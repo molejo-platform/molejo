@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: platform-operator-metrics
+  namespace: fruto-system
+  labels:
+    app.kubernetes.io/name: platform-operator
+    app.kubernetes.io/part-of: fruto-platform
+spec:
+  selector:
+    app.kubernetes.io/name: platform-operator
+  ports:
+    - name: https
+      port: 8443
+      protocol: TCP
+      targetPort: metrics

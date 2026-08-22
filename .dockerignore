@@ -1,0 +1,8 @@
+*
+!go.mod
+!go.sum
+!packages/
+!packages/**
+!services/
+!services/platform-operator/
+!services/platform-operator/**
