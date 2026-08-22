@@ -12,7 +12,7 @@ body:
     attributes:
       label: Before submitting
       options:
-        - label: I searched existing issues and discussions for a similar proposal.
+        - label: I searched existing issues for a similar proposal.
           required: true
   - type: textarea
     attributes:

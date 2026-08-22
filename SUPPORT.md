@@ -12,8 +12,6 @@ production support, compatibility commitment, or response-time guarantee.
 
 - Use a bug report for reproducible defects in the repository.
 - Use a proposal for product or engineering changes.
-- Use GitHub Discussions for questions and early design conversations when that
-  feature is available.
 - Follow [SECURITY.md](SECURITY.md) for suspected vulnerabilities.
 
 Before opening a report, search existing issues and include enough context for
