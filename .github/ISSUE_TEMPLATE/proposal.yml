@@ -1,0 +1,36 @@
+name: Proposal
+description: Propose a product, architecture, or engineering change.
+title: "[Proposal]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Proposals are welcome in English, Portuguese, or Spanish. Keep the request focused on a concrete problem.
+  - type: checkboxes
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and discussions for a similar proposal.
+          required: true
+  - type: textarea
+    attributes:
+      label: Problem
+      description: What problem or limitation should the project address?
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Proposed direction
+      description: Describe the smallest useful change you believe would address the problem.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Alternatives
+      description: What alternatives or workarounds have you considered?
+  - type: textarea
+    attributes:
+      label: Additional context
+      description: Add supporting examples, constraints, or references.
