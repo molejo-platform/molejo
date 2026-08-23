@@ -85,8 +85,8 @@ just verify    # generate, check formatting, run go vet, and run tests
 just e2e       # validate private and public routing in a disposable Kind cluster
 just ci        # run the complete deterministic local gate
 just e2e-public # separately verify outbound public HTTPS access
-just frontend-check # type-check the React fixture from the pnpm lockfile
-just frontend-test # validate both frontend images in a restricted container
+just frontend-check # type-check the React fixture and Console from the pnpm lockfile
+just frontend-test # run Console tests and validate both frontend images in a restricted container
 just audit-frontend-images # run the optional Docker Scout vulnerability check
 ```
 

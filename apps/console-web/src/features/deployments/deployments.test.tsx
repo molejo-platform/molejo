@@ -1,0 +1,58 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+
+import { createIdempotencyKey, setCsrfToken } from "../../shared/api/http-client";
+import type { DeploymentIntent } from "../../shared/api/types";
+import { createDeployment, deleteDeployment, updateDeployment } from "./api";
+import { DeploymentStatus } from "./DeploymentStatus";
+
+const intent: DeploymentIntent = {
+  name: "demo",
+  image: "ghcr.io/fruto-platform/testkit@sha256:" + "a".repeat(64),
+  replicas: 1,
+  port: 8080,
+  resources: { requests: { cpuMillis: 50, memoryMiB: 64 }, limits: { cpuMillis: 250, memoryMiB: 128 } },
+  probes: { liveness: { path: "/healthz" }, readiness: { path: "/readyz" } },
+  exposure: "Private",
+};
+
+describe("deployments slice", () => {
+  beforeEach(() => {
+    setCsrfToken("csrf-1");
+    vi.stubGlobal("fetch", vi.fn());
+    vi.stubGlobal("crypto", { randomUUID: vi.fn().mockReturnValue("idem-1") });
+  });
+
+  it("renders Unknown as a runtime state distinct from Degraded", () => {
+    render(<DeploymentStatus state="Unknown" />);
+
+    expect(screen.getByText("Desconhecido")).toBeTruthy();
+    expect(screen.queryByText("Degraded")).toBeNull();
+  });
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("creates with an idempotency key and CSRF header", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({ operation: { id: "op-1", deploymentId: "dep-1", status: "Pending" } }), { status: 202 }));
+
+    await createDeployment(intent);
+
+    expect(vi.mocked(fetch)).toHaveBeenCalledWith("/api/v1/deployments", expect.objectContaining({ method: "POST" }));
+    const init = vi.mocked(fetch).mock.calls[0]?.[1] as RequestInit;
+    expect(new Headers(init.headers).get("Idempotency-Key")).toBe("idem-1");
+    expect(new Headers(init.headers).get("X-CSRF-Token")).toBe("csrf-1");
+    expect(createIdempotencyKey()).toBe("idem-1");
+  });
+
+  it("updates and deletes with the current optimistic version", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(new Response(JSON.stringify({ operation: { id: "op-2", deploymentId: "dep-1", status: "Pending" } }), { status: 202 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ operation: { id: "op-3", deploymentId: "dep-1", status: "Pending" } }), { status: 202 }));
+
+    await updateDeployment({ id: "dep-1", version: 3, intent });
+    await deleteDeployment({ id: "dep-1", version: 4 });
+
+    expect(new Headers((vi.mocked(fetch).mock.calls[0]?.[1] as RequestInit).headers).get("If-Match")).toBe("3");
+    expect(new Headers((vi.mocked(fetch).mock.calls[1]?.[1] as RequestInit).headers).get("If-Match")).toBe("4");
+  });
+});

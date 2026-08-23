@@ -1,2 +1,8 @@
 packages:
   - test/fixtures/vite-react-spa
+  - apps/console-web
+allowBuilds:
+  esbuild: set this to true or false
+minimumReleaseAgeExclude:
+  - '@tanstack/query-core@5.102.2'
+  - '@tanstack/react-query@5.102.2'

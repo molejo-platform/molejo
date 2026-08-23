@@ -42,3 +42,41 @@ func TestWorkspaceRestrictsLocalChecksToNode24(t *testing.T) {
 		t.Fatalf("expected the SPA builder to use the locally pinned Node %s", version)
 	}
 }
+
+func TestConsoleUsesReactViteAndPinnedStaticRuntime(t *testing.T) {
+	contents, err := os.ReadFile("../../apps/console-web/package.json")
+	if err != nil {
+		t.Fatalf("read console package.json: %v", err)
+	}
+	var manifest struct {
+		Dependencies    map[string]string `json:"dependencies"`
+		DevDependencies map[string]string `json:"devDependencies"`
+	}
+	if err := json.Unmarshal(contents, &manifest); err != nil {
+		t.Fatalf("decode console package.json: %v", err)
+	}
+	if manifest.Dependencies["react"] == "" || manifest.Dependencies["react-dom"] == "" {
+		t.Fatal("expected the console to depend on React and React DOM")
+	}
+	if manifest.DevDependencies["@vitejs/plugin-react"] == "" || manifest.DevDependencies["vite"] == "" {
+		t.Fatal("expected the console to use the React Vite plugin and Vite")
+	}
+	if manifest.Dependencies["@tanstack/react-query"] == "" || manifest.Dependencies["@tanstack/react-router"] == "" {
+		t.Fatal("expected the console to use TanStack Query and TanStack Router")
+	}
+	if _, err := os.Stat("../../apps/console-web/src/app/router.tsx"); err != nil {
+		t.Fatalf("expected code-based application router: %v", err)
+	}
+	if _, err := os.Stat("../../apps/console-web/src/features/deployments"); err != nil {
+		t.Fatalf("expected deployments vertical slice: %v", err)
+	}
+
+	dockerfile, err := os.ReadFile("../../apps/console-web/Dockerfile")
+	if err != nil {
+		t.Fatalf("read console Dockerfile: %v", err)
+	}
+	dockerfileText := string(dockerfile)
+	if !strings.Contains(dockerfileText, "nginx:") || !strings.Contains(dockerfileText, "USER 65532:65532") {
+		t.Fatal("expected the console image to use the static non-root runtime")
+	}
+}

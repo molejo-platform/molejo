@@ -6,7 +6,9 @@
     "node": ">=24 <25"
   },
   "scripts": {
-    "frontend:build": "corepack pnpm --filter @fruto-platform/vite-react-spa build",
-    "frontend:check": "corepack pnpm --filter @fruto-platform/vite-react-spa check"
+    "frontend:build": "corepack pnpm --filter @fruto-platform/vite-react-spa build && corepack pnpm --filter @fruto-platform/console-web build",
+    "frontend:check": "corepack pnpm --filter @fruto-platform/vite-react-spa check && corepack pnpm --filter @fruto-platform/console-web check",
+    "frontend:test": "corepack pnpm --filter @fruto-platform/console-web test",
+    "control-plane:build": "corepack pnpm --filter @fruto-platform/console-web build"
   }
 }

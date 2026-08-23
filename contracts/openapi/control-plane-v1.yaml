@@ -1,0 +1,284 @@
+openapi: 3.1.0
+info:
+  title: Fruto Control Plane API
+  version: 1.0.0
+  description: Pre-alpha control-plane contract for the local beta workspace.
+servers:
+  - url: /
+paths:
+  /api/v1/session:
+    post:
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Authenticated session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    get:
+      operationId: getSession
+      responses:
+        '200':
+          description: Current session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    delete:
+      operationId: logout
+      responses:
+        '204': { description: Session revoked }
+  /api/v1/workspaces/current:
+    get:
+      operationId: getCurrentWorkspace
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Authorized workspace
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Workspace' }
+  /api/v1/deployments:
+    get:
+      operationId: listDeployments
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Deployments
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Deployment' }
+                  nextCursor: { type: [string, 'null'] }
+    post:
+      operationId: createDeployment
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DeploymentIntent' }
+      responses:
+        '202': { $ref: '#/components/responses/MutationAccepted' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/deployments/{deploymentId}:
+    parameters:
+      - name: deploymentId
+        in: path
+        required: true
+        schema: { type: string, pattern: '^dep-[a-z2-7]{20}$' }
+    get:
+      operationId: getDeployment
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Deployment with observed runtime state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Deployment' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      operationId: updateDeployment
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+        - { $ref: '#/components/parameters/IfMatch' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DeploymentIntent' }
+      responses:
+        '202': { $ref: '#/components/responses/MutationAccepted' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      operationId: deleteDeployment
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+        - { $ref: '#/components/parameters/IfMatch' }
+      responses:
+        '202': { $ref: '#/components/responses/MutationAccepted' }
+  /api/v1/deployments/{deploymentId}/operations:
+    get:
+      operationId: listDeploymentOperations
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: deploymentId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Operation history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Operation' }
+  /api/v1/operations/{operationId}:
+    get:
+      operationId: getOperation
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: operationId
+          in: path
+          required: true
+          schema: { type: string, pattern: '^op-[a-z2-7]{20}$' }
+      responses:
+        '200':
+          description: Operation
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Operation' }
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: fruto_session
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, minLength: 1, maxLength: 128 }
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      schema: { type: integer, minimum: 1 }
+  responses:
+    Unauthorized:
+      description: Authentication required
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    BadRequest:
+      description: Invalid request
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Conflict:
+      description: Version or idempotency conflict
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    NotFound:
+      description: Resource not found
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    MutationAccepted:
+      description: Mutation accepted for asynchronous execution
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [operation]
+            properties:
+              deployment: { $ref: '#/components/schemas/Deployment' }
+              operation: { $ref: '#/components/schemas/Operation' }
+  schemas:
+    LoginRequest:
+      type: object
+      required: [actor, password]
+      additionalProperties: false
+      properties:
+        actor: { type: string, enum: [owner, tester-1, tester-2] }
+        password: { type: string, minLength: 1, writeOnly: true }
+    Session:
+      type: object
+      required: [actor, csrfToken]
+      properties:
+        actor:
+          type: object
+          required: [id, role]
+          properties:
+            id: { type: string }
+            role: { type: string, enum: [owner, tester] }
+        csrfToken: { type: string, writeOnly: true }
+    Workspace:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string, pattern: '^ws-' }
+        name: { type: string }
+    DeploymentIntent:
+      type: object
+      required: [name, image, port, resources, probes]
+      additionalProperties: false
+      properties:
+        name: { type: string, pattern: '^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$' }
+        image: { type: string, pattern: '^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$' }
+        replicas: { type: integer, minimum: 1, maximum: 5, default: 1 }
+        port: { type: integer, minimum: 1, maximum: 65535 }
+        resources:
+          type: object
+          required: [requests, limits]
+          properties:
+            requests: { $ref: '#/components/schemas/ResourceValues' }
+            limits: { $ref: '#/components/schemas/ResourceValues' }
+        probes:
+          type: object
+          required: [liveness, readiness]
+          properties:
+            liveness: { $ref: '#/components/schemas/Probe' }
+            readiness: { $ref: '#/components/schemas/Probe' }
+        exposure: { type: string, enum: [Private, Public], default: Private }
+        slug: { type: string, pattern: '^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$' }
+    ResourceValues:
+      type: object
+      required: [cpuMillis, memoryMiB]
+      properties:
+        cpuMillis: { type: integer, minimum: 1, maximum: 2000 }
+        memoryMiB: { type: integer, minimum: 1, maximum: 2048 }
+    Probe:
+      type: object
+      required: [path]
+      properties:
+        path: { type: string, pattern: '^/' }
+    Deployment:
+      type: object
+      required: [id, intent, version, state, createdAt, updatedAt]
+      properties:
+        id: { type: string, pattern: '^dep-' }
+        intent: { $ref: '#/components/schemas/DeploymentIntent' }
+        version: { type: integer, minimum: 1 }
+        observedVersion: { type: integer, minimum: 0 }
+        state: { type: string, enum: [Pending, Progressing, Ready, Degraded, Unknown] }
+        message: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    Operation:
+      type: object
+      required: [id, deploymentId, kind, status, desiredVersion, attempts]
+      properties:
+        id: { type: string, pattern: '^op-' }
+        deploymentId: { type: string, pattern: '^dep-' }
+        kind: { type: string, enum: [CreateDeployment, UpdateDeployment, DeleteDeployment] }
+        status: { type: string, enum: [Pending, Running, Succeeded, Failed, Superseded] }
+        desiredVersion: { type: integer, minimum: 1 }
+        attempts: { type: integer, minimum: 0 }
+        errorCode: { type: string }
+        errorMessage: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    Error:
+      type: object
+      required: [code, message, requestId]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        requestId: { type: string }

@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: control-plane-config
+  namespace: fruto-control-plane
+data:
+  FRUTO_WORKSPACE_NAMESPACE: fruto-workspaces
+  FRUTO_ALLOWED_ORIGIN: https://console.fruto.calouro.tech
+  FRUTO_FIELD_MANAGER: fruto-control-plane

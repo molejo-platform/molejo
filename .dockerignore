@@ -4,6 +4,9 @@
 !package.json
 !pnpm-lock.yaml
 !pnpm-workspace.yaml
+!apps/
+!apps/console-web/
+!apps/console-web/**
 !packages/
 !packages/**
 !services/
@@ -21,3 +24,5 @@
 !test/fixtures/vite-react-spa/**
 test/fixtures/vite-react-spa/node_modules/
 test/fixtures/vite-react-spa/dist/
+apps/console-web/node_modules/
+apps/console-web/dist/

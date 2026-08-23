@@ -25,7 +25,7 @@ frontend-node-check:
     test "$(node --version)" = "v$(cat .node-version)"
 
 frontend-install: frontend-node-check
-    corepack pnpm install --frozen-lockfile
+    CI=true corepack pnpm install --frozen-lockfile --ignore-scripts
 
 frontend-check: frontend-install
     corepack pnpm frontend:check
@@ -33,11 +33,32 @@ frontend-check: frontend-install
 frontend-build: frontend-install
     corepack pnpm frontend:build
 
-frontend-test:
+frontend-test: frontend-install
+    corepack pnpm frontend:test
     bash test/frontend/run.sh
 
 audit-frontend-images:
     bash test/security/base-images.sh
+
+control-plane-test:
+    GOCACHE="/tmp/fruto-go-cache" GOMODCACHE="/tmp/fruto-go-mod-cache" go test ./services/control-plane-api/...
+
+control-plane-build:
+    GOCACHE="/tmp/fruto-go-cache" GOMODCACHE="/tmp/fruto-go-mod-cache" go build -o /tmp/fruto-control-plane-api ./services/control-plane-api/cmd/control-plane-api
+
+control-plane-verify: control-plane-test control-plane-build
+
+db-up:
+    docker compose -f deploy/control-plane/docker-compose.yaml up -d postgres
+
+db-migrate:
+    FRUTO_DATABASE_URL="postgres://fruto:fruto@127.0.0.1:55432/fruto?sslmode=disable" GOCACHE="/tmp/fruto-go-cache" GOMODCACHE="/tmp/fruto-go-mod-cache" go run ./services/control-plane-api/cmd/control-plane-api migrate
+
+db-down:
+    docker compose -f deploy/control-plane/docker-compose.yaml down
+
+control-plane-e2e-kind:
+    bash test/e2e/control-plane-kind.sh
 
 e2e:
     bash test/e2e/run.sh
@@ -48,7 +69,7 @@ e2e-public:
 e2e-frontend-k3s:
     bash test/e2e/k3s-frontend.sh
 
-verify: generate fmt-check lint test frontend-check frontend-test
+verify: generate fmt-check lint test control-plane-verify frontend-check frontend-test
 
 ci:
     bash test/generated/check.sh

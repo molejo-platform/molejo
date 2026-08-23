@@ -7,7 +7,7 @@ RUN corepack enable \
 WORKDIR /workspace
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY test/fixtures/vite-react-spa/package.json test/fixtures/vite-react-spa/package.json
-RUN pnpm install --frozen-lockfile --filter @fruto-platform/vite-react-spa
+RUN pnpm install --frozen-lockfile --ignore-scripts --filter @fruto-platform/vite-react-spa
 
 COPY test/fixtures/vite-react-spa/ test/fixtures/vite-react-spa/
 ARG APP_VERSION=dev

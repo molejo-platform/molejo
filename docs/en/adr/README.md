@@ -16,3 +16,7 @@
   — Draft
 - [ADR-0005: Frontend Image Runtime Contract](0005-frontend-image-runtime-contract.md)
   — Draft
+- [ADR-0006: Control Plane Topology and Runtime Boundary](0006-control-plane-topology-and-runtime-boundary.md)
+  — Draft
+- [ADR-0007: Control Plane Persistence and Operations](0007-control-plane-persistence-and-operations.md)
+  — Draft

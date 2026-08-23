@@ -1,0 +1,17 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: control-plane-api-egress
+  namespace: fruto-control-plane
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: control-plane-api }
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: kube-system } }
+      ports: [{ protocol: UDP, port: 53 }, { protocol: TCP, port: 53 }]
+    - to:
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: fruto-workspaces } }
+      ports: [{ protocol: TCP, port: 443 }]
+    - ports: [{ protocol: TCP, port: 5432 }]

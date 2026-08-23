@@ -87,8 +87,8 @@ just verify    # gera, verifica formatação, executa go vet e os testes
 just e2e       # valida rotas privadas e públicas em um cluster Kind descartável
 just ci        # executa o gate local determinístico completo
 just e2e-public # valida separadamente acesso HTTPS público de saída
-just frontend-check # verifica tipos da fixture React pelo lockfile pnpm
-just frontend-test # valida as duas imagens em um container restrito
+just frontend-check # verifica tipos da fixture React e do Console pelo lockfile pnpm
+just frontend-test # executa os testes do Console e valida as duas imagens em um container restrito
 just audit-frontend-images # executa a auditoria opcional com Docker Scout
 ```
 
