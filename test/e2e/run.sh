@@ -13,15 +13,28 @@ readonly FIXTURE_IMAGE_V1_TAG="fruto-phase2-http-app:e2e-v1-$$"
 readonly FIXTURE_IMAGE_V2_TAG="fruto-phase2-http-app:e2e-v2-$$"
 readonly FIXTURE_IMAGE_V1_FULL="docker.io/library/${FIXTURE_IMAGE_V1_TAG}"
 readonly FIXTURE_IMAGE_V2_FULL="docker.io/library/${FIXTURE_IMAGE_V2_TAG}"
+readonly STATIC_IMAGE_TAG="fruto-phase4-static-html:e2e-$$"
+readonly SPA_IMAGE_V1_TAG="fruto-phase4-vite-react-spa:e2e-v1-$$"
+readonly SPA_IMAGE_V2_TAG="fruto-phase4-vite-react-spa:e2e-v2-$$"
+readonly STATIC_IMAGE_FULL="docker.io/library/${STATIC_IMAGE_TAG}"
+readonly SPA_IMAGE_V1_FULL="docker.io/library/${SPA_IMAGE_V1_TAG}"
+readonly SPA_IMAGE_V2_FULL="docker.io/library/${SPA_IMAGE_V2_TAG}"
 readonly KUBECONFIG_FILE="$(mktemp)"
 readonly APP_MANIFEST_FILE="$(mktemp)"
+readonly STATIC_MANIFEST_FILE="$(mktemp)"
+readonly SPA_MANIFEST_FILE="$(mktemp)"
 readonly OPERATOR_MANIFEST_FILE="$(mktemp)"
 readonly FIXTURE_V1_METADATA="$(mktemp)"
 readonly FIXTURE_V2_METADATA="$(mktemp)"
+readonly STATIC_METADATA="$(mktemp)"
+readonly SPA_V1_METADATA="$(mktemp)"
+readonly SPA_V2_METADATA="$(mktemp)"
 readonly GATEWAY_API_MANIFEST_FILE="$(mktemp)"
 readonly WILDCARD_CERT_FILE="$(mktemp)"
 readonly WILDCARD_KEY_FILE="$(mktemp)"
 readonly PUBLIC_SSE_OUTPUT="$(mktemp)"
+readonly FRONTEND_BODY="$(mktemp)"
+readonly FRONTEND_HEADERS="$(mktemp)"
 readonly HEALTH_FORWARD_LOG="${KUBECONFIG_FILE}.health-port-forward.log"
 readonly METRICS_FORWARD_LOG="${KUBECONFIG_FILE}.metrics-port-forward.log"
 readonly APP_FORWARD_LOG="${KUBECONFIG_FILE}.app-port-forward.log"
@@ -42,6 +55,9 @@ APP_LOCAL_PORT=""
 GATEWAY_LOCAL_PORT=""
 FIXTURE_IMAGE_V1=""
 FIXTURE_IMAGE_V2=""
+STATIC_IMAGE=""
+SPA_IMAGE_V1=""
+SPA_IMAGE_V2=""
 
 kind_cli() {
   go run "sigs.k8s.io/kind@${KIND_VERSION}" "$@"
@@ -180,6 +196,38 @@ wait_for_public_status() {
   return 1
 }
 
+wait_for_public_content() {
+  local expected=$1
+  local hostname=$2
+  local url=$3
+  local response=""
+
+  for _ in $(seq 1 60); do
+    response="$(curl --noproxy '*' --cacert "${WILDCARD_CERT_FILE}" \
+      --connect-timeout 2 --max-time 3 --fail --silent \
+      --resolve "${hostname}:${GATEWAY_LOCAL_PORT}:127.0.0.1" \
+      "${url}")" || true
+    if grep -Fq "${expected}" <<<"${response}"; then
+      printf '%s' "${response}"
+      return 0
+    fi
+    sleep 0.5
+  done
+
+  echo "expected ${url} to contain ${expected}" >&2
+  return 1
+}
+
+assert_response_header() {
+  local headers_file=$1
+  local expected=$2
+  if ! tr -d '\r' <"${headers_file}" | grep -Fqi "${expected}"; then
+    echo "expected response headers to contain ${expected}" >&2
+    cat "${headers_file}" >&2
+    return 1
+  fi
+}
+
 dump_diagnostics() {
   kubectl --kubeconfig "${KUBECONFIG_FILE}" get pods -A -o wide || true
   kubectl --kubeconfig "${KUBECONFIG_FILE}" get appdeployments -A -o yaml || true
@@ -216,17 +264,30 @@ finish() {
   fi
 
   kind_cli delete cluster --name "${CLUSTER_NAME}" >/dev/null 2>&1 || true
-  docker image rm "${OPERATOR_IMAGE}" "${FIXTURE_IMAGE_V1_TAG}" "${FIXTURE_IMAGE_V2_TAG}" >/dev/null 2>&1 || true
+  docker image rm \
+    "${OPERATOR_IMAGE}" \
+    "${FIXTURE_IMAGE_V1_TAG}" \
+    "${FIXTURE_IMAGE_V2_TAG}" \
+    "${STATIC_IMAGE_TAG}" \
+    "${SPA_IMAGE_V1_TAG}" \
+    "${SPA_IMAGE_V2_TAG}" >/dev/null 2>&1 || true
   rm -f \
     "${KUBECONFIG_FILE}" \
     "${APP_MANIFEST_FILE}" \
+    "${STATIC_MANIFEST_FILE}" \
+    "${SPA_MANIFEST_FILE}" \
     "${OPERATOR_MANIFEST_FILE}" \
     "${FIXTURE_V1_METADATA}" \
     "${FIXTURE_V2_METADATA}" \
+    "${STATIC_METADATA}" \
+    "${SPA_V1_METADATA}" \
+    "${SPA_V2_METADATA}" \
     "${GATEWAY_API_MANIFEST_FILE}" \
     "${WILDCARD_CERT_FILE}" \
     "${WILDCARD_KEY_FILE}" \
     "${PUBLIC_SSE_OUTPUT}" \
+    "${FRONTEND_BODY}" \
+    "${FRONTEND_HEADERS}" \
     "${HEALTH_FORWARD_LOG}" \
     "${METRICS_FORWARD_LOG}" \
     "${APP_FORWARD_LOG}" \
@@ -305,6 +366,42 @@ register_digest_reference "${FIXTURE_IMAGE_V1_FULL}" "${fixture_v1_digest}"
 register_digest_reference "${FIXTURE_IMAGE_V2_FULL}" "${fixture_v2_digest}"
 FIXTURE_IMAGE_V1="${FIXTURE_IMAGE_V1_FULL%:*}@${fixture_v1_digest}"
 FIXTURE_IMAGE_V2="${FIXTURE_IMAGE_V2_FULL%:*}@${fixture_v2_digest}"
+
+docker buildx build \
+  --file test/fixtures/static-html/Dockerfile \
+  --tag "${STATIC_IMAGE_TAG}" \
+  --metadata-file "${STATIC_METADATA}" \
+  --load \
+  .
+docker buildx build \
+  --file test/fixtures/vite-react-spa/Dockerfile \
+  --tag "${SPA_IMAGE_V1_TAG}" \
+  --build-arg APP_VERSION=v1 \
+  --metadata-file "${SPA_V1_METADATA}" \
+  --load \
+  .
+docker buildx build \
+  --file test/fixtures/vite-react-spa/Dockerfile \
+  --tag "${SPA_IMAGE_V2_TAG}" \
+  --build-arg APP_VERSION=v2 \
+  --metadata-file "${SPA_V2_METADATA}" \
+  --load \
+  .
+for metadata_file in "${STATIC_METADATA}" "${SPA_V1_METADATA}" "${SPA_V2_METADATA}"; do
+  grep -q '"containerimage.digest"' "${metadata_file}"
+done
+kind_cli load docker-image --name "${CLUSTER_NAME}" "${STATIC_IMAGE_TAG}"
+kind_cli load docker-image --name "${CLUSTER_NAME}" "${SPA_IMAGE_V1_TAG}"
+kind_cli load docker-image --name "${CLUSTER_NAME}" "${SPA_IMAGE_V2_TAG}"
+static_digest="$(containerd_manifest_digest "${STATIC_IMAGE_FULL}")"
+spa_v1_digest="$(containerd_manifest_digest "${SPA_IMAGE_V1_FULL}")"
+spa_v2_digest="$(containerd_manifest_digest "${SPA_IMAGE_V2_FULL}")"
+register_digest_reference "${STATIC_IMAGE_FULL}" "${static_digest}"
+register_digest_reference "${SPA_IMAGE_V1_FULL}" "${spa_v1_digest}"
+register_digest_reference "${SPA_IMAGE_V2_FULL}" "${spa_v2_digest}"
+STATIC_IMAGE="${STATIC_IMAGE_FULL%:*}@${static_digest}"
+SPA_IMAGE_V1="${SPA_IMAGE_V1_FULL%:*}@${spa_v1_digest}"
+SPA_IMAGE_V2="${SPA_IMAGE_V2_FULL%:*}@${spa_v2_digest}"
 
 kubectl --kubeconfig "${KUBECONFIG_FILE}" apply -k deploy/crds
 kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
@@ -789,3 +886,236 @@ kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
   service/ap-e2e000001 \
   -n ws-e2e \
   --timeout=120s
+
+stop_port_forward "${APP_FORWARD_PID}"
+APP_FORWARD_PID=""
+
+kubectl --kubeconfig "${KUBECONFIG_FILE}" create namespace ws-static-e2e
+sed "s|__STATIC_IMAGE__|${STATIC_IMAGE}|" \
+  test/e2e/static-appdeployment.yaml >"${STATIC_MANIFEST_FILE}"
+kubectl --kubeconfig "${KUBECONFIG_FILE}" apply -f "${STATIC_MANIFEST_FILE}"
+kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
+  --for=condition=Ready \
+  appdeployment/ap-static000001 \
+  -n ws-static-e2e \
+  --timeout=180s
+kubectl --kubeconfig "${KUBECONFIG_FILE}" rollout status \
+  deployment/ap-static000001 \
+  -n ws-static-e2e \
+  --timeout=180s
+if kubectl --kubeconfig "${KUBECONFIG_FILE}" get \
+  httproute/ap-static000001 -n ws-static-e2e >/dev/null 2>&1; then
+  echo "unexpected HTTPRoute for the private static frontend" >&2
+  exit 1
+fi
+
+start_port_forward ws-static-e2e service/ap-static000001 8080 "${APP_FORWARD_LOG}" \
+  APP_FORWARD_PID APP_LOCAL_PORT
+curl --fail --silent --show-error --dump-header "${FRONTEND_HEADERS}" \
+  --output "${FRONTEND_BODY}" "http://127.0.0.1:${APP_LOCAL_PORT}/"
+grep -Fq 'data-profile="static-html"' "${FRONTEND_BODY}"
+assert_response_header "${FRONTEND_HEADERS}" 'Cache-Control: no-cache'
+curl --fail --silent --show-error --dump-header "${FRONTEND_HEADERS}" \
+  --output /dev/null \
+  "http://127.0.0.1:${APP_LOCAL_PORT}/assets/styles-9a4b7c2d.css"
+assert_response_header "${FRONTEND_HEADERS}" \
+  'Cache-Control: public, max-age=31536000, immutable'
+stop_port_forward "${APP_FORWARD_PID}"
+APP_FORWARD_PID=""
+
+kubectl --kubeconfig "${KUBECONFIG_FILE}" patch \
+  appdeployment/ap-static000001 \
+  -n ws-static-e2e \
+  --type=merge \
+  --patch '{"spec":{"exposure":"Public","slug":"phase4-static"}}'
+wait_for_resource httproute.gateway.networking.k8s.io ws-static-e2e ap-static000001
+kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
+  --for=jsonpath='{.status.parents[0].conditions[?(@.type=="Accepted")].status}'=True \
+  httproute/ap-static000001 \
+  -n ws-static-e2e \
+  --timeout=120s
+kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
+  --for=jsonpath='{.status.parents[0].conditions[?(@.type=="ResolvedRefs")].status}'=True \
+  httproute/ap-static000001 \
+  -n ws-static-e2e \
+  --timeout=120s
+static_public_generation="$(kubectl --kubeconfig "${KUBECONFIG_FILE}" get \
+  appdeployment/ap-static000001 -n ws-static-e2e -o jsonpath='{.metadata.generation}')"
+kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
+  --for=jsonpath='{.status.observedGeneration}'="${static_public_generation}" \
+  appdeployment/ap-static000001 \
+  -n ws-static-e2e \
+  --timeout=120s
+kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
+  --for=condition=Ready \
+  appdeployment/ap-static000001 \
+  -n ws-static-e2e \
+  --timeout=120s
+
+static_public_url="https://phase4-static.fruto.calouro.tech:${GATEWAY_LOCAL_PORT}"
+wait_for_public_status 200 phase4-static.fruto.calouro.tech \
+  "${static_public_url}/"
+curl --noproxy '*' --cacert "${WILDCARD_CERT_FILE}" --fail --silent --show-error \
+  --resolve "phase4-static.fruto.calouro.tech:${GATEWAY_LOCAL_PORT}:127.0.0.1" \
+  --dump-header "${FRONTEND_HEADERS}" \
+  --output "${FRONTEND_BODY}" \
+  "${static_public_url}/"
+grep -Fq 'data-profile="static-html"' "${FRONTEND_BODY}"
+assert_response_header "${FRONTEND_HEADERS}" 'Cache-Control: no-cache'
+wait_for_public_status 404 phase4-static.fruto.calouro.tech \
+  "${static_public_url}/missing"
+wait_for_public_status 404 phase4-static.fruto.calouro.tech \
+  "${static_public_url}/assets/missing.css"
+
+static_app_uid="$(kubectl --kubeconfig "${KUBECONFIG_FILE}" get \
+  appdeployment/ap-static000001 -n ws-static-e2e -o jsonpath='{.metadata.uid}')"
+static_service_owner_uid="$(kubectl --kubeconfig "${KUBECONFIG_FILE}" get \
+  service/ap-static000001 -n ws-static-e2e -o jsonpath='{.metadata.ownerReferences[0].uid}')"
+static_route_owner_uid="$(kubectl --kubeconfig "${KUBECONFIG_FILE}" get \
+  httproute/ap-static000001 -n ws-static-e2e -o jsonpath='{.metadata.ownerReferences[0].uid}')"
+if [[ ${static_service_owner_uid} != "${static_app_uid}" ||
+  ${static_route_owner_uid} != "${static_app_uid}" ]]; then
+  echo "static frontend children are not owned by the AppDeployment" >&2
+  exit 1
+fi
+
+kubectl --kubeconfig "${KUBECONFIG_FILE}" patch service/ap-static000001 \
+  -n ws-static-e2e \
+  --type=merge \
+  --patch '{"spec":{"selector":{"drift":"true"}}}'
+kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
+  --for=jsonpath='{.spec.selector.platform\.fruto\.calouro\.tech/app-deployment}'=ap-static000001 \
+  service/ap-static000001 \
+  -n ws-static-e2e \
+  --timeout=120s
+for _ in $(seq 1 60); do
+  static_service_selector_drift="$(kubectl --kubeconfig "${KUBECONFIG_FILE}" get \
+    service/ap-static000001 -n ws-static-e2e -o jsonpath='{.spec.selector.drift}')"
+  if [[ -z ${static_service_selector_drift} ]]; then
+    break
+  fi
+  sleep 1
+done
+if [[ -n ${static_service_selector_drift} ]]; then
+  echo "operator did not remove static frontend Service selector drift" >&2
+  exit 1
+fi
+
+kubectl --kubeconfig "${KUBECONFIG_FILE}" create namespace ws-spa-e2e
+sed "s|__SPA_IMAGE__|${SPA_IMAGE_V1}|" \
+  test/e2e/spa-appdeployment.yaml >"${SPA_MANIFEST_FILE}"
+kubectl --kubeconfig "${KUBECONFIG_FILE}" apply -f "${SPA_MANIFEST_FILE}"
+wait_for_resource httproute.gateway.networking.k8s.io ws-spa-e2e ap-spa000001
+kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
+  --for=jsonpath='{.status.parents[0].conditions[?(@.type=="Accepted")].status}'=True \
+  httproute/ap-spa000001 \
+  -n ws-spa-e2e \
+  --timeout=120s
+kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
+  --for=jsonpath='{.status.parents[0].conditions[?(@.type=="ResolvedRefs")].status}'=True \
+  httproute/ap-spa000001 \
+  -n ws-spa-e2e \
+  --timeout=120s
+kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
+  --for=condition=Ready \
+  appdeployment/ap-spa000001 \
+  -n ws-spa-e2e \
+  --timeout=180s
+kubectl --kubeconfig "${KUBECONFIG_FILE}" rollout status \
+  deployment/ap-spa000001 \
+  -n ws-spa-e2e \
+  --timeout=180s
+
+spa_public_url="https://phase4-spa.fruto.calouro.tech:${GATEWAY_LOCAL_PORT}"
+wait_for_public_status 200 phase4-spa.fruto.calouro.tech \
+  "${spa_public_url}/projects/example"
+curl --noproxy '*' --cacert "${WILDCARD_CERT_FILE}" --fail --silent --show-error \
+  --resolve "phase4-spa.fruto.calouro.tech:${GATEWAY_LOCAL_PORT}:127.0.0.1" \
+  --dump-header "${FRONTEND_HEADERS}" \
+  --output "${FRONTEND_BODY}" \
+  "${spa_public_url}/projects/example"
+grep -Fq 'name="fruto-profile" content="vite-react-spa"' "${FRONTEND_BODY}"
+grep -Fq 'name="fruto-version" content="v1"' "${FRONTEND_BODY}"
+assert_response_header "${FRONTEND_HEADERS}" 'Cache-Control: no-cache'
+spa_asset="$(sed -n 's|.*src="\(/assets/[^\"]*\.js\)".*|\1|p' "${FRONTEND_BODY}" | head -n 1)"
+if [[ -z ${spa_asset} ]]; then
+  echo "could not discover the fingerprinted SPA asset through the public route" >&2
+  exit 1
+fi
+curl --noproxy '*' --cacert "${WILDCARD_CERT_FILE}" --fail --silent --show-error \
+  --resolve "phase4-spa.fruto.calouro.tech:${GATEWAY_LOCAL_PORT}:127.0.0.1" \
+  --dump-header "${FRONTEND_HEADERS}" \
+  --output /dev/null \
+  "${spa_public_url}${spa_asset}"
+assert_response_header "${FRONTEND_HEADERS}" \
+  'Cache-Control: public, max-age=31536000, immutable'
+wait_for_public_status 404 phase4-spa.fruto.calouro.tech \
+  "${spa_public_url}/assets/missing.js"
+wait_for_public_status 404 phase4-spa.fruto.calouro.tech \
+  "${spa_public_url}/missing.css"
+
+spa_app_uid_before="$(kubectl --kubeconfig "${KUBECONFIG_FILE}" get \
+  appdeployment/ap-spa000001 -n ws-spa-e2e -o jsonpath='{.metadata.uid}')"
+spa_deployment_uid_before="$(kubectl --kubeconfig "${KUBECONFIG_FILE}" get \
+  deployment/ap-spa000001 -n ws-spa-e2e -o jsonpath='{.metadata.uid}')"
+spa_service_uid_before="$(kubectl --kubeconfig "${KUBECONFIG_FILE}" get \
+  service/ap-spa000001 -n ws-spa-e2e -o jsonpath='{.metadata.uid}')"
+spa_route_uid_before="$(kubectl --kubeconfig "${KUBECONFIG_FILE}" get \
+  httproute/ap-spa000001 -n ws-spa-e2e -o jsonpath='{.metadata.uid}')"
+kubectl --kubeconfig "${KUBECONFIG_FILE}" patch \
+  appdeployment/ap-spa000001 \
+  -n ws-spa-e2e \
+  --type=merge \
+  --patch "{\"spec\":{\"image\":\"${SPA_IMAGE_V2}\"}}"
+spa_updated_generation="$(kubectl --kubeconfig "${KUBECONFIG_FILE}" get \
+  appdeployment/ap-spa000001 -n ws-spa-e2e -o jsonpath='{.metadata.generation}')"
+kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
+  --for=jsonpath='{.status.observedGeneration}'="${spa_updated_generation}" \
+  appdeployment/ap-spa000001 \
+  -n ws-spa-e2e \
+  --timeout=120s
+kubectl --kubeconfig "${KUBECONFIG_FILE}" rollout status \
+  deployment/ap-spa000001 \
+  -n ws-spa-e2e \
+  --timeout=180s
+kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
+  --for=condition=Ready \
+  appdeployment/ap-spa000001 \
+  -n ws-spa-e2e \
+  --timeout=120s
+spa_v2_response="$(wait_for_public_content \
+  'name="fruto-version" content="v2"' \
+  phase4-spa.fruto.calouro.tech \
+  "${spa_public_url}/")"
+grep -Fq 'name="fruto-version" content="v2"' <<<"${spa_v2_response}"
+
+spa_app_uid_after="$(kubectl --kubeconfig "${KUBECONFIG_FILE}" get \
+  appdeployment/ap-spa000001 -n ws-spa-e2e -o jsonpath='{.metadata.uid}')"
+spa_deployment_uid_after="$(kubectl --kubeconfig "${KUBECONFIG_FILE}" get \
+  deployment/ap-spa000001 -n ws-spa-e2e -o jsonpath='{.metadata.uid}')"
+spa_service_uid_after="$(kubectl --kubeconfig "${KUBECONFIG_FILE}" get \
+  service/ap-spa000001 -n ws-spa-e2e -o jsonpath='{.metadata.uid}')"
+spa_route_uid_after="$(kubectl --kubeconfig "${KUBECONFIG_FILE}" get \
+  httproute/ap-spa000001 -n ws-spa-e2e -o jsonpath='{.metadata.uid}')"
+if [[ ${spa_app_uid_after} != "${spa_app_uid_before}" ||
+  ${spa_deployment_uid_after} != "${spa_deployment_uid_before}" ||
+  ${spa_service_uid_after} != "${spa_service_uid_before}" ||
+  ${spa_route_uid_after} != "${spa_route_uid_before}" ]]; then
+  echo "SPA rollout replaced a logical Kubernetes child" >&2
+  exit 1
+fi
+
+kubectl --kubeconfig "${KUBECONFIG_FILE}" delete \
+  appdeployment/ap-static000001 -n ws-static-e2e --wait=true
+kubectl --kubeconfig "${KUBECONFIG_FILE}" delete \
+  appdeployment/ap-spa000001 -n ws-spa-e2e --wait=true
+for child in deployment service httproute.gateway.networking.k8s.io; do
+  kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
+    --for=delete "${child}/ap-static000001" \
+    -n ws-static-e2e \
+    --timeout=120s
+  kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
+    --for=delete "${child}/ap-spa000001" \
+    -n ws-spa-e2e \
+    --timeout=120s
+done

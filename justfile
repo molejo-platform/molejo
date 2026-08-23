@@ -21,13 +21,34 @@ generate:
 test:
     KUBEBUILDER_ASSETS="$(go tool setup-envtest use -p path {{envtest_version}})" go test ./...
 
+frontend-node-check:
+    test "$(node --version)" = "v$(cat .node-version)"
+
+frontend-install: frontend-node-check
+    corepack pnpm install --frozen-lockfile
+
+frontend-check: frontend-install
+    corepack pnpm frontend:check
+
+frontend-build: frontend-install
+    corepack pnpm frontend:build
+
+frontend-test:
+    bash test/frontend/run.sh
+
+audit-frontend-images:
+    bash test/security/base-images.sh
+
 e2e:
     bash test/e2e/run.sh
 
 e2e-public:
     E2E_PUBLIC_EGRESS_URL="${E2E_PUBLIC_EGRESS_URL:-https://api.github.com/zen}" bash test/e2e/run.sh
 
-verify: generate fmt-check lint test
+e2e-frontend-k3s:
+    bash test/e2e/k3s-frontend.sh
+
+verify: generate fmt-check lint test frontend-check frontend-test
 
 ci:
     bash test/generated/check.sh

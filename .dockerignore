@@ -1,6 +1,9 @@
 *
 !go.mod
 !go.sum
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
 !packages/
 !packages/**
 !services/
@@ -10,3 +13,11 @@
 !test/fixtures/
 !test/fixtures/http-app/
 !test/fixtures/http-app/**
+!test/fixtures/frontend-runtime/
+!test/fixtures/frontend-runtime/**
+!test/fixtures/static-html/
+!test/fixtures/static-html/**
+!test/fixtures/vite-react-spa/
+!test/fixtures/vite-react-spa/**
+test/fixtures/vite-react-spa/node_modules/
+test/fixtures/vite-react-spa/dist/

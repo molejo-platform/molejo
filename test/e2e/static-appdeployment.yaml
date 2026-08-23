@@ -1,0 +1,20 @@
+apiVersion: platform.fruto.calouro.tech/v1alpha1
+kind: AppDeployment
+metadata:
+  name: ap-static000001
+  namespace: ws-static-e2e
+spec:
+  image: __STATIC_IMAGE__
+  port: 8080
+  resources:
+    requests:
+      cpuMillis: 10
+      memoryMiB: 16
+    limits:
+      cpuMillis: 100
+      memoryMiB: 64
+  probes:
+    liveness:
+      path: /healthz
+    readiness:
+      path: /readyz
