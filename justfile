@@ -8,7 +8,7 @@ fmt:
     go fmt ./...
 
 fmt-check:
-    test -z "$(find packages services -type f -name '*.go' -exec gofmt -l {} +)"
+    test -z "$(find packages services test -type f -name '*.go' -exec gofmt -l {} +)"
 
 lint:
     go vet ./...
@@ -24,4 +24,12 @@ test:
 e2e:
     bash test/e2e/run.sh
 
+e2e-public:
+    E2E_PUBLIC_EGRESS_URL="${E2E_PUBLIC_EGRESS_URL:-https://api.github.com/zen}" bash test/e2e/run.sh
+
 verify: generate fmt-check lint test
+
+ci:
+    bash test/generated/check.sh
+    just verify
+    just e2e

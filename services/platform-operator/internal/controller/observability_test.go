@@ -225,17 +225,45 @@ func TestObservabilitySignalsAreCorrelatedAndIdempotent(t *testing.T) {
 	}
 	select {
 	case event := <-recorder.Events:
-		t.Fatalf("expected no duplicate event, got %q", event)
+		if !strings.Contains(event, "ServiceCreated") {
+			t.Fatalf("expected ServiceCreated event, got %q", event)
+		}
+	default:
+		t.Fatal("expected a ServiceCreated event")
+	}
+	select {
+	case event := <-recorder.Events:
+		t.Fatalf("expected no duplicate child event, got %q", event)
 	default:
 	}
 
 	logMu.Lock()
 	joinedLogs := strings.Join(logs, "\n")
+	logEntries := append([]string(nil), logs...)
 	logMu.Unlock()
 	for _, field := range []string{"trace_id", "span_id", "state", "reason"} {
 		if !strings.Contains(joinedLogs, field) {
 			t.Errorf("expected structured logs to contain %q", field)
 		}
+	}
+	childTransitionLogs := 0
+	for _, entry := range logEntries {
+		if !strings.Contains(entry, "managed Deployment changed") &&
+			!strings.Contains(entry, "managed Service changed") {
+			continue
+		}
+		childTransitionLogs++
+		for field, value := range map[string]string{
+			"state":  string(workloadStateProgressing),
+			"reason": platformv1alpha1.ReasonDeploymentProgressing,
+		} {
+			if !strings.Contains(entry, `"`+field+`":"`+value+`"`) {
+				t.Errorf("expected child transition log to contain %s=%q: %s", field, value, entry)
+			}
+		}
+	}
+	if childTransitionLogs != 2 {
+		t.Errorf("expected one Deployment and one Service transition log, got %d", childTransitionLogs)
 	}
 
 	spans := exporter.GetSpans()
@@ -243,6 +271,7 @@ func TestObservabilitySignalsAreCorrelatedAndIdempotent(t *testing.T) {
 		"platform-operator.appdeployment.reconcile": false,
 		"kubernetes.appdeployment.get":              false,
 		"kubernetes.deployment.apply":               false,
+		"kubernetes.service.apply":                  false,
 		"domain.deployment.evaluate":                false,
 		"kubernetes.appdeployment.status.patch":     false,
 	}
@@ -453,6 +482,54 @@ func TestPersistentDeploymentFailureSetsSanitizedReconcileFailedStatus(t *testin
 	}
 }
 
+func TestPersistentServiceFailurePreservesObservedStatus(t *testing.T) {
+	ctx := context.Background()
+	namespace := createTestNamespace(t, "persistent-service-failure")
+	appDeployment := newAppDeployment(namespace, "ap-persistentservicefailure", testImage)
+	if err := testClient.Create(ctx, appDeployment); err != nil {
+		t.Fatalf("create AppDeployment: %v", err)
+	}
+
+	persistent := apierrors.NewInvalid(
+		schema.GroupKind{Kind: "Service"},
+		appDeployment.Name,
+		field.ErrorList{field.Invalid(
+			field.NewPath("spec", "ports"),
+			"private-technical-value",
+			"admission rejected the Service port",
+		)},
+	)
+	reconciler := &AppDeploymentReconciler{
+		Client: failingServiceCreateClient{Client: testClient, err: persistent},
+		Scheme: testScheme,
+	}
+	result, err := reconciler.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{
+		Namespace: namespace,
+		Name:      appDeployment.Name,
+	}})
+	if err != nil {
+		t.Errorf("expected persistent Service failure in status, got %v", err)
+	}
+	if result.RequeueAfter != persistentFailureRequeueAfter {
+		t.Errorf("expected persistent failure to requeue after %s, got %s",
+			persistentFailureRequeueAfter, result.RequeueAfter)
+	}
+
+	stored := getAppDeployment(t, ctx, types.NamespacedName{Namespace: namespace, Name: appDeployment.Name})
+	degraded := meta.FindStatusCondition(stored.Status.Conditions, platformv1alpha1.ConditionDegraded)
+	if degraded == nil || degraded.Status != metav1.ConditionTrue ||
+		degraded.Reason != platformv1alpha1.ReasonReconcileFailed {
+		t.Fatalf("expected sanitized ReconcileFailed status, got %#v", degraded)
+	}
+	if strings.Contains(degraded.Message, "private-technical-value") ||
+		strings.Contains(degraded.Message, "spec.ports") {
+		t.Fatalf("expected sanitized status message, got %q", degraded.Message)
+	}
+	if stored.Status.ObservedGeneration != 0 || stored.Status.ObservedRelease != "" || stored.Status.WorkloadRef != nil {
+		t.Fatalf("expected Service failure to preserve observed status, got %#v", stored.Status)
+	}
+}
+
 func spanHasAttribute(span tracetest.SpanStub, key string) bool {
 	for _, spanAttribute := range span.Attributes {
 		if string(spanAttribute.Key) == key {
@@ -487,6 +564,22 @@ func (failing failingDeploymentGetClient) Get(
 type failingDeploymentCreateClient struct {
 	client.Client
 	err error
+}
+
+type failingServiceCreateClient struct {
+	client.Client
+	err error
+}
+
+func (failing failingServiceCreateClient) Create(
+	ctx context.Context,
+	object client.Object,
+	options ...client.CreateOption,
+) error {
+	if _, ok := object.(*corev1.Service); ok {
+		return failing.err
+	}
+	return failing.Client.Create(ctx, object, options...)
 }
 
 func (failing failingDeploymentCreateClient) Create(

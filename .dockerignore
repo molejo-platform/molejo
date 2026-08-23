@@ -6,3 +6,7 @@
 !services/
 !services/platform-operator/
 !services/platform-operator/**
+!test/
+!test/fixtures/
+!test/fixtures/http-app/
+!test/fixtures/http-app/**

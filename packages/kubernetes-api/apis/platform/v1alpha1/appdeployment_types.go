@@ -21,7 +21,7 @@ const (
 	ReasonProgressDeadlineExceeded = "ProgressDeadlineExceeded"
 	// ReasonReplicaFailure reports that the managed Deployment cannot create or retain replicas.
 	ReasonReplicaFailure = "ReplicaFailure"
-	// ReasonOwnershipConflict reports that the required Deployment is controlled elsewhere.
+	// ReasonOwnershipConflict reports that a required Kubernetes child is controlled elsewhere.
 	ReasonOwnershipConflict = "OwnershipConflict"
 	// ReasonReconcileFailed reports an operational reconciliation failure.
 	ReasonReconcileFailed = "ReconcileFailed"
@@ -37,6 +37,57 @@ type AppDeploymentSpec struct {
 	// +kubebuilder:default=1
 	// +kubebuilder:validation:Minimum=1
 	Replicas *int32 `json:"replicas,omitempty"`
+
+	// Port is the private HTTP port exposed by the workload.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
+	Port int32 `json:"port"`
+
+	// Resources declares the required compute requests and limits.
+	Resources AppDeploymentResources `json:"resources"`
+
+	// Probes declares the HTTP health endpoints exposed by the workload.
+	Probes AppDeploymentProbes `json:"probes"`
+}
+
+// AppDeploymentResources declares resource requests and limits in platform units.
+// +kubebuilder:validation:XValidation:rule="self.requests.cpuMillis <= self.limits.cpuMillis",message="CPU requests must not exceed CPU limits"
+// +kubebuilder:validation:XValidation:rule="self.requests.memoryMiB <= self.limits.memoryMiB",message="memory requests must not exceed memory limits"
+type AppDeploymentResources struct {
+	// Requests declares the minimum compute reserved for the workload.
+	Requests AppDeploymentResourceValues `json:"requests"`
+
+	// Limits declares the maximum compute available to the workload.
+	Limits AppDeploymentResourceValues `json:"limits"`
+}
+
+// AppDeploymentResourceValues uses Kubernetes-independent CPU and memory units.
+type AppDeploymentResourceValues struct {
+	// CPUMillis is CPU capacity measured in millicores.
+	// +kubebuilder:validation:Minimum=1
+	CPUMillis int64 `json:"cpuMillis"`
+
+	// MemoryMiB is memory capacity measured in mebibytes.
+	// +kubebuilder:validation:Minimum=1
+	MemoryMiB int64 `json:"memoryMiB"`
+}
+
+// AppDeploymentProbes declares the private HTTP health contract.
+type AppDeploymentProbes struct {
+	// Liveness identifies the endpoint used to detect an unhealthy process.
+	Liveness AppDeploymentHTTPProbe `json:"liveness"`
+
+	// Readiness identifies the endpoint used to admit the process to the Service.
+	Readiness AppDeploymentHTTPProbe `json:"readiness"`
+}
+
+// AppDeploymentHTTPProbe identifies one HTTP endpoint on the declared workload port.
+type AppDeploymentHTTPProbe struct {
+	// Path is an absolute HTTP path served by the workload.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=2048
+	// +kubebuilder:validation:Pattern="^/.*$"
+	Path string `json:"path"`
 }
 
 // AppDeploymentStatus reports the observed workload state.

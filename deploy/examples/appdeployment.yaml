@@ -4,4 +4,18 @@ metadata:
   name: ap-example0001
   namespace: default
 spec:
-  image: registry.k8s.io/pause:3.10.1@sha256:278fb9dbcca9518083ad1e11276933a2e96f23de604a3a08cc3c80002767d24c
+  # Replace this placeholder with an HTTP image pinned by its manifest digest.
+  image: registry.example.com/fruto/http-app@sha256:0000000000000000000000000000000000000000000000000000000000000000
+  port: 8080
+  resources:
+    requests:
+      cpuMillis: 50
+      memoryMiB: 64
+    limits:
+      cpuMillis: 500
+      memoryMiB: 256
+  probes:
+    liveness:
+      path: /healthz
+    readiness:
+      path: /readyz

@@ -54,14 +54,106 @@ spec:
                 description: Image is an immutable OCI image reference.
                 pattern: ^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$
                 type: string
+              port:
+                description: Port is the private HTTP port exposed by the workload.
+                format: int32
+                maximum: 65535
+                minimum: 1
+                type: integer
+              probes:
+                description: Probes declares the HTTP health endpoints exposed by
+                  the workload.
+                properties:
+                  liveness:
+                    description: Liveness identifies the endpoint used to detect an
+                      unhealthy process.
+                    properties:
+                      path:
+                        description: Path is an absolute HTTP path served by the workload.
+                        maxLength: 2048
+                        minLength: 1
+                        pattern: ^/.*$
+                        type: string
+                    required:
+                    - path
+                    type: object
+                  readiness:
+                    description: Readiness identifies the endpoint used to admit the
+                      process to the Service.
+                    properties:
+                      path:
+                        description: Path is an absolute HTTP path served by the workload.
+                        maxLength: 2048
+                        minLength: 1
+                        pattern: ^/.*$
+                        type: string
+                    required:
+                    - path
+                    type: object
+                required:
+                - liveness
+                - readiness
+                type: object
               replicas:
                 default: 1
                 description: Replicas is the desired number of workload replicas.
                 format: int32
                 minimum: 1
                 type: integer
+              resources:
+                description: Resources declares the required compute requests and
+                  limits.
+                properties:
+                  limits:
+                    description: Limits declares the maximum compute available to
+                      the workload.
+                    properties:
+                      cpuMillis:
+                        description: CPUMillis is CPU capacity measured in millicores.
+                        format: int64
+                        minimum: 1
+                        type: integer
+                      memoryMiB:
+                        description: MemoryMiB is memory capacity measured in mebibytes.
+                        format: int64
+                        minimum: 1
+                        type: integer
+                    required:
+                    - cpuMillis
+                    - memoryMiB
+                    type: object
+                  requests:
+                    description: Requests declares the minimum compute reserved for
+                      the workload.
+                    properties:
+                      cpuMillis:
+                        description: CPUMillis is CPU capacity measured in millicores.
+                        format: int64
+                        minimum: 1
+                        type: integer
+                      memoryMiB:
+                        description: MemoryMiB is memory capacity measured in mebibytes.
+                        format: int64
+                        minimum: 1
+                        type: integer
+                    required:
+                    - cpuMillis
+                    - memoryMiB
+                    type: object
+                required:
+                - limits
+                - requests
+                type: object
+                x-kubernetes-validations:
+                - message: CPU requests must not exceed CPU limits
+                  rule: self.requests.cpuMillis <= self.limits.cpuMillis
+                - message: memory requests must not exceed memory limits
+                  rule: self.requests.memoryMiB <= self.limits.memoryMiB
             required:
             - image
+            - port
+            - probes
+            - resources
             type: object
           status:
             description: AppDeploymentStatus reports the observed workload state.

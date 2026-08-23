@@ -16,9 +16,11 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -33,6 +35,7 @@ const (
 	managedByLabel     = "app.kubernetes.io/managed-by"
 	managedByValue     = "fruto-platform-operator"
 	containerName      = "app"
+	httpPortName       = "http"
 	tracerName         = "github.com/fruto-platform/fruto/services/platform-operator"
 
 	ownershipConflictRequeueAfter = 5 * time.Minute
@@ -40,7 +43,7 @@ const (
 )
 
 var (
-	errOwnershipConflict = errors.New("deployment is not controlled by the AppDeployment")
+	errOwnershipConflict = errors.New("required child is not controlled by the AppDeployment")
 	stateTransitions     = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "fruto_platform_operator",
 		Name:      "state_transitions_total",
@@ -63,6 +66,7 @@ type AppDeploymentReconciler struct {
 // +kubebuilder:rbac:groups=platform.fruto.calouro.tech,resources=appdeployments,verbs=get;list;watch
 // +kubebuilder:rbac:groups=platform.fruto.calouro.tech,resources=appdeployments/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch
+// +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch
 
 // Reconcile converges one AppDeployment and its owned Deployment.
 func (r *AppDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -105,87 +109,12 @@ func (r *AppDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		attribute.Int64("fruto.appdeployment.observed_generation", appDeployment.Status.ObservedGeneration),
 	)
 
-	deployment := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      appDeployment.Name,
-			Namespace: appDeployment.Namespace,
-		},
-	}
-
 	applyCtx, applySpan := tracer.Start(ctx, "kubernetes.deployment.apply")
-	var resourceVersionBefore string
-	operation, err := controllerutil.CreateOrPatch(applyCtx, r.Client, deployment, func() error {
-		resourceVersionBefore = deployment.ResourceVersion
-		if !deployment.CreationTimestamp.IsZero() && !metav1.IsControlledBy(deployment, appDeployment) {
-			return errOwnershipConflict
-		}
-
-		if err := controllerutil.SetControllerReference(appDeployment, deployment, r.Scheme); err != nil {
-			return fmt.Errorf("set Deployment owner reference: %w", err)
-		}
-
-		replicas := desiredReplicas(appDeployment)
-		selectorLabels := map[string]string{appDeploymentLabel: appDeployment.Name}
-
-		if deployment.Labels == nil {
-			deployment.Labels = map[string]string{}
-		}
-		deployment.Labels[appDeploymentLabel] = appDeployment.Name
-		deployment.Labels[managedByLabel] = managedByValue
-		deployment.Spec.Replicas = &replicas
-		deployment.Spec.Selector = &metav1.LabelSelector{MatchLabels: selectorLabels}
-		deployment.Spec.Template.Labels = map[string]string{
-			appDeploymentLabel: appDeployment.Name,
-			managedByLabel:     managedByValue,
-		}
-		deployment.Spec.Template.Spec.Containers = []corev1.Container{{
-			Name:            containerName,
-			Image:           appDeployment.Spec.Image,
-			ImagePullPolicy: corev1.PullIfNotPresent,
-		}}
-
-		return nil
-	})
+	deployment, deploymentOperation, deploymentVersionBefore, err := r.applyDeployment(applyCtx, appDeployment)
 	finishSpan(applySpan, err)
 	if err != nil {
-		if errors.Is(err, errOwnershipConflict) {
-			decision := workloadDecision{
-				state:   workloadStateDegraded,
-				reason:  platformv1alpha1.ReasonOwnershipConflict,
-				message: "A Deployment with the required name is not controlled by this AppDeployment.",
-			}
-			span.SetAttributes(
-				attribute.String("fruto.reconciliation.state", string(decision.state)),
-				attribute.String("fruto.reconciliation.reason", decision.reason),
-			)
-			if statusErr := r.updateStatus(ctx, appDeployment, nil, decision, false); statusErr != nil {
-				markReconcileFailure(span, statusErr)
-				logReconcileFailure(ctx, appDeployment, statusErr)
-				return ctrl.Result{}, statusErr
-			}
-			return ctrl.Result{RequeueAfter: ownershipConflictRequeueAfter}, nil
-		}
-
-		markReconcileFailure(span, err)
-		logReconcileFailure(ctx, appDeployment, err)
-		if isPersistentReconcileError(err) {
-			decision := workloadDecision{
-				state:   workloadStateDegraded,
-				reason:  platformv1alpha1.ReasonReconcileFailed,
-				message: "The managed Deployment could not be reconciled.",
-			}
-			if statusErr := r.updateStatus(ctx, appDeployment, nil, decision, false); statusErr != nil {
-				markReconcileFailure(span, statusErr)
-				logReconcileFailure(ctx, appDeployment, statusErr)
-				return ctrl.Result{}, statusErr
-			}
-			return ctrl.Result{RequeueAfter: persistentFailureRequeueAfter}, nil
-		}
-		return ctrl.Result{}, err
+		return r.handleProjectionFailure(ctx, span, appDeployment, err)
 	}
-
-	r.recordDeploymentOperation(ctx, appDeployment, operation, resourceVersionBefore, deployment.ResourceVersion)
-
 	_, evaluateSpan := tracer.Start(ctx, "domain.deployment.evaluate")
 	decision := evaluateWorkload(snapshotDeployment(deployment, desiredReplicas(appDeployment)))
 	evaluateSpan.SetAttributes(
@@ -193,6 +122,17 @@ func (r *AppDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		attribute.String("fruto.reconciliation.reason", decision.reason),
 	)
 	evaluateSpan.End()
+	r.recordDeploymentOperation(ctx, appDeployment, deploymentOperation, deploymentVersionBefore,
+		deployment.ResourceVersion, decision)
+
+	serviceCtx, serviceSpan := tracer.Start(ctx, "kubernetes.service.apply")
+	service, serviceOperation, serviceVersionBefore, err := r.applyService(serviceCtx, appDeployment)
+	finishSpan(serviceSpan, err)
+	if err != nil {
+		return r.handleProjectionFailure(ctx, span, appDeployment, err)
+	}
+	r.recordServiceOperation(ctx, appDeployment, serviceOperation, serviceVersionBefore,
+		service.ResourceVersion, decision)
 
 	span.SetAttributes(
 		attribute.String("fruto.reconciliation.state", string(decision.state)),
@@ -207,13 +147,251 @@ func (r *AppDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	return ctrl.Result{}, nil
 }
 
-// SetupWithManager registers the reconciler and watches its owned Deployments.
+// SetupWithManager registers the reconciler and watches its owned Kubernetes children.
 func (r *AppDeploymentReconciler) SetupWithManager(manager ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(manager).
 		Named("appdeployment").
 		For(&platformv1alpha1.AppDeployment{}).
 		Owns(&appsv1.Deployment{}).
+		Owns(&corev1.Service{}).
 		Complete(r)
+}
+
+func (r *AppDeploymentReconciler) applyDeployment(
+	ctx context.Context,
+	appDeployment *platformv1alpha1.AppDeployment,
+) (*appsv1.Deployment, controllerutil.OperationResult, string, error) {
+	deployment := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{
+		Name:      appDeployment.Name,
+		Namespace: appDeployment.Namespace,
+	}}
+	var resourceVersionBefore string
+	operation, err := controllerutil.CreateOrPatch(ctx, r.Client, deployment, func() error {
+		resourceVersionBefore = deployment.ResourceVersion
+		if !deployment.CreationTimestamp.IsZero() && !metav1.IsControlledBy(deployment, appDeployment) {
+			return errOwnershipConflict
+		}
+		if err := controllerutil.SetControllerReference(appDeployment, deployment, r.Scheme); err != nil {
+			return fmt.Errorf("set Deployment owner reference: %w", err)
+		}
+
+		replicas := desiredReplicas(appDeployment)
+		selectorLabels := desiredSelectorLabels(appDeployment)
+		runAsNonRoot := true
+		allowPrivilegeEscalation := false
+		readOnlyRootFilesystem := true
+		automountServiceAccountToken := false
+		maxUnavailable := intstr.FromString("25%")
+		maxSurge := intstr.FromString("25%")
+		progressDeadlineSeconds := int32(600)
+		revisionHistoryLimit := int32(10)
+
+		if deployment.Labels == nil {
+			deployment.Labels = map[string]string{}
+		}
+		deployment.Labels[appDeploymentLabel] = appDeployment.Name
+		deployment.Labels[managedByLabel] = managedByValue
+		deployment.Spec.Replicas = &replicas
+		deployment.Spec.Selector = &metav1.LabelSelector{MatchLabels: selectorLabels}
+		deployment.Spec.Strategy = appsv1.DeploymentStrategy{
+			Type: appsv1.RollingUpdateDeploymentStrategyType,
+			RollingUpdate: &appsv1.RollingUpdateDeployment{
+				MaxUnavailable: &maxUnavailable,
+				MaxSurge:       &maxSurge,
+			},
+		}
+		deployment.Spec.MinReadySeconds = 0
+		deployment.Spec.RevisionHistoryLimit = &revisionHistoryLimit
+		deployment.Spec.Paused = false
+		deployment.Spec.ProgressDeadlineSeconds = &progressDeadlineSeconds
+		deployment.Spec.Template.Labels = map[string]string{
+			appDeploymentLabel: appDeployment.Name,
+			managedByLabel:     managedByValue,
+		}
+		deployment.Spec.Template.Spec.SecurityContext = &corev1.PodSecurityContext{
+			RunAsNonRoot: &runAsNonRoot,
+			SeccompProfile: &corev1.SeccompProfile{
+				Type: corev1.SeccompProfileTypeRuntimeDefault,
+			},
+		}
+		deployment.Spec.Template.Spec.HostNetwork = false
+		deployment.Spec.Template.Spec.HostPID = false
+		deployment.Spec.Template.Spec.HostIPC = false
+		deployment.Spec.Template.Spec.NodeName = ""
+		deployment.Spec.Template.Spec.SchedulerName = corev1.DefaultSchedulerName
+		deployment.Spec.Template.Spec.ReadinessGates = nil
+		deployment.Spec.Template.Spec.RuntimeClassName = nil
+		deployment.Spec.Template.Spec.SchedulingGates = nil
+		deployment.Spec.Template.Spec.ServiceAccountName = ""
+		deployment.Spec.Template.Spec.DeprecatedServiceAccount = ""
+		deployment.Spec.Template.Spec.AutomountServiceAccountToken = &automountServiceAccountToken
+		deployment.Spec.Template.Spec.InitContainers = nil
+		deployment.Spec.Template.Spec.Volumes = nil
+		deployment.Spec.Template.Spec.Containers = []corev1.Container{{
+			Name:            containerName,
+			Image:           appDeployment.Spec.Image,
+			ImagePullPolicy: corev1.PullIfNotPresent,
+			Ports: []corev1.ContainerPort{{
+				Name:          httpPortName,
+				ContainerPort: appDeployment.Spec.Port,
+				Protocol:      corev1.ProtocolTCP,
+			}},
+			Resources: desiredResourceRequirements(appDeployment),
+			StartupProbe: desiredHTTPProbe(
+				appDeployment.Spec.Probes.Readiness.Path,
+				2,
+				30,
+			),
+			ReadinessProbe: desiredHTTPProbe(
+				appDeployment.Spec.Probes.Readiness.Path,
+				5,
+				3,
+			),
+			LivenessProbe: desiredHTTPProbe(
+				appDeployment.Spec.Probes.Liveness.Path,
+				10,
+				3,
+			),
+			SecurityContext: &corev1.SecurityContext{
+				AllowPrivilegeEscalation: &allowPrivilegeEscalation,
+				ReadOnlyRootFilesystem:   &readOnlyRootFilesystem,
+				Capabilities: &corev1.Capabilities{
+					Drop: []corev1.Capability{"ALL"},
+				},
+			},
+		}}
+
+		return nil
+	})
+	return deployment, operation, resourceVersionBefore, err
+}
+
+func (r *AppDeploymentReconciler) applyService(
+	ctx context.Context,
+	appDeployment *platformv1alpha1.AppDeployment,
+) (*corev1.Service, controllerutil.OperationResult, string, error) {
+	service := &corev1.Service{ObjectMeta: metav1.ObjectMeta{
+		Name:      appDeployment.Name,
+		Namespace: appDeployment.Namespace,
+	}}
+	var resourceVersionBefore string
+	operation, err := controllerutil.CreateOrPatch(ctx, r.Client, service, func() error {
+		resourceVersionBefore = service.ResourceVersion
+		if !service.CreationTimestamp.IsZero() && !metav1.IsControlledBy(service, appDeployment) {
+			return errOwnershipConflict
+		}
+		if err := controllerutil.SetControllerReference(appDeployment, service, r.Scheme); err != nil {
+			return fmt.Errorf("set Service owner reference: %w", err)
+		}
+
+		if service.Labels == nil {
+			service.Labels = map[string]string{}
+		}
+		service.Labels[appDeploymentLabel] = appDeployment.Name
+		service.Labels[managedByLabel] = managedByValue
+		service.Spec.Type = corev1.ServiceTypeClusterIP
+		service.Spec.Selector = desiredSelectorLabels(appDeployment)
+		service.Spec.Ports = []corev1.ServicePort{{
+			Name:       httpPortName,
+			Protocol:   corev1.ProtocolTCP,
+			Port:       appDeployment.Spec.Port,
+			TargetPort: intstr.FromString(httpPortName),
+		}}
+		service.Spec.ExternalIPs = nil
+		service.Spec.ExternalName = ""
+		service.Spec.LoadBalancerIP = ""
+		service.Spec.LoadBalancerClass = nil
+		service.Spec.LoadBalancerSourceRanges = nil
+		service.Spec.AllocateLoadBalancerNodePorts = nil
+		service.Spec.HealthCheckNodePort = 0
+		service.Spec.ExternalTrafficPolicy = ""
+		service.Spec.PublishNotReadyAddresses = false
+		service.Spec.SessionAffinity = corev1.ServiceAffinityNone
+		service.Spec.SessionAffinityConfig = nil
+		internalTrafficPolicy := corev1.ServiceInternalTrafficPolicyCluster
+		service.Spec.InternalTrafficPolicy = &internalTrafficPolicy
+		service.Spec.TrafficDistribution = nil
+
+		return nil
+	})
+	return service, operation, resourceVersionBefore, err
+}
+
+func (r *AppDeploymentReconciler) handleProjectionFailure(
+	ctx context.Context,
+	span trace.Span,
+	appDeployment *platformv1alpha1.AppDeployment,
+	err error,
+) (ctrl.Result, error) {
+	if errors.Is(err, errOwnershipConflict) {
+		decision := workloadDecision{
+			state:   workloadStateDegraded,
+			reason:  platformv1alpha1.ReasonOwnershipConflict,
+			message: "A required Kubernetes child is not controlled by this AppDeployment.",
+		}
+		span.SetAttributes(
+			attribute.String("fruto.reconciliation.state", string(decision.state)),
+			attribute.String("fruto.reconciliation.reason", decision.reason),
+		)
+		if statusErr := r.updateStatus(ctx, appDeployment, nil, decision, false); statusErr != nil {
+			markReconcileFailure(span, statusErr)
+			logReconcileFailure(ctx, appDeployment, statusErr)
+			return ctrl.Result{}, statusErr
+		}
+		return ctrl.Result{RequeueAfter: ownershipConflictRequeueAfter}, nil
+	}
+
+	markReconcileFailure(span, err)
+	logReconcileFailure(ctx, appDeployment, err)
+	if isPersistentReconcileError(err) {
+		decision := workloadDecision{
+			state:   workloadStateDegraded,
+			reason:  platformv1alpha1.ReasonReconcileFailed,
+			message: "A required Kubernetes child could not be reconciled.",
+		}
+		if statusErr := r.updateStatus(ctx, appDeployment, nil, decision, false); statusErr != nil {
+			markReconcileFailure(span, statusErr)
+			logReconcileFailure(ctx, appDeployment, statusErr)
+			return ctrl.Result{}, statusErr
+		}
+		return ctrl.Result{RequeueAfter: persistentFailureRequeueAfter}, nil
+	}
+	return ctrl.Result{}, err
+}
+
+func desiredSelectorLabels(appDeployment *platformv1alpha1.AppDeployment) map[string]string {
+	return map[string]string{appDeploymentLabel: appDeployment.Name}
+}
+
+func desiredResourceRequirements(
+	appDeployment *platformv1alpha1.AppDeployment,
+) corev1.ResourceRequirements {
+	requests := appDeployment.Spec.Resources.Requests
+	limits := appDeployment.Spec.Resources.Limits
+	return corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse(fmt.Sprintf("%dm", requests.CPUMillis)),
+			corev1.ResourceMemory: resource.MustParse(fmt.Sprintf("%dMi", requests.MemoryMiB)),
+		},
+		Limits: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse(fmt.Sprintf("%dm", limits.CPUMillis)),
+			corev1.ResourceMemory: resource.MustParse(fmt.Sprintf("%dMi", limits.MemoryMiB)),
+		},
+	}
+}
+
+func desiredHTTPProbe(path string, periodSeconds int32, failureThreshold int32) *corev1.Probe {
+	return &corev1.Probe{
+		ProbeHandler: corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{
+			Path:   path,
+			Port:   intstr.FromString(httpPortName),
+			Scheme: corev1.URISchemeHTTP,
+		}},
+		TimeoutSeconds:   2,
+		PeriodSeconds:    periodSeconds,
+		SuccessThreshold: 1,
+		FailureThreshold: failureThreshold,
+	}
 }
 
 func desiredReplicas(appDeployment *platformv1alpha1.AppDeployment) int32 {
@@ -316,6 +494,7 @@ func (r *AppDeploymentReconciler) recordDeploymentOperation(
 	operation controllerutil.OperationResult,
 	resourceVersionBefore string,
 	resourceVersionAfter string,
+	decision workloadDecision,
 ) {
 	if resourceVersionBefore != "" && resourceVersionBefore == resourceVersionAfter {
 		return
@@ -336,9 +515,46 @@ func (r *AppDeploymentReconciler) recordDeploymentOperation(
 		"generation", appDeployment.Generation,
 		"observedGeneration", appDeployment.Status.ObservedGeneration,
 		"operation", string(operation),
+		"state", decision.state,
+		"reason", decision.reason,
 	)
 	if r.Recorder != nil {
 		r.Recorder.Event(appDeployment, corev1.EventTypeNormal, reason, "The managed Deployment was reconciled.")
+	}
+}
+
+func (r *AppDeploymentReconciler) recordServiceOperation(
+	ctx context.Context,
+	appDeployment *platformv1alpha1.AppDeployment,
+	operation controllerutil.OperationResult,
+	resourceVersionBefore string,
+	resourceVersionAfter string,
+	decision workloadDecision,
+) {
+	if resourceVersionBefore != "" && resourceVersionBefore == resourceVersionAfter {
+		return
+	}
+	var reason string
+	switch operation {
+	case controllerutil.OperationResultCreated:
+		reason = "ServiceCreated"
+	case controllerutil.OperationResultUpdated, controllerutil.OperationResultUpdatedStatus,
+		controllerutil.OperationResultUpdatedStatusOnly:
+		reason = "ServiceUpdated"
+	default:
+		return
+	}
+
+	ctrl.LoggerFrom(ctx).Info("managed Service changed",
+		"uid", appDeployment.UID,
+		"generation", appDeployment.Generation,
+		"observedGeneration", appDeployment.Status.ObservedGeneration,
+		"operation", string(operation),
+		"state", decision.state,
+		"reason", decision.reason,
+	)
+	if r.Recorder != nil {
+		r.Recorder.Event(appDeployment, corev1.EventTypeNormal, reason, "The managed Service was reconciled.")
 	}
 }
 

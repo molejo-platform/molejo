@@ -4,4 +4,17 @@ metadata:
   name: ap-e2e000001
   namespace: ws-e2e
 spec:
-  image: registry.k8s.io/pause:3.10.1@sha256:278fb9dbcca9518083ad1e11276933a2e96f23de604a3a08cc3c80002767d24c
+  image: __PHASE2_APP_IMAGE__
+  port: 8080
+  resources:
+    requests:
+      cpuMillis: 25
+      memoryMiB: 32
+    limits:
+      cpuMillis: 250
+      memoryMiB: 96
+  probes:
+    liveness:
+      path: /healthz
+    readiness:
+      path: /readyz
