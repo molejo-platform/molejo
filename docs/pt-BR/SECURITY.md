@@ -15,7 +15,7 @@ branch padrão conforme a disponibilidade dos mantenedores.
 
 Relate suspeitas de vulnerabilidade pelo
 [canal privado de vulnerabilidades do GitHub](https://github.com/fruto-platform/fruto/security/advisories/new).
-Não divulgue a vulnerabilidade em uma issue, discussão ou pull request público.
+Não divulgue a vulnerabilidade em uma issue ou pull request público.
 
 Inclua, quando possível:
 

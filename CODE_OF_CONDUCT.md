@@ -35,7 +35,7 @@ project in public spaces.
 
 Report conduct concerns privately to the maintainer using the contact information
 on [their GitHub profile](https://github.com/OliveiraCleidson). Do not publish
-sensitive personal information in an issue or discussion.
+sensitive personal information in an issue or another public project channel.
 
 The maintainer may correct, warn, temporarily restrict, or permanently remove
 participants whose behavior violates this policy. Reports will be handled as

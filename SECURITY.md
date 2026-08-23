@@ -15,7 +15,7 @@ a best-effort basis.
 
 Report suspected vulnerabilities through
 [GitHub private vulnerability reporting](https://github.com/fruto-platform/fruto/security/advisories/new).
-Do not disclose the vulnerability in a public issue, discussion, or pull request.
+Do not disclose the vulnerability in a public issue or pull request.
 
 Include, when possible:
 

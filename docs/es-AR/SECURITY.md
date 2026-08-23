@@ -15,7 +15,7 @@ aplican a la rama predeterminada según la disponibilidad de los mantenedores.
 
 Informá las posibles vulnerabilidades mediante el
 [canal privado de vulnerabilidades de GitHub](https://github.com/fruto-platform/fruto/security/advisories/new).
-No divulgues la vulnerabilidad en un issue, discusión o pull request público.
+No divulgues la vulnerabilidad en un issue o pull request público.
 
 Incluí, cuando sea posible:
 

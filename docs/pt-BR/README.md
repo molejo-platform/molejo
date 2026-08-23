@@ -20,9 +20,12 @@ O repositório está em sua etapa de fundação. O trabalho é intencionalmente
 incremental: a menor capacidade útil é implementada, observada em execução,
 corrigida a partir de evidências reais e somente então ampliada.
 
-O escopo atual está limitado a convenções de engenharia, decisões de arquitetura e
-aos primeiros contratos versionados. Ainda não existe plataforma funcional, API
-pública, controller ou interface web.
+O repositório agora contém um corte vertical executável: um contrato
+`AppDeployment`, um operator Kubernetes, um Service ClusterIP privado, publicação
+opcional por HTTPRoute e Gateway HTTPS compartilhado e testes reproduzíveis de
+integração e end-to-end. Ele também possui contratos de imagem para HTML estático
+e SPA Vite/React que reutilizam a mesma API de runtime. Ainda não existe API pública do produto, CLI, interface
+web, automação de DNS externo ou gestão de workloads pronta para produção.
 
 ## Modelo do Produto
 
@@ -47,11 +50,12 @@ versionados e os componentes que implementam o produto público.
 A estrutura será introduzida apenas quando cada componente possuir um consumidor
 real:
 
-- `api/` — tipos da API Kubernetes e contratos versionados;
-- `cmd/` — entry points Go para controllers, APIs e outros binários;
-- `internal/` — implementação Go compartilhada e privada;
-- `web/` — interface web do produto;
-- `config/` — artefatos de instalação Kubernetes gerados e mantidos;
+- `apps/` — aplicações usadas diretamente por pessoas ou agentes de software;
+- `services/` — componentes server-side executáveis de forma independente;
+- `packages/` — bibliotecas reutilizáveis, contratos Kubernetes e SDKs gerados;
+- `contracts/` — definições canônicas de interfaces independentes de linguagem;
+- `deploy/` — artefatos de instalação Kubernetes gerados e mantidos;
+- `test/e2e/` — testes que atravessam fronteiras de componentes;
 - `docs/` — documentação pública de arquitetura e do projeto.
 
 O código Go inicial usará um único módulo na raiz do repositório. Novos módulos
@@ -69,6 +73,50 @@ SDK público, exigir versionamento e compatibilidade de release independentes.
 Essas escolhas descrevem a direção inicial. Componentes são adicionados de forma
 incremental e não recebem scaffold antes do início de sua fase.
 
+## Desenvolvimento
+
+O checkout atual requer Go 1.26 ou mais recente, Node.js 24.19.0 com Corepack,
+Docker com Buildx, `kubectl` e `just`. O gate local exige intencionalmente a versão
+exata de Node pinada em `.node-version`. Não é necessário instalar Kind globalmente;
+o comando end-to-end executa a versão pinada por meio do Go.
+
+```bash
+just generate  # regenera artefatos DeepCopy, CRD e RBAC
+just test      # executa testes contra um API server local do envtest
+just verify    # gera, verifica formatação, executa go vet e os testes
+just e2e       # valida rotas privadas e públicas em um cluster Kind descartável
+just ci        # executa o gate local determinístico completo
+just e2e-public # valida separadamente acesso HTTPS público de saída
+just frontend-check # verifica tipos da fixture React pelo lockfile pnpm
+just frontend-test # valida as duas imagens em um container restrito
+just audit-frontend-images # executa a auditoria opcional com Docker Scout
+```
+
+A primeira execução baixa módulos Go, binários do envtest, Kind e imagens de
+container pinados. `just e2e` usa um kubeconfig temporário e não acessa o contexto
+Kubernetes atualmente selecionado. Ele constrói duas versões locais da fixture
+HTTP, referencia ambas por digest e valida HTTP privado e publicação HTTPS de
+REST, GraphQL, SSE e WebSocket por um Gateway local com certificado efêmero
+confiado pelo cliente de teste. Também valida hospedagem estática, deep links da
+SPA, cache, probes, rollout, drift, self-healing e garbage collection.
+`just e2e-public` adiciona somente uma chamada HTTPS real de
+saída e fica fora do gate determinístico `just ci`. DNS público e certificado
+publicamente confiável exigem aceite separado no ambiente da foundation.
+
+`just audit-frontend-images` fica deliberadamente fora de `just ci`. Ele requer
+Docker Scout e usa sua base mutável de vulnerabilidades para verificar achados
+críticos e altos de sistema operacional e npm no builder descartado da SPA e
+realiza uma verificação crítica/alta completa nas duas imagens de runtime.
+
+O alvo manual `just e2e-frontend-k3s` é reservado a mantenedores com acesso ao
+`fruto-lab`. Ele implanta imagens do registry privado por digest e mantém
+`static.fruto.calouro.tech` e `spa.fruto.calouro.tech` disponíveis para inspeção.
+
+## Operação
+
+O [runbook do platform operator](operations/platform-operator.md) documenta o
+contrato de estado, fluxo de diagnóstico, métricas protegidas e tracing opcional.
+
 ## Documentação
 
 Inglês é o idioma canônico da documentação. Versões em português (`pt-BR`) e
@@ -76,8 +124,9 @@ espanhol da Argentina (`es-AR`) são mantidas em conjunto, e outros idiomas pode
 ser acrescentados futuramente.
 
 Os Architecture Decision Records ficam em [`adr`](adr/README.md). Os
-arquivos de ADR usam o mesmo identificador, nome de arquivo e headings em inglês
-em todos os idiomas; somente o conteúdo é localizado.
+arquivos de ADR usam o mesmo identificador, nome de arquivo, título em inglês e
+headings em inglês em todos os idiomas; somente o texto abaixo desses headings é
+localizado.
 
 ## Contribuição
 

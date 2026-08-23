@@ -1,4 +1,4 @@
-# ADR-0001: Fronteiras de Componentes do Monorepo e Estratégia de Módulos
+# ADR-0001: Monorepo Component Boundaries and Module Strategy
 
 ## Status
 

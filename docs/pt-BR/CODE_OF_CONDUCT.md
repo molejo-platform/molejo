@@ -36,7 +36,7 @@ oficialmente o projeto em espaços públicos.
 
 Relate problemas de conduta em particular ao mantenedor usando as informações de
 contato em [seu perfil do GitHub](https://github.com/OliveiraCleidson). Não publique
-informações pessoais sensíveis em uma issue ou discussão.
+informações pessoais sensíveis em uma issue ou outro canal público do projeto.
 
 O mantenedor poderá corrigir, advertir, restringir temporariamente ou remover
 permanentemente participantes cujo comportamento viole esta política. Os relatos
