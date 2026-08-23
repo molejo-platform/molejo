@@ -59,7 +59,7 @@ func snapshotDeployment(deployment *appsv1.Deployment, desiredReplicas int32) wo
 }
 
 func evaluateWorkload(snapshot workloadSnapshot) workloadDecision {
-	statusCurrent := snapshot.observedGeneration >= snapshot.generation
+	statusCurrent := snapshot.observedGeneration == snapshot.generation
 	if statusCurrent && snapshot.progressDeadlineExceeded {
 		return workloadDecision{
 			state:   workloadStateDegraded,

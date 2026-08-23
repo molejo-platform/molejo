@@ -1,0 +1,157 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: traefik-e2e
+  namespace: fruto-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: traefik-e2e
+rules:
+  - apiGroups: [""]
+    resources: ["services", "endpoints", "secrets", "configmaps", "namespaces"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpointslices"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["gateway.networking.k8s.io"]
+    resources:
+      - gatewayclasses
+      - gateways
+      - httproutes
+      - grpcroutes
+      - tlsroutes
+      - backendtlspolicies
+      - referencegrants
+      - listenersets
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["gateway.networking.k8s.io"]
+    resources: ["gatewayclasses/status", "gateways/status", "httproutes/status", "grpcroutes/status"]
+    verbs: ["patch", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: traefik-e2e
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: traefik-e2e
+subjects:
+  - kind: ServiceAccount
+    name: traefik-e2e
+    namespace: fruto-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: traefik-e2e
+  namespace: fruto-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: traefik-e2e
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: traefik-e2e
+    spec:
+      serviceAccountName: traefik-e2e
+      automountServiceAccountToken: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: traefik
+          image: docker.io/library/traefik:v3.7.7@sha256:1cb3845d7a05e1473c9086351426597e911db49db382b6e4769f9b0744962ac8
+          args:
+            - --entrypoints.websecure.address=:8443
+            - --entrypoints.websecure.transport.respondingtimeouts.readtimeout=0s
+            - --entrypoints.websecure.transport.respondingtimeouts.writetimeout=0s
+            - --entrypoints.websecure.transport.respondingtimeouts.idletimeout=0s
+            - --entrypoints.admin.address=:9000
+            - --providers.kubernetesgateway=true
+            - --ping=true
+            - --ping.entrypoint=admin
+            - --log.level=INFO
+          ports:
+            - name: websecure
+              containerPort: 8443
+            - name: admin
+              containerPort: 9000
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: admin
+            periodSeconds: 2
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: admin
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: traefik-e2e
+  namespace: fruto-system
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: traefik-e2e
+  ports:
+    - name: https
+      port: 8443
+      targetPort: websecure
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: traefik-e2e
+spec:
+  controllerName: traefik.io/gateway-controller
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: fruto
+  namespace: fruto-system
+spec:
+  gatewayClassName: traefik-e2e
+  listeners:
+    - name: https
+      hostname: "*.fruto.calouro.tech"
+      port: 8443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            name: fruto-e2e-wildcard-tls
+      allowedRoutes:
+        namespaces:
+          from: All

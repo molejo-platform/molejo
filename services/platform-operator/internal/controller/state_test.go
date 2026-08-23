@@ -42,6 +42,14 @@ func TestEvaluateWorkload(t *testing.T) {
 			reason: platformv1alpha1.ReasonDeploymentProgressing,
 		},
 		{
+			name: "future observed generation is not current",
+			mutate: func(snapshot *workloadSnapshot) {
+				snapshot.observedGeneration = 4
+			},
+			state:  workloadStateProgressing,
+			reason: platformv1alpha1.ReasonDeploymentProgressing,
+		},
+		{
 			name: "partial update is progressing",
 			mutate: func(snapshot *workloadSnapshot) {
 				snapshot.replicas = 3
@@ -187,6 +195,7 @@ func FuzzEvaluateWorkload(f *testing.F) {
 	f.Add(int32(1), int64(1), int64(1), int32(1), int32(1), int32(1), int32(0), false, false)
 	f.Add(int32(2), int64(4), int64(3), int32(3), int32(1), int32(2), int32(1), false, false)
 	f.Add(int32(1), int64(2), int64(2), int32(1), int32(1), int32(0), int32(1), true, true)
+	f.Add(int32(1), int64(2), int64(3), int32(1), int32(1), int32(1), int32(0), false, false)
 
 	f.Fuzz(func(
 		t *testing.T,
@@ -216,7 +225,7 @@ func FuzzEvaluateWorkload(f *testing.F) {
 		if !reflect.DeepEqual(decision, evaluateWorkload(snapshot)) {
 			t.Fatal("the same snapshot produced different decisions")
 		}
-		statusCurrent := observedGeneration >= generation
+		statusCurrent := observedGeneration == generation
 
 		switch decision.state {
 		case workloadStateReady:

@@ -25,9 +25,30 @@ const (
 	ReasonOwnershipConflict = "OwnershipConflict"
 	// ReasonReconcileFailed reports an operational reconciliation failure.
 	ReasonReconcileFailed = "ReconcileFailed"
+	// ReasonHTTPRouteProgressing reports that the public route is not accepted yet.
+	ReasonHTTPRouteProgressing = "HTTPRouteProgressing"
+	// ReasonHTTPRouteRejected reports that the configured Gateway rejected the public route.
+	ReasonHTTPRouteRejected = "HTTPRouteRejected"
+	// ReasonGatewayProgressing reports that the shared Gateway is not programmed yet.
+	ReasonGatewayProgressing = "GatewayProgressing"
+	// ReasonGatewayRejected reports that the shared Gateway or HTTPS listener is unavailable.
+	ReasonGatewayRejected = "GatewayRejected"
+	// ReasonHostnameConflict reports that another AppDeployment owns the requested public hostname.
+	ReasonHostnameConflict = "HostnameConflict"
+
+	// ExposurePrivate keeps an AppDeployment reachable only through its ClusterIP Service.
+	ExposurePrivate AppDeploymentExposure = "Private"
+	// ExposurePublic publishes an AppDeployment through the shared HTTPS Gateway.
+	ExposurePublic AppDeploymentExposure = "Public"
 )
 
+// AppDeploymentExposure declares whether the workload has a public route.
+// +kubebuilder:validation:Enum=Private;Public
+type AppDeploymentExposure string
+
 // AppDeploymentSpec declares the minimum workload intent understood by the platform operator.
+// +kubebuilder:validation:XValidation:rule="self.exposure != 'Public' || has(self.slug)",message="slug is required for public exposure"
+// +kubebuilder:validation:XValidation:rule="self.exposure != 'Private' || !has(self.slug)",message="slug must be omitted for private exposure"
 type AppDeploymentSpec struct {
 	// Image is an immutable OCI image reference.
 	// +kubebuilder:validation:Pattern="^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$"
@@ -48,6 +69,16 @@ type AppDeploymentSpec struct {
 
 	// Probes declares the HTTP health endpoints exposed by the workload.
 	Probes AppDeploymentProbes `json:"probes"`
+
+	// Exposure controls whether the workload is reachable through the shared HTTPS Gateway.
+	// +kubebuilder:default=Private
+	Exposure AppDeploymentExposure `json:"exposure,omitempty"`
+
+	// Slug is the globally unique DNS label used for public exposure.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern="^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$"
+	Slug string `json:"slug,omitempty"`
 }
 
 // AppDeploymentResources declares resource requests and limits in platform units.

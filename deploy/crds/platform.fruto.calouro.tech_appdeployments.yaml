@@ -50,6 +50,14 @@ spec:
             description: AppDeploymentSpec declares the minimum workload intent understood
               by the platform operator.
             properties:
+              exposure:
+                default: Private
+                description: Exposure controls whether the workload is reachable through
+                  the shared HTTPS Gateway.
+                enum:
+                - Private
+                - Public
+                type: string
               image:
                 description: Image is an immutable OCI image reference.
                 pattern: ^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$
@@ -149,12 +157,24 @@ spec:
                   rule: self.requests.cpuMillis <= self.limits.cpuMillis
                 - message: memory requests must not exceed memory limits
                   rule: self.requests.memoryMiB <= self.limits.memoryMiB
+              slug:
+                description: Slug is the globally unique DNS label used for public
+                  exposure.
+                maxLength: 63
+                minLength: 1
+                pattern: ^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$
+                type: string
             required:
             - image
             - port
             - probes
             - resources
             type: object
+            x-kubernetes-validations:
+            - message: slug is required for public exposure
+              rule: self.exposure != 'Public' || has(self.slug)
+            - message: slug must be omitted for private exposure
+              rule: self.exposure != 'Private' || !has(self.slug)
           status:
             description: AppDeploymentStatus reports the observed workload state.
             properties:

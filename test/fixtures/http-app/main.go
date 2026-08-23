@@ -2,15 +2,22 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
 	"time"
+
+	"github.com/gorilla/websocket"
 )
 
-const maxUpstreamBodyBytes = 64 * 1024
+const (
+	maxUpstreamBodyBytes = 64 * 1024
+	maxGraphQLBodyBytes  = 16 * 1024
+	maxWebSocketBytes    = 4 * 1024
+)
 
 var version = "devel"
 
@@ -27,7 +34,7 @@ func main() {
 		Handler:           newHandler(),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
-		WriteTimeout:      10 * time.Second,
+		WriteTimeout:      0,
 		IdleTimeout:       30 * time.Second,
 	}
 	log.Printf("phase 2 HTTP fixture %s listening on %s", version, server.Addr)
@@ -45,6 +52,9 @@ func newHandler() http.Handler {
 		writeJSON(writer, http.StatusServiceUnavailable, response{Status: "not-ready", Version: version})
 	}))
 	mux.HandleFunc("/outbound", exactGET("/outbound", outbound))
+	mux.HandleFunc("/graphql", graphQL)
+	mux.HandleFunc("/events", exactGET("/events", events))
+	mux.HandleFunc("/ws", webSocket)
 	return mux
 }
 
@@ -114,7 +124,88 @@ func outbound(writer http.ResponseWriter, request *http.Request) {
 	})
 }
 
-func writeJSON(writer http.ResponseWriter, statusCode int, payload response) {
+func graphQL(writer http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodPost {
+		writer.Header().Set("Allow", http.MethodPost)
+		http.Error(writer, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	request.Body = http.MaxBytesReader(writer, request.Body, maxGraphQLBodyBytes)
+	var payload struct {
+		Query string `json:"query"`
+	}
+	if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+		var maxBytesError *http.MaxBytesError
+		if errors.As(err, &maxBytesError) {
+			http.Error(writer, "request body too large", http.StatusRequestEntityTooLarge)
+			return
+		}
+		http.Error(writer, "invalid GraphQL request", http.StatusBadRequest)
+		return
+	}
+	if payload.Query != "{ status version }" {
+		http.Error(writer, "unsupported GraphQL query", http.StatusBadRequest)
+		return
+	}
+	writeJSON(writer, http.StatusOK, struct {
+		Data response `json:"data"`
+	}{Data: response{Status: "ok", Version: version}})
+}
+
+func events(writer http.ResponseWriter, request *http.Request) {
+	flusher, ok := writer.(http.Flusher)
+	if !ok {
+		http.Error(writer, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+	writer.Header().Set("Content-Type", "text/event-stream")
+	writer.Header().Set("Cache-Control", "no-cache")
+	writer.Header().Set("X-Accel-Buffering", "no")
+	writer.WriteHeader(http.StatusOK)
+	ticker := time.NewTicker(25 * time.Millisecond)
+	defer ticker.Stop()
+	for sequence := 1; ; sequence++ {
+		if _, err := fmt.Fprintf(writer, "id: %d\nevent: status\ndata: {\"status\":\"ok\",\"version\":%q}\n\n", sequence, version); err != nil {
+			return
+		}
+		flusher.Flush()
+		select {
+		case <-request.Context().Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+var websocketUpgrader = websocket.Upgrader{
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
+}
+
+func webSocket(writer http.ResponseWriter, request *http.Request) {
+	connection, err := websocketUpgrader.Upgrade(writer, request, nil)
+	if err != nil {
+		return
+	}
+	defer connection.Close()
+	connection.SetReadLimit(maxWebSocketBytes)
+	for {
+		var payload struct {
+			Message string `json:"message"`
+		}
+		if err := connection.ReadJSON(&payload); err != nil {
+			return
+		}
+		if err := connection.WriteJSON(struct {
+			Message string `json:"message"`
+			Version string `json:"version"`
+		}{Message: payload.Message, Version: version}); err != nil {
+			return
+		}
+	}
+}
+
+func writeJSON(writer http.ResponseWriter, statusCode int, payload any) {
 	writer.Header().Set("Content-Type", "application/json")
 	writer.WriteHeader(statusCode)
 	if err := json.NewEncoder(writer).Encode(payload); err != nil {

@@ -25,18 +25,24 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	controllermetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	platformv1alpha1 "github.com/fruto-platform/fruto/packages/kubernetes-api/apis/platform/v1alpha1"
 )
 
 const (
-	appDeploymentLabel = "platform.fruto.calouro.tech/app-deployment"
-	managedByLabel     = "app.kubernetes.io/managed-by"
-	managedByValue     = "fruto-platform-operator"
-	containerName      = "app"
-	httpPortName       = "http"
-	tracerName         = "github.com/fruto-platform/fruto/services/platform-operator"
+	appDeploymentLabel     = "platform.fruto.calouro.tech/app-deployment"
+	managedByLabel         = "app.kubernetes.io/managed-by"
+	managedByValue         = "fruto-platform-operator"
+	containerName          = "app"
+	httpPortName           = "http"
+	tracerName             = "github.com/fruto-platform/fruto/services/platform-operator"
+	sharedGatewayName      = "fruto"
+	sharedGatewayNamespace = "fruto-system"
+	sharedGatewaySection   = "https"
 
 	ownershipConflictRequeueAfter = 5 * time.Minute
 	persistentFailureRequeueAfter = 5 * time.Minute
@@ -44,6 +50,7 @@ const (
 
 var (
 	errOwnershipConflict = errors.New("required child is not controlled by the AppDeployment")
+	errHostnameConflict  = errors.New("public hostname is already owned by another AppDeployment")
 	stateTransitions     = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "fruto_platform_operator",
 		Name:      "state_transitions_total",
@@ -67,6 +74,8 @@ type AppDeploymentReconciler struct {
 // +kubebuilder:rbac:groups=platform.fruto.calouro.tech,resources=appdeployments/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch
+// +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways,verbs=get;list;watch
 
 // Reconcile converges one AppDeployment and its owned Deployment.
 func (r *AppDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -108,6 +117,9 @@ func (r *AppDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		attribute.Int64("fruto.appdeployment.generation", appDeployment.Generation),
 		attribute.Int64("fruto.appdeployment.observed_generation", appDeployment.Status.ObservedGeneration),
 	)
+	if !appDeployment.DeletionTimestamp.IsZero() {
+		return ctrl.Result{}, nil
+	}
 
 	applyCtx, applySpan := tracer.Start(ctx, "kubernetes.deployment.apply")
 	deployment, deploymentOperation, deploymentVersionBefore, err := r.applyDeployment(applyCtx, appDeployment)
@@ -134,6 +146,24 @@ func (r *AppDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	r.recordServiceOperation(ctx, appDeployment, serviceOperation, serviceVersionBefore,
 		service.ResourceVersion, decision)
 
+	publicationCtx, publicationSpan := tracer.Start(ctx, "kubernetes.httproute.apply")
+	route, routeOperation, routeVersionBefore, err := r.applyPublication(publicationCtx, appDeployment)
+	finishSpan(publicationSpan, err)
+	if err != nil {
+		return r.handleProjectionFailure(ctx, span, appDeployment, err)
+	}
+	decision = evaluatePublication(appDeployment, route, decision)
+	if appDeployment.Spec.Exposure == platformv1alpha1.ExposurePublic {
+		gatewayCtx, gatewaySpan := tracer.Start(ctx, "kubernetes.gateway.get")
+		gateway, gatewayErr := r.getPublicationGateway(gatewayCtx)
+		finishSpan(gatewaySpan, gatewayErr)
+		if gatewayErr != nil {
+			return r.handleProjectionFailure(ctx, span, appDeployment, gatewayErr)
+		}
+		decision = evaluatePublicationGateway(gateway, decision)
+	}
+	r.recordHTTPRouteOperation(ctx, appDeployment, routeOperation, routeVersionBefore, route, decision)
+
 	span.SetAttributes(
 		attribute.String("fruto.reconciliation.state", string(decision.state)),
 		attribute.String("fruto.reconciliation.reason", decision.reason),
@@ -154,7 +184,365 @@ func (r *AppDeploymentReconciler) SetupWithManager(manager ctrl.Manager) error {
 		For(&platformv1alpha1.AppDeployment{}).
 		Owns(&appsv1.Deployment{}).
 		Owns(&corev1.Service{}).
+		Owns(&gatewayv1.HTTPRoute{}).
+		Watches(&gatewayv1.Gateway{}, handler.EnqueueRequestsFromMapFunc(r.mapGatewayToAppDeployments)).
 		Complete(r)
+}
+
+func (r *AppDeploymentReconciler) mapGatewayToAppDeployments(
+	ctx context.Context,
+	object client.Object,
+) []reconcile.Request {
+	if object.GetNamespace() != sharedGatewayNamespace || object.GetName() != sharedGatewayName {
+		return nil
+	}
+	appDeployments := &platformv1alpha1.AppDeploymentList{}
+	if err := r.List(ctx, appDeployments); err != nil {
+		ctrl.LoggerFrom(ctx).Error(err, "unable to list public AppDeployments after Gateway change")
+		return nil
+	}
+	requests := make([]reconcile.Request, 0, len(appDeployments.Items))
+	for index := range appDeployments.Items {
+		appDeployment := &appDeployments.Items[index]
+		if appDeployment.Spec.Exposure != platformv1alpha1.ExposurePublic {
+			continue
+		}
+		requests = append(requests, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(appDeployment)})
+	}
+	return requests
+}
+
+func (r *AppDeploymentReconciler) applyPublication(
+	ctx context.Context,
+	appDeployment *platformv1alpha1.AppDeployment,
+) (*gatewayv1.HTTPRoute, controllerutil.OperationResult, string, error) {
+	route := &gatewayv1.HTTPRoute{ObjectMeta: metav1.ObjectMeta{
+		Name: appDeployment.Name, Namespace: appDeployment.Namespace,
+	}}
+	if appDeployment.Spec.Exposure != platformv1alpha1.ExposurePublic {
+		if err := r.Get(ctx, client.ObjectKeyFromObject(route), route); err != nil {
+			if apierrors.IsNotFound(err) {
+				return nil, controllerutil.OperationResultNone, "", nil
+			}
+			return nil, controllerutil.OperationResultNone, "", err
+		}
+		if !metav1.IsControlledBy(route, appDeployment) {
+			return nil, controllerutil.OperationResultNone, route.ResourceVersion, errOwnershipConflict
+		}
+		resourceVersion := route.ResourceVersion
+		if err := r.Delete(ctx, route); err != nil && !apierrors.IsNotFound(err) {
+			return nil, controllerutil.OperationResultNone, resourceVersion, fmt.Errorf("delete HTTPRoute: %w", err)
+		}
+		return nil, controllerutil.OperationResultUpdated, resourceVersion, nil
+	}
+
+	if err := r.ensureHostnameAvailable(ctx, appDeployment); err != nil {
+		if errors.Is(err, errHostnameConflict) {
+			if cleanupErr := r.deleteOwnedHTTPRoute(ctx, appDeployment, route); cleanupErr != nil {
+				return nil, controllerutil.OperationResultNone, "", cleanupErr
+			}
+		}
+		return nil, controllerutil.OperationResultNone, "", err
+	}
+
+	var resourceVersionBefore string
+	operation, err := controllerutil.CreateOrPatch(ctx, r.Client, route, func() error {
+		resourceVersionBefore = route.ResourceVersion
+		if !route.CreationTimestamp.IsZero() && !metav1.IsControlledBy(route, appDeployment) {
+			return errOwnershipConflict
+		}
+		if err := controllerutil.SetControllerReference(appDeployment, route, r.Scheme); err != nil {
+			return fmt.Errorf("set HTTPRoute owner reference: %w", err)
+		}
+		if route.Labels == nil {
+			route.Labels = map[string]string{}
+		}
+		route.Labels[appDeploymentLabel] = appDeployment.Name
+		route.Labels[managedByLabel] = managedByValue
+
+		gatewayGroup := gatewayv1.Group(gatewayv1.GroupName)
+		gatewayKind := gatewayv1.Kind("Gateway")
+		gatewayNamespace := gatewayv1.Namespace(sharedGatewayNamespace)
+		httpsSection := gatewayv1.SectionName(sharedGatewaySection)
+		backendPort := gatewayv1.PortNumber(appDeployment.Spec.Port)
+		backendGroup := gatewayv1.Group("")
+		serviceKind := gatewayv1.Kind("Service")
+		pathType := gatewayv1.PathMatchPathPrefix
+		pathValue := "/"
+		weight := int32(1)
+		route.Spec = gatewayv1.HTTPRouteSpec{
+			CommonRouteSpec: gatewayv1.CommonRouteSpec{ParentRefs: []gatewayv1.ParentReference{{
+				Group: &gatewayGroup, Kind: &gatewayKind, Name: sharedGatewayName,
+				Namespace: &gatewayNamespace, SectionName: &httpsSection,
+			}}},
+			Hostnames: []gatewayv1.Hostname{gatewayv1.Hostname(publicHostname(appDeployment.Spec.Slug))},
+			Rules: []gatewayv1.HTTPRouteRule{{
+				Matches: []gatewayv1.HTTPRouteMatch{{Path: &gatewayv1.HTTPPathMatch{
+					Type: &pathType, Value: &pathValue,
+				}}},
+				BackendRefs: []gatewayv1.HTTPBackendRef{{
+					BackendRef: gatewayv1.BackendRef{BackendObjectReference: gatewayv1.BackendObjectReference{
+						Group: &backendGroup, Kind: &serviceKind,
+						Name: gatewayv1.ObjectName(appDeployment.Name), Port: &backendPort,
+					}, Weight: &weight},
+				}},
+			}},
+		}
+		return nil
+	})
+	return route, operation, resourceVersionBefore, err
+}
+
+func (r *AppDeploymentReconciler) deleteOwnedHTTPRoute(
+	ctx context.Context,
+	appDeployment *platformv1alpha1.AppDeployment,
+	route *gatewayv1.HTTPRoute,
+) error {
+	if err := r.Get(ctx, client.ObjectKeyFromObject(appDeployment), route); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		return fmt.Errorf("get losing HTTPRoute claim: %w", err)
+	}
+	if !metav1.IsControlledBy(route, appDeployment) {
+		return nil
+	}
+	if err := r.Delete(ctx, route); err != nil && !apierrors.IsNotFound(err) {
+		return fmt.Errorf("delete losing HTTPRoute claim: %w", err)
+	}
+	return nil
+}
+
+func (r *AppDeploymentReconciler) ensureHostnameAvailable(
+	ctx context.Context,
+	appDeployment *platformv1alpha1.AppDeployment,
+) error {
+	appDeployments := &platformv1alpha1.AppDeploymentList{}
+	if err := r.List(ctx, appDeployments); err != nil {
+		return fmt.Errorf("list AppDeployments for hostname ownership: %w", err)
+	}
+	winner := appDeployment
+	winnerHasRoute, err := r.hasPublicHostnameRoute(ctx, appDeployment)
+	if err != nil {
+		return err
+	}
+	for index := range appDeployments.Items {
+		candidate := &appDeployments.Items[index]
+		if candidate.Spec.Exposure != platformv1alpha1.ExposurePublic ||
+			candidate.Spec.Slug != appDeployment.Spec.Slug ||
+			candidate.UID == appDeployment.UID {
+			continue
+		}
+		candidateHasRoute, err := r.hasPublicHostnameRoute(ctx, candidate)
+		if err != nil {
+			return err
+		}
+		if (candidateHasRoute && !winnerHasRoute) ||
+			(candidateHasRoute == winnerHasRoute && hostnameClaimPrecedes(candidate, winner)) {
+			winner = candidate
+			winnerHasRoute = candidateHasRoute
+		}
+	}
+	if winner.UID != appDeployment.UID {
+		return errHostnameConflict
+	}
+	return nil
+}
+
+func (r *AppDeploymentReconciler) hasPublicHostnameRoute(
+	ctx context.Context,
+	appDeployment *platformv1alpha1.AppDeployment,
+) (bool, error) {
+	route := &gatewayv1.HTTPRoute{}
+	if err := r.Get(ctx, client.ObjectKeyFromObject(appDeployment), route); err != nil {
+		if apierrors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("get HTTPRoute for hostname ownership: %w", err)
+	}
+	return metav1.IsControlledBy(route, appDeployment) &&
+		len(route.Spec.Hostnames) == 1 &&
+		string(route.Spec.Hostnames[0]) == publicHostname(appDeployment.Spec.Slug), nil
+}
+
+func hostnameClaimPrecedes(left, right *platformv1alpha1.AppDeployment) bool {
+	if !left.CreationTimestamp.Time.Equal(right.CreationTimestamp.Time) {
+		return left.CreationTimestamp.Before(&right.CreationTimestamp)
+	}
+	leftKey := left.Namespace + "/" + left.Name
+	rightKey := right.Namespace + "/" + right.Name
+	if leftKey != rightKey {
+		return leftKey < rightKey
+	}
+	return string(left.UID) < string(right.UID)
+}
+
+func publicHostname(slug string) string {
+	return slug + ".fruto.calouro.tech"
+}
+
+func (r *AppDeploymentReconciler) getPublicationGateway(ctx context.Context) (*gatewayv1.Gateway, error) {
+	gateway := &gatewayv1.Gateway{}
+	err := r.Get(ctx, client.ObjectKey{Namespace: sharedGatewayNamespace, Name: sharedGatewayName}, gateway)
+	if apierrors.IsNotFound(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get shared Gateway: %w", err)
+	}
+	return gateway, nil
+}
+
+func evaluatePublication(
+	appDeployment *platformv1alpha1.AppDeployment,
+	route *gatewayv1.HTTPRoute,
+	workload workloadDecision,
+) workloadDecision {
+	if appDeployment.Spec.Exposure != platformv1alpha1.ExposurePublic {
+		return workload
+	}
+	if workload.state == workloadStateDegraded {
+		return workload
+	}
+	if route == nil {
+		return workloadDecision{state: workloadStateProgressing, reason: platformv1alpha1.ReasonHTTPRouteProgressing,
+			message: "The public HTTP route is being reconciled."}
+	}
+	conditions := publicationParentConditions(route)
+	accepted := meta.FindStatusCondition(conditions, string(gatewayv1.RouteConditionAccepted))
+	if accepted == nil || accepted.ObservedGeneration != route.Generation {
+		return workloadDecision{state: workloadStateProgressing, reason: platformv1alpha1.ReasonHTTPRouteProgressing,
+			message: "The public HTTP route is awaiting Gateway acceptance."}
+	}
+	if accepted.Status == metav1.ConditionFalse {
+		return workloadDecision{state: workloadStateDegraded, reason: platformv1alpha1.ReasonHTTPRouteRejected,
+			message: "The shared Gateway rejected the public HTTP route."}
+	}
+	resolved := meta.FindStatusCondition(conditions, string(gatewayv1.RouteConditionResolvedRefs))
+	if accepted.Status != metav1.ConditionTrue || resolved == nil || resolved.ObservedGeneration != route.Generation {
+		return workloadDecision{state: workloadStateProgressing, reason: platformv1alpha1.ReasonHTTPRouteProgressing,
+			message: "The public HTTP route is awaiting resolved backend references."}
+	}
+	if resolved.Status == metav1.ConditionFalse {
+		return workloadDecision{state: workloadStateDegraded, reason: platformv1alpha1.ReasonHTTPRouteRejected,
+			message: "The public HTTP route has invalid backend references."}
+	}
+	if resolved.Status != metav1.ConditionTrue {
+		return workloadDecision{state: workloadStateProgressing, reason: platformv1alpha1.ReasonHTTPRouteProgressing,
+			message: "The public HTTP route is awaiting resolved backend references."}
+	}
+	return workload
+}
+
+func evaluatePublicationGateway(
+	gateway *gatewayv1.Gateway,
+	publication workloadDecision,
+) workloadDecision {
+	if publication.state == workloadStateDegraded {
+		return publication
+	}
+	if gateway == nil {
+		return workloadDecision{
+			state: workloadStateDegraded, reason: platformv1alpha1.ReasonGatewayRejected,
+			message: "The shared HTTPS Gateway is unavailable.",
+		}
+	}
+	programmed := meta.FindStatusCondition(gateway.Status.Conditions, string(gatewayv1.GatewayConditionProgrammed))
+	if conditionIsCurrent(programmed, gateway.Generation) && programmed.Status == metav1.ConditionFalse {
+		return workloadDecision{
+			state: workloadStateDegraded, reason: platformv1alpha1.ReasonGatewayRejected,
+			message: "The shared HTTPS Gateway is unavailable.",
+		}
+	}
+
+	listenerConditions, found := publicationGatewayListenerConditions(gateway)
+	if !found {
+		if !conditionIsCurrent(programmed, gateway.Generation) || programmed.Status != metav1.ConditionTrue {
+			return workloadDecision{
+				state: workloadStateProgressing, reason: platformv1alpha1.ReasonGatewayProgressing,
+				message: "The shared HTTPS Gateway listener is converging.",
+			}
+		}
+		return workloadDecision{
+			state: workloadStateDegraded, reason: platformv1alpha1.ReasonGatewayRejected,
+			message: "The shared HTTPS Gateway listener is unavailable.",
+		}
+	}
+	conditions := []*metav1.Condition{
+		programmed,
+		meta.FindStatusCondition(listenerConditions, string(gatewayv1.ListenerConditionAccepted)),
+		meta.FindStatusCondition(listenerConditions, string(gatewayv1.ListenerConditionProgrammed)),
+		meta.FindStatusCondition(listenerConditions, string(gatewayv1.ListenerConditionResolvedRefs)),
+	}
+	for _, condition := range conditions {
+		if conditionIsCurrent(condition, gateway.Generation) && condition.Status == metav1.ConditionFalse {
+			return workloadDecision{
+				state: workloadStateDegraded, reason: platformv1alpha1.ReasonGatewayRejected,
+				message: "The shared HTTPS Gateway listener is unavailable.",
+			}
+		}
+	}
+	for _, condition := range conditions {
+		if !conditionIsCurrent(condition, gateway.Generation) || condition.Status != metav1.ConditionTrue {
+			return workloadDecision{
+				state: workloadStateProgressing, reason: platformv1alpha1.ReasonGatewayProgressing,
+				message: "The shared HTTPS Gateway listener is converging.",
+			}
+		}
+	}
+	return publication
+}
+
+func conditionIsCurrent(condition *metav1.Condition, generation int64) bool {
+	return condition != nil && condition.ObservedGeneration == generation
+}
+
+func publicationGatewayListenerConditions(gateway *gatewayv1.Gateway) ([]metav1.Condition, bool) {
+	var conditions []metav1.Condition
+	found := false
+	for index := range gateway.Status.Listeners {
+		listener := &gateway.Status.Listeners[index]
+		if listener.Name != sharedGatewaySection {
+			continue
+		}
+		if found {
+			return nil, false
+		}
+		found = true
+		conditions = listener.Conditions
+	}
+	return conditions, found
+}
+
+func publicationParentConditions(route *gatewayv1.HTTPRoute) []metav1.Condition {
+	var conditions []metav1.Condition
+	found := false
+	for _, parent := range route.Status.Parents {
+		if parent.ParentRef.Name != sharedGatewayName {
+			continue
+		}
+		if parent.ParentRef.Group != nil && *parent.ParentRef.Group != gatewayv1.GroupName {
+			continue
+		}
+		if parent.ParentRef.Kind != nil && *parent.ParentRef.Kind != "Gateway" {
+			continue
+		}
+		if parent.ParentRef.Namespace == nil || *parent.ParentRef.Namespace != sharedGatewayNamespace {
+			continue
+		}
+		if parent.ParentRef.SectionName == nil || *parent.ParentRef.SectionName != sharedGatewaySection {
+			continue
+		}
+		if parent.ParentRef.Port != nil {
+			continue
+		}
+		if found {
+			return nil
+		}
+		found = true
+		conditions = parent.Conditions
+	}
+	return conditions
 }
 
 func (r *AppDeploymentReconciler) applyDeployment(
@@ -323,6 +711,23 @@ func (r *AppDeploymentReconciler) handleProjectionFailure(
 	appDeployment *platformv1alpha1.AppDeployment,
 	err error,
 ) (ctrl.Result, error) {
+	if errors.Is(err, errHostnameConflict) {
+		decision := workloadDecision{
+			state:   workloadStateDegraded,
+			reason:  platformv1alpha1.ReasonHostnameConflict,
+			message: "The requested public hostname is not available.",
+		}
+		span.SetAttributes(
+			attribute.String("fruto.reconciliation.state", string(decision.state)),
+			attribute.String("fruto.reconciliation.reason", decision.reason),
+		)
+		if statusErr := r.updateStatus(ctx, appDeployment, nil, decision, false); statusErr != nil {
+			markReconcileFailure(span, statusErr)
+			logReconcileFailure(ctx, appDeployment, statusErr)
+			return ctrl.Result{}, statusErr
+		}
+		return ctrl.Result{RequeueAfter: ownershipConflictRequeueAfter}, nil
+	}
 	if errors.Is(err, errOwnershipConflict) {
 		decision := workloadDecision{
 			state:   workloadStateDegraded,
@@ -477,7 +882,10 @@ func (r *AppDeploymentReconciler) patchStatusIfChanged(
 	}
 
 	patchCtx, patchSpan := r.tracer().Start(ctx, "kubernetes.appdeployment.status.patch")
-	err := r.Status().Patch(patchCtx, after, client.MergeFrom(before))
+	err := r.Status().Patch(patchCtx, after, client.MergeFromWithOptions(
+		before,
+		client.MergeFromWithOptimisticLock{},
+	))
 	finishSpan(patchSpan, err)
 	if err != nil {
 		return fmt.Errorf("patch AppDeployment status %s: %w", types.NamespacedName{
@@ -555,6 +963,42 @@ func (r *AppDeploymentReconciler) recordServiceOperation(
 	)
 	if r.Recorder != nil {
 		r.Recorder.Event(appDeployment, corev1.EventTypeNormal, reason, "The managed Service was reconciled.")
+	}
+}
+
+func (r *AppDeploymentReconciler) recordHTTPRouteOperation(
+	ctx context.Context,
+	appDeployment *platformv1alpha1.AppDeployment,
+	operation controllerutil.OperationResult,
+	resourceVersionBefore string,
+	route *gatewayv1.HTTPRoute,
+	decision workloadDecision,
+) {
+	if route != nil && resourceVersionBefore != "" && resourceVersionBefore == route.ResourceVersion {
+		return
+	}
+	var reason string
+	switch {
+	case route == nil && operation == controllerutil.OperationResultUpdated:
+		reason = "HTTPRouteDeleted"
+	case operation == controllerutil.OperationResultCreated:
+		reason = "HTTPRouteCreated"
+	case operation == controllerutil.OperationResultUpdated:
+		reason = "HTTPRouteUpdated"
+	default:
+		return
+	}
+
+	ctrl.LoggerFrom(ctx).Info("managed HTTPRoute changed",
+		"uid", appDeployment.UID,
+		"generation", appDeployment.Generation,
+		"observedGeneration", appDeployment.Status.ObservedGeneration,
+		"operation", string(operation),
+		"state", decision.state,
+		"reason", decision.reason,
+	)
+	if r.Recorder != nil {
+		r.Recorder.Event(appDeployment, corev1.EventTypeNormal, reason, "The managed HTTPRoute was reconciled.")
 	}
 }
 

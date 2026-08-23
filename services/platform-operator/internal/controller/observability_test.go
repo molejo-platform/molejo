@@ -314,6 +314,132 @@ func TestObservabilitySignalsAreCorrelatedAndIdempotent(t *testing.T) {
 	}
 }
 
+func TestPublicationObservabilitySignalsAreCorrelatedAndIdempotent(t *testing.T) {
+	ctx := context.Background()
+	namespace := createTestNamespace(t, "publication-observability")
+	appDeployment := newAppDeployment(namespace, "ap-publicationobservability", testImage)
+	appDeployment.Spec.Exposure = platformv1alpha1.ExposurePublic
+	appDeployment.Spec.Slug = "publication-observability"
+	if err := testClient.Create(ctx, appDeployment); err != nil {
+		t.Fatalf("create public AppDeployment: %v", err)
+	}
+
+	exporter := tracetest.NewInMemoryExporter()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
+	t.Cleanup(func() {
+		_ = provider.Shutdown(context.Background())
+	})
+	recorder := record.NewFakeRecorder(20)
+	reconciler := &AppDeploymentReconciler{
+		Client:   testClient,
+		Scheme:   testScheme,
+		Recorder: recorder,
+		Tracer:   provider.Tracer(tracerName),
+	}
+	request := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(appDeployment)}
+
+	var (
+		logMu sync.Mutex
+		logs  []string
+	)
+	logger := funcr.NewJSON(func(entry string) {
+		logMu.Lock()
+		defer logMu.Unlock()
+		logs = append(logs, entry)
+	}, funcr.Options{})
+	ctx = ctrl.LoggerInto(ctx, logger)
+
+	if _, err := reconciler.Reconcile(ctx, request); err != nil {
+		t.Fatalf("create public projection: %v", err)
+	}
+	if _, err := reconciler.Reconcile(ctx, request); err != nil {
+		t.Fatalf("idempotent public reconcile: %v", err)
+	}
+
+	route := getHTTPRoute(t, ctx, request.NamespacedName)
+	route.Spec.Hostnames[0] = "drift.fruto.calouro.tech"
+	if err := testClient.Update(ctx, route); err != nil {
+		t.Fatalf("introduce HTTPRoute drift: %v", err)
+	}
+	if _, err := reconciler.Reconcile(ctx, request); err != nil {
+		t.Fatalf("correct HTTPRoute drift: %v", err)
+	}
+
+	stored := getAppDeployment(t, ctx, request.NamespacedName)
+	stored.Spec.Exposure = platformv1alpha1.ExposurePrivate
+	stored.Spec.Slug = ""
+	if err := testClient.Update(ctx, stored); err != nil {
+		t.Fatalf("make AppDeployment private: %v", err)
+	}
+	if _, err := reconciler.Reconcile(ctx, request); err != nil {
+		t.Fatalf("remove public projection: %v", err)
+	}
+	if _, err := reconciler.Reconcile(ctx, request); err != nil {
+		t.Fatalf("idempotent private reconcile: %v", err)
+	}
+
+	eventCounts := map[string]int{}
+drainEvents:
+	for {
+		select {
+		case event := <-recorder.Events:
+			for _, reason := range []string{"HTTPRouteCreated", "HTTPRouteUpdated", "HTTPRouteDeleted"} {
+				if strings.Contains(event, reason) {
+					eventCounts[reason]++
+				}
+			}
+		default:
+			break drainEvents
+		}
+	}
+
+	for _, reason := range []string{"HTTPRouteCreated", "HTTPRouteUpdated", "HTTPRouteDeleted"} {
+		if eventCounts[reason] != 1 {
+			t.Errorf("expected exactly one %s Event, got %d", reason, eventCounts[reason])
+		}
+	}
+
+	logMu.Lock()
+	logEntries := append([]string(nil), logs...)
+	logMu.Unlock()
+	routeOperationLogs := 0
+	for _, entry := range logEntries {
+		if !strings.Contains(entry, "managed HTTPRoute changed") {
+			continue
+		}
+		routeOperationLogs++
+		for _, field := range []string{"trace_id", "span_id", "state", "reason"} {
+			if !strings.Contains(entry, `"`+field+`"`) {
+				t.Errorf("expected HTTPRoute log to contain %q: %s", field, entry)
+			}
+		}
+	}
+	if routeOperationLogs != 3 {
+		t.Errorf("expected one HTTPRoute log per material operation, got %d", routeOperationLogs)
+	}
+
+	spans := exporter.GetSpans()
+	rootSpanIDs := map[string]struct{}{}
+	for _, span := range spans {
+		if span.Name == "platform-operator.appdeployment.reconcile" {
+			rootSpanIDs[span.SpanContext.SpanID().String()] = struct{}{}
+		}
+	}
+	httpRouteSpans := 0
+	for _, span := range spans {
+		if span.Name != "kubernetes.httproute.apply" {
+			continue
+		}
+		httpRouteSpans++
+		if _, found := rootSpanIDs[span.Parent.SpanID().String()]; !found {
+			t.Errorf("expected HTTPRoute span to be a direct child of a reconcile span")
+		}
+	}
+	if httpRouteSpans != 5 {
+		t.Errorf("expected one HTTPRoute span per reconcile, got %d", httpRouteSpans)
+	}
+}
+
 func TestObservabilityTraceMarksOperationalErrors(t *testing.T) {
 	sentinel := errors.New("API server unavailable")
 	exporter := tracetest.NewInMemoryExporter()

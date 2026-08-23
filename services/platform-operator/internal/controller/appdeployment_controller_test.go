@@ -8,6 +8,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -832,6 +833,79 @@ func TestOwnershipConflictPreservesObservedGeneration(t *testing.T) {
 	if strings.Contains(meta.FindStatusCondition(stored.Status.Conditions, platformv1alpha1.ConditionDegraded).Message, "uid") {
 		t.Fatal("expected degraded message to remain sanitized")
 	}
+}
+
+func TestReconcileSkipsTerminatingAppDeployment(t *testing.T) {
+	ctx := context.Background()
+	namespace := createTestNamespace(t, "terminating")
+	appDeployment := newAppDeployment(namespace, "ap-terminating0001", testImage)
+	appDeployment.Finalizers = []string{"test.fruto.calouro.tech/hold"}
+	if err := testClient.Create(ctx, appDeployment); err != nil {
+		t.Fatalf("create AppDeployment: %v", err)
+	}
+	if err := testClient.Delete(ctx, appDeployment); err != nil {
+		t.Fatalf("start AppDeployment deletion: %v", err)
+	}
+
+	key := client.ObjectKeyFromObject(appDeployment)
+	terminating := getAppDeployment(t, ctx, key)
+	if terminating.DeletionTimestamp.IsZero() {
+		t.Fatal("expected AppDeployment to remain terminating behind the test finalizer")
+	}
+
+	reconciler := &AppDeploymentReconciler{Client: testClient, Scheme: testScheme}
+	if _, err := reconciler.Reconcile(ctx, ctrl.Request{NamespacedName: key}); err != nil {
+		t.Fatalf("reconcile terminating AppDeployment: %v", err)
+	}
+
+	for kind, object := range map[string]client.Object{
+		"Deployment": &appsv1.Deployment{},
+		"Service":    &corev1.Service{},
+	} {
+		err := testClient.Get(ctx, key, object)
+		if !apierrors.IsNotFound(err) {
+			t.Fatalf("expected terminating AppDeployment not to create %s, got %v", kind, err)
+		}
+	}
+}
+
+func TestStatusPatchRejectsAStaleWriter(t *testing.T) {
+	ctx := context.Background()
+	namespace := createTestNamespace(t, "status-conflict")
+	appDeployment := newAppDeployment(namespace, "ap-statusconflict", testImage)
+	if err := testClient.Create(ctx, appDeployment); err != nil {
+		t.Fatalf("create AppDeployment: %v", err)
+	}
+
+	key := client.ObjectKeyFromObject(appDeployment)
+	staleBefore := getAppDeployment(t, ctx, key)
+	currentBefore := getAppDeployment(t, ctx, key)
+	reconciler := &AppDeploymentReconciler{Client: testClient, Scheme: testScheme}
+
+	currentAfter := currentBefore.DeepCopy()
+	currentAfter.Status.ObservedGeneration = currentAfter.Generation
+	currentAfter.Status.ObservedRelease = currentAfter.Spec.Image
+	applyDecision(currentAfter, workloadDecision{
+		state:  workloadStateReady,
+		reason: platformv1alpha1.ReasonDeploymentAvailable,
+	})
+	if err := reconciler.patchStatusIfChanged(ctx, currentBefore, currentAfter); err != nil {
+		t.Fatalf("patch current status: %v", err)
+	}
+
+	staleAfter := staleBefore.DeepCopy()
+	applyDecision(staleAfter, workloadDecision{
+		state:  workloadStateDegraded,
+		reason: platformv1alpha1.ReasonReplicaFailure,
+	})
+	err := reconciler.patchStatusIfChanged(ctx, staleBefore, staleAfter)
+	if !apierrors.IsConflict(err) {
+		t.Fatalf("expected stale status patch to fail with a resourceVersion conflict, got %v", err)
+	}
+
+	stored := getAppDeployment(t, ctx, key)
+	assertCondition(t, stored, platformv1alpha1.ConditionReady, metav1.ConditionTrue,
+		platformv1alpha1.ReasonDeploymentAvailable)
 }
 
 func createTestNamespace(t *testing.T, suffix string) string {

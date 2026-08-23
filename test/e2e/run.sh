@@ -4,6 +4,9 @@ set -euo pipefail
 
 readonly KIND_VERSION="v0.32.0"
 readonly KIND_NODE_IMAGE="kindest/node:v1.36.1@sha256:3489c7674813ba5d8b1a9977baea8a6e553784dab7b84759d1014dbd78f7ebd5"
+readonly GATEWAY_API_URL="https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/standard-install.yaml"
+readonly GATEWAY_API_SHA256="751002b3b91a87f7ae3bd2517c79a47a8d7ed6702901808a1cf9bd97d284f9b8"
+readonly PERSISTENT_TRANSPORT_SECONDS=11
 readonly CLUSTER_NAME="fruto-e2e-$$"
 readonly OPERATOR_IMAGE="fruto-platform-operator:e2e-$$"
 readonly FIXTURE_IMAGE_V1_TAG="fruto-phase2-http-app:e2e-v1-$$"
@@ -15,9 +18,14 @@ readonly APP_MANIFEST_FILE="$(mktemp)"
 readonly OPERATOR_MANIFEST_FILE="$(mktemp)"
 readonly FIXTURE_V1_METADATA="$(mktemp)"
 readonly FIXTURE_V2_METADATA="$(mktemp)"
+readonly GATEWAY_API_MANIFEST_FILE="$(mktemp)"
+readonly WILDCARD_CERT_FILE="$(mktemp)"
+readonly WILDCARD_KEY_FILE="$(mktemp)"
+readonly PUBLIC_SSE_OUTPUT="$(mktemp)"
 readonly HEALTH_FORWARD_LOG="${KUBECONFIG_FILE}.health-port-forward.log"
 readonly METRICS_FORWARD_LOG="${KUBECONFIG_FILE}.metrics-port-forward.log"
 readonly APP_FORWARD_LOG="${KUBECONFIG_FILE}.app-port-forward.log"
+readonly GATEWAY_FORWARD_LOG="${KUBECONFIG_FILE}.gateway-port-forward.log"
 readonly OPERATOR_IDENTITY="system:serviceaccount:fruto-system:platform-operator"
 readonly PUBLIC_EGRESS_URL="${E2E_PUBLIC_EGRESS_URL:-}"
 
@@ -26,9 +34,12 @@ export OPERATOR_IMAGE
 HEALTH_FORWARD_PID=""
 METRICS_FORWARD_PID=""
 APP_FORWARD_PID=""
+GATEWAY_FORWARD_PID=""
+PUBLIC_SSE_PID=""
 HEALTH_LOCAL_PORT=""
 METRICS_LOCAL_PORT=""
 APP_LOCAL_PORT=""
+GATEWAY_LOCAL_PORT=""
 FIXTURE_IMAGE_V1=""
 FIXTURE_IMAGE_V2=""
 
@@ -147,10 +158,33 @@ curl_json() {
   return 1
 }
 
+wait_for_public_status() {
+  local expected_status=$1
+  local hostname=$2
+  local url=$3
+  local status=""
+
+  for _ in $(seq 1 60); do
+    status="$(curl --noproxy '*' --cacert "${WILDCARD_CERT_FILE}" \
+      --connect-timeout 2 --max-time 3 --silent --output /dev/null \
+      --write-out '%{http_code}' \
+      --resolve "${hostname}:${GATEWAY_LOCAL_PORT}:127.0.0.1" \
+      "${url}")" || true
+    if [[ ${status} == "${expected_status}" ]]; then
+      return 0
+    fi
+    sleep 0.5
+  done
+
+  echo "expected ${url} to return HTTP ${expected_status}, got ${status:-no response}" >&2
+  return 1
+}
+
 dump_diagnostics() {
   kubectl --kubeconfig "${KUBECONFIG_FILE}" get pods -A -o wide || true
   kubectl --kubeconfig "${KUBECONFIG_FILE}" get appdeployments -A -o yaml || true
   kubectl --kubeconfig "${KUBECONFIG_FILE}" get services -A -o wide || true
+  kubectl --kubeconfig "${KUBECONFIG_FILE}" get gateways,httproutes -A -o yaml || true
   kubectl --kubeconfig "${KUBECONFIG_FILE}" describe \
     appdeployment/ap-e2e000001 -n ws-e2e || true
   kubectl --kubeconfig "${KUBECONFIG_FILE}" describe \
@@ -161,6 +195,8 @@ dump_diagnostics() {
     deployment/platform-operator -n fruto-system || true
   kubectl --kubeconfig "${KUBECONFIG_FILE}" logs \
     deployment/platform-operator -n fruto-system --all-containers --prefix || true
+  kubectl --kubeconfig "${KUBECONFIG_FILE}" logs \
+    deployment/traefik-e2e -n fruto-system --all-containers --prefix || true
   kubectl --kubeconfig "${KUBECONFIG_FILE}" get events -A \
     --sort-by=.metadata.creationTimestamp || true
 }
@@ -172,6 +208,8 @@ finish() {
   stop_port_forward "${HEALTH_FORWARD_PID}"
   stop_port_forward "${METRICS_FORWARD_PID}"
   stop_port_forward "${APP_FORWARD_PID}"
+  stop_port_forward "${GATEWAY_FORWARD_PID}"
+  stop_port_forward "${PUBLIC_SSE_PID}"
 
   if [[ ${exit_code} -ne 0 ]]; then
     dump_diagnostics
@@ -185,9 +223,14 @@ finish() {
     "${OPERATOR_MANIFEST_FILE}" \
     "${FIXTURE_V1_METADATA}" \
     "${FIXTURE_V2_METADATA}" \
+    "${GATEWAY_API_MANIFEST_FILE}" \
+    "${WILDCARD_CERT_FILE}" \
+    "${WILDCARD_KEY_FILE}" \
+    "${PUBLIC_SSE_OUTPUT}" \
     "${HEALTH_FORWARD_LOG}" \
     "${METRICS_FORWARD_LOG}" \
-    "${APP_FORWARD_LOG}"
+    "${APP_FORWARD_LOG}" \
+    "${GATEWAY_FORWARD_LOG}"
   exit "${exit_code}"
 }
 trap finish EXIT
@@ -197,6 +240,38 @@ kind_cli create cluster \
   --image "${KIND_NODE_IMAGE}" \
   --kubeconfig "${KUBECONFIG_FILE}" \
   --wait 180s
+
+curl -L --fail --silent --show-error \
+  "${GATEWAY_API_URL}" \
+  --output "${GATEWAY_API_MANIFEST_FILE}"
+echo "${GATEWAY_API_SHA256}  ${GATEWAY_API_MANIFEST_FILE}" | shasum -a 256 --check
+kubectl --kubeconfig "${KUBECONFIG_FILE}" apply --server-side \
+  -f "${GATEWAY_API_MANIFEST_FILE}"
+kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
+  --for=condition=Established \
+  crd/httproutes.gateway.networking.k8s.io \
+  --timeout=60s
+kubectl --kubeconfig "${KUBECONFIG_FILE}" create namespace fruto-system
+openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
+  -subj "/CN=*.fruto.calouro.tech" \
+  -addext "subjectAltName=DNS:*.fruto.calouro.tech" \
+  -keyout "${WILDCARD_KEY_FILE}" \
+  -out "${WILDCARD_CERT_FILE}" >/dev/null 2>&1
+kubectl --kubeconfig "${KUBECONFIG_FILE}" create secret tls \
+  fruto-e2e-wildcard-tls \
+  -n fruto-system \
+  --cert="${WILDCARD_CERT_FILE}" \
+  --key="${WILDCARD_KEY_FILE}"
+kubectl --kubeconfig "${KUBECONFIG_FILE}" apply -f test/e2e/gateway.yaml
+kubectl --kubeconfig "${KUBECONFIG_FILE}" rollout status \
+  deployment/traefik-e2e \
+  -n fruto-system \
+  --timeout=180s
+kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
+  --for=condition=Programmed \
+  gateway/fruto \
+  -n fruto-system \
+  --timeout=120s
 
 docker buildx build \
   --file services/platform-operator/Dockerfile \
@@ -257,6 +332,9 @@ for resource in deployments.apps services; do
     assert_can_i "${verb}" "${resource}" -n fruto-system
   done
   assert_cannot_i delete "${resource}" -n fruto-system
+done
+for verb in create get list patch update watch delete; do
+  assert_can_i "${verb}" httproutes.gateway.networking.k8s.io -n fruto-system
 done
 for verb in create patch; do
   assert_can_i "${verb}" events -n fruto-system
@@ -347,6 +425,11 @@ if kubectl --kubeconfig "${KUBECONFIG_FILE}" get \
   echo "unexpected public Ingress for the private AppDeployment" >&2
   exit 1
 fi
+if kubectl --kubeconfig "${KUBECONFIG_FILE}" get \
+  httproute.gateway.networking.k8s.io/ap-e2e000001 -n ws-e2e >/dev/null 2>&1; then
+  echo "unexpected public HTTPRoute for the private AppDeployment" >&2
+  exit 1
+fi
 
 run_as_non_root="$(kubectl --kubeconfig "${KUBECONFIG_FILE}" get \
   deployment/ap-e2e000001 -n ws-e2e \
@@ -386,6 +469,94 @@ if [[ -n ${PUBLIC_EGRESS_URL} ]]; then
     "http://127.0.0.1:${APP_LOCAL_PORT}/outbound")"
   grep -q '"upstreamStatus":200' <<<"${public_response}"
 fi
+
+start_port_forward fruto-system service/traefik-e2e 8443 "${GATEWAY_FORWARD_LOG}" \
+  GATEWAY_FORWARD_PID GATEWAY_LOCAL_PORT
+wait_for_public_status 404 phase3-e2e.fruto.calouro.tech \
+  "https://phase3-e2e.fruto.calouro.tech:${GATEWAY_LOCAL_PORT}/"
+
+kubectl --kubeconfig "${KUBECONFIG_FILE}" patch \
+  appdeployment/ap-e2e000001 \
+  -n ws-e2e \
+  --type=merge \
+  --patch '{"spec":{"exposure":"Public","slug":"phase3-e2e"}}'
+wait_for_resource httproute.gateway.networking.k8s.io ws-e2e ap-e2e000001
+kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
+  --for=jsonpath='{.status.parents[0].conditions[?(@.type=="Accepted")].status}'=True \
+  httproute/ap-e2e000001 \
+  -n ws-e2e \
+  --timeout=120s
+kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
+  --for=jsonpath='{.status.parents[0].conditions[?(@.type=="ResolvedRefs")].status}'=True \
+  httproute/ap-e2e000001 \
+  -n ws-e2e \
+  --timeout=120s
+kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
+  --for=condition=Ready \
+  appdeployment/ap-e2e000001 \
+  -n ws-e2e \
+  --timeout=120s
+
+public_base_url="https://phase3-e2e.fruto.calouro.tech:${GATEWAY_LOCAL_PORT}"
+public_rest="$(curl --noproxy '*' --cacert "${WILDCARD_CERT_FILE}" --fail --silent --show-error \
+  --resolve "phase3-e2e.fruto.calouro.tech:${GATEWAY_LOCAL_PORT}:127.0.0.1" \
+  "${public_base_url}/")"
+grep -q '"status":"ok"' <<<"${public_rest}"
+public_graphql="$(curl --noproxy '*' --cacert "${WILDCARD_CERT_FILE}" --fail --silent --show-error \
+  --resolve "phase3-e2e.fruto.calouro.tech:${GATEWAY_LOCAL_PORT}:127.0.0.1" \
+  --header 'Content-Type: application/json' \
+  --data '{"query":"{ status version }"}' \
+  "${public_base_url}/graphql")"
+grep -q '"data":{"status":"ok"' <<<"${public_graphql}"
+curl --noproxy '*' --cacert "${WILDCARD_CERT_FILE}" --fail --silent --show-error --no-buffer \
+  --resolve "phase3-e2e.fruto.calouro.tech:${GATEWAY_LOCAL_PORT}:127.0.0.1" \
+  "${public_base_url}/events" >"${PUBLIC_SSE_OUTPUT}" &
+PUBLIC_SSE_PID=$!
+for _ in $(seq 1 50); do
+  if grep -q '^event: status$' "${PUBLIC_SSE_OUTPUT}"; then
+    break
+  fi
+  if ! kill -0 "${PUBLIC_SSE_PID}" 2>/dev/null; then
+    echo "public SSE stream ended before its first event" >&2
+    exit 1
+  fi
+  sleep 0.1
+done
+grep -q '^event: status$' "${PUBLIC_SSE_OUTPUT}"
+initial_sse_event_count="$(grep -c '^event: status$' "${PUBLIC_SSE_OUTPUT}")"
+for _ in $(seq 1 $((PERSISTENT_TRANSPORT_SECONDS * 5))); do
+  if ! kill -0 "${PUBLIC_SSE_PID}" 2>/dev/null; then
+    echo "public SSE stream ended before ${PERSISTENT_TRANSPORT_SECONDS}s" >&2
+    exit 1
+  fi
+  sleep 0.2
+done
+final_sse_event_count="$(grep -c '^event: status$' "${PUBLIC_SSE_OUTPUT}")"
+if ((final_sse_event_count <= initial_sse_event_count)); then
+  echo "public SSE stream did not deliver incremental events" >&2
+  exit 1
+fi
+stop_port_forward "${PUBLIC_SSE_PID}"
+wait "${PUBLIC_SSE_PID}" 2>/dev/null || true
+PUBLIC_SSE_PID=""
+GOCACHE=/tmp/fruto-go-cache go run ./test/fixtures/transport-client \
+  --address "127.0.0.1:${GATEWAY_LOCAL_PORT}" \
+  --ca "${WILDCARD_CERT_FILE}" \
+  --idle-duration "${PERSISTENT_TRANSPORT_SECONDS}s" \
+  --url "wss://phase3-e2e.fruto.calouro.tech:${GATEWAY_LOCAL_PORT}/ws"
+
+kubectl --kubeconfig "${KUBECONFIG_FILE}" patch \
+  appdeployment/ap-e2e000001 \
+  -n ws-e2e \
+  --type=json \
+  --patch '[{"op":"replace","path":"/spec/exposure","value":"Private"},{"op":"remove","path":"/spec/slug"}]'
+kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
+  --for=delete \
+  httproute/ap-e2e000001 \
+  -n ws-e2e \
+  --timeout=120s
+wait_for_public_status 404 phase3-e2e.fruto.calouro.tech "${public_base_url}/"
+curl_json "http://127.0.0.1:${APP_LOCAL_PORT}/" >/dev/null
 
 metrics_token="$(kubectl --kubeconfig "${KUBECONFIG_FILE}" create token \
   metrics-reader-e2e -n fruto-system --duration=10m)"
