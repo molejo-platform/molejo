@@ -43,16 +43,19 @@ type Server struct {
 	Config  Config
 	Logger  *slog.Logger
 	limiter *loginLimiter
+	token   func(int) (string, error)
 }
 
 func NewServer(s *store.Store, r runtime.Client, cfg Config, logger *slog.Logger) *Server {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Server{Store: s, Runtime: r, Config: cfg, Logger: logger, limiter: &loginLimiter{entries: map[string]loginAttempt{}}}
+	return &Server{Store: s, Runtime: r, Config: cfg, Logger: logger, limiter: &loginLimiter{entries: map[string]loginAttempt{}}, token: randomToken}
 }
 
-func (s *Server) Handler() http.Handler { return securityMiddleware(s, http.HandlerFunc(s.route)) }
+func (s *Server) Handler() http.Handler {
+	return requestIDMiddleware(securityMiddleware(s, http.HandlerFunc(s.route)))
+}
 
 func (s *Server) route(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(r.URL.Path, "/healthz") {
@@ -61,6 +64,7 @@ func (s *Server) route(w http.ResponseWriter, r *http.Request) {
 	}
 	if strings.HasPrefix(r.URL.Path, "/readyz") {
 		if err := s.Store.SchemaReady(r.Context()); err != nil {
+			s.logger().Error("schema readiness failed", "request_id", requestID(r), "error", err)
 			writeError(w, http.StatusServiceUnavailable, "database_unavailable", "service is not ready", r)
 			return
 		}
@@ -81,7 +85,7 @@ func (s *Server) route(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.URL.Path == "/api/v1/session" && r.Method == http.MethodGet {
-		s.sessionInfo(w, r, actorID, csrf)
+		s.sessionInfo(w, r, actorID)
 		return
 	}
 	if r.URL.Path == "/api/v1/session" && r.Method == http.MethodDelete {
@@ -144,12 +148,12 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.limiter.success(ip)
-	token, err := randomToken(32)
+	token, err := s.newToken(32)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "session_failed", "could not create session", r)
 		return
 	}
-	csrf, err := randomToken(32)
+	csrf, err := s.newToken(32)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "session_failed", "could not create session", r)
 		return
@@ -163,27 +167,43 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"actor": map[string]string{"id": actor.Key, "role": actor.Role}, "csrfToken": csrf})
 }
 
-func (s *Server) sessionInfo(w http.ResponseWriter, r *http.Request, actorID int64, csrf []byte) {
+func (s *Server) sessionInfo(w http.ResponseWriter, r *http.Request, actorID int64) {
 	var actor domain.Actor
 	err := s.Store.Pool.QueryRow(r.Context(), `SELECT id,actor_key,role FROM actors WHERE id=$1`, actorID).Scan(&actor.ID, &actor.Key, &actor.Role)
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, "unauthenticated", "authentication required", r)
 		return
 	}
-	token, _ := randomToken(32)
-	newCSRF, _ := randomToken(32)
-	cookie, _ := r.Cookie(s.Config.CookieName)
-	_ = s.Store.RevokeSession(r.Context(), auth.HashToken(cookie.Value))
-	_ = s.Store.CreateSession(r.Context(), actor.ID, auth.HashToken(token), auth.HashToken(newCSRF), time.Now().Add(s.Config.SessionTTL))
+	token, err := s.newToken(32)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "session_failed", "could not refresh session", r)
+		return
+	}
+	newCSRF, err := s.newToken(32)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "session_failed", "could not refresh session", r)
+		return
+	}
+	cookie, err := r.Cookie(s.Config.CookieName)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "unauthenticated", "authentication required", r)
+		return
+	}
+	if err = s.Store.RotateSession(r.Context(), actor.ID, auth.HashToken(cookie.Value), auth.HashToken(token), auth.HashToken(newCSRF), time.Now().Add(s.Config.SessionTTL)); err != nil {
+		writeError(w, http.StatusInternalServerError, "session_failed", "could not refresh session", r)
+		return
+	}
 	http.SetCookie(w, &http.Cookie{Name: s.Config.CookieName, Value: token, Path: "/", HttpOnly: true, Secure: s.Config.CookieSecure || isHTTPS(r), SameSite: http.SameSiteStrictMode, MaxAge: int(s.Config.SessionTTL.Seconds())})
-	_ = csrf
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, map[string]any{"actor": map[string]string{"id": actor.Key, "role": actor.Role}, "csrfToken": newCSRF})
 }
 
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 	if cookie, err := r.Cookie(s.Config.CookieName); err == nil {
-		_ = s.Store.RevokeSession(r.Context(), auth.HashToken(cookie.Value))
+		if err = s.Store.RevokeSession(r.Context(), auth.HashToken(cookie.Value)); err != nil {
+			writeError(w, http.StatusInternalServerError, "session_failed", "could not end session", r)
+			return
+		}
 	}
 	http.SetCookie(w, &http.Cookie{Name: s.Config.CookieName, Value: "", Path: "/", HttpOnly: true, MaxAge: -1, SameSite: http.SameSiteStrictMode})
 	w.WriteHeader(http.StatusNoContent)
@@ -224,6 +244,7 @@ func (s *Server) createDeployment(w http.ResponseWriter, r *http.Request, worksp
 		writeError(w, http.StatusInternalServerError, "storage_failed", "could not create deployment", r)
 		return
 	}
+	s.logAcceptedOperation(r, op)
 	writeJSON(w, http.StatusAccepted, map[string]any{"deployment": dep, "operation": op})
 }
 
@@ -318,6 +339,7 @@ func (s *Server) updateDeployment(w http.ResponseWriter, r *http.Request, worksp
 		writeError(w, http.StatusInternalServerError, "storage_failed", "could not update deployment", r)
 		return
 	}
+	s.logAcceptedOperation(r, op)
 	writeJSON(w, http.StatusAccepted, map[string]any{"deployment": updated, "operation": op})
 }
 
@@ -341,7 +363,12 @@ func (s *Server) deleteDeployment(w http.ResponseWriter, r *http.Request, worksp
 		writeError(w, http.StatusInternalServerError, "storage_failed", "could not delete deployment", r)
 		return
 	}
+	s.logAcceptedOperation(r, op)
 	writeJSON(w, http.StatusAccepted, map[string]any{"operation": op})
+}
+
+func (s *Server) logAcceptedOperation(r *http.Request, op domain.Operation) {
+	s.logger().Info("operation accepted", "request_id", requestID(r), "operation_id", op.PublicID, "deployment_id", op.DeploymentPublicID, "operation_kind", op.Kind)
 }
 
 func (s *Server) operation(w http.ResponseWriter, r *http.Request, workspace domain.Workspace) {
@@ -442,17 +469,51 @@ func randomToken(size int) (string, error) {
 	}
 	return hex.EncodeToString(b), nil
 }
+
+func (s *Server) newToken(size int) (string, error) {
+	if s.token != nil {
+		return s.token(size)
+	}
+	return randomToken(size)
+}
+
+type requestIDContextKey struct{}
+
+func requestIDMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := strings.TrimSpace(r.Header.Get("X-Request-ID"))
+		if id == "" || len(id) > 64 || strings.IndexFunc(id, func(r rune) bool {
+			return !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.')
+		}) >= 0 {
+			id, _ = randomToken(8)
+		}
+		w.Header().Set("X-Request-ID", id)
+		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), requestIDContextKey{}, id)))
+	})
+}
+
+func requestID(r *http.Request) string {
+	id, _ := r.Context().Value(requestIDContextKey{}).(string)
+	return id
+}
 func writeJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(value)
 }
 func writeError(w http.ResponseWriter, status int, code, message string, r *http.Request) {
-	requestID := r.Header.Get("X-Request-ID")
-	if requestID == "" {
-		requestID, _ = randomToken(8)
+	id := requestID(r)
+	if id == "" {
+		id, _ = randomToken(8)
 	}
-	writeJSON(w, status, map[string]string{"code": code, "message": message, "requestId": requestID})
+	writeJSON(w, status, map[string]string{"code": code, "message": message, "requestId": id})
+}
+
+func (s *Server) logger() *slog.Logger {
+	if s.Logger != nil {
+		return s.Logger
+	}
+	return slog.Default()
 }
 
 type loginAttempt struct {
@@ -488,40 +549,54 @@ func (s *Server) RunOnce(ctx context.Context, workerID string) (bool, error) {
 	if err != nil || !ok {
 		return ok, err
 	}
+	s.logger().Info("operation claimed", "operation_id", op.PublicID, "deployment_id", op.DeploymentPublicID, "operation_kind", op.Kind, "worker_id", workerID, "attempt", op.Attempts)
 	if s.Runtime == nil {
-		return true, s.Store.Fail(ctx, op, "runtime_unconfigured", "runtime is not configured", false)
+		return true, s.failOperation(ctx, op, "runtime_unconfigured", "runtime is not configured", false)
 	}
 	workspace, err := s.Store.Workspace(ctx, dep.WorkspaceID)
 	if err != nil {
-		return true, s.Store.Fail(ctx, op, "workspace_unavailable", "workspace is not available", true)
+		return true, s.failOperation(ctx, op, "workspace_unavailable", "workspace is not available", true)
 	}
 	if err = s.Runtime.EnsureWorkspace(ctx, workspace.Namespace); err != nil {
-		return true, s.Store.Fail(ctx, op, "workspace_unavailable", "workspace is not available", true)
+		return true, s.failOperation(ctx, op, "workspace_unavailable", "workspace is not available", true)
 	}
 	if op.Kind == "DeleteDeployment" {
 		if err = s.Runtime.DeleteDeployment(ctx, workspace.Namespace, dep.RuntimeName); err != nil {
-			return true, s.Store.Fail(ctx, op, "runtime_error", "runtime operation failed", true)
+			return true, s.failOperation(ctx, op, "runtime_error", "runtime operation failed", true)
 		}
 		obs, observeErr := s.Runtime.ObserveDeployment(ctx, workspace.Namespace, dep.RuntimeName)
 		if observeErr != nil {
-			return true, s.Store.Fail(ctx, op, "runtime_observation_failed", "runtime observation failed", true)
+			return true, s.failOperation(ctx, op, "runtime_observation_failed", "runtime observation failed", true)
 		}
 		if obs.Exists {
-			return true, s.Store.Fail(ctx, op, "runtime_deletion_pending", "runtime removal is not yet observed", true)
+			return true, s.failOperation(ctx, op, "runtime_deletion_pending", "runtime removal is not yet observed", true)
 		}
-		return true, s.Store.Complete(ctx, op, domain.Ready, obs.Message, 0, obs.ObservedRelease, true)
+		return true, s.completeOperation(ctx, op, domain.Ready, obs.Message, 0, obs.ObservedRelease, true)
 	}
 	if err = s.Runtime.ApplyDeployment(ctx, workspace.Namespace, dep.RuntimeName, op.Intent); err != nil {
-		return true, s.Store.Fail(ctx, op, "runtime_error", "runtime operation failed", true)
+		return true, s.failOperation(ctx, op, "runtime_error", "runtime operation failed", true)
 	}
 	obs, err := s.Runtime.ObserveDeployment(ctx, workspace.Namespace, dep.RuntimeName)
 	if err != nil {
-		return true, s.Store.Fail(ctx, op, "runtime_observation_failed", "runtime observation failed", true)
+		return true, s.failOperation(ctx, op, "runtime_observation_failed", "runtime observation failed", true)
 	}
 	if obs.State != domain.Ready || !obs.Exists || obs.ObservedRelease != op.Intent.Image {
-		return true, s.Store.Fail(ctx, op, "runtime_not_ready", "runtime has not observed the requested release", true)
+		return true, s.failOperation(ctx, op, "runtime_not_ready", "runtime has not observed the requested release", true)
 	}
-	return true, s.Store.Complete(ctx, op, domain.Ready, obs.Message, op.DesiredVersion, obs.ObservedRelease, false)
+	return true, s.completeOperation(ctx, op, domain.Ready, obs.Message, op.DesiredVersion, obs.ObservedRelease, false)
+}
+
+func (s *Server) failOperation(ctx context.Context, op domain.Operation, code, message string, retryable bool) error {
+	s.logger().Warn("operation failed", "operation_id", op.PublicID, "deployment_id", op.DeploymentPublicID, "operation_kind", op.Kind, "worker_id", op.WorkerID, "error_code", code, "retryable", retryable)
+	return s.Store.Fail(ctx, op, code, message, retryable)
+}
+
+func (s *Server) completeOperation(ctx context.Context, op domain.Operation, state, message string, observedVersion int64, release string, deleted bool) error {
+	err := s.Store.Complete(ctx, op, state, message, observedVersion, release, deleted)
+	if err == nil {
+		s.logger().Info("operation completed", "operation_id", op.PublicID, "deployment_id", op.DeploymentPublicID, "operation_kind", op.Kind, "worker_id", op.WorkerID)
+	}
+	return err
 }
 
 func (s *Server) RunWorker(ctx context.Context, workerID string) {

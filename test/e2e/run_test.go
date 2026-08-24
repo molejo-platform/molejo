@@ -92,6 +92,67 @@ func TestControlPlaneE2ERestartPinsTheCrashAfterOperationClaim(t *testing.T) {
 	}
 }
 
+func TestControlPlaneE2EIsolatesHostResourcesAndSecrets(t *testing.T) {
+	contents, err := os.ReadFile("control-plane-kind.sh")
+	if err != nil {
+		t.Fatalf("read control-plane E2E script: %v", err)
+	}
+	script := string(contents)
+	for description, expected := range map[string]string{
+		"uses a unique Compose project":        `compose_project="fruto-control-plane-e2e-$PPID"`,
+		"allocates host ports dynamically":     `allocate_port()`,
+		"uses isolated control-plane images":   `api_image="fruto-control-plane-api:local-$PPID"`,
+		"injects the bootstrap hash by Secret": `--from=secret/control-plane-bootstrap-owner`,
+		"projects the isolated API image":      `image: $api_image`,
+		"projects the isolated Console image":  `image: $console_image`,
+	} {
+		if !strings.Contains(script, expected) {
+			t.Errorf("expected control-plane E2E to %s", description)
+		}
+	}
+	if strings.Contains(script, `set env deployment/control-plane-api FRUTO_OWNER_PASSWORD_HASH="$owner_hash"`) {
+		t.Error("control-plane E2E exposes the bootstrap password hash in the PodSpec")
+	}
+	if strings.Contains(script, `get jobs,pods,httproutes -o yaml`) {
+		t.Error("control-plane E2E dumps PodSpecs while collecting diagnostics")
+	}
+}
+
+func TestGeneratedGateIncludesTheFrontendAPIClient(t *testing.T) {
+	contents, err := os.ReadFile("../generated/check.sh")
+	if err != nil {
+		t.Fatalf("read generated gate: %v", err)
+	}
+	if !strings.Contains(string(contents), `apps/console-web/src/shared/api/generated/control-plane.ts`) {
+		t.Fatal("generated gate does not detect stale frontend API types")
+	}
+}
+
+func TestControlPlaneManifestsApplyLeastPrivilegeDefaults(t *testing.T) {
+	migration, err := os.ReadFile("../../deploy/control-plane/migration-job.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(migration), "serviceAccountName: control-plane-api") || !strings.Contains(string(migration), "automountServiceAccountToken: false") {
+		t.Error("migration Job still mounts the control-plane API service account token")
+	}
+	deployments, err := os.ReadFile("../../deploy/control-plane/deployments.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	consoleStart := strings.Index(string(deployments), "name: console-web")
+	if consoleStart < 0 || !strings.Contains(string(deployments)[consoleStart:], "automountServiceAccountToken: false") {
+		t.Error("console Deployment does not disable service account token automount")
+	}
+	operator, err := os.ReadFile("../../deploy/operator/manager/deployment.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(operator), "image: fruto-platform-operator:e2e") {
+		t.Error("operator installation still uses a mutable image tag")
+	}
+}
+
 func TestCIGateRequiresPostgreSQLBackedControlPlaneTests(t *testing.T) {
 	contents, err := os.ReadFile("../../justfile")
 	if err != nil {
@@ -104,7 +165,11 @@ func TestCIGateRequiresPostgreSQLBackedControlPlaneTests(t *testing.T) {
 		t.Fatal("expected canonical ci recipe")
 	}
 	ciRecipe := justfile[ciStart:]
-	if !strings.Contains(ciRecipe, "FRUTO_TEST_DATABASE_URL") {
+	if !strings.Contains(ciRecipe, "just control-plane-integration-test") {
+		t.Fatal("canonical ci recipe omits the PostgreSQL-backed control-plane integration stage")
+	}
+	integrationStart := strings.Index(justfile, "\ncontrol-plane-integration-test:\n")
+	if integrationStart < 0 || !strings.Contains(justfile[integrationStart:ciStart], "FRUTO_TEST_DATABASE_URL") {
 		t.Fatal("canonical ci recipe can pass without enabling the PostgreSQL-backed control-plane tests")
 	}
 }

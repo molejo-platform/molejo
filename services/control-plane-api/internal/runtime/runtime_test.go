@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 )
 
 func TestObservationDoesNotReportReadyForAnUnobservedVersion(t *testing.T) {
@@ -116,6 +118,82 @@ func TestApplyDeploymentKeepsTheRuntimeNameStableAcrossIntentUpdates(t *testing.
 	}
 	if len(list.Items) != 1 {
 		t.Fatalf("expected one AppDeployment for the stable runtime name, got %d", len(list.Items))
+	}
+}
+
+func TestApplyDeploymentRejectsAnUnownedRootObject(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := platformv1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	existing := &platformv1alpha1.AppDeployment{ObjectMeta: metav1.ObjectMeta{Name: "ap-deployment-id", Namespace: "fruto-workspaces"}}
+	kubernetesClient := &KubernetesClient{
+		client:       fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build(),
+		fieldManager: "test-control-plane",
+		applyTimeout: time.Second,
+	}
+
+	err := kubernetesClient.ApplyDeployment(context.Background(), "fruto-workspaces", "ap-deployment-id", runtimeTestIntent("demo"))
+	if !errors.Is(err, ErrOwnershipConflict) {
+		t.Fatalf("expected ErrOwnershipConflict, got %v", err)
+	}
+}
+
+func TestDeleteDeploymentRejectsAnUnownedRootObject(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := platformv1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	existing := &platformv1alpha1.AppDeployment{ObjectMeta: metav1.ObjectMeta{Name: "ap-deployment-id", Namespace: "fruto-workspaces"}}
+	kubernetesClient := &KubernetesClient{
+		client:       fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build(),
+		fieldManager: "test-control-plane",
+		applyTimeout: time.Second,
+	}
+
+	err := kubernetesClient.DeleteDeployment(context.Background(), "fruto-workspaces", "ap-deployment-id")
+	if !errors.Is(err, ErrOwnershipConflict) {
+		t.Fatalf("expected ErrOwnershipConflict, got %v", err)
+	}
+	current := &platformv1alpha1.AppDeployment{}
+	if err := kubernetesClient.client.Get(context.Background(), client.ObjectKey{Namespace: "fruto-workspaces", Name: "ap-deployment-id"}, current); err != nil {
+		t.Fatalf("unowned root object was deleted: %v", err)
+	}
+}
+
+func TestApplyDeploymentRejectsAnObjectCreatedAfterTheOwnershipCheck(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := platformv1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	intercepted := false
+	kubernetesClient := &KubernetesClient{
+		client: fake.NewClientBuilder().WithScheme(scheme).WithInterceptorFuncs(interceptor.Funcs{
+			Create: func(ctx context.Context, underlying client.WithWatch, obj client.Object, opts ...client.CreateOption) error {
+				if !intercepted {
+					intercepted = true
+					unowned := &platformv1alpha1.AppDeployment{ObjectMeta: metav1.ObjectMeta{Name: obj.GetName(), Namespace: obj.GetNamespace()}}
+					if err := underlying.Create(ctx, unowned); err != nil {
+						return err
+					}
+				}
+				return underlying.Create(ctx, obj, opts...)
+			},
+		}).Build(),
+		fieldManager: "test-control-plane",
+		applyTimeout: time.Second,
+	}
+
+	err := kubernetesClient.ApplyDeployment(context.Background(), "fruto-workspaces", "ap-deployment-id", runtimeTestIntent("demo"))
+	if !errors.Is(err, ErrOwnershipConflict) {
+		t.Fatalf("expected ErrOwnershipConflict, got %v", err)
+	}
+	current := &platformv1alpha1.AppDeployment{}
+	if err := kubernetesClient.client.Get(context.Background(), client.ObjectKey{Namespace: "fruto-workspaces", Name: "ap-deployment-id"}, current); err != nil {
+		t.Fatal(err)
+	}
+	if current.Annotations[controlPlaneOwnerAnnotation] != "" {
+		t.Fatal("control plane adopted the object that appeared during create")
 	}
 }
 

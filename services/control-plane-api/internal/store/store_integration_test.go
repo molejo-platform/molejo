@@ -72,6 +72,20 @@ func TestSchemaReadyRejectsMigrationChecksumDrift(t *testing.T) {
 	}
 }
 
+func TestSchemaReadyRejectsAnUnknownAppliedMigration(t *testing.T) {
+	ctx := context.Background()
+	s := newSchemaReadyFixture(t)
+
+	if _, err := s.Pool.Exec(ctx, `INSERT INTO schema_migrations(version,checksum) VALUES (999,$1)`, bytes.Repeat([]byte{0xaa}, 32)); err != nil {
+		t.Fatal(err)
+	}
+
+	err := s.SchemaReady(ctx)
+	if err == nil || !strings.Contains(err.Error(), "unknown schema migration 999") {
+		t.Fatalf("expected an unknown migration diagnostic, got %v", err)
+	}
+}
+
 func TestSchemaReadyRejectsAnUnavailableDatabase(t *testing.T) {
 	dsn := strings.TrimSpace(os.Getenv("FRUTO_TEST_DATABASE_URL"))
 	if dsn == "" {
@@ -85,6 +99,35 @@ func TestSchemaReadyRejectsAnUnavailableDatabase(t *testing.T) {
 	s.Close()
 	if err := s.SchemaReady(context.Background()); err == nil {
 		t.Fatal("closed database pool was reported ready")
+	}
+}
+
+func TestConcurrentMigratorsSerializeAndProduceAReadySchema(t *testing.T) {
+	ctx := context.Background()
+	first := newSchemaReadyFixtureWithoutMigrations(t)
+	second, err := New(ctx, first.Pool.Config().ConnString())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(second.Close)
+
+	errorsByMigrator := make(chan error, 2)
+	var start sync.WaitGroup
+	start.Add(1)
+	for _, migrator := range []*Store{first, second} {
+		go func(s *Store) {
+			start.Wait()
+			errorsByMigrator <- s.Migrate(ctx)
+		}(migrator)
+	}
+	start.Done()
+	for range 2 {
+		if err := <-errorsByMigrator; err != nil {
+			t.Fatalf("concurrent migration failed: %v", err)
+		}
+	}
+	if err := first.SchemaReady(ctx); err != nil {
+		t.Fatalf("schema is not ready after concurrent migrations: %v", err)
 	}
 }
 
@@ -180,6 +223,15 @@ func pgxKeywordValue(value string) string {
 
 func newSchemaReadyFixture(t *testing.T) *Store {
 	t.Helper()
+	s := newSchemaReadyFixtureWithoutMigrations(t)
+	if err := s.Migrate(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	return s
+}
+
+func newSchemaReadyFixtureWithoutMigrations(t *testing.T) *Store {
+	t.Helper()
 	dsn := strings.TrimSpace(os.Getenv("FRUTO_TEST_DATABASE_URL"))
 	if dsn == "" {
 		t.Skip("set FRUTO_TEST_DATABASE_URL to run PostgreSQL integration tests")
@@ -213,9 +265,6 @@ func newSchemaReadyFixture(t *testing.T) *Store {
 		t.Fatal(err)
 	}
 	t.Cleanup(s.Close)
-	if err := s.Migrate(ctx); err != nil {
-		t.Fatal(err)
-	}
 	return s
 }
 
@@ -275,6 +324,110 @@ func TestCompleteRejectsAStaleWorkerAfterLeaseHandoff(t *testing.T) {
 	}
 }
 
+func TestFailEnforcesFencingBackoffAndRetryExhaustion(t *testing.T) {
+	ctx := context.Background()
+	s, workspaceID, actorID := newIntegrationFixture(t)
+	publicID, err := domain.NewPublicID("dep")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, operation, _, err := s.CreateDeployment(ctx, workspaceID, actorID, publicID, integrationIntent("retry-test"), domain.SHA256([]byte("retry-idem")), domain.SHA256([]byte("retry-payload")))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	stale, _, ok, err := s.ClaimNext(ctx, "worker-a", time.Second)
+	if err != nil || !ok {
+		t.Fatalf("initial claim: ok=%v err=%v", ok, err)
+	}
+	if _, err := s.Pool.Exec(ctx, `UPDATE operations SET lease_until=now()-interval '1 second' WHERE id=$1`, stale.ID); err != nil {
+		t.Fatal(err)
+	}
+	current, _, ok, err := s.ClaimNext(ctx, "worker-b", time.Second)
+	if err != nil || !ok {
+		t.Fatalf("replacement claim: ok=%v err=%v", ok, err)
+	}
+	if err := s.Fail(ctx, stale, "stale", "stale worker", true); !errors.Is(err, ErrLeaseLost) {
+		t.Fatalf("stale Fail returned %v, want ErrLeaseLost", err)
+	}
+	if err := s.Fail(ctx, current, "retryable", "try again", true); err != nil {
+		t.Fatal(err)
+	}
+	var status string
+	var nextAttempt time.Time
+	if err := s.Pool.QueryRow(ctx, `SELECT status,next_attempt_at FROM operations WHERE id=$1`, operation.ID).Scan(&status, &nextAttempt); err != nil {
+		t.Fatal(err)
+	}
+	if status != domain.OperationPending || !nextAttempt.After(time.Now()) {
+		t.Fatalf("retry did not schedule backoff: status=%q next_attempt_at=%s", status, nextAttempt)
+	}
+
+	for attempt := current.Attempts + 1; attempt <= 8; attempt++ {
+		if _, err := s.Pool.Exec(ctx, `UPDATE operations SET next_attempt_at=now()-interval '1 second' WHERE id=$1`, operation.ID); err != nil {
+			t.Fatal(err)
+		}
+		claimed, _, ok, err := s.ClaimNext(ctx, "worker-retry", time.Second)
+		if err != nil || !ok {
+			t.Fatalf("claim attempt %d: ok=%v err=%v", attempt, ok, err)
+		}
+		if err := s.Fail(ctx, claimed, "retryable", "try again", true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.Pool.QueryRow(ctx, `SELECT status FROM operations WHERE id=$1`, operation.ID).Scan(&status); err != nil {
+		t.Fatal(err)
+	}
+	if status != domain.OperationFailed {
+		t.Fatalf("operation status after eight attempts=%q, want Failed", status)
+	}
+}
+
+func TestRotateSessionIsAtomicWhenCreatingTheReplacementFails(t *testing.T) {
+	ctx := context.Background()
+	s, _, actorID := newIntegrationFixture(t)
+	oldToken := domain.SHA256([]byte("old-session-" + strconv.FormatInt(time.Now().UnixNano(), 10)))
+	newToken := domain.SHA256([]byte("new-session-" + strconv.FormatInt(time.Now().UnixNano(), 10)))
+	csrf := domain.SHA256([]byte("csrf"))
+	if err := s.CreateSession(ctx, actorID, oldToken, csrf, time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateSession(ctx, actorID, newToken, csrf, time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.RotateSession(ctx, actorID, oldToken, newToken, csrf, time.Now().Add(time.Hour)); err == nil {
+		t.Fatal("expected replacement session insertion to fail")
+	}
+	if _, _, err := s.Session(ctx, oldToken); err != nil {
+		t.Fatalf("old session was revoked despite replacement failure: %v", err)
+	}
+}
+
+func TestSessionRejectsExpiredAndRevokedTokens(t *testing.T) {
+	ctx := context.Background()
+	s, _, actorID := newIntegrationFixture(t)
+	csrf := domain.SHA256([]byte("csrf"))
+
+	expired := domain.SHA256([]byte("expired-" + strconv.FormatInt(time.Now().UnixNano(), 10)))
+	if err := s.CreateSession(ctx, actorID, expired, csrf, time.Now().Add(-time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.Session(ctx, expired); !errors.Is(err, pgx.ErrNoRows) {
+		t.Fatalf("expired session remained valid: %v", err)
+	}
+
+	revoked := domain.SHA256([]byte("revoked-" + strconv.FormatInt(time.Now().UnixNano(), 10)))
+	if err := s.CreateSession(ctx, actorID, revoked, csrf, time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RevokeSession(ctx, revoked); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.Session(ctx, revoked); !errors.Is(err, pgx.ErrNoRows) {
+		t.Fatalf("revoked session remained valid: %v", err)
+	}
+}
+
 func TestClaimNextReturnsThePersistedOperationSnapshot(t *testing.T) {
 	ctx := context.Background()
 	s, workspaceID, actorID := newIntegrationFixture(t)
@@ -304,6 +457,52 @@ func TestClaimNextReturnsThePersistedOperationSnapshot(t *testing.T) {
 
 	if op.Intent.Name != intent.Name {
 		t.Fatalf("operation snapshot name=%q, want %q", op.Intent.Name, intent.Name)
+	}
+}
+
+func TestUpdateSupersedesPendingSnapshotsAndClaimsOnlyTheLatestVersion(t *testing.T) {
+	ctx := context.Background()
+	s, workspaceID, actorID := newIntegrationFixture(t)
+	publicID, err := domain.NewPublicID("dep")
+	if err != nil {
+		t.Fatal(err)
+	}
+	initial := integrationIntent("supersession-test")
+	deployment, createOperation, _, err := s.CreateDeployment(ctx, workspaceID, actorID, publicID, initial, domain.SHA256([]byte("create-idem")), domain.SHA256([]byte("create-payload")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	second := initial
+	second.Image = "ghcr.io/fruto-platform/testkit@sha256:" + strings.Repeat("b", 64)
+	deployment, firstUpdate, err := s.UpdateDeployment(ctx, workspaceID, actorID, deployment.ID, second, deployment.DesiredVersion, domain.SHA256([]byte("update-1-idem")), domain.SHA256([]byte("update-1-payload")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	third := second
+	third.Image = "ghcr.io/fruto-platform/testkit@sha256:" + strings.Repeat("c", 64)
+	deployment, latestUpdate, err := s.UpdateDeployment(ctx, workspaceID, actorID, deployment.ID, third, deployment.DesiredVersion, domain.SHA256([]byte("update-2-idem")), domain.SHA256([]byte("update-2-payload")))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, operationID := range []int64{createOperation.ID, firstUpdate.ID} {
+		var status string
+		if err := s.Pool.QueryRow(ctx, `SELECT status FROM operations WHERE id=$1`, operationID).Scan(&status); err != nil {
+			t.Fatal(err)
+		}
+		if status != domain.OperationSuperseded {
+			t.Fatalf("operation %d status=%q, want Superseded", operationID, status)
+		}
+	}
+	if _, _, err := s.UpdateDeployment(ctx, workspaceID, actorID, deployment.ID, third, deployment.DesiredVersion-1, domain.SHA256([]byte("stale-idem")), domain.SHA256([]byte("stale-payload"))); !errors.Is(err, ErrConflict) {
+		t.Fatalf("stale desired version returned %v, want ErrConflict", err)
+	}
+	claimed, _, ok, err := s.ClaimNext(ctx, "latest-worker", time.Second)
+	if err != nil || !ok {
+		t.Fatalf("claim latest update: ok=%v err=%v", ok, err)
+	}
+	if claimed.ID != latestUpdate.ID || claimed.DesiredVersion != deployment.DesiredVersion || claimed.Intent.Image != third.Image {
+		t.Fatalf("claimed stale update snapshot: %+v", claimed)
 	}
 }
 
@@ -486,6 +685,9 @@ func newIntegrationFixture(t *testing.T) (*Store, int64, int64) {
 	}
 	t.Cleanup(func() {
 		cleanupCtx := context.Background()
+		if _, err := s.Pool.Exec(cleanupCtx, `DELETE FROM sessions WHERE actor_id=$1`, actorID); err != nil {
+			t.Errorf("delete integration sessions: %v", err)
+		}
 		if _, err := s.Pool.Exec(cleanupCtx, `DELETE FROM operations WHERE workspace_id=$1`, workspaceID); err != nil {
 			t.Errorf("delete integration operations: %v", err)
 		}

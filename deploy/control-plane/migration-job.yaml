@@ -14,7 +14,7 @@ spec:
       labels: { app.kubernetes.io/name: control-plane-migrate }
     spec:
       restartPolicy: OnFailure
-      serviceAccountName: control-plane-api
+      automountServiceAccountToken: false
       containers:
         - name: migrate
           image: ghcr.io/fruto-platform/control-plane-api@sha256:0000000000000000000000000000000000000000000000000000000000000000

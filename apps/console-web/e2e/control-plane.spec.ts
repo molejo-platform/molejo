@@ -41,7 +41,7 @@ test.describe("control plane browser flow", () => {
     await expect(page.getByText("Nenhum deployment ainda")).toBeVisible({ timeout: 120_000 });
   });
 
-  test("keeps a deep link on the console and shows an expired session", async ({ page, context }) => {
+  test("keeps a deep link on the console and redirects after the session cookie is removed", async ({ page, context }) => {
     await login(page);
     await page.goto("/deployments/dep-missing");
     await expect(page.getByText(/deployment (não encontrado|was not found)|não foi possível/i)).toBeVisible();

@@ -79,7 +79,7 @@ the exact Node version pinned in `.node-version`. Kind does not need to be
 installed globally; the end-to-end command runs its pinned version through Go.
 
 ```bash
-just generate  # regenerate DeepCopy, CRD, and RBAC artifacts
+just generate  # regenerate DeepCopy, CRD, RBAC, and Console API artifacts
 just test      # run tests against a local envtest API server
 just verify    # generate, check formatting, run go vet, and run tests
 just e2e       # validate private and public routing in a disposable Kind cluster
@@ -89,6 +89,10 @@ just frontend-check # type-check the React fixture and Console from the pnpm loc
 just frontend-test # run Console tests and validate both frontend images in a restricted container
 just audit-frontend-images # run the optional Docker Scout vulnerability check
 ```
+
+`just ci` checks tracked generation, runs `just verify`, executes the
+PostgreSQL-backed control-plane integration suite, validates both control-plane
+topologies in a disposable Kind cluster, and then runs the platform Kind E2E.
 
 The first run downloads pinned Go modules, envtest binaries, Kind, and container
 images. `just e2e` uses a temporary kubeconfig and does not access the currently

@@ -64,6 +64,7 @@ spec:
         app.kubernetes.io/name: console-web
         app.kubernetes.io/part-of: fruto-platform
     spec:
+      automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
         seccompProfile: { type: RuntimeDefault }

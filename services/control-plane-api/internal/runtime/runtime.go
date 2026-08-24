@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"time"
@@ -18,6 +19,10 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+const controlPlaneOwnerAnnotation = "platform.fruto.calouro.tech/control-plane-owner"
+
+var ErrOwnershipConflict = errors.New("runtime object is not owned by the control plane")
 
 type Observation struct {
 	Exists             bool
@@ -89,10 +94,23 @@ func (k *KubernetesClient) EnsureWorkspace(ctx context.Context, namespace string
 func (k *KubernetesClient) ApplyDeployment(ctx context.Context, namespace, name string, intent domain.Intent) error {
 	applyCtx, cancel := context.WithTimeout(ctx, k.applyTimeout)
 	defer cancel()
+	exists, err := k.ownedObjectExists(applyCtx, namespace, name)
+	if err != nil {
+		return err
+	}
 	replicas := intent.Replicas
 	resourceSpec := platformv1alpha1.AppDeploymentResources{Requests: platformv1alpha1.AppDeploymentResourceValues{CPUMillis: intent.Resources.Requests.CPUMillis, MemoryMiB: intent.Resources.Requests.MemoryMiB}, Limits: platformv1alpha1.AppDeploymentResourceValues{CPUMillis: intent.Resources.Limits.CPUMillis, MemoryMiB: intent.Resources.Limits.MemoryMiB}}
-	obj := &platformv1alpha1.AppDeployment{TypeMeta: metav1.TypeMeta{APIVersion: "platform.fruto.calouro.tech/v1alpha1", Kind: "AppDeployment"}, ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}, Spec: platformv1alpha1.AppDeploymentSpec{Image: intent.Image, Replicas: &replicas, Port: intent.Port, Resources: resourceSpec, Probes: platformv1alpha1.AppDeploymentProbes{Liveness: platformv1alpha1.AppDeploymentHTTPProbe{Path: intent.Probes.Liveness.Path}, Readiness: platformv1alpha1.AppDeploymentHTTPProbe{Path: intent.Probes.Readiness.Path}}, Exposure: platformv1alpha1.AppDeploymentExposure(intent.Exposure), Slug: intent.Slug}}
-	if err := k.client.Patch(applyCtx, obj, client.Apply, client.FieldOwner(k.fieldManager)); err != nil {
+	obj := &platformv1alpha1.AppDeployment{TypeMeta: metav1.TypeMeta{APIVersion: "platform.fruto.calouro.tech/v1alpha1", Kind: "AppDeployment"}, ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, Annotations: map[string]string{controlPlaneOwnerAnnotation: name}}, Spec: platformv1alpha1.AppDeploymentSpec{Image: intent.Image, Replicas: &replicas, Port: intent.Port, Resources: resourceSpec, Probes: platformv1alpha1.AppDeploymentProbes{Liveness: platformv1alpha1.AppDeploymentHTTPProbe{Path: intent.Probes.Liveness.Path}, Readiness: platformv1alpha1.AppDeploymentHTTPProbe{Path: intent.Probes.Readiness.Path}}, Exposure: platformv1alpha1.AppDeploymentExposure(intent.Exposure), Slug: intent.Slug}}
+	if !exists {
+		if err := k.client.Create(applyCtx, obj, client.FieldOwner(k.fieldManager)); err != nil {
+			if apierrors.IsAlreadyExists(err) {
+				return fmt.Errorf("%w: AppDeployment %s/%s appeared during create", ErrOwnershipConflict, namespace, name)
+			}
+			return fmt.Errorf("create AppDeployment: %w", err)
+		}
+		return nil
+	}
+	if err := k.client.Patch(applyCtx, obj, client.Apply, client.FieldOwner(k.fieldManager), client.ForceOwnership); err != nil {
 		return fmt.Errorf("apply AppDeployment: %w", err)
 	}
 	return nil
@@ -114,12 +132,35 @@ func (k *KubernetesClient) ObserveDeployment(ctx context.Context, namespace, nam
 func (k *KubernetesClient) DeleteDeployment(ctx context.Context, namespace, name string) error {
 	delCtx, cancel := context.WithTimeout(ctx, k.applyTimeout)
 	defer cancel()
-	obj := &platformv1alpha1.AppDeployment{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
-	err := k.client.Delete(delCtx, obj)
-	if apierrors.IsNotFound(err) {
-		return nil
+	obj := &platformv1alpha1.AppDeployment{}
+	if err := k.client.Get(delCtx, types.NamespacedName{Namespace: namespace, Name: name}, obj); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		return err
 	}
-	return err
+	if obj.Annotations[controlPlaneOwnerAnnotation] != name {
+		return fmt.Errorf("%w: AppDeployment %s/%s", ErrOwnershipConflict, namespace, name)
+	}
+	if err := k.client.Delete(delCtx, obj); apierrors.IsNotFound(err) {
+		return nil
+	} else {
+		return err
+	}
+}
+
+func (k *KubernetesClient) ownedObjectExists(ctx context.Context, namespace, name string) (bool, error) {
+	obj := &platformv1alpha1.AppDeployment{}
+	if err := k.client.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, obj); err != nil {
+		if apierrors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	if obj.Annotations[controlPlaneOwnerAnnotation] != name {
+		return false, fmt.Errorf("%w: AppDeployment %s/%s", ErrOwnershipConflict, namespace, name)
+	}
+	return true, nil
 }
 
 func observation(obj *platformv1alpha1.AppDeployment, expectedRelease string) Observation {

@@ -54,24 +54,30 @@ control-plane-integration-test:
     set -euo pipefail
     compose_project="fruto-control-plane-integration-$$"
     compose_file="deploy/control-plane/docker-compose.yaml"
+    postgres_port="$(node -e 'const net=require("net");const server=net.createServer();server.listen(0,"127.0.0.1",()=>{console.log(server.address().port);server.close();});')"
     cleanup() {
-      docker compose --project-name "$compose_project" -f "$compose_file" down >/dev/null 2>&1 || true
+      exit_code=$?
+      if ! FRUTO_POSTGRES_PORT="$postgres_port" docker compose --project-name "$compose_project" -f "$compose_file" down >/dev/null 2>&1 && [[ "$exit_code" -eq 0 ]]; then
+        exit_code=1
+      fi
+      trap - EXIT
+      exit "$exit_code"
     }
     trap cleanup EXIT
-    docker compose --project-name "$compose_project" -f "$compose_file" up -d postgres
+    FRUTO_POSTGRES_PORT="$postgres_port" docker compose --project-name "$compose_project" -f "$compose_file" up -d postgres
     ready=false
     for _ in $(seq 1 60); do
-      if docker compose --project-name "$compose_project" -f "$compose_file" exec -T postgres pg_isready -U fruto -d fruto >/dev/null 2>&1; then
+      if FRUTO_POSTGRES_PORT="$postgres_port" docker compose --project-name "$compose_project" -f "$compose_file" exec -T postgres pg_isready -U fruto -d fruto >/dev/null 2>&1; then
         ready=true
         break
       fi
       sleep 1
     done
     if [[ "$ready" != true ]]; then
-      docker compose --project-name "$compose_project" -f "$compose_file" logs postgres >&2
+      FRUTO_POSTGRES_PORT="$postgres_port" docker compose --project-name "$compose_project" -f "$compose_file" logs postgres >&2
       exit 1
     fi
-    FRUTO_TEST_DATABASE_URL="${FRUTO_TEST_DATABASE_URL:-postgres://fruto:fruto@127.0.0.1:55432/fruto?sslmode=disable}" \
+    FRUTO_TEST_DATABASE_URL="postgres://fruto:fruto@127.0.0.1:${postgres_port}/fruto?sslmode=disable" \
       GOCACHE="/tmp/fruto-go-cache" GOMODCACHE="/tmp/fruto-go-mod-cache" \
       go test -count=1 -p=1 ./services/control-plane-api/internal/store ./services/control-plane-api/internal/api
 
@@ -101,6 +107,6 @@ verify: generate fmt-check lint test control-plane-verify frontend-check fronten
 ci:
     bash test/generated/check.sh
     just verify
-    FRUTO_TEST_DATABASE_URL="postgres://fruto:fruto@127.0.0.1:55432/fruto?sslmode=disable" just control-plane-integration-test
+    just control-plane-integration-test
     just control-plane-e2e-kind
     just e2e

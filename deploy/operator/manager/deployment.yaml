@@ -24,7 +24,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: manager
-          image: fruto-platform-operator:e2e
+          image: ghcr.io/fruto-platform/platform-operator@sha256:0000000000000000000000000000000000000000000000000000000000000000
           imagePullPolicy: IfNotPresent
           args:
             - --leader-elect=false

@@ -82,7 +82,7 @@ versión exacta de Node fijada en `.node-version`. No es necesario instalar Kind
 globalmente; el comando end-to-end ejecuta la versión fijada mediante Go.
 
 ```bash
-just generate  # regenera artefactos DeepCopy, CRD y RBAC
+just generate  # regenera artefactos DeepCopy, CRD, RBAC y de la API de la Console
 just test      # ejecuta pruebas contra un API server local de envtest
 just verify    # genera, verifica formato, ejecuta go vet y las pruebas
 just e2e       # valida rutas privadas y públicas en un cluster Kind descartable
@@ -92,6 +92,10 @@ just frontend-check # verifica tipos de la fixture React y de la Console desde e
 just frontend-test # ejecuta las pruebas de la Console y valida ambas imágenes en un container restringido
 just audit-frontend-images # ejecuta la auditoría opcional con Docker Scout
 ```
+
+`just ci` verifica la generación versionada, ejecuta `just verify`, la suite de
+integración del control plane con PostgreSQL, ambas topologías del control plane
+en un cluster Kind descartable y, por último, el E2E de la plataforma en Kind.
 
 La primera ejecución descarga módulos Go, binarios de envtest, Kind e imágenes de
 container fijados. `just e2e` usa un kubeconfig temporal y no accede al contexto

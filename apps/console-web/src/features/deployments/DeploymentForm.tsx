@@ -40,18 +40,18 @@ export function DeploymentForm({ deployment }: { deployment?: Deployment }) {
   const error = mutation.isError ? userFacingError(mutation.error) : "";
   return (
     <form onSubmit={submit} className="stack">
-      <Field label="Nome" value={draft.name} onChange={(event) => patchDraft({ name: event.target.value })} required />
+      <Field label="Nome" maxLength={63} value={draft.name} onChange={(event) => patchDraft({ name: event.target.value })} required />
       <Field label="Imagem OCI por digest" value={draft.image} onChange={(event) => patchDraft({ image: event.target.value })} required />
       <div className="form-row">
         <Field label="Réplicas" type="number" min="1" max="5" value={draft.replicas} onChange={(event) => patchDraft({ replicas: Number(event.target.value) })} required />
         <Field label="Porta" type="number" min="1" max="65535" value={draft.port} onChange={(event) => patchDraft({ port: Number(event.target.value) })} required />
       </div>
       <div className="form-row">
-        <Field label="CPU limite (m)" type="number" min="1" value={draft.resources.limits.cpuMillis} onChange={(event) => patchDraft({ resources: { ...draft.resources, limits: { ...draft.resources.limits, cpuMillis: Number(event.target.value) } } })} required />
-        <Field label="Memória limite (MiB)" type="number" min="1" value={draft.resources.limits.memoryMiB} onChange={(event) => patchDraft({ resources: { ...draft.resources, limits: { ...draft.resources.limits, memoryMiB: Number(event.target.value) } } })} required />
+		<Field label="CPU limite (m)" type="number" min="1" max="2000" value={draft.resources.limits.cpuMillis} onChange={(event) => patchDraft({ resources: { ...draft.resources, limits: { ...draft.resources.limits, cpuMillis: Number(event.target.value) } } })} required />
+		<Field label="Memória limite (MiB)" type="number" min="1" max="2048" value={draft.resources.limits.memoryMiB} onChange={(event) => patchDraft({ resources: { ...draft.resources, limits: { ...draft.resources.limits, memoryMiB: Number(event.target.value) } } })} required />
       </div>
-      <Field label="Readiness path" value={draft.probes.readiness.path} onChange={(event) => patchDraft({ probes: { ...draft.probes, readiness: { path: event.target.value } } })} required />
-      <Field label="Liveness path" value={draft.probes.liveness.path} onChange={(event) => patchDraft({ probes: { ...draft.probes, liveness: { path: event.target.value } } })} required />
+	  <Field label="Readiness path" maxLength={2048} value={draft.probes.readiness.path} onChange={(event) => patchDraft({ probes: { ...draft.probes, readiness: { path: event.target.value } } })} required />
+	  <Field label="Liveness path" maxLength={2048} value={draft.probes.liveness.path} onChange={(event) => patchDraft({ probes: { ...draft.probes, liveness: { path: event.target.value } } })} required />
       {error && <Alert>{error}</Alert>}
       <Button type="submit" disabled={mutation.isPending}>{mutation.isPending ? "Enviando…" : deployment ? "Atualizar deployment" : "Criar deployment"}</Button>
     </form>

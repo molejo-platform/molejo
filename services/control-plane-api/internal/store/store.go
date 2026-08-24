@@ -52,6 +52,7 @@ func embeddedMigrations() ([]migration, error) {
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
 	migrations := make([]migration, 0, len(entries))
+	seenVersions := make(map[int64]string)
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".sql") {
 			continue
@@ -60,6 +61,10 @@ func embeddedMigrations() ([]migration, error) {
 		if err != nil {
 			return nil, fmt.Errorf("invalid migration name %q: %w", entry.Name(), err)
 		}
+		if previous, exists := seenVersions[version]; exists {
+			return nil, fmt.Errorf("duplicate migration version %d in %q and %q", version, previous, entry.Name())
+		}
+		seenVersions[version] = entry.Name()
 		contents, err := migrationFS.ReadFile("migrations/" + entry.Name())
 		if err != nil {
 			return nil, err
@@ -210,6 +215,15 @@ func (s *Store) SchemaReady(ctx context.Context) error {
 		if !bytes.Equal(checksum, migration.checksum[:]) {
 			return fmt.Errorf("schema migration %d checksum drift", migration.version)
 		}
+		delete(applied, migration.version)
+	}
+	if len(applied) != 0 {
+		versions := make([]int64, 0, len(applied))
+		for version := range applied {
+			versions = append(versions, version)
+		}
+		sort.Slice(versions, func(i, j int) bool { return versions[i] < versions[j] })
+		return fmt.Errorf("unknown schema migration %d is applied", versions[0])
 	}
 	return nil
 }
@@ -229,6 +243,25 @@ func (s *Store) Session(ctx context.Context, tokenHash []byte) (int64, []byte, e
 func (s *Store) RevokeSession(ctx context.Context, tokenHash []byte) error {
 	_, err := s.Pool.Exec(ctx, `UPDATE sessions SET revoked_at=now() WHERE token_hash=$1`, tokenHash)
 	return err
+}
+
+func (s *Store) RotateSession(ctx context.Context, actorID int64, oldTokenHash, newTokenHash, csrfHash []byte, expires time.Time) error {
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	result, err := tx.Exec(ctx, `UPDATE sessions SET revoked_at=now() WHERE token_hash=$1 AND actor_id=$2 AND revoked_at IS NULL AND expires_at > now()`, oldTokenHash, actorID)
+	if err != nil {
+		return err
+	}
+	if result.RowsAffected() != 1 {
+		return ErrSessionInvalid
+	}
+	if _, err = tx.Exec(ctx, `INSERT INTO sessions(token_hash,actor_id,csrf_hash,expires_at) VALUES ($1,$2,$3,$4)`, newTokenHash, actorID, csrfHash, expires); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func (s *Store) CreateDeployment(ctx context.Context, workspaceID, actorID int64, deploymentID string, intent domain.Intent, idempotencyHash, payloadHash []byte) (domain.Deployment, domain.Operation, bool, error) {
@@ -608,6 +641,8 @@ var ErrImmutableName = errors.New("deployment name is immutable")
 var ErrLeaseLost = errors.New("operation lease lost")
 
 var ErrNotFound = errors.New("not found")
+
+var ErrSessionInvalid = errors.New("session is no longer valid")
 
 var ErrNoRows = pgx.ErrNoRows
 

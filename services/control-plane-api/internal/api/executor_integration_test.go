@@ -1,8 +1,11 @@
 package api
 
 import (
+	"bytes"
 	"context"
-	"fmt"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"strconv"
 	"strings"
@@ -17,15 +20,22 @@ import (
 
 func TestWorkerResumesAcrossRuntimeCrashWindows(t *testing.T) {
 	tests := []struct {
-		name       string
-		preApplied bool
-		wantCalls  int32
+		kind       string
+		crashAfter bool
 	}{
-		{name: "before runtime effect", preApplied: false, wantCalls: 1},
-		{name: "after runtime effect before completion", preApplied: true, wantCalls: 2},
+		{kind: "create", crashAfter: false},
+		{kind: "create", crashAfter: true},
+		{kind: "update", crashAfter: false},
+		{kind: "update", crashAfter: true},
+		{kind: "delete", crashAfter: false},
+		{kind: "delete", crashAfter: true},
 	}
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+		window := "before-effect"
+		if tt.crashAfter {
+			window = "after-effect-before-complete"
+		}
+		t.Run(tt.kind+"/"+window, func(t *testing.T) {
 			ctx := context.Background()
 			s, workspaceID, actorID, workspaceNamespace := newExecutorIntegrationFixture(t)
 			publicID, err := domain.NewPublicID("dep")
@@ -37,30 +47,65 @@ func TestWorkerResumesAcrossRuntimeCrashWindows(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-
-			claimed, claimedDeployment, ok, err := s.ClaimNext(ctx, "crashed-worker", time.Minute)
-			if err != nil || !ok {
-				t.Fatalf("claim before simulated crash: ok=%v err=%v", ok, err)
-			}
-			runtimeClient := &resumableRuntime{}
-			if tt.preApplied {
-				if err := runtimeClient.ApplyDeployment(ctx, workspaceNamespace, claimedDeployment.RuntimeName, claimed.Intent); err != nil {
-					t.Fatal(err)
+			runtimeClient := &crashBarrierRuntime{}
+			if tt.kind != "create" {
+				server := NewServer(s, runtimeClient, Config{OperationLease: time.Second}, nil)
+				if processed, err := server.RunOnce(ctx, "initial-worker"); err != nil || !processed {
+					t.Fatalf("complete initial create: processed=%v err=%v", processed, err)
+				}
+				switch tt.kind {
+				case "update":
+					updatedIntent := intent
+					updatedIntent.Image = "ghcr.io/fruto-platform/testkit@sha256:" + strings.Repeat("b", 64)
+					deployment, operation, err = s.UpdateDeployment(ctx, workspaceID, actorID, deployment.ID, updatedIntent, deployment.DesiredVersion, domain.SHA256([]byte("update-idem")), domain.SHA256([]byte("update-payload")))
+					if err != nil {
+						t.Fatal(err)
+					}
+					intent = updatedIntent
+				case "delete":
+					operation, err = s.DeleteDeployment(ctx, workspaceID, actorID, deployment.ID, deployment.DesiredVersion, domain.SHA256([]byte("delete-idem")), domain.SHA256([]byte("delete-payload")))
+					if err != nil {
+						t.Fatal(err)
+					}
 				}
 			}
-			if _, err := s.Pool.Exec(ctx, `UPDATE operations SET lease_until=now()-interval '1 second' WHERE id=$1`, claimed.ID); err != nil {
+
+			runtimeClient.crashAfterEffect = tt.crashAfter
+			runtimeClient.crashBeforeEffect = !tt.crashAfter
+			runtimeClient.crashOperation = tt.kind
+			crashedServer := NewServer(s, runtimeClient, Config{OperationLease: time.Minute}, nil)
+			func() {
+				defer func() {
+					if recover() == nil {
+						t.Fatal("worker did not stop at the configured crash barrier")
+					}
+				}()
+				_, _ = crashedServer.RunOnce(ctx, "crashed-worker")
+			}()
+			currentOperation, err := s.GetOperation(ctx, workspaceID, operation.PublicID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if currentOperation.Status != domain.OperationRunning || currentOperation.Attempts != 1 {
+				t.Fatalf("crashed operation status=%q attempts=%d", currentOperation.Status, currentOperation.Attempts)
+			}
+			if _, err := s.Pool.Exec(ctx, `UPDATE operations SET lease_until=now()-interval '1 second' WHERE id=$1`, currentOperation.ID); err != nil {
 				t.Fatal(err)
 			}
 
-			server := NewServer(s, runtimeClient, Config{OperationLease: time.Second}, nil)
+			replacementStore, err := store.New(ctx, s.Pool.Config().ConnString())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer replacementStore.Close()
+			runtimeClient.crashBeforeEffect = false
+			runtimeClient.crashAfterEffect = false
+			server := NewServer(replacementStore, runtimeClient, Config{OperationLease: time.Second, WorkspaceNamespace: workspaceNamespace}, nil)
 			processed, err := server.RunOnce(ctx, "replacement-worker")
 			if err != nil || !processed {
 				t.Fatalf("resume operation: processed=%v err=%v", processed, err)
 			}
-			if got := atomic.LoadInt32(&runtimeClient.applyCalls); got != tt.wantCalls {
-				t.Fatalf("runtime apply calls=%d, want %d", got, tt.wantCalls)
-			}
-			currentOperation, err := s.GetOperation(ctx, workspaceID, operation.PublicID)
+			currentOperation, err = s.GetOperation(ctx, workspaceID, operation.PublicID)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -68,11 +113,17 @@ func TestWorkerResumesAcrossRuntimeCrashWindows(t *testing.T) {
 				t.Fatalf("resumed operation status=%q attempts=%d", currentOperation.Status, currentOperation.Attempts)
 			}
 			currentDeployment, err := s.FindDeployment(ctx, workspaceID, deployment.PublicID)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if currentDeployment.ObservedVersion != currentDeployment.DesiredVersion || currentDeployment.ObservedRelease != intent.Image {
-				t.Fatalf("deployment was not finalized after resume: %+v", currentDeployment)
+			if tt.kind == "delete" {
+				if err == nil {
+					t.Fatalf("deleted deployment remained visible: %+v", currentDeployment)
+				}
+			} else {
+				if err != nil {
+					t.Fatal(err)
+				}
+				if currentDeployment.ObservedVersion != currentDeployment.DesiredVersion || currentDeployment.ObservedRelease != intent.Image {
+					t.Fatalf("deployment was not finalized after resume: %+v", currentDeployment)
+				}
 			}
 		})
 	}
@@ -140,32 +191,139 @@ func TestWorkerDoesNotHideADeploymentBeforeRuntimeRemovalIsObserved(t *testing.T
 	}
 }
 
+func TestWorkerLogsOperationAndWorkerCorrelation(t *testing.T) {
+	ctx := context.Background()
+	s, workspaceID, actorID, _ := newExecutorIntegrationFixture(t)
+	publicID, err := domain.NewPublicID("dep")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, operation, _, err := s.CreateDeployment(ctx, workspaceID, actorID, publicID, executorIntent("log-correlation"), domain.SHA256([]byte("log-idem")), domain.SHA256([]byte("log-payload")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var output bytes.Buffer
+	server := NewServer(s, &crashBarrierRuntime{}, Config{OperationLease: time.Second}, slog.New(slog.NewJSONHandler(&output, nil)))
+	if processed, err := server.RunOnce(ctx, "worker-correlation"); err != nil || !processed {
+		t.Fatalf("run operation: processed=%v err=%v", processed, err)
+	}
+	log := output.String()
+	for _, expected := range []string{`"operation_id":"` + operation.PublicID + `"`, `"worker_id":"worker-correlation"`, `"msg":"operation claimed"`, `"msg":"operation completed"`} {
+		if !strings.Contains(log, expected) {
+			t.Errorf("worker log is missing %s: %s", expected, log)
+		}
+	}
+}
+
+func TestSessionRefreshFailureKeepsTheOldSessionValid(t *testing.T) {
+	ctx := context.Background()
+	s, _, actorID, _ := newExecutorIntegrationFixture(t)
+	oldToken := "old-session-token"
+	collidingToken := "already-issued-token"
+	csrf := domain.SHA256([]byte("csrf"))
+	if err := s.CreateSession(ctx, actorID, domain.SHA256([]byte(oldToken)), csrf, time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateSession(ctx, actorID, domain.SHA256([]byte(collidingToken)), csrf, time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	server := NewServer(s, nil, Config{CookieName: "fruto_session", SessionTTL: time.Hour}, nil)
+	issued := []string{collidingToken, "new-csrf-token"}
+	server.token = func(int) (string, error) {
+		value := issued[0]
+		issued = issued[1:]
+		return value, nil
+	}
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/session", nil)
+	request.AddCookie(&http.Cookie{Name: "fruto_session", Value: oldToken})
+	recorder := httptest.NewRecorder()
+
+	server.sessionInfo(recorder, request, actorID)
+
+	if recorder.Code != http.StatusInternalServerError {
+		t.Fatalf("refresh status=%d, want %d", recorder.Code, http.StatusInternalServerError)
+	}
+	if recorder.Header().Get("Set-Cookie") != "" {
+		t.Fatal("refresh failure emitted a replacement cookie")
+	}
+	if _, _, err := s.Session(ctx, domain.SHA256([]byte(oldToken))); err != nil {
+		t.Fatalf("refresh failure revoked the old session: %v", err)
+	}
+}
+
+func TestLogoutDoesNotClaimSuccessWhenRevocationFails(t *testing.T) {
+	dsn := strings.TrimSpace(os.Getenv("FRUTO_TEST_DATABASE_URL"))
+	if dsn == "" {
+		t.Skip("set FRUTO_TEST_DATABASE_URL to run PostgreSQL integration tests")
+	}
+	brokenStore, err := store.New(context.Background(), dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	brokenStore.Close()
+	server := NewServer(brokenStore, nil, Config{CookieName: "fruto_session"}, nil)
+	request := httptest.NewRequest(http.MethodDelete, "/api/v1/session", nil)
+	request.AddCookie(&http.Cookie{Name: "fruto_session", Value: "session-token"})
+	recorder := httptest.NewRecorder()
+
+	server.logout(recorder, request)
+
+	if recorder.Code != http.StatusInternalServerError {
+		t.Fatalf("logout status=%d, want %d", recorder.Code, http.StatusInternalServerError)
+	}
+	if recorder.Header().Get("Set-Cookie") != "" {
+		t.Fatal("failed logout cleared the client cookie despite failed server-side revocation")
+	}
+}
+
 type deleteObservationRuntime struct {
 	deleteCalls  int32
 	observeCalls int32
 }
 
-type resumableRuntime struct {
-	applyCalls int32
-	release    string
+type crashBarrierRuntime struct {
+	applyCalls        int32
+	deleteCalls       int32
+	release           string
+	exists            bool
+	crashOperation    string
+	crashBeforeEffect bool
+	crashAfterEffect  bool
 }
 
-func (r *resumableRuntime) EnsureWorkspace(context.Context, string) error { return nil }
+func (r *crashBarrierRuntime) EnsureWorkspace(context.Context, string) error { return nil }
 
-func (r *resumableRuntime) ApplyDeployment(_ context.Context, _, _ string, intent domain.Intent) error {
+func (r *crashBarrierRuntime) ApplyDeployment(_ context.Context, _, _ string, intent domain.Intent) error {
+	if r.crashBeforeEffect && (r.crashOperation == "create" || r.crashOperation == "update") {
+		panic("worker crashed before runtime apply")
+	}
 	atomic.AddInt32(&r.applyCalls, 1)
 	r.release = intent.Image
+	r.exists = true
+	if r.crashAfterEffect && (r.crashOperation == "create" || r.crashOperation == "update") {
+		panic("worker crashed after runtime apply")
+	}
 	return nil
 }
 
-func (r *resumableRuntime) ObserveDeployment(context.Context, string, string) (controlruntime.Observation, error) {
-	if r.release == "" {
-		return controlruntime.Observation{}, fmt.Errorf("runtime release was not applied")
+func (r *crashBarrierRuntime) ObserveDeployment(context.Context, string, string) (controlruntime.Observation, error) {
+	if !r.exists {
+		return controlruntime.Observation{Exists: false, State: domain.Unknown, Message: "runtime absent"}, nil
 	}
 	return controlruntime.Observation{Exists: true, State: domain.Ready, Message: "runtime ready", ObservedRelease: r.release}, nil
 }
 
-func (r *resumableRuntime) DeleteDeployment(context.Context, string, string) error { return nil }
+func (r *crashBarrierRuntime) DeleteDeployment(context.Context, string, string) error {
+	if r.crashBeforeEffect && r.crashOperation == "delete" {
+		panic("worker crashed before runtime delete")
+	}
+	atomic.AddInt32(&r.deleteCalls, 1)
+	r.exists = false
+	if r.crashAfterEffect && r.crashOperation == "delete" {
+		panic("worker crashed after runtime delete")
+	}
+	return nil
+}
 
 func (r *deleteObservationRuntime) EnsureWorkspace(context.Context, string) error {
 	return nil
@@ -242,6 +400,9 @@ func newExecutorIntegrationFixture(t *testing.T) (*store.Store, int64, int64, st
 	}
 	t.Cleanup(func() {
 		cleanupCtx := context.Background()
+		if _, err := s.Pool.Exec(cleanupCtx, `DELETE FROM sessions WHERE actor_id=$1`, actorID); err != nil {
+			t.Errorf("delete executor sessions: %v", err)
+		}
 		if _, err := s.Pool.Exec(cleanupCtx, `DELETE FROM operations WHERE workspace_id=$1`, workspaceID); err != nil {
 			t.Errorf("delete executor operations: %v", err)
 		}

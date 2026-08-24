@@ -154,7 +154,6 @@ func NormalizeIntent(intent Intent) Intent {
 }
 
 func ValidateIntent(intent Intent, maxReplicas int32, maxCPU, maxMemory int64) error {
-	intent = NormalizeIntent(intent)
 	if len(intent.Name) == 0 || len(intent.Name) > 63 || !namePattern.MatchString(intent.Name) {
 		return errors.New("name must be a lowercase DNS label")
 	}

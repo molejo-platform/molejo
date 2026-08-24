@@ -22,7 +22,9 @@ temporario y Vite en el host, mientras PostgreSQL corre en Docker. La segunda
 ejecuta API, Console, Job de migration, Services y HTTPRoutes dentro de Kind.
 
 La suite pinada de Playwright valida login, el ciclo completo de deployment,
-historial, deep links, sesión expirada y credenciales inválidas. El runner
+historial, deep links, ausencia de la cookie de sesión y credenciales inválidas.
+La suite Go con PostgreSQL comprueba por separado el rechazo de sesiones
+expiradas y revocadas. El runner
 también comprueba la recuperación de una operación pendiente después de
 reiniciar la API, `Unknown` mientras se pausa el API server de Kind, idempotencia
 por repetición y concurrencia y la ServiceAccount del control plane con
@@ -36,5 +38,11 @@ de PostgreSQL. Un Job de migration fallido puede ejecutarse de nuevo después de
 revisar sus logs. Un runtime ausente o indisponible se muestra como `Unknown`,
 nunca como deployment exitoso. Esta instalación no declara HA ni DR.
 
-NetworkPolicy queda fuera del gate local principal hasta seleccionar y probar
-explícitamente un CNI compatible.
+Los máximos de réplicas, CPU y memoria son cuotas de producto aplicadas por la
+API pública. El CRD aplica intencionalmente solo la validez de runtime y las
+relaciones entre requests y limits; no duplica esas cuotas de producto.
+
+La NetworkPolicy del repositorio es un ejemplo incompleto y no instalado. El
+egress hacia PostgreSQL no restringe destino porque la instalación portátil aún
+no tiene un contrato de destino de la base. No la instales tal como está:
+primero definí el destino de la base y el CNI y después validá la política.

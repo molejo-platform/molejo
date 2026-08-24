@@ -133,10 +133,11 @@ Before sharing a change, run:
 just ci
 ```
 
-This is the canonical local CI entry point. It first verifies that regenerating
-the CRD, RBAC, and DeepCopy artifacts produces no changes, runs `just verify`, and
-then runs `just e2e`. There is currently no remote CI pipeline or release
-publication attached to this command.
+This is the canonical local CI entry point. It verifies every tracked generated
+artifact, runs `just verify`, exercises the PostgreSQL-backed control-plane
+integration suite, validates both control-plane topologies in a disposable Kind
+cluster, and finally runs the platform Kind E2E. There is currently no remote CI
+pipeline or release publication attached to this command.
 
 The deterministic gate uses an in-cluster controlled upstream. To separately
 prove outbound access to a real public HTTPS endpoint, run when external
@@ -174,7 +175,7 @@ effects are documented in the operator runbook.
 | Command | Purpose |
 | --- | --- |
 | `just fmt` | Format Go source files. |
-| `just generate` | Regenerate Kubernetes API, CRD, and RBAC artifacts. |
+| `just generate` | Regenerate Kubernetes API, CRD, RBAC, and Console API artifacts. |
 | `just test` | Run unit and envtest integration tests. |
 | `just frontend-check` | Install from the lockfile and type-check the React fixture. |
 | `just frontend-test` | Validate both frontend images in a restricted Docker runtime. |

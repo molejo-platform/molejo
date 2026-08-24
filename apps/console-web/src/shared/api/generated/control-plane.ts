@@ -143,7 +143,13 @@ export interface components {
              */
             exposure: "Private" | "Public";
             slug?: string;
-        };
+        } & ({
+            /** @enum {string} */
+            exposure: "Public";
+        } | {
+            /** @enum {string} */
+            exposure?: "Private";
+        });
         ResourceValues: {
             cpuMillis: number;
             memoryMiB: number;

@@ -409,7 +409,7 @@ kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
   crd/appdeployments.platform.fruto.calouro.tech \
   --timeout=60s
 kubectl kustomize deploy/operator |
-  sed "s|image: fruto-platform-operator:e2e|image: ${OPERATOR_IMAGE}|" >"${OPERATOR_MANIFEST_FILE}"
+  sed "s|image: ghcr.io/fruto-platform/platform-operator@sha256:0000000000000000000000000000000000000000000000000000000000000000|image: ${OPERATOR_IMAGE}|" >"${OPERATOR_MANIFEST_FILE}"
 grep -Fq "image: ${OPERATOR_IMAGE}" "${OPERATOR_MANIFEST_FILE}"
 kubectl --kubeconfig "${KUBECONFIG_FILE}" apply -f "${OPERATOR_MANIFEST_FILE}"
 kubectl --kubeconfig "${KUBECONFIG_FILE}" rollout status \

@@ -10,7 +10,12 @@ done
 
 kind_cli() { go run sigs.k8s.io/kind@v0.32.0 "$@"; }
 
+allocate_port() {
+  node -e 'const net=require("net");const server=net.createServer();server.listen(0,"127.0.0.1",()=>{console.log(server.address().port);server.close();});'
+}
+
 cluster_name="${FRUTO_KIND_CLUSTER:-fruto-control-plane-$PPID}"
+compose_project="fruto-control-plane-e2e-$PPID"
 if kind_cli get clusters 2>/dev/null | grep -Fxq "$cluster_name"; then
   echo "refusing to reuse existing Kind cluster $cluster_name" >&2
   exit 1
@@ -23,21 +28,29 @@ api_binary="$tmp_dir/control-plane-api"
 api_log="$tmp_dir/api.log"
 vite_log="$tmp_dir/vite.log"
 gateway_log="$tmp_dir/gateway-port-forward.log"
-postgres_port="55432"
-host_api_port="18080"
-vite_port="5173"
+operator_manifest="$tmp_dir/operator.yaml"
+control_plane_manifest="$tmp_dir/control-plane.yaml"
+postgres_port="$(allocate_port)"
+host_api_port="$(allocate_port)"
+while [[ "$host_api_port" == "$postgres_port" ]]; do host_api_port="$(allocate_port)"; done
+vite_port="$(allocate_port)"
+while [[ "$vite_port" == "$postgres_port" || "$vite_port" == "$host_api_port" ]]; do vite_port="$(allocate_port)"; done
 runtime_timeout="1s"
 cluster_created=false
 compose_started=false
 node_paused=false
+api_image_built=false
+console_image_built=false
+operator_image_built=false
+fixture_image_built=false
 host_api_pid=""
 vite_pid=""
 gateway_port_forward_pid=""
 gateway_port=""
-api_image="fruto-control-plane-api:local"
-console_image="fruto-console-web:local"
-operator_image="fruto-platform-operator:e2e"
-fixture_image="fruto-control-plane-http-app:e2e"
+api_image="fruto-control-plane-api:local-$PPID"
+console_image="fruto-console-web:local-$PPID"
+operator_image="fruto-platform-operator:e2e-$PPID"
+fixture_image="fruto-control-plane-http-app:e2e-$PPID"
 node_name="$cluster_name-control-plane"
 
 stop_pid() {
@@ -49,7 +62,10 @@ stop_pid() {
 
 cleanup() {
   local exit_code=$?
-  [[ "$node_paused" == true ]] && docker unpause "$node_name" >/dev/null 2>&1 || true
+  local cleanup_failed=false
+  if [[ "$node_paused" == true ]] && ! docker unpause "$node_name" >/dev/null 2>&1; then
+    cleanup_failed=true
+  fi
   stop_pid "$host_api_pid"
   stop_pid "$vite_pid"
   stop_pid "$gateway_port_forward_pid"
@@ -59,18 +75,31 @@ cleanup() {
     kubectl --kubeconfig "$kubeconfig" get pods -A -o wide || true
     kubectl --kubeconfig "$kubeconfig" get events -A --sort-by=.lastTimestamp || true
     kubectl --kubeconfig "$kubeconfig" -n fruto-control-plane logs deployment/control-plane-api --tail=120 || true
-    kubectl --kubeconfig "$kubeconfig" -n fruto-control-plane get jobs,pods,httproutes -o yaml || true
+    kubectl --kubeconfig "$kubeconfig" -n fruto-control-plane get jobs,httproutes -o yaml || true
     kubectl --kubeconfig "$kubeconfig" -n fruto-workspaces get appdeployments -o yaml || true
     kubectl --kubeconfig "$kubeconfig" -n fruto-system logs deployment/platform-operator --tail=120 || true
   fi
   if [[ "$cluster_created" == true ]]; then
-    kind_cli delete cluster --name "$cluster_name" >/dev/null 2>&1 || true
+    if ! kind_cli delete cluster --name "$cluster_name" >/dev/null 2>&1; then
+      cleanup_failed=true
+    fi
   fi
   if [[ "$compose_started" == true ]]; then
-    docker compose -f deploy/control-plane/docker-compose.yaml down >/dev/null 2>&1 || true
+    if ! FRUTO_POSTGRES_PORT="$postgres_port" docker compose --project-name "$compose_project" -f deploy/control-plane/docker-compose.yaml down >/dev/null 2>&1; then
+      cleanup_failed=true
+    fi
   fi
-  docker image rm "$api_image" "$console_image" "$operator_image" "$fixture_image" >/dev/null 2>&1 || true
-  rm -rf "$tmp_dir"
+  if [[ "$api_image_built" == true ]] && ! docker image rm "$api_image" >/dev/null 2>&1; then cleanup_failed=true; fi
+  if [[ "$console_image_built" == true ]] && ! docker image rm "$console_image" >/dev/null 2>&1; then cleanup_failed=true; fi
+  if [[ "$operator_image_built" == true ]] && ! docker image rm "$operator_image" >/dev/null 2>&1; then cleanup_failed=true; fi
+  if [[ "$fixture_image_built" == true ]] && ! docker image rm "$fixture_image" >/dev/null 2>&1; then cleanup_failed=true; fi
+  if ! rm -rf "$tmp_dir"; then
+    cleanup_failed=true
+  fi
+  if [[ "$exit_code" -eq 0 && "$cleanup_failed" == true ]]; then
+    exit_code=1
+  fi
+  trap - EXIT INT TERM
   exit "$exit_code"
 }
 trap cleanup EXIT INT TERM
@@ -183,11 +212,16 @@ run_host_browser() {
 }
 
 run_cluster_bootstrap() {
-  kubectl --kubeconfig "$kubeconfig" -n fruto-control-plane set env deployment/control-plane-api FRUTO_OWNER_PASSWORD_HASH="$owner_hash"
+  local owner_hash_file="$tmp_dir/owner-password-hash"
+  printf '%s' "$owner_hash" >"$owner_hash_file"
+  chmod 600 "$owner_hash_file"
+  kubectl --kubeconfig "$kubeconfig" -n fruto-control-plane create secret generic control-plane-bootstrap-owner --from-file=FRUTO_OWNER_PASSWORD_HASH="$owner_hash_file"
+  kubectl --kubeconfig "$kubeconfig" -n fruto-control-plane set env deployment/control-plane-api --from=secret/control-plane-bootstrap-owner
   kubectl --kubeconfig "$kubeconfig" -n fruto-control-plane rollout status deployment/control-plane-api --timeout=120s
   kubectl --kubeconfig "$kubeconfig" -n fruto-control-plane exec deployment/control-plane-api -- /control-plane-api bootstrap >/dev/null
   kubectl --kubeconfig "$kubeconfig" -n fruto-control-plane set env deployment/control-plane-api FRUTO_OWNER_PASSWORD_HASH-
   kubectl --kubeconfig "$kubeconfig" -n fruto-control-plane rollout status deployment/control-plane-api --timeout=120s
+  kubectl --kubeconfig "$kubeconfig" -n fruto-control-plane delete secret control-plane-bootstrap-owner
 }
 
 run_cluster_browser() {
@@ -222,7 +256,7 @@ assert_rbac() {
 run_concurrent_request() {
   local output="$1"
   curl --fail --silent --show-error -b "$host_cookie_jar" \
-    -H 'Origin: http://127.0.0.1:5173' -H "X-CSRF-Token: $csrf_token" \
+    -H "Origin: http://127.0.0.1:${vite_port}" -H "X-CSRF-Token: $csrf_token" \
     -H 'Idempotency-Key: phase6-concurrent' -H 'Content-Type: application/json' \
     -d "$concurrent_intent" "http://127.0.0.1:${host_api_port}/api/v1/deployments" >"$output"
 }
@@ -231,9 +265,13 @@ kind_cli create cluster --name "$cluster_name" --kubeconfig "$kubeconfig" --wait
 cluster_created=true
 
 docker buildx build --file services/platform-operator/Dockerfile --tag "$operator_image" --load .
+operator_image_built=true
 docker buildx build --file services/control-plane-api/Dockerfile --tag "$api_image" --load .
+api_image_built=true
 docker buildx build --file apps/console-web/Dockerfile --tag "$console_image" --load .
+console_image_built=true
 docker buildx build --file test/fixtures/http-app/Dockerfile --tag "$fixture_image" --build-arg VERSION=e2e-v1 --load .
+fixture_image_built=true
 kind_cli load docker-image --name "$cluster_name" "$operator_image" "$api_image" "$console_image" "$fixture_image"
 
 curl -L --fail --silent --show-error \
@@ -245,8 +283,10 @@ kubectl --kubeconfig "$kubeconfig" wait --for=condition=Established \
   crd/gateways.gateway.networking.k8s.io crd/httproutes.gateway.networking.k8s.io --timeout=60s
 
 kubectl --kubeconfig "$kubeconfig" apply -f deploy/crds/platform.fruto.calouro.tech_appdeployments.yaml
-kubectl --kubeconfig "$kubeconfig" apply -k deploy/operator
-kubectl --kubeconfig "$kubeconfig" -n fruto-system set image deployment/platform-operator "manager=$operator_image"
+kubectl kustomize deploy/operator |
+  sed "s|image: ghcr.io/fruto-platform/platform-operator@sha256:0000000000000000000000000000000000000000000000000000000000000000|image: $operator_image|" >"$operator_manifest"
+grep -Fq "image: $operator_image" "$operator_manifest"
+kubectl --kubeconfig "$kubeconfig" apply -f "$operator_manifest"
 kubectl --kubeconfig "$kubeconfig" -n fruto-system rollout status deployment/platform-operator --timeout=120s
 kubectl --kubeconfig "$kubeconfig" apply -f deploy/control-plane/namespace.yaml
 
@@ -257,12 +297,20 @@ fixture_digest="$(docker exec "$node_name" ctr --namespace=k8s.io images inspect
 fixture_ref="$fixture_repository@$fixture_digest"
 docker exec "$node_name" ctr --namespace=k8s.io images tag "$fixture_full" "$fixture_ref"
 
-docker compose -f deploy/control-plane/docker-compose.yaml up -d postgres
+FRUTO_POSTGRES_PORT="$postgres_port" docker compose --project-name "$compose_project" -f deploy/control-plane/docker-compose.yaml up -d postgres
 compose_started=true
+postgres_ready=false
 for _ in $(seq 1 60); do
-  docker compose -f deploy/control-plane/docker-compose.yaml exec -T postgres pg_isready -U fruto -d fruto >/dev/null 2>&1 && break
+  if FRUTO_POSTGRES_PORT="$postgres_port" docker compose --project-name "$compose_project" -f deploy/control-plane/docker-compose.yaml exec -T postgres pg_isready -U fruto -d fruto >/dev/null 2>&1; then
+    postgres_ready=true
+    break
+  fi
   sleep 1
 done
+if [[ "$postgres_ready" != true ]]; then
+  FRUTO_POSTGRES_PORT="$postgres_port" docker compose --project-name "$compose_project" -f deploy/control-plane/docker-compose.yaml logs postgres >&2
+  exit 1
+fi
 GOCACHE="$tmp_dir/go-cache" GOMODCACHE="${GOMODCACHE:-/tmp/fruto-go-mod-cache}" go build -o "$api_binary" ./services/control-plane-api/cmd/control-plane-api
 run_without_xtrace prepare_owner_credentials
 run_without_xtrace bootstrap_host_database
@@ -275,23 +323,23 @@ run_host_browser
 
 intent="$(jq -cn --arg image "$fixture_ref" '{name:"phase6-api",image:$image,replicas:1,port:8080,resources:{requests:{cpuMillis:50,memoryMiB:64},limits:{cpuMillis:250,memoryMiB:128}},probes:{liveness:{path:"/healthz"},readiness:{path:"/readyz"}},exposure:"Private"}')"
 create_response="$(curl --fail --silent --show-error -b "$host_cookie_jar" \
-  -H 'Origin: http://127.0.0.1:5173' -H "X-CSRF-Token: $csrf_token" \
+  -H "Origin: http://127.0.0.1:${vite_port}" -H "X-CSRF-Token: $csrf_token" \
   -H 'Idempotency-Key: phase6-idempotent' -H 'Content-Type: application/json' \
   -d "$intent" "http://127.0.0.1:${host_api_port}/api/v1/deployments")"
 api_deployment_id="$(jq -er '.deployment.id' <<<"$create_response")"
 api_operation_id="$(jq -er '.operation.id' <<<"$create_response")"
 repeat_response="$(curl --fail --silent --show-error -b "$host_cookie_jar" \
-  -H 'Origin: http://127.0.0.1:5173' -H "X-CSRF-Token: $csrf_token" \
+  -H "Origin: http://127.0.0.1:${vite_port}" -H "X-CSRF-Token: $csrf_token" \
   -H 'Idempotency-Key: phase6-idempotent' -H 'Content-Type: application/json' \
   -d "$intent" "http://127.0.0.1:${host_api_port}/api/v1/deployments")"
 [[ "$(jq -r '.operation.id' <<<"$repeat_response")" == "$api_operation_id" ]]
 conflict_intent="$(jq '.name = "phase6-conflict"' <<<"$intent")"
 assert_http_status 409 "http://127.0.0.1:${host_api_port}/api/v1/deployments" \
-  -X POST -b "$host_cookie_jar" -H 'Origin: http://127.0.0.1:5173' \
+  -X POST -b "$host_cookie_jar" -H "Origin: http://127.0.0.1:${vite_port}" \
   -H "X-CSRF-Token: $csrf_token" -H 'Idempotency-Key: phase6-idempotent' \
   -H 'Content-Type: application/json' -d "$conflict_intent"
 assert_http_status 403 "http://127.0.0.1:${host_api_port}/api/v1/deployments" \
-  -X POST -b "$host_cookie_jar" -H 'Origin: http://127.0.0.1:5173' \
+  -X POST -b "$host_cookie_jar" -H "Origin: http://127.0.0.1:${vite_port}" \
   -H 'Idempotency-Key: phase6-no-csrf' -H 'Content-Type: application/json' -d "$intent"
 assert_http_status 403 "http://127.0.0.1:${host_api_port}/api/v1/session" \
   -X POST -H 'Origin: https://invalid.example' -H 'Content-Type: application/json' \
@@ -309,7 +357,7 @@ start_host_api
 docker pause "$node_name" >/dev/null
 node_paused=true
 pending_response="$(curl --fail --silent --show-error -b "$host_cookie_jar" \
-  -H 'Origin: http://127.0.0.1:5173' -H "X-CSRF-Token: $csrf_token" \
+  -H "Origin: http://127.0.0.1:${vite_port}" -H "X-CSRF-Token: $csrf_token" \
   -H 'Idempotency-Key: phase6-restart' -H 'Content-Type: application/json' \
   -d "$(jq '.name = "phase6-restart"' <<<"$intent")" "http://127.0.0.1:${host_api_port}/api/v1/deployments")"
 pending_operation_id="$(jq -er '.operation.id' <<<"$pending_response")"
@@ -358,7 +406,7 @@ delete_api_deployment() {
   detail="$(curl --fail --silent --show-error -b "$host_cookie_jar" "http://127.0.0.1:${host_api_port}/api/v1/deployments/$deployment_id")"
   version="$(jq -r '.version' <<<"$detail")"
   response="$(curl --fail --silent --show-error -b "$host_cookie_jar" -X DELETE \
-    -H 'Origin: http://127.0.0.1:5173' -H "X-CSRF-Token: $csrf_token" \
+    -H "Origin: http://127.0.0.1:${vite_port}" -H "X-CSRF-Token: $csrf_token" \
     -H "Idempotency-Key: $key" -H "If-Match: $version" \
     "http://127.0.0.1:${host_api_port}/api/v1/deployments/$deployment_id")"
   operation="$(jq -r '.operation.id' <<<"$response")"
@@ -368,7 +416,7 @@ run_without_xtrace delete_api_deployment "$api_deployment_id" phase6-delete-api
 run_without_xtrace delete_api_deployment "$concurrent_deployment_id" phase6-delete-concurrent
 stop_pid "$vite_pid"; vite_pid=""
 stop_pid "$host_api_pid"; host_api_pid=""
-docker compose -f deploy/control-plane/docker-compose.yaml down >/dev/null
+FRUTO_POSTGRES_PORT="$postgres_port" docker compose --project-name "$compose_project" -f deploy/control-plane/docker-compose.yaml down >/dev/null
 compose_started=false
 
 kubectl --kubeconfig "$kubeconfig" -n fruto-control-plane create deployment postgres --image=postgres:17.6
@@ -382,7 +430,12 @@ kubectl --kubeconfig "$kubeconfig" create namespace fruto-system 2>/dev/null || 
 kubectl --kubeconfig "$kubeconfig" -n fruto-system create secret tls fruto-e2e-wildcard-tls --cert="$tmp_dir/wildcard.crt" --key="$tmp_dir/wildcard.key"
 kubectl --kubeconfig "$kubeconfig" apply -f test/e2e/gateway.yaml
 kubectl --kubeconfig "$kubeconfig" -n fruto-system rollout status deployment/traefik-e2e --timeout=180s
-kubectl --kubeconfig "$kubeconfig" apply -k deploy/control-plane-local
+kubectl kustomize deploy/control-plane-local |
+  sed -e "s|image: fruto-control-plane-api:local|image: $api_image|g" \
+    -e "s|image: fruto-console-web:local|image: $console_image|g" >"$control_plane_manifest"
+grep -Fq "image: $api_image" "$control_plane_manifest"
+grep -Fq "image: $console_image" "$control_plane_manifest"
+kubectl --kubeconfig "$kubeconfig" apply -f "$control_plane_manifest"
 kubectl --kubeconfig "$kubeconfig" apply -f test/e2e/control-plane-gateway.yaml
 kubectl --kubeconfig "$kubeconfig" -n fruto-control-plane wait --for=condition=complete job/control-plane-migrate --timeout=180s
 kubectl --kubeconfig "$kubeconfig" -n fruto-control-plane rollout status deployment/control-plane-api --timeout=120s

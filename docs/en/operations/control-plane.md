@@ -20,7 +20,9 @@ on the host while PostgreSQL runs in Docker. The second runs the API, Console,
 migration Job, Services, and HTTPRoutes in Kind.
 
 The pinned Playwright suite validates login, the complete deployment flow,
-history, deep links, expired sessions, and invalid credentials. The runner also
+history, deep links, missing session cookies, and invalid credentials. The
+PostgreSQL-backed Go suite separately proves rejection of expired and revoked
+sessions. The runner also
 proves pending-operation recovery after an API restart, `Unknown` while the Kind
 API server is paused, idempotency under repetition and concurrency, and the
 control-plane ServiceAccount with `kubectl auth can-i`. Secrets are generated at
@@ -33,5 +35,11 @@ serialization. A failed migration Job can be rerun explicitly after inspecting
 its logs. A missing or unavailable runtime is shown as `Unknown`; it is not
 treated as a successful deployment. This installation does not claim HA or DR.
 
-NetworkPolicy is intentionally outside the primary local gate until a compatible
-CNI is explicitly selected and tested.
+Replica, CPU, and memory maxima are product quotas enforced by the public API.
+The CRD deliberately enforces only runtime validity and request/limit relations;
+it does not duplicate those product quotas.
+
+The repository's NetworkPolicy is an incomplete, non-installed example. Its
+PostgreSQL egress is intentionally not destination-scoped because the portable
+installation has no database destination contract yet. Do not install it as-is;
+select the database destination and CNI first, then validate the resulting policy.
