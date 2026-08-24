@@ -220,7 +220,7 @@ components:
       required: [name, image, port, resources, probes]
       additionalProperties: false
       properties:
-        name: { type: string, pattern: '^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$' }
+        name: { type: string, maxLength: 63, pattern: '^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$' }
         image: { type: string, pattern: '^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$' }
         replicas: { type: integer, minimum: 1, maximum: 5, default: 1 }
         port: { type: integer, minimum: 1, maximum: 65535 }
@@ -237,7 +237,7 @@ components:
             liveness: { $ref: '#/components/schemas/Probe' }
             readiness: { $ref: '#/components/schemas/Probe' }
         exposure: { type: string, enum: [Private, Public], default: Private }
-        slug: { type: string, pattern: '^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$' }
+        slug: { type: string, maxLength: 63, pattern: '^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$' }
     ResourceValues:
       type: object
       required: [cpuMillis, memoryMiB]
@@ -248,7 +248,7 @@ components:
       type: object
       required: [path]
       properties:
-        path: { type: string, pattern: '^/' }
+        path: { type: string, maxLength: 2048, pattern: '^/' }
     Deployment:
       type: object
       required: [id, intent, version, state, createdAt, updatedAt]

@@ -25,7 +25,11 @@ var migrationFS embed.FS
 
 type Store struct{ Pool *pgxpool.Pool }
 
-const ExpectedMigrationVersion int64 = 3
+type migration struct {
+	version  int64
+	contents []byte
+	checksum [sha256.Size]byte
+}
 
 func New(ctx context.Context, dsn string) (*Store, error) {
 	pool, err := pgxpool.New(ctx, dsn)
@@ -41,14 +45,40 @@ func New(ctx context.Context, dsn string) (*Store, error) {
 
 func (s *Store) Close() { s.Pool.Close() }
 
-func (s *Store) Migrate(ctx context.Context) error {
+func embeddedMigrations() ([]migration, error) {
 	entries, err := fs.ReadDir(migrationFS, "migrations")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
-	if len(entries) == 0 {
-		return errors.New("no migrations found")
+	migrations := make([]migration, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".sql") {
+			continue
+		}
+		version, err := strconv.ParseInt(strings.SplitN(entry.Name(), "_", 2)[0], 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid migration name %q: %w", entry.Name(), err)
+		}
+		contents, err := migrationFS.ReadFile("migrations/" + entry.Name())
+		if err != nil {
+			return nil, err
+		}
+		if parts := strings.SplitN(string(contents), "-- +goose Down", 2); len(parts) == 2 {
+			contents = []byte(parts[0])
+		}
+		migrations = append(migrations, migration{version: version, contents: contents, checksum: sha256.Sum256(contents)})
+	}
+	if len(migrations) == 0 {
+		return nil, errors.New("no migrations found")
+	}
+	return migrations, nil
+}
+
+func (s *Store) Migrate(ctx context.Context) error {
+	migrations, err := embeddedMigrations()
+	if err != nil {
+		return err
 	}
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
@@ -67,22 +97,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 	if err = tx.Commit(ctx); err != nil {
 		return err
 	}
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".sql") {
-			continue
-		}
-		version, err := strconv.ParseInt(strings.SplitN(entry.Name(), "_", 2)[0], 10, 64)
-		if err != nil {
-			return fmt.Errorf("invalid migration name %q: %w", entry.Name(), err)
-		}
-		contents, err := migrationFS.ReadFile("migrations/" + entry.Name())
-		if err != nil {
-			return err
-		}
-		if parts := strings.SplitN(string(contents), "-- +goose Down", 2); len(parts) == 2 {
-			contents = []byte(parts[0])
-		}
-		checksum := sha256.Sum256(contents)
+	for _, migration := range migrations {
 		tx, err := s.Pool.Begin(ctx)
 		if err != nil {
 			return err
@@ -92,17 +107,17 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return err
 		}
 		var stored []byte
-		err = tx.QueryRow(ctx, `SELECT checksum FROM schema_migrations WHERE version=$1`, version).Scan(&stored)
+		err = tx.QueryRow(ctx, `SELECT checksum FROM schema_migrations WHERE version=$1`, migration.version).Scan(&stored)
 		switch {
 		case err == nil && len(stored) == 0:
 			// Databases created by the original MVP did not record checksums.
 			// Backfill the checksum once so subsequent runs detect drift.
-			_, err = tx.Exec(ctx, `UPDATE schema_migrations SET checksum=$1 WHERE version=$2`, checksum[:], version)
-		case err == nil && !bytes.Equal(stored, checksum[:]):
-			err = fmt.Errorf("migration %d checksum drift", version)
+			_, err = tx.Exec(ctx, `UPDATE schema_migrations SET checksum=$1 WHERE version=$2`, migration.checksum[:], migration.version)
+		case err == nil && !bytes.Equal(stored, migration.checksum[:]):
+			err = fmt.Errorf("migration %d checksum drift", migration.version)
 		case errors.Is(err, pgx.ErrNoRows):
-			if _, err = tx.Exec(ctx, string(contents)); err == nil {
-				_, err = tx.Exec(ctx, `INSERT INTO schema_migrations(version,checksum) VALUES ($1,$2)`, version, checksum[:])
+			if _, err = tx.Exec(ctx, string(migration.contents)); err == nil {
+				_, err = tx.Exec(ctx, `INSERT INTO schema_migrations(version,checksum) VALUES ($1,$2)`, migration.version, migration.checksum[:])
 			}
 		}
 		if err != nil {
@@ -165,19 +180,36 @@ func (s *Store) Workspace(ctx context.Context, workspaceID int64) (domain.Worksp
 	return workspace, err
 }
 
-func (s *Store) WorkspaceForDeployment(ctx context.Context, deploymentID int64) (domain.Workspace, error) {
-	var workspace domain.Workspace
-	err := s.Pool.QueryRow(ctx, `SELECT w.id,w.public_id,w.name,w.namespace_name FROM workspaces w JOIN deployments d ON d.workspace_id=w.id WHERE d.id=$1`, deploymentID).Scan(&workspace.ID, &workspace.PublicID, &workspace.Name, &workspace.Namespace)
-	return workspace, err
-}
-
 func (s *Store) SchemaReady(ctx context.Context) error {
-	var version int64
-	if err := s.Pool.QueryRow(ctx, `SELECT COALESCE(MAX(version),0) FROM schema_migrations`).Scan(&version); err != nil {
+	migrations, err := embeddedMigrations()
+	if err != nil {
 		return err
 	}
-	if version < ExpectedMigrationVersion {
-		return fmt.Errorf("schema version %d is below expected version %d", version, ExpectedMigrationVersion)
+	rows, err := s.Pool.Query(ctx, `SELECT version,checksum FROM schema_migrations`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	applied := make(map[int64][]byte, len(migrations))
+	for rows.Next() {
+		var version int64
+		var checksum []byte
+		if err = rows.Scan(&version, &checksum); err != nil {
+			return err
+		}
+		applied[version] = checksum
+	}
+	if err = rows.Err(); err != nil {
+		return err
+	}
+	for _, migration := range migrations {
+		checksum, ok := applied[migration.version]
+		if !ok {
+			return fmt.Errorf("schema migration %d is not applied", migration.version)
+		}
+		if !bytes.Equal(checksum, migration.checksum[:]) {
+			return fmt.Errorf("schema migration %d checksum drift", migration.version)
+		}
 	}
 	return nil
 }
@@ -423,17 +455,6 @@ func (s *Store) ListDeployments(ctx context.Context, workspaceID int64, limit in
 		out = append(out, d)
 	}
 	return out, rows.Err()
-}
-
-func (s *Store) GetDeployment(ctx context.Context, workspaceID, id int64) (domain.Deployment, error) {
-	var d domain.Deployment
-	var raw []byte
-	err := s.Pool.QueryRow(ctx, `SELECT id,public_id,workspace_id,runtime_name,intent_json::text,desired_version,observed_version,observed_release,last_state,last_message,deletion_requested_at,created_at,updated_at FROM deployments WHERE workspace_id=$1 AND id=$2 AND deleted_at IS NULL`, workspaceID, id).Scan(&d.ID, &d.PublicID, &d.WorkspaceID, &d.RuntimeName, &raw, &d.DesiredVersion, &d.ObservedVersion, &d.ObservedRelease, &d.State, &d.Message, &d.DeletionRequestedAt, &d.CreatedAt, &d.UpdatedAt)
-	if err != nil {
-		return d, err
-	}
-	err = jsonUnmarshal(raw, &d.Intent)
-	return d, err
 }
 
 func (s *Store) FindDeployment(ctx context.Context, workspaceID int64, publicID string) (domain.Deployment, error) {

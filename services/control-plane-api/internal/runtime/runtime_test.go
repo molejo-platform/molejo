@@ -73,6 +73,16 @@ func TestApplyDeploymentKeepsTheRuntimeNameStableAcrossIntentUpdates(t *testing.
 	first := runtimeTestIntent("demo")
 	second := runtimeTestIntent("demo")
 	second.Image = "ghcr.io/fruto-platform/testkit@sha256:" + strings.Repeat("b", 64)
+	second.Replicas = 3
+	second.Port = 9090
+	second.Resources.Requests.CPUMillis = 125
+	second.Resources.Requests.MemoryMiB = 192
+	second.Resources.Limits.CPUMillis = 500
+	second.Resources.Limits.MemoryMiB = 384
+	second.Probes.Liveness.Path = "/live"
+	second.Probes.Readiness.Path = "/ready"
+	second.Exposure = domain.ExposurePublic
+	second.Slug = "demo-public"
 
 	if err := kubernetesClient.ApplyDeployment(context.Background(), "fruto-workspaces", "ap-deployment-id", first); err != nil {
 		t.Fatal(err)
@@ -87,6 +97,18 @@ func TestApplyDeploymentKeepsTheRuntimeNameStableAcrossIntentUpdates(t *testing.
 	}
 	if current.Spec.Image != second.Image {
 		t.Fatalf("expected the stable runtime to contain the latest image %q, got %q", second.Image, current.Spec.Image)
+	}
+	if current.Spec.Replicas == nil || *current.Spec.Replicas != second.Replicas || current.Spec.Port != second.Port {
+		t.Fatalf("runtime scale/port projection does not match intent: %+v", current.Spec)
+	}
+	if current.Spec.Resources.Requests.CPUMillis != second.Resources.Requests.CPUMillis || current.Spec.Resources.Requests.MemoryMiB != second.Resources.Requests.MemoryMiB || current.Spec.Resources.Limits.CPUMillis != second.Resources.Limits.CPUMillis || current.Spec.Resources.Limits.MemoryMiB != second.Resources.Limits.MemoryMiB {
+		t.Fatalf("runtime resource projection does not match intent: %+v", current.Spec.Resources)
+	}
+	if current.Spec.Probes.Liveness.Path != second.Probes.Liveness.Path || current.Spec.Probes.Readiness.Path != second.Probes.Readiness.Path {
+		t.Fatalf("runtime probe projection does not match intent: %+v", current.Spec.Probes)
+	}
+	if current.Spec.Exposure != platformv1alpha1.ExposurePublic || current.Spec.Slug != second.Slug {
+		t.Fatalf("runtime exposure projection does not match intent: exposure=%q slug=%q", current.Spec.Exposure, current.Spec.Slug)
 	}
 	list := &platformv1alpha1.AppDeploymentList{}
 	if err := kubernetesClient.client.List(context.Background(), list, client.InNamespace("fruto-workspaces")); err != nil {

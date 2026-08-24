@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -13,6 +14,69 @@ import (
 	controlruntime "github.com/fruto-platform/fruto/services/control-plane-api/internal/runtime"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/store"
 )
+
+func TestWorkerResumesAcrossRuntimeCrashWindows(t *testing.T) {
+	tests := []struct {
+		name       string
+		preApplied bool
+		wantCalls  int32
+	}{
+		{name: "before runtime effect", preApplied: false, wantCalls: 1},
+		{name: "after runtime effect before completion", preApplied: true, wantCalls: 2},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			s, workspaceID, actorID, workspaceNamespace := newExecutorIntegrationFixture(t)
+			publicID, err := domain.NewPublicID("dep")
+			if err != nil {
+				t.Fatal(err)
+			}
+			intent := executorIntent("crash-window-" + strconv.FormatInt(time.Now().UnixNano(), 10))
+			deployment, operation, _, err := s.CreateDeployment(ctx, workspaceID, actorID, publicID, intent, domain.SHA256([]byte("crash-window-idem")), domain.SHA256([]byte("crash-window-payload")))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			claimed, claimedDeployment, ok, err := s.ClaimNext(ctx, "crashed-worker", time.Minute)
+			if err != nil || !ok {
+				t.Fatalf("claim before simulated crash: ok=%v err=%v", ok, err)
+			}
+			runtimeClient := &resumableRuntime{}
+			if tt.preApplied {
+				if err := runtimeClient.ApplyDeployment(ctx, workspaceNamespace, claimedDeployment.RuntimeName, claimed.Intent); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if _, err := s.Pool.Exec(ctx, `UPDATE operations SET lease_until=now()-interval '1 second' WHERE id=$1`, claimed.ID); err != nil {
+				t.Fatal(err)
+			}
+
+			server := NewServer(s, runtimeClient, Config{OperationLease: time.Second}, nil)
+			processed, err := server.RunOnce(ctx, "replacement-worker")
+			if err != nil || !processed {
+				t.Fatalf("resume operation: processed=%v err=%v", processed, err)
+			}
+			if got := atomic.LoadInt32(&runtimeClient.applyCalls); got != tt.wantCalls {
+				t.Fatalf("runtime apply calls=%d, want %d", got, tt.wantCalls)
+			}
+			currentOperation, err := s.GetOperation(ctx, workspaceID, operation.PublicID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if currentOperation.Status != domain.OperationSucceeded || currentOperation.Attempts != 2 {
+				t.Fatalf("resumed operation status=%q attempts=%d", currentOperation.Status, currentOperation.Attempts)
+			}
+			currentDeployment, err := s.FindDeployment(ctx, workspaceID, deployment.PublicID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if currentDeployment.ObservedVersion != currentDeployment.DesiredVersion || currentDeployment.ObservedRelease != intent.Image {
+				t.Fatalf("deployment was not finalized after resume: %+v", currentDeployment)
+			}
+		})
+	}
+}
 
 func TestWorkerDoesNotHideADeploymentBeforeRuntimeRemovalIsObserved(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -81,6 +145,28 @@ type deleteObservationRuntime struct {
 	observeCalls int32
 }
 
+type resumableRuntime struct {
+	applyCalls int32
+	release    string
+}
+
+func (r *resumableRuntime) EnsureWorkspace(context.Context, string) error { return nil }
+
+func (r *resumableRuntime) ApplyDeployment(_ context.Context, _, _ string, intent domain.Intent) error {
+	atomic.AddInt32(&r.applyCalls, 1)
+	r.release = intent.Image
+	return nil
+}
+
+func (r *resumableRuntime) ObserveDeployment(context.Context, string, string) (controlruntime.Observation, error) {
+	if r.release == "" {
+		return controlruntime.Observation{}, fmt.Errorf("runtime release was not applied")
+	}
+	return controlruntime.Observation{Exists: true, State: domain.Ready, Message: "runtime ready", ObservedRelease: r.release}, nil
+}
+
+func (r *resumableRuntime) DeleteDeployment(context.Context, string, string) error { return nil }
+
 func (r *deleteObservationRuntime) EnsureWorkspace(context.Context, string) error {
 	return nil
 }
@@ -97,6 +183,24 @@ func (r *deleteObservationRuntime) ObserveDeployment(context.Context, string, st
 func (r *deleteObservationRuntime) DeleteDeployment(context.Context, string, string) error {
 	atomic.AddInt32(&r.deleteCalls, 1)
 	return nil
+}
+
+func executorIntent(name string) domain.Intent {
+	return domain.Intent{
+		Name:     name,
+		Image:    "ghcr.io/fruto-platform/testkit@sha256:" + strings.Repeat("a", 64),
+		Replicas: 1,
+		Port:     8080,
+		Resources: domain.Resources{
+			Requests: domain.ResourceValues{CPUMillis: 50, MemoryMiB: 64},
+			Limits:   domain.ResourceValues{CPUMillis: 250, MemoryMiB: 128},
+		},
+		Probes: domain.Probes{
+			Liveness:  domain.Probe{Path: "/healthz"},
+			Readiness: domain.Probe{Path: "/readyz"},
+		},
+		Exposure: domain.ExposurePrivate,
+	}
 }
 
 func newExecutorIntegrationFixture(t *testing.T) (*store.Store, int64, int64, string) {

@@ -26,6 +26,7 @@ gateway_log="$tmp_dir/gateway-port-forward.log"
 postgres_port="55432"
 host_api_port="18080"
 vite_port="5173"
+runtime_timeout="1s"
 cluster_created=false
 compose_started=false
 node_paused=false
@@ -104,7 +105,7 @@ start_host_api() {
     FRUTO_COOKIE_SECURE=false \
     FRUTO_AUTO_MIGRATE=true \
     FRUTO_OPERATION_LEASE=2s \
-    FRUTO_RUNTIME_TIMEOUT=1s \
+    FRUTO_RUNTIME_TIMEOUT="$runtime_timeout" \
     FRUTO_WORKSPACE_NAMESPACE=fruto-workspaces \
     "$api_binary" serve >"$api_log" 2>&1 &
   host_api_pid=$!
@@ -302,15 +303,29 @@ ready_response="$(curl --fail --silent --show-error -b "$host_cookie_jar" "http:
 [[ "$(jq -r '.state' <<<"$ready_response")" == Ready ]]
 
 kubectl --kubeconfig "$kubeconfig" scale deployment/platform-operator -n fruto-system --replicas=0
+stop_pid "$host_api_pid"; host_api_pid=""
+runtime_timeout="30s"
+start_host_api
+docker pause "$node_name" >/dev/null
+node_paused=true
 pending_response="$(curl --fail --silent --show-error -b "$host_cookie_jar" \
   -H 'Origin: http://127.0.0.1:5173' -H "X-CSRF-Token: $csrf_token" \
   -H 'Idempotency-Key: phase6-restart' -H 'Content-Type: application/json' \
   -d "$(jq '.name = "phase6-restart"' <<<"$intent")" "http://127.0.0.1:${host_api_port}/api/v1/deployments")"
 pending_operation_id="$(jq -er '.operation.id' <<<"$pending_response")"
-sleep 2
-pending_status="$(curl --fail --silent --show-error -b "$host_cookie_jar" "http://127.0.0.1:${host_api_port}/api/v1/operations/$pending_operation_id" | jq -r '.status')"
-[[ "$pending_status" == Pending || "$pending_status" == Running ]]
-stop_pid "$host_api_pid"; host_api_pid=""
+pending_status=""
+for _ in $(seq 1 100); do
+  pending_status="$(curl --fail --silent --show-error -b "$host_cookie_jar" "http://127.0.0.1:${host_api_port}/api/v1/operations/$pending_operation_id" | jq -r '.status')"
+  [[ "$pending_status" == Running ]] && break
+  sleep 0.1
+done
+[[ "$pending_status" == Running ]]
+kill -KILL "$host_api_pid"
+wait "$host_api_pid" >/dev/null 2>&1 || true
+host_api_pid=""
+docker unpause "$node_name" >/dev/null
+node_paused=false
+runtime_timeout="1s"
 kubectl --kubeconfig "$kubeconfig" scale deployment/platform-operator -n fruto-system --replicas=1
 kubectl --kubeconfig "$kubeconfig" -n fruto-system rollout status deployment/platform-operator --timeout=120s
 start_host_api

@@ -31,11 +31,10 @@ type Config struct {
 	SessionTTL         time.Duration
 	OperationLease     time.Duration
 	WorkspaceNamespace string
-	PublicWorkspaceID  string
 }
 
 func DefaultConfig() Config {
-	return Config{CookieName: "fruto_session", MaxReplicas: 5, MaxCPU: 2000, MaxMemory: 2048, SessionTTL: 12 * time.Hour, OperationLease: 30 * time.Second, WorkspaceNamespace: "fruto-workspaces", PublicWorkspaceID: "ws-lab"}
+	return Config{CookieName: "fruto_session", MaxReplicas: 5, MaxCPU: 2000, MaxMemory: 2048, SessionTTL: 12 * time.Hour, OperationLease: 30 * time.Second, WorkspaceNamespace: "fruto-workspaces"}
 }
 
 type Server struct {
@@ -210,12 +209,7 @@ func (s *Server) createDeployment(w http.ResponseWriter, r *http.Request, worksp
 		writeError(w, http.StatusBadRequest, "invalid_json", "request body is invalid", r)
 		return
 	}
-	if intent.Replicas == 0 {
-		intent.Replicas = 1
-	}
-	if intent.Exposure == "" {
-		intent.Exposure = domain.ExposurePrivate
-	}
+	intent = domain.NormalizeIntent(intent)
 	if err := domain.ValidateIntent(intent, s.Config.MaxReplicas, s.Config.MaxCPU, s.Config.MaxMemory); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_intent", err.Error(), r)
 		return
@@ -306,12 +300,7 @@ func (s *Server) updateDeployment(w http.ResponseWriter, r *http.Request, worksp
 		writeError(w, http.StatusBadRequest, "invalid_json", "request body is invalid", r)
 		return
 	}
-	if intent.Replicas == 0 {
-		intent.Replicas = 1
-	}
-	if intent.Exposure == "" {
-		intent.Exposure = domain.ExposurePrivate
-	}
+	intent = domain.NormalizeIntent(intent)
 	if err = domain.ValidateIntent(intent, s.Config.MaxReplicas, s.Config.MaxCPU, s.Config.MaxMemory); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_intent", err.Error(), r)
 		return

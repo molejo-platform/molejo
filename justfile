@@ -20,7 +20,7 @@ generate:
     corepack pnpm --filter @fruto-platform/console-web generate:api-types
 
 test:
-    KUBEBUILDER_ASSETS="$(go tool setup-envtest use -p path {{envtest_version}})" go test ./...
+    KUBEBUILDER_ASSETS="$(go tool setup-envtest use -p path {{ envtest_version }})" go test ./...
 
 frontend-node-check:
     test "$(node --version)" = "v$(cat .node-version)"
@@ -49,6 +49,32 @@ control-plane-build:
 
 control-plane-verify: control-plane-test control-plane-build
 
+control-plane-integration-test:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    compose_project="fruto-control-plane-integration-$$"
+    compose_file="deploy/control-plane/docker-compose.yaml"
+    cleanup() {
+      docker compose --project-name "$compose_project" -f "$compose_file" down >/dev/null 2>&1 || true
+    }
+    trap cleanup EXIT
+    docker compose --project-name "$compose_project" -f "$compose_file" up -d postgres
+    ready=false
+    for _ in $(seq 1 60); do
+      if docker compose --project-name "$compose_project" -f "$compose_file" exec -T postgres pg_isready -U fruto -d fruto >/dev/null 2>&1; then
+        ready=true
+        break
+      fi
+      sleep 1
+    done
+    if [[ "$ready" != true ]]; then
+      docker compose --project-name "$compose_project" -f "$compose_file" logs postgres >&2
+      exit 1
+    fi
+    FRUTO_TEST_DATABASE_URL="${FRUTO_TEST_DATABASE_URL:-postgres://fruto:fruto@127.0.0.1:55432/fruto?sslmode=disable}" \
+      GOCACHE="/tmp/fruto-go-cache" GOMODCACHE="/tmp/fruto-go-mod-cache" \
+      go test -count=1 -p=1 ./services/control-plane-api/internal/store ./services/control-plane-api/internal/api
+
 db-up:
     docker compose -f deploy/control-plane/docker-compose.yaml up -d postgres
 
@@ -75,5 +101,6 @@ verify: generate fmt-check lint test control-plane-verify frontend-check fronten
 ci:
     bash test/generated/check.sh
     just verify
+    FRUTO_TEST_DATABASE_URL="postgres://fruto:fruto@127.0.0.1:55432/fruto?sslmode=disable" just control-plane-integration-test
     just control-plane-e2e-kind
     just e2e

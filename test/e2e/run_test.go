@@ -74,6 +74,41 @@ func TestE2ECoversPersistentPublicTransports(t *testing.T) {
 	}
 }
 
+func TestControlPlaneE2ERestartPinsTheCrashAfterOperationClaim(t *testing.T) {
+	contents, err := os.ReadFile("control-plane-kind.sh")
+	if err != nil {
+		t.Fatalf("read control-plane E2E script: %v", err)
+	}
+	script := string(contents)
+
+	restartStart := strings.Index(script, "Idempotency-Key: phase6-restart")
+	restartEnd := strings.Index(script, "unknown_response=")
+	if restartStart < 0 || restartEnd <= restartStart {
+		t.Fatal("expected the control-plane restart scenario")
+	}
+	restart := script[restartStart:restartEnd]
+	if !strings.Contains(restart, `[[ "$pending_status" == Running ]]`) {
+		t.Fatal("restart can happen while the operation is either Pending or Running; the crash window is not pinned after ClaimNext")
+	}
+}
+
+func TestCIGateRequiresPostgreSQLBackedControlPlaneTests(t *testing.T) {
+	contents, err := os.ReadFile("../../justfile")
+	if err != nil {
+		t.Fatalf("read justfile: %v", err)
+	}
+	justfile := string(contents)
+
+	ciStart := strings.Index(justfile, "\nci:\n")
+	if ciStart < 0 {
+		t.Fatal("expected canonical ci recipe")
+	}
+	ciRecipe := justfile[ciStart:]
+	if !strings.Contains(ciRecipe, "FRUTO_TEST_DATABASE_URL") {
+		t.Fatal("canonical ci recipe can pass without enabling the PostgreSQL-backed control-plane tests")
+	}
+}
+
 func TestE2ECoversFrontendImageContracts(t *testing.T) {
 	contents, err := os.ReadFile("run.sh")
 	if err != nil {

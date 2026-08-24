@@ -143,7 +143,18 @@ func SHA256(value []byte) []byte {
 	return h[:]
 }
 
+func NormalizeIntent(intent Intent) Intent {
+	if intent.Replicas == 0 {
+		intent.Replicas = 1
+	}
+	if intent.Exposure == "" {
+		intent.Exposure = ExposurePrivate
+	}
+	return intent
+}
+
 func ValidateIntent(intent Intent, maxReplicas int32, maxCPU, maxMemory int64) error {
+	intent = NormalizeIntent(intent)
 	if len(intent.Name) == 0 || len(intent.Name) > 63 || !namePattern.MatchString(intent.Name) {
 		return errors.New("name must be a lowercase DNS label")
 	}
@@ -164,9 +175,6 @@ func ValidateIntent(intent Intent, maxReplicas int32, maxCPU, maxMemory int64) e
 	}
 	if !validPath(intent.Probes.Liveness.Path) || !validPath(intent.Probes.Readiness.Path) {
 		return errors.New("probe paths must be absolute HTTP paths")
-	}
-	if intent.Exposure == "" {
-		intent.Exposure = ExposurePrivate
 	}
 	if intent.Exposure != ExposurePrivate && intent.Exposure != ExposurePublic {
 		return errors.New("exposure must be Private or Public")
