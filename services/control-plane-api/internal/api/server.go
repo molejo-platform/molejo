@@ -29,12 +29,13 @@ type Config struct {
 	MaxCPU             int64
 	MaxMemory          int64
 	SessionTTL         time.Duration
+	OperationLease     time.Duration
 	WorkspaceNamespace string
 	PublicWorkspaceID  string
 }
 
 func DefaultConfig() Config {
-	return Config{CookieName: "fruto_session", MaxReplicas: 5, MaxCPU: 2000, MaxMemory: 2048, SessionTTL: 12 * time.Hour, WorkspaceNamespace: "fruto-workspaces", PublicWorkspaceID: "ws-lab"}
+	return Config{CookieName: "fruto_session", MaxReplicas: 5, MaxCPU: 2000, MaxMemory: 2048, SessionTTL: 12 * time.Hour, OperationLease: 30 * time.Second, WorkspaceNamespace: "fruto-workspaces", PublicWorkspaceID: "ws-lab"}
 }
 
 type Server struct {
@@ -60,7 +61,7 @@ func (s *Server) route(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if strings.HasPrefix(r.URL.Path, "/readyz") {
-		if err := s.Store.Pool.Ping(r.Context()); err != nil {
+		if err := s.Store.SchemaReady(r.Context()); err != nil {
 			writeError(w, http.StatusServiceUnavailable, "database_unavailable", "service is not ready", r)
 			return
 		}
@@ -273,13 +274,13 @@ func (s *Server) deploymentRoute(w http.ResponseWriter, r *http.Request, workspa
 
 func (s *Server) detailDeployment(w http.ResponseWriter, r *http.Request, workspace domain.Workspace, dep domain.Deployment) {
 	if s.Runtime != nil {
-		obs, err := s.Runtime.ObserveDeployment(r.Context(), workspace.Namespace, "ap-"+dep.Intent.Name)
+		obs, err := s.Runtime.ObserveDeployment(r.Context(), workspace.Namespace, dep.RuntimeName)
 		if err == nil {
 			dep.State = obs.State
 			dep.Message = obs.Message
-			dep.ObservedVersion = dep.DesiredVersion
-			if obs.State != domain.Ready {
-				dep.ObservedVersion = 0
+			if dep.State == domain.Ready && dep.ObservedVersion != dep.DesiredVersion {
+				dep.State = domain.Progressing
+				dep.Message = "runtime is ready; operation finalization is pending"
 			}
 		} else {
 			dep.State = domain.Unknown
@@ -316,6 +317,10 @@ func (s *Server) updateDeployment(w http.ResponseWriter, r *http.Request, worksp
 		return
 	}
 	updated, op, err := s.Store.UpdateDeployment(r.Context(), workspace.ID, actorID, dep.ID, intent, version, auth.HashToken(idem), payload)
+	if errors.Is(err, store.ErrImmutableName) {
+		writeError(w, http.StatusConflict, "deployment_name_immutable", "deployment name cannot be changed", r)
+		return
+	}
 	if errors.Is(err, store.ErrConflict) {
 		writeError(w, http.StatusConflict, "version_conflict", "deployment changed since it was read", r)
 		return
@@ -489,6 +494,47 @@ func (l *loginLimiter) fail(ip string) {
 }
 func (l *loginLimiter) success(ip string) { l.Lock(); defer l.Unlock(); delete(l.entries, ip) }
 
+func (s *Server) RunOnce(ctx context.Context, workerID string) (bool, error) {
+	op, dep, ok, err := s.Store.ClaimNext(ctx, workerID, s.Config.OperationLease)
+	if err != nil || !ok {
+		return ok, err
+	}
+	if s.Runtime == nil {
+		return true, s.Store.Fail(ctx, op, "runtime_unconfigured", "runtime is not configured", false)
+	}
+	workspace, err := s.Store.Workspace(ctx, dep.WorkspaceID)
+	if err != nil {
+		return true, s.Store.Fail(ctx, op, "workspace_unavailable", "workspace is not available", true)
+	}
+	if err = s.Runtime.EnsureWorkspace(ctx, workspace.Namespace); err != nil {
+		return true, s.Store.Fail(ctx, op, "workspace_unavailable", "workspace is not available", true)
+	}
+	if op.Kind == "DeleteDeployment" {
+		if err = s.Runtime.DeleteDeployment(ctx, workspace.Namespace, dep.RuntimeName); err != nil {
+			return true, s.Store.Fail(ctx, op, "runtime_error", "runtime operation failed", true)
+		}
+		obs, observeErr := s.Runtime.ObserveDeployment(ctx, workspace.Namespace, dep.RuntimeName)
+		if observeErr != nil {
+			return true, s.Store.Fail(ctx, op, "runtime_observation_failed", "runtime observation failed", true)
+		}
+		if obs.Exists {
+			return true, s.Store.Fail(ctx, op, "runtime_deletion_pending", "runtime removal is not yet observed", true)
+		}
+		return true, s.Store.Complete(ctx, op, domain.Ready, obs.Message, 0, obs.ObservedRelease, true)
+	}
+	if err = s.Runtime.ApplyDeployment(ctx, workspace.Namespace, dep.RuntimeName, op.Intent); err != nil {
+		return true, s.Store.Fail(ctx, op, "runtime_error", "runtime operation failed", true)
+	}
+	obs, err := s.Runtime.ObserveDeployment(ctx, workspace.Namespace, dep.RuntimeName)
+	if err != nil {
+		return true, s.Store.Fail(ctx, op, "runtime_observation_failed", "runtime observation failed", true)
+	}
+	if obs.State != domain.Ready || !obs.Exists || obs.ObservedRelease != op.Intent.Image {
+		return true, s.Store.Fail(ctx, op, "runtime_not_ready", "runtime has not observed the requested release", true)
+	}
+	return true, s.Store.Complete(ctx, op, domain.Ready, obs.Message, op.DesiredVersion, obs.ObservedRelease, false)
+}
+
 func (s *Server) RunWorker(ctx context.Context, workerID string) {
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
@@ -497,37 +543,10 @@ func (s *Server) RunWorker(ctx context.Context, workerID string) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			op, dep, ok, err := s.Store.ClaimNext(ctx, workerID, 30*time.Second)
+			_, err := s.RunOnce(ctx, workerID)
 			if err != nil {
-				s.Logger.Error("claim operation", "error", err)
-				continue
+				s.Logger.Error("run operation", "error", err)
 			}
-			if !ok {
-				continue
-			}
-			if s.Runtime == nil {
-				_ = s.Store.Fail(ctx, op, "runtime_unconfigured", "runtime is not configured", false)
-				continue
-			}
-			var obs runtime.Observation
-			if op.Kind == "DeleteDeployment" {
-				err = s.Runtime.DeleteDeployment(ctx, s.Config.WorkspaceNamespace, "ap-"+dep.Intent.Name)
-			} else {
-				obs, err = s.Runtime.ApplyDeployment(ctx, s.Config.WorkspaceNamespace, dep.Intent, op.DesiredVersion)
-			}
-			if err != nil {
-				_ = s.Store.Fail(ctx, op, "runtime_error", "runtime operation failed", true)
-				continue
-			}
-			state := obs.State
-			if state == "" {
-				state = domain.Progressing
-			}
-			observed := int64(0)
-			if state == domain.Ready {
-				observed = op.DesiredVersion
-			}
-			_ = s.Store.Complete(ctx, op, state, obs.Message, observed, obs.Release, op.Kind == "DeleteDeployment")
 		}
 	}
 }

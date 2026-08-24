@@ -1,11 +1,16 @@
 package store
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,6 +24,8 @@ import (
 var migrationFS embed.FS
 
 type Store struct{ Pool *pgxpool.Pool }
+
+const ExpectedMigrationVersion int64 = 3
 
 func New(ctx context.Context, dsn string) (*Store, error) {
 	pool, err := pgxpool.New(ctx, dsn)
@@ -35,34 +42,78 @@ func New(ctx context.Context, dsn string) (*Store, error) {
 func (s *Store) Close() { s.Pool.Close() }
 
 func (s *Store) Migrate(ctx context.Context) error {
-	contents, err := migrationFS.ReadFile("migrations/001_initial.sql")
+	entries, err := fs.ReadDir(migrationFS, "migrations")
 	if err != nil {
 		return err
 	}
-	if parts := strings.SplitN(string(contents), "-- +goose Down", 2); len(parts) == 2 {
-		contents = []byte(parts[0])
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
+	if len(entries) == 0 {
+		return errors.New("no migrations found")
 	}
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback(ctx)
-	if _, err = tx.Exec(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (version BIGINT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())`); err != nil {
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext('fruto-control-plane-migrations'))`); err != nil {
 		return err
 	}
-	var applied bool
-	if err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM schema_migrations WHERE version = 1)`).Scan(&applied); err != nil {
+	if _, err = tx.Exec(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (version BIGINT PRIMARY KEY, checksum BYTEA, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())`); err != nil {
 		return err
 	}
-	if !applied {
-		if _, err = tx.Exec(ctx, string(contents)); err != nil {
+	if _, err = tx.Exec(ctx, `ALTER TABLE schema_migrations ADD COLUMN IF NOT EXISTS checksum BYTEA`); err != nil {
+		return err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".sql") {
+			continue
+		}
+		version, err := strconv.ParseInt(strings.SplitN(entry.Name(), "_", 2)[0], 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid migration name %q: %w", entry.Name(), err)
+		}
+		contents, err := migrationFS.ReadFile("migrations/" + entry.Name())
+		if err != nil {
 			return err
 		}
-		if _, err = tx.Exec(ctx, `INSERT INTO schema_migrations(version) VALUES (1)`); err != nil {
+		if parts := strings.SplitN(string(contents), "-- +goose Down", 2); len(parts) == 2 {
+			contents = []byte(parts[0])
+		}
+		checksum := sha256.Sum256(contents)
+		tx, err := s.Pool.Begin(ctx)
+		if err != nil {
+			return err
+		}
+		if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext('fruto-control-plane-migrations'))`); err != nil {
+			_ = tx.Rollback(ctx)
+			return err
+		}
+		var stored []byte
+		err = tx.QueryRow(ctx, `SELECT checksum FROM schema_migrations WHERE version=$1`, version).Scan(&stored)
+		switch {
+		case err == nil && len(stored) == 0:
+			// Databases created by the original MVP did not record checksums.
+			// Backfill the checksum once so subsequent runs detect drift.
+			_, err = tx.Exec(ctx, `UPDATE schema_migrations SET checksum=$1 WHERE version=$2`, checksum[:], version)
+		case err == nil && !bytes.Equal(stored, checksum[:]):
+			err = fmt.Errorf("migration %d checksum drift", version)
+		case errors.Is(err, pgx.ErrNoRows):
+			if _, err = tx.Exec(ctx, string(contents)); err == nil {
+				_, err = tx.Exec(ctx, `INSERT INTO schema_migrations(version,checksum) VALUES ($1,$2)`, version, checksum[:])
+			}
+		}
+		if err != nil {
+			_ = tx.Rollback(ctx)
+			return err
+		}
+		if err = tx.Commit(ctx); err != nil {
 			return err
 		}
 	}
-	return tx.Commit(ctx)
+	return nil
 }
 
 func (s *Store) Bootstrap(ctx context.Context, workspace domain.Workspace, actors map[string]struct{ Role, PasswordHash string }) error {
@@ -108,6 +159,29 @@ func (s *Store) WorkspaceForActor(ctx context.Context, actorID int64) (domain.Wo
 	return workspace, err
 }
 
+func (s *Store) Workspace(ctx context.Context, workspaceID int64) (domain.Workspace, error) {
+	var workspace domain.Workspace
+	err := s.Pool.QueryRow(ctx, `SELECT id,public_id,name,namespace_name FROM workspaces WHERE id=$1`, workspaceID).Scan(&workspace.ID, &workspace.PublicID, &workspace.Name, &workspace.Namespace)
+	return workspace, err
+}
+
+func (s *Store) WorkspaceForDeployment(ctx context.Context, deploymentID int64) (domain.Workspace, error) {
+	var workspace domain.Workspace
+	err := s.Pool.QueryRow(ctx, `SELECT w.id,w.public_id,w.name,w.namespace_name FROM workspaces w JOIN deployments d ON d.workspace_id=w.id WHERE d.id=$1`, deploymentID).Scan(&workspace.ID, &workspace.PublicID, &workspace.Name, &workspace.Namespace)
+	return workspace, err
+}
+
+func (s *Store) SchemaReady(ctx context.Context) error {
+	var version int64
+	if err := s.Pool.QueryRow(ctx, `SELECT COALESCE(MAX(version),0) FROM schema_migrations`).Scan(&version); err != nil {
+		return err
+	}
+	if version < ExpectedMigrationVersion {
+		return fmt.Errorf("schema version %d is below expected version %d", version, ExpectedMigrationVersion)
+	}
+	return nil
+}
+
 func (s *Store) CreateSession(ctx context.Context, actorID int64, tokenHash, csrfHash []byte, expires time.Time) error {
 	_, err := s.Pool.Exec(ctx, `INSERT INTO sessions(token_hash,actor_id,csrf_hash,expires_at) VALUES ($1,$2,$3,$4)`, tokenHash, actorID, csrfHash, expires)
 	return err
@@ -126,6 +200,18 @@ func (s *Store) RevokeSession(ctx context.Context, tokenHash []byte) error {
 }
 
 func (s *Store) CreateDeployment(ctx context.Context, workspaceID, actorID int64, deploymentID string, intent domain.Intent, idempotencyHash, payloadHash []byte) (domain.Deployment, domain.Operation, bool, error) {
+	for attempt := 0; attempt < 3; attempt++ {
+		deployment, operation, reused, err := s.createDeployment(ctx, workspaceID, actorID, deploymentID, intent, idempotencyHash, payloadHash)
+		if !errors.Is(err, errRetryCreate) {
+			return deployment, operation, reused, err
+		}
+	}
+	return domain.Deployment{}, domain.Operation{}, false, ErrConflict
+}
+
+var errRetryCreate = errors.New("retry concurrent create")
+
+func (s *Store) createDeployment(ctx context.Context, workspaceID, actorID int64, deploymentID string, intent domain.Intent, idempotencyHash, payloadHash []byte) (domain.Deployment, domain.Operation, bool, error) {
 	intentJSON, err := domain.CanonicalJSON(intent)
 	if err != nil {
 		return domain.Deployment{}, domain.Operation{}, false, err
@@ -160,8 +246,12 @@ func (s *Store) CreateDeployment(ctx context.Context, workspaceID, actorID int64
 		return domain.Deployment{}, domain.Operation{}, false, err
 	}
 	var deployment domain.Deployment
-	err = tx.QueryRow(ctx, `INSERT INTO deployments(public_id,workspace_id,name,slug,intent_json) VALUES ($1,$2,$3,NULLIF($4,''),$5) RETURNING id,public_id,workspace_id,intent_json::text,desired_version,observed_version,observed_release,last_state,last_message,created_at,updated_at`, deploymentID, workspaceID, intent.Name, intent.Slug, intentJSON).Scan(&deployment.ID, &deployment.PublicID, &deployment.WorkspaceID, &intentJSON, &deployment.DesiredVersion, &deployment.ObservedVersion, &deployment.ObservedRelease, &deployment.State, &deployment.Message, &deployment.CreatedAt, &deployment.UpdatedAt)
+	runtimeName := domain.RuntimeName(deploymentID)
+	err = tx.QueryRow(ctx, `INSERT INTO deployments(public_id,workspace_id,name,runtime_name,slug,intent_json) VALUES ($1,$2,$3,$4,NULLIF($5,''),$6) RETURNING id,public_id,workspace_id,runtime_name,intent_json::text,desired_version,observed_version,observed_release,last_state,last_message,created_at,updated_at`, deploymentID, workspaceID, intent.Name, runtimeName, intent.Slug, intentJSON).Scan(&deployment.ID, &deployment.PublicID, &deployment.WorkspaceID, &deployment.RuntimeName, &intentJSON, &deployment.DesiredVersion, &deployment.ObservedVersion, &deployment.ObservedRelease, &deployment.State, &deployment.Message, &deployment.CreatedAt, &deployment.UpdatedAt)
 	if err != nil {
+		if isUniqueViolation(err) {
+			return domain.Deployment{}, domain.Operation{}, false, errRetryCreate
+		}
 		return domain.Deployment{}, domain.Operation{}, false, translateDBError(err)
 	}
 	if err := jsonUnmarshal(intentJSON, &deployment.Intent); err != nil {
@@ -169,6 +259,9 @@ func (s *Store) CreateDeployment(ctx context.Context, workspaceID, actorID int64
 	}
 	op, err := insertOperation(ctx, tx, workspaceID, deployment.ID, deployment.PublicID, actorID, "CreateDeployment", idempotencyHash, payloadHash, intentJSON, deployment.DesiredVersion)
 	if err != nil {
+		if isUniqueViolation(err) {
+			return domain.Deployment{}, domain.Operation{}, false, errRetryCreate
+		}
 		return domain.Deployment{}, domain.Operation{}, false, translateDBError(err)
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -200,9 +293,26 @@ func (s *Store) UpdateDeployment(ctx context.Context, workspaceID, actorID, depl
 		}
 		return dep, existing, nil
 	}
+	current, err := deploymentByID(ctx, tx, deploymentID)
+	if err != nil {
+		return domain.Deployment{}, domain.Operation{}, err
+	}
+	if current.WorkspaceID != workspaceID || current.DeletionRequestedAt != nil {
+		return domain.Deployment{}, domain.Operation{}, ErrConflict
+	}
+	if intent.Name != current.Intent.Name {
+		return domain.Deployment{}, domain.Operation{}, ErrImmutableName
+	}
+	var running bool
+	if err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM operations WHERE deployment_id=$1 AND status='Running')`, deploymentID).Scan(&running); err != nil {
+		return domain.Deployment{}, domain.Operation{}, err
+	}
+	if running {
+		return domain.Deployment{}, domain.Operation{}, ErrConflict
+	}
 	var deployment domain.Deployment
 	var storedJSON []byte
-	err = tx.QueryRow(ctx, `UPDATE deployments SET name=$1,slug=NULLIF($2,''),intent_json=$3,desired_version=desired_version+1,updated_at=now() WHERE id=$4 AND workspace_id=$5 AND deleted_at IS NULL AND desired_version=$6 RETURNING id,public_id,workspace_id,intent_json::text,desired_version,observed_version,observed_release,last_state,last_message,created_at,updated_at`, intent.Name, intent.Slug, intentJSON, deploymentID, workspaceID, version).Scan(&deployment.ID, &deployment.PublicID, &deployment.WorkspaceID, &storedJSON, &deployment.DesiredVersion, &deployment.ObservedVersion, &deployment.ObservedRelease, &deployment.State, &deployment.Message, &deployment.CreatedAt, &deployment.UpdatedAt)
+	err = tx.QueryRow(ctx, `UPDATE deployments SET slug=NULLIF($1,''),intent_json=$2,desired_version=desired_version+1,updated_at=now() WHERE id=$3 AND workspace_id=$4 AND deleted_at IS NULL AND deletion_requested_at IS NULL AND desired_version=$5 RETURNING id,public_id,workspace_id,runtime_name,intent_json::text,desired_version,observed_version,observed_release,last_state,last_message,created_at,updated_at`, intent.Slug, intentJSON, deploymentID, workspaceID, version).Scan(&deployment.ID, &deployment.PublicID, &deployment.WorkspaceID, &deployment.RuntimeName, &storedJSON, &deployment.DesiredVersion, &deployment.ObservedVersion, &deployment.ObservedRelease, &deployment.State, &deployment.Message, &deployment.CreatedAt, &deployment.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.Deployment{}, domain.Operation{}, ErrConflict
@@ -212,7 +322,7 @@ func (s *Store) UpdateDeployment(ctx context.Context, workspaceID, actorID, depl
 	if err = jsonUnmarshal(storedJSON, &deployment.Intent); err != nil {
 		return domain.Deployment{}, domain.Operation{}, err
 	}
-	if _, err = tx.Exec(ctx, `UPDATE operations SET status='Superseded',updated_at=now() WHERE deployment_id=$1 AND status IN ('Pending','Running')`, deploymentID); err != nil {
+	if _, err = tx.Exec(ctx, `UPDATE operations SET status='Superseded',updated_at=now() WHERE deployment_id=$1 AND status='Pending'`, deploymentID); err != nil {
 		return domain.Deployment{}, domain.Operation{}, err
 	}
 	op, err := insertOperation(ctx, tx, workspaceID, deployment.ID, deployment.PublicID, actorID, "UpdateDeployment", idem, payload, intentJSON, deployment.DesiredVersion)
@@ -240,23 +350,38 @@ func (s *Store) DeleteDeployment(ctx context.Context, workspaceID, actorID, depl
 		}
 		return existing, nil
 	}
+	current, err := deploymentByID(ctx, tx, deploymentID)
+	if err != nil {
+		return domain.Operation{}, err
+	}
+	if current.WorkspaceID != workspaceID || current.DeletedAt != nil || current.DeletionRequestedAt != nil {
+		return domain.Operation{}, ErrConflict
+	}
+	var running bool
+	if err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM operations WHERE deployment_id=$1 AND status='Running')`, deploymentID).Scan(&running); err != nil {
+		return domain.Operation{}, err
+	}
+	if running {
+		return domain.Operation{}, ErrConflict
+	}
 	var publicID string
 	var intentJSON []byte
 	var newVersion int64
-	err = tx.QueryRow(ctx, `UPDATE deployments SET desired_version=desired_version+1,updated_at=now() WHERE id=$1 AND workspace_id=$2 AND deleted_at IS NULL AND desired_version=$3 RETURNING public_id,intent_json::text,desired_version`, deploymentID, workspaceID, version).Scan(&publicID, &intentJSON, &newVersion)
+	err = tx.QueryRow(ctx, `UPDATE deployments SET desired_version=desired_version+1,deletion_requested_at=now(),updated_at=now() WHERE id=$1 AND workspace_id=$2 AND deleted_at IS NULL AND deletion_requested_at IS NULL AND desired_version=$3 RETURNING public_id,intent_json::text,desired_version`, deploymentID, workspaceID, version).Scan(&publicID, &intentJSON, &newVersion)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.Operation{}, ErrConflict
 		}
 		return domain.Operation{}, translateDBError(err)
 	}
-	if _, err = tx.Exec(ctx, `UPDATE operations SET status='Superseded',updated_at=now() WHERE deployment_id=$1 AND status IN ('Pending','Running')`, deploymentID); err != nil {
+	if _, err = tx.Exec(ctx, `UPDATE operations SET status='Superseded',updated_at=now() WHERE deployment_id=$1 AND status='Pending'`, deploymentID); err != nil {
 		return domain.Operation{}, err
 	}
 	op, err := insertOperation(ctx, tx, workspaceID, deploymentID, publicID, actorID, "DeleteDeployment", idem, payload, intentJSON, newVersion)
 	if err != nil {
 		return domain.Operation{}, translateDBError(err)
 	}
+	op.DeploymentPublicID = publicID
 	if err = tx.Commit(ctx); err != nil {
 		return domain.Operation{}, err
 	}
@@ -270,6 +395,9 @@ func insertOperation(ctx context.Context, tx pgx.Tx, workspaceID, deploymentID i
 	}
 	var op domain.Operation
 	err = tx.QueryRow(ctx, `INSERT INTO operations(public_id,workspace_id,deployment_id,actor_id,kind,status,idempotency_hash,payload_hash,intent_json,desired_version,sequence) VALUES($1,$2,$3,$4,$5,'Pending',$6,$7,$8,$9,$9) RETURNING id,public_id,kind,status,desired_version,attempts,created_at,updated_at`, id, workspaceID, deploymentID, actorID, kind, idem, payload, intentJSON, version).Scan(&op.ID, &op.PublicID, &op.Kind, &op.Status, &op.DesiredVersion, &op.Attempts, &op.CreatedAt, &op.UpdatedAt)
+	if err == nil {
+		err = jsonUnmarshal(intentJSON, &op.Intent)
+	}
 	op.DeploymentID = deploymentID
 	op.DeploymentPublicID = deploymentPublicID
 	op.ActorID = actorID
@@ -277,7 +405,7 @@ func insertOperation(ctx context.Context, tx pgx.Tx, workspaceID, deploymentID i
 }
 
 func (s *Store) ListDeployments(ctx context.Context, workspaceID int64, limit int) ([]domain.Deployment, error) {
-	rows, err := s.Pool.Query(ctx, `SELECT id,public_id,workspace_id,intent_json::text,desired_version,observed_version,observed_release,last_state,last_message,created_at,updated_at FROM deployments WHERE workspace_id=$1 AND deleted_at IS NULL ORDER BY id DESC LIMIT $2`, workspaceID, limit)
+	rows, err := s.Pool.Query(ctx, `SELECT id,public_id,workspace_id,runtime_name,intent_json::text,desired_version,observed_version,observed_release,last_state,last_message,deletion_requested_at,created_at,updated_at FROM deployments WHERE workspace_id=$1 AND deleted_at IS NULL ORDER BY id DESC LIMIT $2`, workspaceID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -286,7 +414,7 @@ func (s *Store) ListDeployments(ctx context.Context, workspaceID int64, limit in
 	for rows.Next() {
 		var d domain.Deployment
 		var raw []byte
-		if err = rows.Scan(&d.ID, &d.PublicID, &d.WorkspaceID, &raw, &d.DesiredVersion, &d.ObservedVersion, &d.ObservedRelease, &d.State, &d.Message, &d.CreatedAt, &d.UpdatedAt); err != nil {
+		if err = rows.Scan(&d.ID, &d.PublicID, &d.WorkspaceID, &d.RuntimeName, &raw, &d.DesiredVersion, &d.ObservedVersion, &d.ObservedRelease, &d.State, &d.Message, &d.DeletionRequestedAt, &d.CreatedAt, &d.UpdatedAt); err != nil {
 			return nil, err
 		}
 		if err = jsonUnmarshal(raw, &d.Intent); err != nil {
@@ -300,7 +428,7 @@ func (s *Store) ListDeployments(ctx context.Context, workspaceID int64, limit in
 func (s *Store) GetDeployment(ctx context.Context, workspaceID, id int64) (domain.Deployment, error) {
 	var d domain.Deployment
 	var raw []byte
-	err := s.Pool.QueryRow(ctx, `SELECT id,public_id,workspace_id,intent_json::text,desired_version,observed_version,observed_release,last_state,last_message,created_at,updated_at FROM deployments WHERE workspace_id=$1 AND id=$2 AND deleted_at IS NULL`, workspaceID, id).Scan(&d.ID, &d.PublicID, &d.WorkspaceID, &raw, &d.DesiredVersion, &d.ObservedVersion, &d.ObservedRelease, &d.State, &d.Message, &d.CreatedAt, &d.UpdatedAt)
+	err := s.Pool.QueryRow(ctx, `SELECT id,public_id,workspace_id,runtime_name,intent_json::text,desired_version,observed_version,observed_release,last_state,last_message,deletion_requested_at,created_at,updated_at FROM deployments WHERE workspace_id=$1 AND id=$2 AND deleted_at IS NULL`, workspaceID, id).Scan(&d.ID, &d.PublicID, &d.WorkspaceID, &d.RuntimeName, &raw, &d.DesiredVersion, &d.ObservedVersion, &d.ObservedRelease, &d.State, &d.Message, &d.DeletionRequestedAt, &d.CreatedAt, &d.UpdatedAt)
 	if err != nil {
 		return d, err
 	}
@@ -311,7 +439,7 @@ func (s *Store) GetDeployment(ctx context.Context, workspaceID, id int64) (domai
 func (s *Store) FindDeployment(ctx context.Context, workspaceID int64, publicID string) (domain.Deployment, error) {
 	var d domain.Deployment
 	var raw []byte
-	err := s.Pool.QueryRow(ctx, `SELECT id,public_id,workspace_id,intent_json::text,desired_version,observed_version,observed_release,last_state,last_message,created_at,updated_at FROM deployments WHERE workspace_id=$1 AND public_id=$2 AND deleted_at IS NULL`, workspaceID, publicID).Scan(&d.ID, &d.PublicID, &d.WorkspaceID, &raw, &d.DesiredVersion, &d.ObservedVersion, &d.ObservedRelease, &d.State, &d.Message, &d.CreatedAt, &d.UpdatedAt)
+	err := s.Pool.QueryRow(ctx, `SELECT id,public_id,workspace_id,runtime_name,intent_json::text,desired_version,observed_version,observed_release,last_state,last_message,deletion_requested_at,created_at,updated_at FROM deployments WHERE workspace_id=$1 AND public_id=$2 AND deleted_at IS NULL`, workspaceID, publicID).Scan(&d.ID, &d.PublicID, &d.WorkspaceID, &d.RuntimeName, &raw, &d.DesiredVersion, &d.ObservedVersion, &d.ObservedRelease, &d.State, &d.Message, &d.DeletionRequestedAt, &d.CreatedAt, &d.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return d, ErrNotFound
 	}
@@ -323,7 +451,7 @@ func (s *Store) FindDeployment(ctx context.Context, workspaceID int64, publicID 
 }
 
 func (s *Store) ListOperations(ctx context.Context, workspaceID, deploymentID int64) ([]domain.Operation, error) {
-	rows, err := s.Pool.Query(ctx, `SELECT id,public_id,deployment_id,actor_id,kind,status,desired_version,attempts,error_code,error_message,created_at,updated_at FROM operations WHERE workspace_id=$1 AND deployment_id=$2 ORDER BY id DESC`, workspaceID, deploymentID)
+	rows, err := s.Pool.Query(ctx, `SELECT o.id,o.public_id,o.deployment_id,d.public_id,o.actor_id,o.kind,o.status,o.desired_version,o.attempts,o.error_code,o.error_message,o.created_at,o.updated_at FROM operations o JOIN deployments d ON d.id=o.deployment_id WHERE o.workspace_id=$1 AND o.deployment_id=$2 ORDER BY o.id DESC`, workspaceID, deploymentID)
 	if err != nil {
 		return nil, err
 	}
@@ -331,7 +459,7 @@ func (s *Store) ListOperations(ctx context.Context, workspaceID, deploymentID in
 	out := []domain.Operation{}
 	for rows.Next() {
 		var op domain.Operation
-		if err = rows.Scan(&op.ID, &op.PublicID, &op.DeploymentID, &op.ActorID, &op.Kind, &op.Status, &op.DesiredVersion, &op.Attempts, &op.ErrorCode, &op.ErrorMessage, &op.CreatedAt, &op.UpdatedAt); err != nil {
+		if err = rows.Scan(&op.ID, &op.PublicID, &op.DeploymentID, &op.DeploymentPublicID, &op.ActorID, &op.Kind, &op.Status, &op.DesiredVersion, &op.Attempts, &op.ErrorCode, &op.ErrorMessage, &op.CreatedAt, &op.UpdatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, op)
@@ -341,7 +469,7 @@ func (s *Store) ListOperations(ctx context.Context, workspaceID, deploymentID in
 
 func (s *Store) GetOperation(ctx context.Context, workspaceID int64, publicID string) (domain.Operation, error) {
 	var op domain.Operation
-	err := s.Pool.QueryRow(ctx, `SELECT id,public_id,deployment_id,kind,status,desired_version,attempts,error_code,error_message,created_at,updated_at FROM operations WHERE workspace_id=$1 AND public_id=$2`, workspaceID, publicID).Scan(&op.ID, &op.PublicID, &op.DeploymentID, &op.Kind, &op.Status, &op.DesiredVersion, &op.Attempts, &op.ErrorCode, &op.ErrorMessage, &op.CreatedAt, &op.UpdatedAt)
+	err := s.Pool.QueryRow(ctx, `SELECT o.id,o.public_id,o.deployment_id,d.public_id,o.kind,o.status,o.desired_version,o.attempts,o.error_code,o.error_message,o.created_at,o.updated_at FROM operations o JOIN deployments d ON d.id=o.deployment_id WHERE o.workspace_id=$1 AND o.public_id=$2`, workspaceID, publicID).Scan(&op.ID, &op.PublicID, &op.DeploymentID, &op.DeploymentPublicID, &op.Kind, &op.Status, &op.DesiredVersion, &op.Attempts, &op.ErrorCode, &op.ErrorMessage, &op.CreatedAt, &op.UpdatedAt)
 	return op, err
 }
 
@@ -353,7 +481,7 @@ func (s *Store) ClaimNext(ctx context.Context, worker string, lease time.Duratio
 	defer tx.Rollback(ctx)
 	var op domain.Operation
 	var operationIntent []byte
-	err = tx.QueryRow(ctx, `WITH candidate AS (SELECT id FROM operations WHERE (status='Pending' OR (status='Running' AND lease_until < now())) AND next_attempt_at <= now() ORDER BY id FOR UPDATE SKIP LOCKED LIMIT 1) UPDATE operations o SET status='Running',attempts=attempts+1,lease_until=now()+$1::interval,worker_id=$2,fencing_token=fencing_token+1,updated_at=now() FROM candidate c WHERE o.id=c.id RETURNING o.id,o.public_id,o.workspace_id,o.deployment_id,o.actor_id,o.kind,o.status,o.desired_version,o.attempts,o.intent_json::text,o.created_at,o.updated_at`, fmt.Sprintf("%f seconds", lease.Seconds()), worker).Scan(&op.ID, &op.PublicID, &op.WorkspaceID, &op.DeploymentID, &op.ActorID, &op.Kind, &op.Status, &op.DesiredVersion, &op.Attempts, &operationIntent, &op.CreatedAt, &op.UpdatedAt)
+	err = tx.QueryRow(ctx, `WITH candidate AS (SELECT id FROM operations WHERE (status='Pending' OR (status='Running' AND lease_until < now())) AND next_attempt_at <= now() ORDER BY id FOR UPDATE SKIP LOCKED LIMIT 1) UPDATE operations o SET status='Running',attempts=attempts+1,lease_until=now()+$1::interval,worker_id=$2,fencing_token=fencing_token+1,updated_at=now() FROM candidate c WHERE o.id=c.id RETURNING o.id,o.public_id,o.workspace_id,o.deployment_id,o.actor_id,o.kind,o.status,o.desired_version,o.attempts,o.intent_json::text,o.worker_id,o.fencing_token,o.lease_until,o.created_at,o.updated_at`, fmt.Sprintf("%f seconds", lease.Seconds()), worker).Scan(&op.ID, &op.PublicID, &op.WorkspaceID, &op.DeploymentID, &op.ActorID, &op.Kind, &op.Status, &op.DesiredVersion, &op.Attempts, &operationIntent, &op.WorkerID, &op.FencingToken, &op.LeaseUntil, &op.CreatedAt, &op.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.Operation{}, domain.Deployment{}, false, nil
 	}
@@ -362,7 +490,7 @@ func (s *Store) ClaimNext(ctx context.Context, worker string, lease time.Duratio
 	}
 	var d domain.Deployment
 	var deploymentIntent []byte
-	if err = tx.QueryRow(ctx, `SELECT id,public_id,workspace_id,intent_json::text,desired_version,observed_version,observed_release,last_state,last_message,created_at,updated_at FROM deployments WHERE id=$1`, op.DeploymentID).Scan(&d.ID, &d.PublicID, &d.WorkspaceID, &deploymentIntent, &d.DesiredVersion, &d.ObservedVersion, &d.ObservedRelease, &d.State, &d.Message, &d.CreatedAt, &d.UpdatedAt); err != nil {
+	if err = tx.QueryRow(ctx, `SELECT id,public_id,workspace_id,runtime_name,intent_json::text,desired_version,observed_version,observed_release,last_state,last_message,deletion_requested_at,created_at,updated_at FROM deployments WHERE id=$1`, op.DeploymentID).Scan(&d.ID, &d.PublicID, &d.WorkspaceID, &d.RuntimeName, &deploymentIntent, &d.DesiredVersion, &d.ObservedVersion, &d.ObservedRelease, &d.State, &d.Message, &d.DeletionRequestedAt, &d.CreatedAt, &d.UpdatedAt); err != nil {
 		return domain.Operation{}, domain.Deployment{}, false, err
 	}
 	if err = jsonUnmarshal(deploymentIntent, &d.Intent); err != nil {
@@ -371,7 +499,9 @@ func (s *Store) ClaimNext(ctx context.Context, worker string, lease time.Duratio
 	if err = tx.Commit(ctx); err != nil {
 		return domain.Operation{}, domain.Deployment{}, false, err
 	}
-	_ = operationIntent
+	if err = jsonUnmarshal(operationIntent, &op.Intent); err != nil {
+		return domain.Operation{}, domain.Deployment{}, false, err
+	}
 	op.DeploymentPublicID = d.PublicID
 	return op, d, true, nil
 }
@@ -382,28 +512,45 @@ func (s *Store) Complete(ctx context.Context, op domain.Operation, state, messag
 		return err
 	}
 	defer tx.Rollback(ctx)
+	var commandTag pgconn.CommandTag
 	if deleted {
-		_, err = tx.Exec(ctx, `UPDATE deployments SET deleted_at=now(),last_state='Ready',last_message=$1,updated_at=now() WHERE id=$2 AND desired_version=$3`, message, op.DeploymentID, op.DesiredVersion)
+		commandTag, err = tx.Exec(ctx, `UPDATE deployments SET deleted_at=now(),last_message=$1,updated_at=now() WHERE id=$2 AND desired_version=$3 AND deletion_requested_at IS NOT NULL AND deleted_at IS NULL`, message, op.DeploymentID, op.DesiredVersion)
 	} else {
-		_, err = tx.Exec(ctx, `UPDATE deployments SET observed_version=$1,observed_release=$2,last_state=$3,last_message=$4,updated_at=now() WHERE id=$5 AND desired_version=$6`, observedVersion, release, state, message, op.DeploymentID, op.DesiredVersion)
+		commandTag, err = tx.Exec(ctx, `UPDATE deployments SET observed_version=$1,observed_release=$2,last_state=$3,last_message=$4,updated_at=now() WHERE id=$5 AND desired_version=$6 AND deleted_at IS NULL`, observedVersion, release, state, message, op.DeploymentID, op.DesiredVersion)
 	}
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec(ctx, `UPDATE operations SET status='Succeeded',lease_until=NULL,worker_id=NULL,updated_at=now() WHERE id=$1 AND status='Running'`, op.ID)
+	if commandTag.RowsAffected() != 1 {
+		return ErrLeaseLost
+	}
+	commandTag, err = tx.Exec(ctx, `UPDATE operations SET status='Succeeded',lease_until=NULL,worker_id=NULL,updated_at=now() WHERE id=$1 AND status='Running' AND worker_id=$2 AND fencing_token=$3 AND lease_until > now()`, op.ID, op.WorkerID, op.FencingToken)
 	if err != nil {
 		return err
+	}
+	if commandTag.RowsAffected() != 1 {
+		return ErrLeaseLost
 	}
 	return tx.Commit(ctx)
 }
 
 func (s *Store) Fail(ctx context.Context, op domain.Operation, code, message string, retry bool) error {
+	status := "Failed"
 	if retry {
-		_, err := s.Pool.Exec(ctx, `UPDATE operations SET status=CASE WHEN attempts >= 8 THEN 'Failed' ELSE 'Pending' END,next_attempt_at=now()+make_interval(secs => LEAST(300, power(2, attempts)::int)),lease_until=NULL,worker_id=NULL,error_code=$1,error_message=$2,updated_at=now() WHERE id=$3`, code, message, op.ID)
+		status = "Pending"
+	}
+	command := `UPDATE operations SET status=$1,next_attempt_at=CASE WHEN $1='Pending' THEN now()+make_interval(secs => LEAST(300, power(2, attempts)::int)) ELSE next_attempt_at END,lease_until=NULL,worker_id=NULL,error_code=$2,error_message=$3,updated_at=now() WHERE id=$4 AND status='Running' AND worker_id=$5 AND fencing_token=$6 AND lease_until > now()`
+	if retry && op.Attempts >= 8 {
+		status = "Failed"
+	}
+	tag, err := s.Pool.Exec(ctx, command, status, code, message, op.ID, op.WorkerID, op.FencingToken)
+	if err != nil {
 		return err
 	}
-	_, err := s.Pool.Exec(ctx, `UPDATE operations SET status='Failed',lease_until=NULL,worker_id=NULL,error_code=$1,error_message=$2,updated_at=now() WHERE id=$3`, code, message, op.ID)
-	return err
+	if tag.RowsAffected() != 1 {
+		return ErrLeaseLost
+	}
+	return nil
 }
 
 func existingOperation(ctx context.Context, tx pgx.Tx, workspaceID, deploymentID int64, kind string, idem, payload []byte) (domain.Operation, bool, error) {
@@ -425,7 +572,7 @@ func existingOperation(ctx context.Context, tx pgx.Tx, workspaceID, deploymentID
 func deploymentByID(ctx context.Context, tx pgx.Tx, id int64) (domain.Deployment, error) {
 	var d domain.Deployment
 	var raw []byte
-	err := tx.QueryRow(ctx, `SELECT id,public_id,workspace_id,intent_json::text,desired_version,observed_version,observed_release,last_state,last_message,created_at,updated_at FROM deployments WHERE id=$1`, id).Scan(&d.ID, &d.PublicID, &d.WorkspaceID, &raw, &d.DesiredVersion, &d.ObservedVersion, &d.ObservedRelease, &d.State, &d.Message, &d.CreatedAt, &d.UpdatedAt)
+	err := tx.QueryRow(ctx, `SELECT id,public_id,workspace_id,runtime_name,intent_json::text,desired_version,observed_version,observed_release,last_state,last_message,deletion_requested_at,deleted_at,created_at,updated_at FROM deployments WHERE id=$1`, id).Scan(&d.ID, &d.PublicID, &d.WorkspaceID, &d.RuntimeName, &raw, &d.DesiredVersion, &d.ObservedVersion, &d.ObservedRelease, &d.State, &d.Message, &d.DeletionRequestedAt, &d.DeletedAt, &d.CreatedAt, &d.UpdatedAt)
 	if err != nil {
 		return d, err
 	}
@@ -435,16 +582,24 @@ func deploymentByID(ctx context.Context, tx pgx.Tx, id int64) (domain.Deployment
 
 var ErrConflict = errors.New("conflict")
 
+var ErrImmutableName = errors.New("deployment name is immutable")
+
+var ErrLeaseLost = errors.New("operation lease lost")
+
 var ErrNotFound = errors.New("not found")
 
 var ErrNoRows = pgx.ErrNoRows
 
 func translateDBError(err error) error {
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+	if isUniqueViolation(err) {
 		return ErrConflict
 	}
 	return err
+}
+
+func isUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }
 
 func jsonUnmarshal(raw []byte, target any) error { return json.Unmarshal(raw, target) }

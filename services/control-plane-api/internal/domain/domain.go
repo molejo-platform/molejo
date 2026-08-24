@@ -81,35 +81,41 @@ type Workspace struct {
 }
 
 type Deployment struct {
-	ID              int64      `json:"-"`
-	PublicID        string     `json:"id"`
-	WorkspaceID     int64      `json:"-"`
-	Intent          Intent     `json:"intent"`
-	DesiredVersion  int64      `json:"version"`
-	State           string     `json:"state"`
-	ObservedVersion int64      `json:"observedVersion,omitempty"`
-	ObservedRelease string     `json:"-"`
-	Message         string     `json:"message,omitempty"`
-	CreatedAt       time.Time  `json:"createdAt"`
-	UpdatedAt       time.Time  `json:"updatedAt"`
-	DeletedAt       *time.Time `json:"-"`
+	ID                  int64      `json:"-"`
+	PublicID            string     `json:"id"`
+	WorkspaceID         int64      `json:"-"`
+	RuntimeName         string     `json:"-"`
+	Intent              Intent     `json:"intent"`
+	DesiredVersion      int64      `json:"version"`
+	State               string     `json:"state"`
+	ObservedVersion     int64      `json:"observedVersion,omitempty"`
+	ObservedRelease     string     `json:"-"`
+	Message             string     `json:"message,omitempty"`
+	CreatedAt           time.Time  `json:"createdAt"`
+	UpdatedAt           time.Time  `json:"updatedAt"`
+	DeletionRequestedAt *time.Time `json:"-"`
+	DeletedAt           *time.Time `json:"-"`
 }
 
 type Operation struct {
-	ID                 int64     `json:"-"`
-	PublicID           string    `json:"id"`
-	DeploymentID       int64     `json:"-"`
-	WorkspaceID        int64     `json:"-"`
-	DeploymentPublicID string    `json:"deploymentId"`
-	ActorID            int64     `json:"-"`
-	Kind               string    `json:"kind"`
-	Status             string    `json:"status"`
-	DesiredVersion     int64     `json:"desiredVersion"`
-	Attempts           int       `json:"attempts"`
-	ErrorCode          string    `json:"errorCode,omitempty"`
-	ErrorMessage       string    `json:"errorMessage,omitempty"`
-	CreatedAt          time.Time `json:"createdAt"`
-	UpdatedAt          time.Time `json:"updatedAt"`
+	ID                 int64      `json:"-"`
+	PublicID           string     `json:"id"`
+	DeploymentID       int64      `json:"-"`
+	WorkspaceID        int64      `json:"-"`
+	DeploymentPublicID string     `json:"deploymentId"`
+	ActorID            int64      `json:"-"`
+	Kind               string     `json:"kind"`
+	Status             string     `json:"status"`
+	DesiredVersion     int64      `json:"desiredVersion"`
+	Attempts           int        `json:"attempts"`
+	Intent             Intent     `json:"-"`
+	WorkerID           string     `json:"-"`
+	FencingToken       int64      `json:"-"`
+	LeaseUntil         *time.Time `json:"-"`
+	ErrorCode          string     `json:"errorCode,omitempty"`
+	ErrorMessage       string     `json:"errorMessage,omitempty"`
+	CreatedAt          time.Time  `json:"createdAt"`
+	UpdatedAt          time.Time  `json:"updatedAt"`
 }
 
 func NewPublicID(prefix string) (string, error) {
@@ -119,6 +125,15 @@ func NewPublicID(prefix string) (string, error) {
 	}
 	encoded := base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(b)
 	return prefix + "-" + strings.ToLower(encoded), nil
+}
+
+func RuntimeName(publicID string) string {
+	const prefix = "ap-"
+	name := strings.TrimPrefix(publicID, "dep-")
+	if name == publicID {
+		name = strings.ReplaceAll(publicID, "_", "-")
+	}
+	return prefix + name
 }
 
 func CanonicalJSON(value any) ([]byte, error) { return json.Marshal(value) }

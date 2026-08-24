@@ -57,19 +57,31 @@ func run() error {
 	cfg := api.DefaultConfig()
 	cfg.AllowedOrigin = os.Getenv("FRUTO_ALLOWED_ORIGIN")
 	cfg.CookieSecure = os.Getenv("FRUTO_COOKIE_SECURE") == "true"
+	cfg.WorkspaceNamespace = env("FRUTO_WORKSPACE_NAMESPACE", cfg.WorkspaceNamespace)
 	if value := os.Getenv("FRUTO_SESSION_TTL"); value != "" {
 		if d, e := time.ParseDuration(value); e == nil {
 			cfg.SessionTTL = d
 		}
 	}
+	if value := os.Getenv("FRUTO_OPERATION_LEASE"); value != "" {
+		if d, e := time.ParseDuration(value); e == nil && d > 0 {
+			cfg.OperationLease = d
+		}
+	}
+	runtimeTimeout := 10 * time.Second
+	if value := os.Getenv("FRUTO_RUNTIME_TIMEOUT"); value != "" {
+		if d, e := time.ParseDuration(value); e == nil && d > 0 {
+			runtimeTimeout = d
+		}
+	}
 	var rt runtime.Client
 	if kubeconfig := os.Getenv("KUBECONFIG"); kubeconfig != "" {
-		rt, err = runtime.NewKubernetesClient(kubeconfig, env("FRUTO_FIELD_MANAGER", "fruto-control-plane"), 10*time.Second)
+		rt, err = runtime.NewKubernetesClient(kubeconfig, env("FRUTO_FIELD_MANAGER", "fruto-control-plane"), runtimeTimeout)
 		if err != nil {
 			return err
 		}
 	} else if os.Getenv("FRUTO_IN_CLUSTER") == "true" {
-		rt, err = runtime.NewInClusterClient(env("FRUTO_FIELD_MANAGER", "fruto-control-plane"), 10*time.Second)
+		rt, err = runtime.NewInClusterClient(env("FRUTO_FIELD_MANAGER", "fruto-control-plane"), runtimeTimeout)
 		if err != nil {
 			return err
 		}
