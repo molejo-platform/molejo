@@ -38,6 +38,11 @@ spec:
       automountServiceAccountToken: false
       nodeSelector:
         kubernetes.io/hostname: fruto-data-01
+      tolerations:
+        - key: fruto.cleidsonoliveira.dev/workload
+          operator: Equal
+          value: data
+          effect: NoSchedule
       securityContext:
         runAsNonRoot: true
         runAsUser: 999

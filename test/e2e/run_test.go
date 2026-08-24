@@ -257,7 +257,15 @@ func TestControlPlanePhase7ArtifactsAreExplicitAndReproducible(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, expected := range []string{`molejo.dev/disposable: "true"`, "kind: StatefulSet", "name: fruto-control-plane-postgres", "storage: 2Gi"} {
+	for _, expected := range []string{
+		`molejo.dev/disposable: "true"`,
+		"kind: StatefulSet",
+		"name: fruto-control-plane-postgres",
+		"storage: 2Gi",
+		"fruto.cleidsonoliveira.dev/workload",
+		"value: data",
+		"effect: NoSchedule",
+	} {
 		if !strings.Contains(string(lab), expected) {
 			t.Errorf("lab PostgreSQL fixture is missing %q", expected)
 		}
