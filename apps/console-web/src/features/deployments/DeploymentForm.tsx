@@ -4,10 +4,10 @@ import { useNavigate } from "@tanstack/react-router";
 import { userFacingError } from "../../shared/api/errors";
 import { Alert } from "../../shared/ui/Alert";
 import { Button } from "../../shared/ui/Button";
-import { Field } from "../../shared/ui/Field";
+import { Field, SelectField } from "../../shared/ui/Field";
 import type { Deployment, DeploymentIntent } from "../../shared/api/types";
 import { useCreateDeploymentMutation, useUpdateDeploymentMutation } from "./mutations";
-import { emptyIntent } from "./model";
+import { emptyIntent, withExposure } from "./model";
 
 export function DeploymentForm({ deployment }: { deployment?: Deployment }) {
   const navigate = useNavigate();
@@ -42,6 +42,13 @@ export function DeploymentForm({ deployment }: { deployment?: Deployment }) {
     <form onSubmit={submit} className="stack">
       <Field label="Nome" maxLength={63} value={draft.name} onChange={(event) => patchDraft({ name: event.target.value })} required />
       <Field label="Imagem OCI por digest" value={draft.image} onChange={(event) => patchDraft({ image: event.target.value })} required />
+      <div className="form-row">
+        <SelectField label="Exposição" value={draft.exposure} onChange={(event) => setDraft((current) => withExposure(current, event.target.value as DeploymentIntent["exposure"]))}>
+          <option value="Private">Privado</option>
+          <option value="Public">Público</option>
+        </SelectField>
+        {draft.exposure === "Public" && <Field label="Slug público" maxLength={63} pattern="[a-z0-9](?:[-a-z0-9]*[a-z0-9])?" value={draft.slug ?? ""} onChange={(event) => patchDraft({ slug: event.target.value })} required />}
+      </div>
       <div className="form-row">
         <Field label="Réplicas" type="number" min="1" max="5" value={draft.replicas} onChange={(event) => patchDraft({ replicas: Number(event.target.value) })} required />
         <Field label="Porta" type="number" min="1" max="65535" value={draft.port} onChange={(event) => patchDraft({ port: Number(event.target.value) })} required />

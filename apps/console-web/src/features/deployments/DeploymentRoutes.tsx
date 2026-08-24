@@ -4,7 +4,7 @@ import { DeploymentForm } from "./DeploymentForm";
 import { useDeploymentQuery } from "./queries";
 
 export function NewDeploymentPage() {
-  return <section className="card"><div className="section-heading"><div><p className="eyebrow">Nova intenção</p><h2>Deployment privado</h2></div><Link to="/deployments">Cancelar</Link></div><DeploymentForm /></section>;
+  return <section className="card"><div className="section-heading"><div><p className="eyebrow">Nova intenção</p><h2>Deployment</h2></div><Link to="/deployments">Cancelar</Link></div><DeploymentForm /></section>;
 }
 
 export function EditDeploymentPage() {

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createIdempotencyKey, setCsrfToken } from "../../shared/api/http-client";
 import type { DeploymentIntent } from "../../shared/api/types";
 import { createDeployment, deleteDeployment, updateDeployment } from "./api";
+import { publicDeploymentURL, withExposure } from "./model";
 
 const intent: DeploymentIntent = {
   name: "demo",
@@ -45,5 +46,21 @@ describe("deployments slice", () => {
 
     expect(new Headers((vi.mocked(fetch).mock.calls[0]?.[1] as RequestInit).headers).get("If-Match")).toBe("3");
     expect(new Headers((vi.mocked(fetch).mock.calls[1]?.[1] as RequestInit).headers).get("If-Match")).toBe("4");
+  });
+});
+
+describe("deployment intent model", () => {
+  it("keeps slug only for public exposure", () => {
+    const publicIntent = withExposure(intent, "Public");
+    expect(publicIntent).toMatchObject({ exposure: "Public" });
+
+    const privateIntent = withExposure({ ...publicIntent, slug: "phase7-testkit" }, "Private");
+    expect(privateIntent.exposure).toBe("Private");
+    expect(privateIntent.slug).toBeUndefined();
+  });
+
+  it("derives the public workload URL only from a public slug", () => {
+    expect(publicDeploymentURL({ ...intent, exposure: "Public", slug: "phase7-testkit" })).toBe("https://phase7-testkit.molejo.dev");
+    expect(publicDeploymentURL(intent)).toBeUndefined();
   });
 });

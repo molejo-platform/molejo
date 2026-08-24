@@ -47,4 +47,20 @@ describe("deployment form integration", () => {
       replace: true,
     });
   });
+
+  it("collects a slug for public exposure", async () => {
+    mocks.create.mockResolvedValue({
+      deployment: { id: "ap-bbbbbbbbbbbbbbbbbbbb" },
+      operation: { id: "op-bbbbbbbbbbbbbbbbbbbb", deploymentId: "ap-bbbbbbbbbbbbbbbbbbbb" },
+    });
+    mocks.navigate.mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    render(<DeploymentForm />);
+
+    await user.selectOptions(screen.getByLabelText("Exposição"), "Public");
+    await user.type(screen.getByLabelText("Slug público"), "phase7-testkit");
+    await user.click(screen.getByRole("button", { name: "Criar deployment" }));
+
+    expect(mocks.create.mock.calls[0]?.[0]).toMatchObject({ exposure: "Public", slug: "phase7-testkit" });
+  });
 });

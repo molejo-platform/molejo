@@ -10,6 +10,15 @@ export const emptyIntent: DeploymentIntent = {
   exposure: "Private",
 };
 
+export function withExposure(intent: DeploymentIntent, exposure: DeploymentIntent["exposure"]): DeploymentIntent {
+  return exposure === "Private" ? { ...intent, exposure, slug: undefined } : { ...intent, exposure };
+}
+
+export function publicDeploymentURL(intent: DeploymentIntent) {
+  if (intent.exposure !== "Public" || !intent.slug) return undefined;
+  return `https://${intent.slug}.molejo.dev`;
+}
+
 export function statusLabel(state: string) {
   return state === "Ready" ? "Pronto" : state === "Unknown" ? "Desconhecido" : state;
 }
