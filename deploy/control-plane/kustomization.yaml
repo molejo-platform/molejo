@@ -7,3 +7,4 @@ resources:
   - services.yaml
   - deployments.yaml
   - migration-job.yaml
+  - http-route.yaml

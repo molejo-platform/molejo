@@ -14,6 +14,7 @@ export class ApiRequestError extends Error {
 
 export function userFacingError(error: unknown) {
   if (error instanceof ApiRequestError) {
+    if (error.details?.code === "invalid_credentials") return "Credenciais inválidas.";
     if (error.status === 401) return "Sua sessão expirou. Entre novamente.";
     if (error.status === 409) return "O deployment mudou. Recarregue os dados antes de tentar novamente.";
     return error.message;

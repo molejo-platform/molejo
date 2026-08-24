@@ -8,6 +8,7 @@
     "check": "tsc --noEmit",
     "dev": "vite --host",
     "generate:api-types": "openapi-typescript ../../contracts/openapi/control-plane-v1.yaml -o src/shared/api/generated/control-plane.ts",
+    "e2e": "playwright test",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -25,6 +26,8 @@
     "@vitejs/plugin-react": "6.1.0",
     "jsdom": "30.0.1",
     "openapi-typescript": "7.13.0",
+    "@playwright/test": "1.55.0",
+    "@types/node": "24.10.1",
     "typescript": "5.9.3",
     "vite": "8.2.2",
     "vitest": "4.1.11"
