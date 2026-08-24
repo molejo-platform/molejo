@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: control-plane-api
+  namespace: fruto-control-plane
+spec:
+  template:
+    spec:
+      imagePullSecrets: [{ name: registry-pull }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: console-web
+  namespace: fruto-control-plane
+spec:
+  template:
+    spec:
+      imagePullSecrets: [{ name: registry-pull }]
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: control-plane-migrate
+  namespace: fruto-control-plane
+spec:
+  template:
+    spec:
+      imagePullSecrets: [{ name: registry-pull }]
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: control-plane-bootstrap
+  namespace: fruto-control-plane
+spec:
+  template:
+    spec:
+      imagePullSecrets: [{ name: registry-pull }]

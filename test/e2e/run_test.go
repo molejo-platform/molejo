@@ -128,6 +128,71 @@ func TestGeneratedGateIncludesTheFrontendAPIClient(t *testing.T) {
 	}
 }
 
+func TestControlPlaneGenerationIncludesServerAndSQLC(t *testing.T) {
+	justContents, err := os.ReadFile("../../justfile")
+	if err != nil {
+		t.Fatalf("read justfile: %v", err)
+	}
+	generatedCheck, err := os.ReadFile("../generated/check.sh")
+	if err != nil {
+		t.Fatalf("read generated check: %v", err)
+	}
+
+	for _, expected := range []string{"go tool oapi-codegen", "go tool sqlc generate"} {
+		if !strings.Contains(string(justContents), expected) {
+			t.Errorf("just generate is missing %q", expected)
+		}
+	}
+	for _, expected := range []string{
+		"services/control-plane-api/internal/api/generated/control-plane.gen.go",
+		"services/control-plane-api/internal/store/sqlc/db.go",
+		"services/control-plane-api/internal/store/sqlc/models.go",
+		"services/control-plane-api/internal/store/sqlc/querier.go",
+	} {
+		if !strings.Contains(string(generatedCheck), expected) {
+			t.Errorf("generated gate is missing %q", expected)
+		}
+	}
+}
+
+func TestControlPlaneUsesPinnedGooseAndKeepsSQLCTypesInsideTheStore(t *testing.T) {
+	storeContents, err := os.ReadFile("../../services/control-plane-api/internal/store/store.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	contents := string(storeContents)
+	for _, expected := range []string{"storesqlc.New(pool)", "queries.WithTx(tx)", "goose.NewProvider", "goose.WithSessionLocker"} {
+		if !strings.Contains(contents, expected) {
+			t.Errorf("store is missing %q", expected)
+		}
+	}
+	module, err := os.ReadFile("../../go.mod")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{"github.com/pressly/goose/v3/cmd/goose", "github.com/sqlc-dev/sqlc/cmd/sqlc"} {
+		if !strings.Contains(string(module), expected) {
+			t.Errorf("go.mod does not pin %q", expected)
+		}
+	}
+	apiEntries, err := os.ReadDir("../../services/control-plane-api/internal/api")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range apiEntries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") {
+			continue
+		}
+		apiFile, err := os.ReadFile("../../services/control-plane-api/internal/api/" + entry.Name())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(apiFile), "/internal/store/sqlc") {
+			t.Errorf("SQLC type leaked into HTTP adapter %s", entry.Name())
+		}
+	}
+}
+
 func TestControlPlaneManifestsApplyLeastPrivilegeDefaults(t *testing.T) {
 	migration, err := os.ReadFile("../../deploy/control-plane/migration-job.yaml")
 	if err != nil {
@@ -150,6 +215,88 @@ func TestControlPlaneManifestsApplyLeastPrivilegeDefaults(t *testing.T) {
 	}
 	if strings.Contains(string(operator), "image: fruto-platform-operator:e2e") {
 		t.Error("operator installation still uses a mutable image tag")
+	}
+}
+
+func TestControlPlanePhase7ArtifactsAreExplicitAndReproducible(t *testing.T) {
+	preflight, err := os.ReadFile("control-plane-k3s-preflight.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{
+		`FRUTO_CERTIFICATE_NAMESPACE:-traefik-system`,
+		`FRUTO_CERTIFICATE_NAME:-molejo-public-tls`,
+		`FRUTO_CERTIFICATE_SECRET:-molejo-public-tls`,
+	} {
+		if !strings.Contains(string(preflight), expected) {
+			t.Errorf("k3s preflight is missing %q", expected)
+		}
+	}
+
+	route, err := os.ReadFile("../../deploy/control-plane/http-route.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{"name: control-plane-redirect", "sectionName: http", "type: RequestRedirect", "scheme: https"} {
+		if !strings.Contains(string(route), expected) {
+			t.Errorf("control-plane route is missing %q", expected)
+		}
+	}
+
+	bootstrap, err := os.ReadFile("../../deploy/control-plane/bootstrap-job.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{"args: [\"bootstrap\"]", "name: fruto-control-plane-bootstrap", "automountServiceAccountToken: false"} {
+		if !strings.Contains(string(bootstrap), expected) {
+			t.Errorf("bootstrap Job is missing %q", expected)
+		}
+	}
+
+	lab, err := os.ReadFile("../../deploy/control-plane-lab/postgres.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{`molejo.dev/disposable: "true"`, "kind: StatefulSet", "name: fruto-control-plane-postgres", "storage: 2Gi"} {
+		if !strings.Contains(string(lab), expected) {
+			t.Errorf("lab PostgreSQL fixture is missing %q", expected)
+		}
+	}
+
+	renderer, err := os.ReadFile("render-control-plane-release.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{"FRUTO_TESTKIT_IMAGE", "testkit=%s", "deploy/control-plane-lab"} {
+		if !strings.Contains(string(renderer), expected) {
+			t.Errorf("release renderer is missing %q", expected)
+		}
+	}
+
+	for path, assertions := range map[string][]string{
+		"build-control-plane-release.sh": {
+			"--platform linux/amd64", "--push", `containerimage.digest`, "images.env",
+		},
+		"prepare-control-plane-k3s.sh": {
+			"openssl rand", "hash-password", "fruto-control-plane-bootstrap", "registry-pull",
+		},
+		"apply-control-plane-k3s.sh": {
+			"--dry-run=server", "control-plane-migrate", "control-plane-bootstrap", "control-plane-console",
+		},
+		"accept-control-plane-k3s.sh": {
+			"control-plane-redirect", "ResolvedRefs", "auth can-i", "ssl_verify_result",
+		},
+	} {
+		contents, err := os.ReadFile(path)
+		if err != nil {
+			t.Errorf("read %s: %v", path, err)
+			continue
+		}
+		for _, expected := range assertions {
+			if !strings.Contains(string(contents), expected) {
+				t.Errorf("%s is missing %q", path, expected)
+			}
+		}
 	}
 }
 
@@ -187,7 +334,7 @@ func TestE2ECoversFrontendImageContracts(t *testing.T) {
 		"starts the static frontend as private":     "unexpected HTTPRoute for the private static frontend",
 		"promotes the static frontend to public":    `"slug":"phase4-static"`,
 		"checks a public SPA deep link":             `"${spa_public_url}/projects/example"`,
-		"waits for the SPA dataplane":               "wait_for_public_status 200 phase4-spa.fruto.calouro.tech",
+		"waits for the SPA dataplane":               "wait_for_public_status 200 phase4-spa.molejo.dev",
 		"does not fall back for missing SPA assets": `"${spa_public_url}/assets/missing.js"`,
 		"rolls out a second immutable SPA release":  "SPA_IMAGE_V2",
 		"observes v2 through the dataplane":         "wait_for_public_content",
@@ -197,6 +344,46 @@ func TestE2ECoversFrontendImageContracts(t *testing.T) {
 	for description, expected := range checks {
 		if !strings.Contains(script, expected) {
 			t.Errorf("expected E2E to %s", description)
+		}
+	}
+}
+
+func TestPublicHostnamesUseTheMolejoDomain(t *testing.T) {
+	files := map[string]struct {
+		expected  []string
+		forbidden []string
+	}{
+		"../../deploy/control-plane/configmap.yaml": {
+			expected: []string{"https://cloud.molejo.dev"}, forbidden: []string{"console.fruto.calouro.tech"},
+		},
+		"../../deploy/control-plane/http-route.yaml": {
+			expected: []string{"cloud.molejo.dev", "sectionName: https-molejo"}, forbidden: []string{"console.fruto.calouro.tech"},
+		},
+		"control-plane-kind.sh": {
+			expected: []string{"cloud.molejo.dev", "*.molejo.dev"}, forbidden: []string{"console.fruto.calouro.tech", "*.fruto.calouro.tech"},
+		},
+		"gateway.yaml": {
+			expected: []string{"listeners:\n    - name: https-molejo", `hostname: "*.molejo.dev"`}, forbidden: []string{`hostname: "*.fruto.calouro.tech"`},
+		},
+		"run.sh": {
+			expected:  []string{"phase3-e2e.molejo.dev", "phase4-static.molejo.dev", "phase4-spa.molejo.dev"},
+			forbidden: []string{"phase3-e2e.fruto.calouro.tech", "phase4-static.fruto.calouro.tech", "phase4-spa.fruto.calouro.tech", "*.fruto.calouro.tech"},
+		},
+	}
+	for path, assertions := range files {
+		contents, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		for _, expected := range assertions.expected {
+			if !strings.Contains(string(contents), expected) {
+				t.Errorf("expected %s to contain %q", path, expected)
+			}
+		}
+		for _, forbidden := range assertions.forbidden {
+			if strings.Contains(string(contents), forbidden) {
+				t.Errorf("expected %s to stop using retired public hostname %q", path, forbidden)
+			}
 		}
 	}
 }
