@@ -6,3 +6,4 @@ node_modules/
 dist/
 .pnpm-store/
 apps/console-web/test-results/
+.local/

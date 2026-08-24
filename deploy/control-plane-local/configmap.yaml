@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: control-plane-config
+  namespace: fruto-control-plane
+data:
+  FRUTO_ALLOWED_REGISTRIES: docker.io,ghcr.io

@@ -129,8 +129,15 @@ wait_http() {
 start_host_api() {
   FRUTO_DATABASE_URL="postgres://fruto:fruto@127.0.0.1:${postgres_port}/fruto?sslmode=disable" \
     KUBECONFIG="$kubeconfig" \
+    FRUTO_EXPECTED_KUBE_CONTEXT="$expected_kube_context" \
+    FRUTO_EXPECTED_KUBE_SERVER="$expected_kube_server" \
+    FRUTO_EXPECTED_CLUSTER_UID="$expected_cluster_uid" \
     FRUTO_HTTP_ADDR="127.0.0.1:${host_api_port}" \
+    FRUTO_MODE=development \
+    FRUTO_PUBLIC_URL="http://127.0.0.1:${vite_port}" \
     FRUTO_ALLOWED_ORIGIN="http://127.0.0.1:${vite_port}" \
+    FRUTO_ALLOWED_HOSTS="127.0.0.1:${host_api_port},127.0.0.1:${vite_port}" \
+    FRUTO_ALLOWED_REGISTRIES=docker.io \
     FRUTO_COOKIE_SECURE=false \
     FRUTO_AUTO_MIGRATE=true \
     FRUTO_OPERATION_LEASE=2s \
@@ -227,7 +234,8 @@ run_cluster_bootstrap() {
 run_cluster_browser() {
   run_without_xtrace env \
     FRUTO_E2E_BASE_URL="$gateway_base_url" \
-    FRUTO_E2E_HOST=console.fruto.calouro.tech \
+    FRUTO_E2E_HOST=cloud.molejo.dev \
+    FRUTO_E2E_ALLOW_UNTRUSTED_TLS=true \
     FRUTO_E2E_IMAGE="$fixture_ref" \
     FRUTO_E2E_PASSWORD="$owner_password" \
     FRUTO_E2E_RESULTS="$tmp_dir/in-cluster-playwright.json" \
@@ -250,7 +258,9 @@ assert_rbac() {
     [[ "$(kubectl --kubeconfig "$kubeconfig" auth can-i create "$resource" -n fruto-workspaces --as="$identity")" == no ]]
   done
   [[ "$(kubectl --kubeconfig "$kubeconfig" auth can-i get namespaces/fruto-workspaces --as="$identity")" == yes ]]
-  [[ "$(kubectl --kubeconfig "$kubeconfig" auth can-i get namespaces/kube-system --as="$identity")" == no ]]
+  [[ "$(kubectl --kubeconfig "$kubeconfig" auth can-i get namespaces/kube-system --as="$identity")" == yes ]]
+  [[ "$(kubectl --kubeconfig "$kubeconfig" auth can-i create namespaces --as="$identity")" == yes ]]
+  [[ "$(kubectl --kubeconfig "$kubeconfig" auth can-i delete namespaces --as="$identity")" == no ]]
 }
 
 run_concurrent_request() {
@@ -263,6 +273,10 @@ run_concurrent_request() {
 
 kind_cli create cluster --name "$cluster_name" --kubeconfig "$kubeconfig" --wait 120s
 cluster_created=true
+expected_kube_context="$(kubectl --kubeconfig "$kubeconfig" config current-context)"
+expected_kube_server="$(kubectl --kubeconfig "$kubeconfig" config view --minify -o jsonpath='{.clusters[0].cluster.server}')"
+expected_cluster_uid="$(kubectl --kubeconfig "$kubeconfig" get namespace kube-system -o jsonpath='{.metadata.uid}')"
+[[ -n "$expected_kube_context" && -n "$expected_kube_server" && -n "$expected_cluster_uid" ]]
 
 docker buildx build --file services/platform-operator/Dockerfile --tag "$operator_image" --load .
 operator_image_built=true
@@ -344,7 +358,7 @@ assert_http_status 403 "http://127.0.0.1:${host_api_port}/api/v1/deployments" \
 assert_http_status 403 "http://127.0.0.1:${host_api_port}/api/v1/session" \
   -X POST -H 'Origin: https://invalid.example' -H 'Content-Type: application/json' \
   -d '{"actor":"owner","password":"invalid"}'
-assert_http_status 404 "http://127.0.0.1:${host_api_port}/api/v1/deployments/dep-aaaaaaaaaaaaaaaaaaaa" -b "$host_cookie_jar"
+assert_http_status 404 "http://127.0.0.1:${host_api_port}/api/v1/deployments/ap-aaaaaaaaaaaaaaaaaaaa" -b "$host_cookie_jar"
 
 wait_operation "http://127.0.0.1:${host_api_port}" "$api_operation_id" "$host_cookie_jar"
 ready_response="$(curl --fail --silent --show-error -b "$host_cookie_jar" "http://127.0.0.1:${host_api_port}/api/v1/deployments/$api_deployment_id")"
@@ -397,7 +411,7 @@ wait "$concurrent_a_pid" "$concurrent_b_pid"
 concurrent_operation_id="$(jq -r '.operation.id' "$tmp_dir/concurrent-a.json")"
 concurrent_deployment_id="$(jq -r '.deployment.id' "$tmp_dir/concurrent-a.json")"
 wait_operation "http://127.0.0.1:${host_api_port}" "$concurrent_operation_id" "$host_cookie_jar"
-concurrent_runtime_name="ap-${concurrent_deployment_id#dep-}"
+concurrent_runtime_name="$concurrent_deployment_id"
 [[ "$(kubectl --kubeconfig "$kubeconfig" -n fruto-workspaces get appdeployment "$concurrent_runtime_name" -o name)" == "appdeployment.platform.fruto.calouro.tech/$concurrent_runtime_name" ]]
 
 delete_api_deployment() {
@@ -425,16 +439,19 @@ kubectl --kubeconfig "$kubeconfig" -n fruto-control-plane expose deployment post
 kubectl --kubeconfig "$kubeconfig" -n fruto-control-plane rollout status deployment/postgres --timeout=120s
 kubectl --kubeconfig "$kubeconfig" -n fruto-control-plane create secret generic fruto-control-plane-db --from-literal=database-url='postgres://fruto:fruto@postgres:5432/fruto?sslmode=disable'
 
-openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj '/CN=*.fruto.calouro.tech' -addext 'subjectAltName=DNS:*.fruto.calouro.tech' -keyout "$tmp_dir/wildcard.key" -out "$tmp_dir/wildcard.crt" >/dev/null 2>&1
+openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj '/CN=*.molejo.dev' -addext 'subjectAltName=DNS:*.molejo.dev' -keyout "$tmp_dir/wildcard.key" -out "$tmp_dir/wildcard.crt" >/dev/null 2>&1
 kubectl --kubeconfig "$kubeconfig" create namespace fruto-system 2>/dev/null || true
 kubectl --kubeconfig "$kubeconfig" -n fruto-system create secret tls fruto-e2e-wildcard-tls --cert="$tmp_dir/wildcard.crt" --key="$tmp_dir/wildcard.key"
 kubectl --kubeconfig "$kubeconfig" apply -f test/e2e/gateway.yaml
 kubectl --kubeconfig "$kubeconfig" -n fruto-system rollout status deployment/traefik-e2e --timeout=180s
 kubectl kustomize deploy/control-plane-local |
   sed -e "s|image: fruto-control-plane-api:local|image: $api_image|g" \
-    -e "s|image: fruto-console-web:local|image: $console_image|g" >"$control_plane_manifest"
+    -e "s|image: fruto-console-web:local|image: $console_image|g" \
+    -e "s|required-external-cluster-uid|$expected_cluster_uid|g" \
+    -e "s|required-external-proxy-cidr|0.0.0.0/0|g" >"$control_plane_manifest"
 grep -Fq "image: $api_image" "$control_plane_manifest"
 grep -Fq "image: $console_image" "$control_plane_manifest"
+grep -Fq "FRUTO_EXPECTED_CLUSTER_UID: $expected_cluster_uid" "$control_plane_manifest"
 kubectl --kubeconfig "$kubeconfig" apply -f "$control_plane_manifest"
 kubectl --kubeconfig "$kubeconfig" apply -f test/e2e/control-plane-gateway.yaml
 kubectl --kubeconfig "$kubeconfig" -n fruto-control-plane wait --for=condition=complete job/control-plane-migrate --timeout=180s
@@ -451,16 +468,19 @@ for _ in $(seq 1 60); do
   sleep 1
 done
 [[ "$route_status" == True ]]
-gateway_base_url="https://console.fruto.calouro.tech:${gateway_port}"
-gateway_curl_args=(--insecure --resolve "console.fruto.calouro.tech:${gateway_port}:127.0.0.1")
-kubectl --kubeconfig "$kubeconfig" -n fruto-control-plane set env deployment/control-plane-api "FRUTO_ALLOWED_ORIGIN=${gateway_base_url}"
+gateway_base_url="https://cloud.molejo.dev:${gateway_port}"
+gateway_curl_args=(--insecure --resolve "cloud.molejo.dev:${gateway_port}:127.0.0.1")
+kubectl --kubeconfig "$kubeconfig" -n fruto-control-plane set env deployment/control-plane-api \
+  "FRUTO_PUBLIC_URL=${gateway_base_url}" \
+  "FRUTO_ALLOWED_ORIGIN=${gateway_base_url}" \
+  "FRUTO_ALLOWED_HOSTS=cloud.molejo.dev,cloud.molejo.dev:${gateway_port}"
 kubectl --kubeconfig "$kubeconfig" -n fruto-control-plane rollout status deployment/control-plane-api --timeout=120s
 gateway_api_status=""
 gateway_console_body=""
 for _ in $(seq 1 60); do
   gateway_api_status="$(curl "${gateway_curl_args[@]}" --silent --output /dev/null --write-out '%{http_code}' "$gateway_base_url/api/v1/session" || true)"
   if [[ "$gateway_api_status" == 401 ]]; then
-    gateway_console_body="$(curl "${gateway_curl_args[@]}" --silent "$gateway_base_url/deployments/dep-deep-link" || true)"
+    gateway_console_body="$(curl "${gateway_curl_args[@]}" --silent "$gateway_base_url/deployments/ap-deep-link" || true)"
     grep -q '<div id="root">' <<<"$gateway_console_body" && break
   fi
   sleep 1

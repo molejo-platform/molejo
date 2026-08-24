@@ -9,8 +9,10 @@
     "dev": "vite --host",
     "generate:api-types": "openapi-typescript ../../contracts/openapi/control-plane-v1.yaml -o src/shared/api/generated/control-plane.ts",
     "e2e": "playwright test",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "test": "corepack pnpm test:unit && corepack pnpm test:integration",
+    "test:unit": "vitest run --config vitest.unit.config.ts",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:watch": "vitest --config vitest.unit.config.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "5.102.2",

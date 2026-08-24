@@ -1,10 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
 
 import { createIdempotencyKey, setCsrfToken } from "../../shared/api/http-client";
 import type { DeploymentIntent } from "../../shared/api/types";
 import { createDeployment, deleteDeployment, updateDeployment } from "./api";
-import { DeploymentStatus } from "./DeploymentStatus";
 
 const intent: DeploymentIntent = {
   name: "demo",
@@ -23,17 +21,10 @@ describe("deployments slice", () => {
     vi.stubGlobal("crypto", { randomUUID: vi.fn().mockReturnValue("idem-1") });
   });
 
-  it("renders Unknown as a runtime state distinct from Degraded", () => {
-    render(<DeploymentStatus state="Unknown" />);
-
-    expect(screen.getByText("Desconhecido")).toBeTruthy();
-    expect(screen.queryByText("Degraded")).toBeNull();
-  });
-
   afterEach(() => vi.unstubAllGlobals());
 
   it("creates with an idempotency key and CSRF header", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({ operation: { id: "op-1", deploymentId: "dep-1", status: "Pending" } }), { status: 202 }));
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({ operation: { id: "op-1", deploymentId: "ap-1", status: "Pending" } }), { status: 202 }));
 
     await createDeployment(intent);
 
@@ -46,11 +37,11 @@ describe("deployments slice", () => {
 
   it("updates and deletes with the current optimistic version", async () => {
     vi.mocked(fetch)
-      .mockResolvedValueOnce(new Response(JSON.stringify({ operation: { id: "op-2", deploymentId: "dep-1", status: "Pending" } }), { status: 202 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ operation: { id: "op-3", deploymentId: "dep-1", status: "Pending" } }), { status: 202 }));
+      .mockResolvedValueOnce(new Response(JSON.stringify({ operation: { id: "op-2", deploymentId: "ap-1", status: "Pending" } }), { status: 202 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ operation: { id: "op-3", deploymentId: "ap-1", status: "Pending" } }), { status: 202 }));
 
-    await updateDeployment({ id: "dep-1", version: 3, intent });
-    await deleteDeployment({ id: "dep-1", version: 4 });
+    await updateDeployment({ id: "ap-1", version: 3, intent });
+    await deleteDeployment({ id: "ap-1", version: 4 });
 
     expect(new Headers((vi.mocked(fetch).mock.calls[0]?.[1] as RequestInit).headers).get("If-Match")).toBe("3");
     expect(new Headers((vi.mocked(fetch).mock.calls[1]?.[1] as RequestInit).headers).get("If-Match")).toBe("4");

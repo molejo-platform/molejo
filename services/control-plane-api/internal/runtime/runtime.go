@@ -4,7 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path/filepath"
+	"net/url"
+	"strings"
 	"time"
 
 	platformv1alpha1 "github.com/fruto-platform/fruto/packages/kubernetes-api/apis/platform/v1alpha1"
@@ -21,6 +22,7 @@ import (
 )
 
 const controlPlaneOwnerAnnotation = "platform.fruto.calouro.tech/control-plane-owner"
+const workspaceOwnerValue = "fruto-control-plane"
 
 var ErrOwnershipConflict = errors.New("runtime object is not owned by the control plane")
 
@@ -41,31 +43,60 @@ type Client interface {
 }
 
 type KubernetesClient struct {
-	client       client.Client
-	fieldManager string
-	applyTimeout time.Duration
+	client             client.Client
+	fieldManager       string
+	applyTimeout       time.Duration
+	expectedClusterUID types.UID
 }
 
-func NewKubernetesClient(kubeconfig, fieldManager string, timeout time.Duration) (*KubernetesClient, error) {
-	if kubeconfig == "" {
-		return nil, fmt.Errorf("kubeconfig is required")
+type ExternalConfig struct {
+	Kubeconfig         string
+	Context            string
+	Server             string
+	ExpectedClusterUID string
+}
+
+func NewKubernetesClient(external ExternalConfig, fieldManager string, timeout time.Duration) (*KubernetesClient, error) {
+	if strings.TrimSpace(external.Kubeconfig) == "" || strings.TrimSpace(external.Context) == "" || strings.TrimSpace(external.Server) == "" || strings.TrimSpace(external.ExpectedClusterUID) == "" {
+		return nil, fmt.Errorf("kubeconfig, context, server, and expected cluster UID are required")
 	}
-	config, err := clientcmd.BuildConfigFromFlags("", filepath.Clean(kubeconfig))
+	raw, err := clientcmd.LoadFromFile(external.Kubeconfig)
 	if err != nil {
 		return nil, err
 	}
-	return newKubernetesClient(config, fieldManager, timeout)
+	if raw.CurrentContext != external.Context {
+		return nil, fmt.Errorf("kubeconfig current context %q does not match expected context %q", raw.CurrentContext, external.Context)
+	}
+	contextConfig, ok := raw.Contexts[external.Context]
+	if !ok || contextConfig == nil {
+		return nil, fmt.Errorf("expected kubeconfig context %q is missing", external.Context)
+	}
+	clusterConfig, ok := raw.Clusters[contextConfig.Cluster]
+	if !ok || clusterConfig == nil {
+		return nil, fmt.Errorf("cluster for kubeconfig context %q is missing", external.Context)
+	}
+	if normalizedServer(clusterConfig.Server) != normalizedServer(external.Server) {
+		return nil, fmt.Errorf("kubeconfig server %q does not match expected server %q", clusterConfig.Server, external.Server)
+	}
+	config, err := clientcmd.NewNonInteractiveClientConfig(*raw, external.Context, &clientcmd.ConfigOverrides{CurrentContext: external.Context}, nil).ClientConfig()
+	if err != nil {
+		return nil, err
+	}
+	return newKubernetesClient(config, fieldManager, timeout, external.ExpectedClusterUID)
 }
 
-func NewInClusterClient(fieldManager string, timeout time.Duration) (*KubernetesClient, error) {
+func NewInClusterClient(fieldManager string, timeout time.Duration, expectedClusterUID string) (*KubernetesClient, error) {
+	if strings.TrimSpace(expectedClusterUID) == "" {
+		return nil, fmt.Errorf("expected cluster UID is required")
+	}
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		return nil, err
 	}
-	return newKubernetesClient(config, fieldManager, timeout)
+	return newKubernetesClient(config, fieldManager, timeout, expectedClusterUID)
 }
 
-func newKubernetesClient(config *rest.Config, fieldManager string, timeout time.Duration) (*KubernetesClient, error) {
+func newKubernetesClient(config *rest.Config, fieldManager string, timeout time.Duration, expectedClusterUID string) (*KubernetesClient, error) {
 	scheme := runtime.NewScheme()
 	if err := corev1.AddToScheme(scheme); err != nil {
 		return nil, err
@@ -80,15 +111,57 @@ func newKubernetesClient(config *rest.Config, fieldManager string, timeout time.
 	if err != nil {
 		return nil, err
 	}
-	return &KubernetesClient{client: c, fieldManager: fieldManager, applyTimeout: timeout}, nil
+	return &KubernetesClient{client: c, fieldManager: fieldManager, applyTimeout: timeout, expectedClusterUID: types.UID(expectedClusterUID)}, nil
 }
 
 func (k *KubernetesClient) EnsureWorkspace(ctx context.Context, namespace string) error {
+	workspaceCtx, cancel := context.WithTimeout(ctx, k.applyTimeout)
+	defer cancel()
 	var ns corev1.Namespace
-	if err := k.client.Get(ctx, types.NamespacedName{Name: namespace}, &ns); err != nil {
+	err := k.client.Get(workspaceCtx, types.NamespacedName{Name: namespace}, &ns)
+	if apierrors.IsNotFound(err) {
+		ns = corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace, Annotations: map[string]string{controlPlaneOwnerAnnotation: workspaceOwnerValue}, Labels: map[string]string{"app.kubernetes.io/managed-by": workspaceOwnerValue}}}
+		if err = k.client.Create(workspaceCtx, &ns); err == nil {
+			return nil
+		}
+		if !apierrors.IsAlreadyExists(err) {
+			return fmt.Errorf("create workspace namespace: %w", err)
+		}
+		if err = k.client.Get(workspaceCtx, types.NamespacedName{Name: namespace}, &ns); err != nil {
+			return fmt.Errorf("workspace namespace appeared during create: %w", err)
+		}
+	} else if err != nil {
 		return fmt.Errorf("workspace namespace: %w", err)
 	}
+	if ns.Annotations[controlPlaneOwnerAnnotation] != workspaceOwnerValue {
+		return fmt.Errorf("%w: Namespace %s is not managed by the control plane", ErrOwnershipConflict, namespace)
+	}
 	return nil
+}
+
+func (k *KubernetesClient) Preflight(ctx context.Context) error {
+	if k.expectedClusterUID == "" {
+		return fmt.Errorf("expected cluster UID is required")
+	}
+	preflightCtx, cancel := context.WithTimeout(ctx, k.applyTimeout)
+	defer cancel()
+	var systemNamespace corev1.Namespace
+	if err := k.client.Get(preflightCtx, types.NamespacedName{Name: metav1.NamespaceSystem}, &systemNamespace); err != nil {
+		return fmt.Errorf("read cluster identity: %w", err)
+	}
+	if systemNamespace.UID != k.expectedClusterUID {
+		return fmt.Errorf("cluster UID %q does not match expected UID %q", systemNamespace.UID, k.expectedClusterUID)
+	}
+	return nil
+}
+
+func normalizedServer(value string) string {
+	parsed, err := url.Parse(strings.TrimSpace(value))
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return ""
+	}
+	parsed.Path = strings.TrimRight(parsed.Path, "/")
+	return parsed.String()
 }
 
 func (k *KubernetesClient) ApplyDeployment(ctx context.Context, namespace, name string, intent domain.Intent) error {

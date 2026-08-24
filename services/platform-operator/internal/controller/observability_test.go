@@ -357,7 +357,7 @@ func TestPublicationObservabilitySignalsAreCorrelatedAndIdempotent(t *testing.T)
 	}
 
 	route := getHTTPRoute(t, ctx, request.NamespacedName)
-	route.Spec.Hostnames[0] = "drift.fruto.calouro.tech"
+	route.Spec.Hostnames[0] = "drift.molejo.dev"
 	if err := testClient.Update(ctx, route); err != nil {
 		t.Fatalf("introduce HTTPRoute drift: %v", err)
 	}

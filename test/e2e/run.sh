@@ -314,8 +314,8 @@ kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
   --timeout=60s
 kubectl --kubeconfig "${KUBECONFIG_FILE}" create namespace fruto-system
 openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
-  -subj "/CN=*.fruto.calouro.tech" \
-  -addext "subjectAltName=DNS:*.fruto.calouro.tech" \
+  -subj "/CN=*.molejo.dev" \
+  -addext "subjectAltName=DNS:*.molejo.dev" \
   -keyout "${WILDCARD_KEY_FILE}" \
   -out "${WILDCARD_CERT_FILE}" >/dev/null 2>&1
 kubectl --kubeconfig "${KUBECONFIG_FILE}" create secret tls \
@@ -569,8 +569,8 @@ fi
 
 start_port_forward fruto-system service/traefik-e2e 8443 "${GATEWAY_FORWARD_LOG}" \
   GATEWAY_FORWARD_PID GATEWAY_LOCAL_PORT
-wait_for_public_status 404 phase3-e2e.fruto.calouro.tech \
-  "https://phase3-e2e.fruto.calouro.tech:${GATEWAY_LOCAL_PORT}/"
+wait_for_public_status 404 phase3-e2e.molejo.dev \
+  "https://phase3-e2e.molejo.dev:${GATEWAY_LOCAL_PORT}/"
 
 kubectl --kubeconfig "${KUBECONFIG_FILE}" patch \
   appdeployment/ap-e2e000001 \
@@ -594,19 +594,19 @@ kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
   -n ws-e2e \
   --timeout=120s
 
-public_base_url="https://phase3-e2e.fruto.calouro.tech:${GATEWAY_LOCAL_PORT}"
+public_base_url="https://phase3-e2e.molejo.dev:${GATEWAY_LOCAL_PORT}"
 public_rest="$(curl --noproxy '*' --cacert "${WILDCARD_CERT_FILE}" --fail --silent --show-error \
-  --resolve "phase3-e2e.fruto.calouro.tech:${GATEWAY_LOCAL_PORT}:127.0.0.1" \
+  --resolve "phase3-e2e.molejo.dev:${GATEWAY_LOCAL_PORT}:127.0.0.1" \
   "${public_base_url}/")"
 grep -q '"status":"ok"' <<<"${public_rest}"
 public_graphql="$(curl --noproxy '*' --cacert "${WILDCARD_CERT_FILE}" --fail --silent --show-error \
-  --resolve "phase3-e2e.fruto.calouro.tech:${GATEWAY_LOCAL_PORT}:127.0.0.1" \
+  --resolve "phase3-e2e.molejo.dev:${GATEWAY_LOCAL_PORT}:127.0.0.1" \
   --header 'Content-Type: application/json' \
   --data '{"query":"{ status version }"}' \
   "${public_base_url}/graphql")"
 grep -q '"data":{"status":"ok"' <<<"${public_graphql}"
 curl --noproxy '*' --cacert "${WILDCARD_CERT_FILE}" --fail --silent --show-error --no-buffer \
-  --resolve "phase3-e2e.fruto.calouro.tech:${GATEWAY_LOCAL_PORT}:127.0.0.1" \
+  --resolve "phase3-e2e.molejo.dev:${GATEWAY_LOCAL_PORT}:127.0.0.1" \
   "${public_base_url}/events" >"${PUBLIC_SSE_OUTPUT}" &
 PUBLIC_SSE_PID=$!
 for _ in $(seq 1 50); do
@@ -640,7 +640,7 @@ GOCACHE=/tmp/fruto-go-cache go run ./test/fixtures/transport-client \
   --address "127.0.0.1:${GATEWAY_LOCAL_PORT}" \
   --ca "${WILDCARD_CERT_FILE}" \
   --idle-duration "${PERSISTENT_TRANSPORT_SECONDS}s" \
-  --url "wss://phase3-e2e.fruto.calouro.tech:${GATEWAY_LOCAL_PORT}/ws"
+  --url "wss://phase3-e2e.molejo.dev:${GATEWAY_LOCAL_PORT}/ws"
 
 kubectl --kubeconfig "${KUBECONFIG_FILE}" patch \
   appdeployment/ap-e2e000001 \
@@ -652,7 +652,7 @@ kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
   httproute/ap-e2e000001 \
   -n ws-e2e \
   --timeout=120s
-wait_for_public_status 404 phase3-e2e.fruto.calouro.tech "${public_base_url}/"
+wait_for_public_status 404 phase3-e2e.molejo.dev "${public_base_url}/"
 curl_json "http://127.0.0.1:${APP_LOCAL_PORT}/" >/dev/null
 
 metrics_token="$(kubectl --kubeconfig "${KUBECONFIG_FILE}" create token \
@@ -952,19 +952,19 @@ kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
   -n ws-static-e2e \
   --timeout=120s
 
-static_public_url="https://phase4-static.fruto.calouro.tech:${GATEWAY_LOCAL_PORT}"
-wait_for_public_status 200 phase4-static.fruto.calouro.tech \
+static_public_url="https://phase4-static.molejo.dev:${GATEWAY_LOCAL_PORT}"
+wait_for_public_status 200 phase4-static.molejo.dev \
   "${static_public_url}/"
 curl --noproxy '*' --cacert "${WILDCARD_CERT_FILE}" --fail --silent --show-error \
-  --resolve "phase4-static.fruto.calouro.tech:${GATEWAY_LOCAL_PORT}:127.0.0.1" \
+  --resolve "phase4-static.molejo.dev:${GATEWAY_LOCAL_PORT}:127.0.0.1" \
   --dump-header "${FRONTEND_HEADERS}" \
   --output "${FRONTEND_BODY}" \
   "${static_public_url}/"
 grep -Fq 'data-profile="static-html"' "${FRONTEND_BODY}"
 assert_response_header "${FRONTEND_HEADERS}" 'Cache-Control: no-cache'
-wait_for_public_status 404 phase4-static.fruto.calouro.tech \
+wait_for_public_status 404 phase4-static.molejo.dev \
   "${static_public_url}/missing"
-wait_for_public_status 404 phase4-static.fruto.calouro.tech \
+wait_for_public_status 404 phase4-static.molejo.dev \
   "${static_public_url}/assets/missing.css"
 
 static_app_uid="$(kubectl --kubeconfig "${KUBECONFIG_FILE}" get \
@@ -1026,11 +1026,11 @@ kubectl --kubeconfig "${KUBECONFIG_FILE}" rollout status \
   -n ws-spa-e2e \
   --timeout=180s
 
-spa_public_url="https://phase4-spa.fruto.calouro.tech:${GATEWAY_LOCAL_PORT}"
-wait_for_public_status 200 phase4-spa.fruto.calouro.tech \
+spa_public_url="https://phase4-spa.molejo.dev:${GATEWAY_LOCAL_PORT}"
+wait_for_public_status 200 phase4-spa.molejo.dev \
   "${spa_public_url}/projects/example"
 curl --noproxy '*' --cacert "${WILDCARD_CERT_FILE}" --fail --silent --show-error \
-  --resolve "phase4-spa.fruto.calouro.tech:${GATEWAY_LOCAL_PORT}:127.0.0.1" \
+  --resolve "phase4-spa.molejo.dev:${GATEWAY_LOCAL_PORT}:127.0.0.1" \
   --dump-header "${FRONTEND_HEADERS}" \
   --output "${FRONTEND_BODY}" \
   "${spa_public_url}/projects/example"
@@ -1043,15 +1043,15 @@ if [[ -z ${spa_asset} ]]; then
   exit 1
 fi
 curl --noproxy '*' --cacert "${WILDCARD_CERT_FILE}" --fail --silent --show-error \
-  --resolve "phase4-spa.fruto.calouro.tech:${GATEWAY_LOCAL_PORT}:127.0.0.1" \
+  --resolve "phase4-spa.molejo.dev:${GATEWAY_LOCAL_PORT}:127.0.0.1" \
   --dump-header "${FRONTEND_HEADERS}" \
   --output /dev/null \
   "${spa_public_url}${spa_asset}"
 assert_response_header "${FRONTEND_HEADERS}" \
   'Cache-Control: public, max-age=31536000, immutable'
-wait_for_public_status 404 phase4-spa.fruto.calouro.tech \
+wait_for_public_status 404 phase4-spa.molejo.dev \
   "${spa_public_url}/assets/missing.js"
-wait_for_public_status 404 phase4-spa.fruto.calouro.tech \
+wait_for_public_status 404 phase4-spa.molejo.dev \
   "${spa_public_url}/missing.css"
 
 spa_app_uid_before="$(kubectl --kubeconfig "${KUBECONFIG_FILE}" get \
@@ -1085,7 +1085,7 @@ kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
   --timeout=120s
 spa_v2_response="$(wait_for_public_content \
   'name="fruto-version" content="v2"' \
-  phase4-spa.fruto.calouro.tech \
+  phase4-spa.molejo.dev \
   "${spa_public_url}/")"
 grep -Fq 'name="fruto-version" content="v2"' <<<"${spa_v2_response}"
 

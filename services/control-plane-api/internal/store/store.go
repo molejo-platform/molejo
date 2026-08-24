@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"embed"
 	"encoding/json"
 	"errors"
@@ -15,15 +16,23 @@ import (
 	"time"
 
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/domain"
+	storesqlc "github.com/fruto-platform/fruto/services/control-plane-api/internal/store/sqlc"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/pressly/goose/v3"
+	"github.com/pressly/goose/v3/lock"
 )
 
 //go:embed migrations/*.sql
 var migrationFS embed.FS
 
-type Store struct{ Pool *pgxpool.Pool }
+type Store struct {
+	Pool    *pgxpool.Pool
+	queries *storesqlc.Queries
+}
 
 type migration struct {
 	version  int64
@@ -40,7 +49,7 @@ func New(ctx context.Context, dsn string) (*Store, error) {
 		pool.Close()
 		return nil, err
 	}
-	return &Store{Pool: pool}, nil
+	return &Store{Pool: pool, queries: storesqlc.New(pool)}, nil
 }
 
 func (s *Store) Close() { s.Pool.Close() }
@@ -85,55 +94,106 @@ func (s *Store) Migrate(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	tx, err := s.Pool.Begin(ctx)
+	db, err := sql.Open("pgx", s.Pool.Config().ConnString())
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
-	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext('fruto-control-plane-migrations'))`); err != nil {
+	defer db.Close()
+	if err = db.PingContext(ctx); err != nil {
 		return err
 	}
-	if _, err = tx.Exec(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (version BIGINT PRIMARY KEY, checksum BYTEA, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())`); err != nil {
+	migrationConn, err := db.Conn(ctx)
+	if err != nil {
 		return err
 	}
-	if _, err = tx.Exec(ctx, `ALTER TABLE schema_migrations ADD COLUMN IF NOT EXISTS checksum BYTEA`); err != nil {
+	defer migrationConn.Close()
+	if _, err = migrationConn.ExecContext(ctx, `SELECT pg_advisory_lock(hashtext('fruto-control-plane-goose'))`); err != nil {
 		return err
 	}
-	if err = tx.Commit(ctx); err != nil {
+	defer func() {
+		_, _ = migrationConn.ExecContext(context.Background(), `SELECT pg_advisory_unlock(hashtext('fruto-control-plane-goose'))`)
+	}()
+	if _, err = db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (version BIGINT PRIMARY KEY, checksum BYTEA, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())`); err != nil {
+		return err
+	}
+	if _, err = db.ExecContext(ctx, `ALTER TABLE schema_migrations ADD COLUMN IF NOT EXISTS checksum BYTEA`); err != nil {
+		return err
+	}
+	applied, err := loadAndValidateChecksums(ctx, db, migrations, false)
+	if err != nil {
+		return err
+	}
+	migrationFiles, err := fs.Sub(migrationFS, "migrations")
+	if err != nil {
+		return err
+	}
+	locker, err := lock.NewPostgresSessionLocker()
+	if err != nil {
+		return err
+	}
+	provider, err := goose.NewProvider(goose.DialectPostgres, db, migrationFiles, goose.WithSessionLocker(locker))
+	if err != nil {
+		return err
+	}
+	currentVersion, err := provider.GetDBVersion(ctx)
+	if err != nil {
+		return err
+	}
+	if currentVersion == 0 {
+		for version := range applied {
+			if _, err = db.ExecContext(ctx, `INSERT INTO goose_db_version(version_id,is_applied) SELECT $1,true WHERE NOT EXISTS (SELECT 1 FROM goose_db_version WHERE version_id=$1 AND is_applied=true)`, version); err != nil {
+				return err
+			}
+		}
+	}
+	if _, err = provider.Up(ctx); err != nil {
 		return err
 	}
 	for _, migration := range migrations {
-		tx, err := s.Pool.Begin(ctx)
-		if err != nil {
-			return err
-		}
-		if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext('fruto-control-plane-migrations'))`); err != nil {
-			_ = tx.Rollback(ctx)
-			return err
-		}
-		var stored []byte
-		err = tx.QueryRow(ctx, `SELECT checksum FROM schema_migrations WHERE version=$1`, migration.version).Scan(&stored)
-		switch {
-		case err == nil && len(stored) == 0:
-			// Databases created by the original MVP did not record checksums.
-			// Backfill the checksum once so subsequent runs detect drift.
-			_, err = tx.Exec(ctx, `UPDATE schema_migrations SET checksum=$1 WHERE version=$2`, migration.checksum[:], migration.version)
-		case err == nil && !bytes.Equal(stored, migration.checksum[:]):
-			err = fmt.Errorf("migration %d checksum drift", migration.version)
-		case errors.Is(err, pgx.ErrNoRows):
-			if _, err = tx.Exec(ctx, string(migration.contents)); err == nil {
-				_, err = tx.Exec(ctx, `INSERT INTO schema_migrations(version,checksum) VALUES ($1,$2)`, migration.version, migration.checksum[:])
-			}
-		}
-		if err != nil {
-			_ = tx.Rollback(ctx)
-			return err
-		}
-		if err = tx.Commit(ctx); err != nil {
+		if _, err = db.ExecContext(ctx, `INSERT INTO schema_migrations(version,checksum) VALUES ($1,$2) ON CONFLICT(version) DO UPDATE SET checksum=EXCLUDED.checksum`, migration.version, migration.checksum[:]); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func loadAndValidateChecksums(ctx context.Context, db *sql.DB, migrations []migration, requireAll bool) (map[int64]struct{}, error) {
+	rows, err := db.QueryContext(ctx, `SELECT version,checksum FROM schema_migrations`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	known := make(map[int64]migration, len(migrations))
+	for _, item := range migrations {
+		known[item.version] = item
+	}
+	applied := make(map[int64]struct{}, len(migrations))
+	for rows.Next() {
+		var version int64
+		var checksum []byte
+		if err = rows.Scan(&version, &checksum); err != nil {
+			return nil, err
+		}
+		item, ok := known[version]
+		if !ok {
+			return nil, fmt.Errorf("unknown schema migration %d is applied", version)
+		}
+		if len(checksum) != 0 && !bytes.Equal(checksum, item.checksum[:]) {
+			return nil, fmt.Errorf("migration %d checksum drift", version)
+		}
+		applied[version] = struct{}{}
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	if requireAll {
+		for _, item := range migrations {
+			if _, ok := applied[item.version]; !ok {
+				return nil, fmt.Errorf("schema migration %d is not applied", item.version)
+			}
+		}
+	}
+	return applied, nil
 }
 
 func (s *Store) Bootstrap(ctx context.Context, workspace domain.Workspace, actors map[string]struct{ Role, PasswordHash string }) error {
@@ -142,47 +202,64 @@ func (s *Store) Bootstrap(ctx context.Context, workspace domain.Workspace, actor
 		return err
 	}
 	defer tx.Rollback(ctx)
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, "workspace-bootstrap:"+workspace.Namespace); err != nil {
+		return err
+	}
+	queries := s.queries.WithTx(tx)
+	actorIDs := make([]int64, 0, len(actors))
 	for key, actor := range actors {
-		_, err = tx.Exec(ctx, `INSERT INTO actors(actor_key, role, password_hash) VALUES ($1,$2,$3) ON CONFLICT(actor_key) DO UPDATE SET role=EXCLUDED.role, password_hash=EXCLUDED.password_hash`, key, actor.Role, actor.PasswordHash)
+		actorID, queryErr := queries.UpsertActor(ctx, storesqlc.UpsertActorParams{ActorKey: key, Role: actor.Role, PasswordHash: actor.PasswordHash})
+		err = queryErr
 		if err != nil {
 			return err
 		}
+		actorIDs = append(actorIDs, actorID)
 	}
-	var workspaceID int64
-	err = tx.QueryRow(ctx, `INSERT INTO workspaces(public_id,name,namespace_name) VALUES ($1,$2,$3) ON CONFLICT(namespace_name) DO UPDATE SET name=EXCLUDED.name RETURNING id`, workspace.PublicID, workspace.Name, workspace.Namespace).Scan(&workspaceID)
+	workspaceID, err := queries.UpsertWorkspace(ctx, storesqlc.UpsertWorkspaceParams{PublicID: workspace.PublicID, Name: workspace.Name, NamespaceName: workspace.Namespace})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			err = tx.QueryRow(ctx, `SELECT id FROM workspaces WHERE namespace_name=$1`, workspace.Namespace).Scan(&workspaceID)
-		}
-		if err != nil {
+		return err
+	}
+	for _, actorID := range actorIDs {
+		if err = queries.AddWorkspaceActor(ctx, storesqlc.AddWorkspaceActorParams{WorkspaceID: workspaceID, ActorID: actorID}); err != nil {
 			return err
 		}
 	}
-	for key := range actors {
-		if _, err = tx.Exec(ctx, `INSERT INTO workspace_actors(workspace_id,actor_id) SELECT $1,id FROM actors WHERE actor_key=$2 ON CONFLICT DO NOTHING`, workspaceID, key); err != nil {
-			return err
-		}
+	if len(actorIDs) == 0 {
+		return errors.New("workspace bootstrap requires at least one actor")
+	}
+	sort.Slice(actorIDs, func(i, j int) bool { return actorIDs[i] < actorIDs[j] })
+	operationID, err := domain.NewPublicID("op")
+	if err != nil {
+		return err
+	}
+	bootstrapHash := domain.SHA256([]byte(workspace.PublicID + ":ensure-workspace"))
+	if _, err = tx.Exec(ctx, `INSERT INTO operations(public_id,workspace_id,deployment_id,actor_id,kind,status,idempotency_hash,payload_hash,intent_json,desired_version,sequence)
+		SELECT $1,$2,NULL,$3,'EnsureWorkspace','Pending',$4,$4,'{}'::jsonb,1,1
+		WHERE EXISTS (SELECT 1 FROM workspaces WHERE id=$2 AND bootstrap_state <> 'Ready')
+		  AND NOT EXISTS (SELECT 1 FROM operations WHERE workspace_id=$2 AND kind='EnsureWorkspace' AND status IN ('Pending','Running'))`, operationID, workspaceID, actorIDs[0], bootstrapHash); err != nil {
+		return err
 	}
 	return tx.Commit(ctx)
 }
 
 func (s *Store) Authenticate(ctx context.Context, key string) (domain.Actor, string, error) {
-	var actor domain.Actor
-	var hash string
-	err := s.Pool.QueryRow(ctx, `SELECT id,actor_key,role,password_hash FROM actors WHERE actor_key=$1`, key).Scan(&actor.ID, &actor.Key, &actor.Role, &hash)
-	return actor, hash, err
+	row, err := s.queries.GetActorByKey(ctx, key)
+	return domain.Actor{ID: row.ID, Key: row.ActorKey, Role: row.Role}, row.PasswordHash, err
+}
+
+func (s *Store) Actor(ctx context.Context, actorID int64) (domain.Actor, error) {
+	row, err := s.queries.GetActorByID(ctx, actorID)
+	return domain.Actor{ID: row.ID, Key: row.ActorKey, Role: row.Role}, err
 }
 
 func (s *Store) WorkspaceForActor(ctx context.Context, actorID int64) (domain.Workspace, error) {
-	var workspace domain.Workspace
-	err := s.Pool.QueryRow(ctx, `SELECT w.id,w.public_id,w.name,w.namespace_name FROM workspaces w JOIN workspace_actors wa ON wa.workspace_id=w.id WHERE wa.actor_id=$1 ORDER BY w.id LIMIT 1`, actorID).Scan(&workspace.ID, &workspace.PublicID, &workspace.Name, &workspace.Namespace)
-	return workspace, err
+	row, err := s.queries.GetWorkspaceForActor(ctx, actorID)
+	return domain.Workspace{ID: row.ID, PublicID: row.PublicID, Name: row.Name, Namespace: row.NamespaceName}, err
 }
 
 func (s *Store) Workspace(ctx context.Context, workspaceID int64) (domain.Workspace, error) {
-	var workspace domain.Workspace
-	err := s.Pool.QueryRow(ctx, `SELECT id,public_id,name,namespace_name FROM workspaces WHERE id=$1`, workspaceID).Scan(&workspace.ID, &workspace.PublicID, &workspace.Name, &workspace.Namespace)
-	return workspace, err
+	row, err := s.queries.GetWorkspaceByID(ctx, workspaceID)
+	return domain.Workspace{ID: row.ID, PublicID: row.PublicID, Name: row.Name, Namespace: row.NamespaceName}, err
 }
 
 func (s *Store) SchemaReady(ctx context.Context) error {
@@ -225,24 +302,47 @@ func (s *Store) SchemaReady(ctx context.Context) error {
 		sort.Slice(versions, func(i, j int) bool { return versions[i] < versions[j] })
 		return fmt.Errorf("unknown schema migration %d is applied", versions[0])
 	}
+	gooseRows, err := s.Pool.Query(ctx, `SELECT version_id FROM goose_db_version WHERE is_applied=true`)
+	if err != nil {
+		return fmt.Errorf("goose migration metadata: %w", err)
+	}
+	defer gooseRows.Close()
+	gooseApplied := make(map[int64]struct{}, len(migrations))
+	for gooseRows.Next() {
+		var version int64
+		if err = gooseRows.Scan(&version); err != nil {
+			return err
+		}
+		if version != 0 {
+			gooseApplied[version] = struct{}{}
+		}
+	}
+	if err = gooseRows.Err(); err != nil {
+		return err
+	}
+	for _, migration := range migrations {
+		if _, ok := gooseApplied[migration.version]; !ok {
+			return fmt.Errorf("goose migration %d is not applied", migration.version)
+		}
+		delete(gooseApplied, migration.version)
+	}
+	if len(gooseApplied) != 0 {
+		return fmt.Errorf("unknown goose migration is applied")
+	}
 	return nil
 }
 
 func (s *Store) CreateSession(ctx context.Context, actorID int64, tokenHash, csrfHash []byte, expires time.Time) error {
-	_, err := s.Pool.Exec(ctx, `INSERT INTO sessions(token_hash,actor_id,csrf_hash,expires_at) VALUES ($1,$2,$3,$4)`, tokenHash, actorID, csrfHash, expires)
-	return err
+	return s.queries.CreateSession(ctx, storesqlc.CreateSessionParams{TokenHash: tokenHash, ActorID: actorID, CsrfHash: csrfHash, ExpiresAt: pgtype.Timestamptz{Time: expires, Valid: true}})
 }
 
 func (s *Store) Session(ctx context.Context, tokenHash []byte) (int64, []byte, error) {
-	var actorID int64
-	var csrf []byte
-	err := s.Pool.QueryRow(ctx, `SELECT actor_id,csrf_hash FROM sessions WHERE token_hash=$1 AND revoked_at IS NULL AND expires_at > now()`, tokenHash).Scan(&actorID, &csrf)
-	return actorID, csrf, err
+	row, err := s.queries.GetActiveSession(ctx, tokenHash)
+	return row.ActorID, row.CsrfHash, err
 }
 
 func (s *Store) RevokeSession(ctx context.Context, tokenHash []byte) error {
-	_, err := s.Pool.Exec(ctx, `UPDATE sessions SET revoked_at=now() WHERE token_hash=$1`, tokenHash)
-	return err
+	return s.queries.RevokeSession(ctx, tokenHash)
 }
 
 func (s *Store) RotateSession(ctx context.Context, actorID int64, oldTokenHash, newTokenHash, csrfHash []byte, expires time.Time) error {
@@ -251,14 +351,15 @@ func (s *Store) RotateSession(ctx context.Context, actorID int64, oldTokenHash, 
 		return err
 	}
 	defer tx.Rollback(ctx)
-	result, err := tx.Exec(ctx, `UPDATE sessions SET revoked_at=now() WHERE token_hash=$1 AND actor_id=$2 AND revoked_at IS NULL AND expires_at > now()`, oldTokenHash, actorID)
+	queries := s.queries.WithTx(tx)
+	rowsAffected, err := queries.RevokeActiveSession(ctx, storesqlc.RevokeActiveSessionParams{TokenHash: oldTokenHash, ActorID: actorID})
 	if err != nil {
 		return err
 	}
-	if result.RowsAffected() != 1 {
+	if rowsAffected != 1 {
 		return ErrSessionInvalid
 	}
-	if _, err = tx.Exec(ctx, `INSERT INTO sessions(token_hash,actor_id,csrf_hash,expires_at) VALUES ($1,$2,$3,$4)`, newTokenHash, actorID, csrfHash, expires); err != nil {
+	if err = queries.CreateSession(ctx, storesqlc.CreateSessionParams{TokenHash: newTokenHash, ActorID: actorID, CsrfHash: csrfHash, ExpiresAt: pgtype.Timestamptz{Time: expires, Valid: true}}); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
@@ -315,6 +416,9 @@ func (s *Store) createDeployment(ctx context.Context, workspaceID, actorID int64
 	err = tx.QueryRow(ctx, `INSERT INTO deployments(public_id,workspace_id,name,runtime_name,slug,intent_json) VALUES ($1,$2,$3,$4,NULLIF($5,''),$6) RETURNING id,public_id,workspace_id,runtime_name,intent_json::text,desired_version,observed_version,observed_release,last_state,last_message,created_at,updated_at`, deploymentID, workspaceID, intent.Name, runtimeName, intent.Slug, intentJSON).Scan(&deployment.ID, &deployment.PublicID, &deployment.WorkspaceID, &deployment.RuntimeName, &intentJSON, &deployment.DesiredVersion, &deployment.ObservedVersion, &deployment.ObservedRelease, &deployment.State, &deployment.Message, &deployment.CreatedAt, &deployment.UpdatedAt)
 	if err != nil {
 		if isUniqueViolation(err) {
+			if uniqueConstraint(err) == "deployments_public_id_key" {
+				return domain.Deployment{}, domain.Operation{}, false, ErrPublicIDCollision
+			}
 			return domain.Deployment{}, domain.Operation{}, false, errRetryCreate
 		}
 		return domain.Deployment{}, domain.Operation{}, false, translateDBError(err)
@@ -387,7 +491,7 @@ func (s *Store) UpdateDeployment(ctx context.Context, workspaceID, actorID, depl
 	if err = jsonUnmarshal(storedJSON, &deployment.Intent); err != nil {
 		return domain.Deployment{}, domain.Operation{}, err
 	}
-	if _, err = tx.Exec(ctx, `UPDATE operations SET status='Superseded',updated_at=now() WHERE deployment_id=$1 AND status='Pending'`, deploymentID); err != nil {
+	if _, err = tx.Exec(ctx, `UPDATE operations SET status='Superseded',completed_at=now(),updated_at=now() WHERE deployment_id=$1 AND status='Pending'`, deploymentID); err != nil {
 		return domain.Deployment{}, domain.Operation{}, err
 	}
 	op, err := insertOperation(ctx, tx, workspaceID, deployment.ID, deployment.PublicID, actorID, "UpdateDeployment", idem, payload, intentJSON, deployment.DesiredVersion)
@@ -439,7 +543,7 @@ func (s *Store) DeleteDeployment(ctx context.Context, workspaceID, actorID, depl
 		}
 		return domain.Operation{}, translateDBError(err)
 	}
-	if _, err = tx.Exec(ctx, `UPDATE operations SET status='Superseded',updated_at=now() WHERE deployment_id=$1 AND status='Pending'`, deploymentID); err != nil {
+	if _, err = tx.Exec(ctx, `UPDATE operations SET status='Superseded',completed_at=now(),updated_at=now() WHERE deployment_id=$1 AND status='Pending'`, deploymentID); err != nil {
 		return domain.Operation{}, err
 	}
 	op, err := insertOperation(ctx, tx, workspaceID, deploymentID, publicID, actorID, "DeleteDeployment", idem, payload, intentJSON, newVersion)
@@ -454,25 +558,40 @@ func (s *Store) DeleteDeployment(ctx context.Context, workspaceID, actorID, depl
 }
 
 func insertOperation(ctx context.Context, tx pgx.Tx, workspaceID, deploymentID int64, deploymentPublicID string, actorID int64, kind string, idem, payload, intentJSON []byte, version int64) (domain.Operation, error) {
-	id, err := domain.NewPublicID("op")
-	if err != nil {
-		return domain.Operation{}, err
+	for range 3 {
+		if _, err := tx.Exec(ctx, `SAVEPOINT operation_public_id`); err != nil {
+			return domain.Operation{}, err
+		}
+		id, err := domain.NewPublicID("op")
+		if err != nil {
+			return domain.Operation{}, err
+		}
+		var op domain.Operation
+		err = tx.QueryRow(ctx, `INSERT INTO operations(public_id,workspace_id,deployment_id,actor_id,kind,status,idempotency_hash,payload_hash,intent_json,desired_version,sequence) VALUES($1,$2,$3,$4,$5,'Pending',$6,$7,$8,$9,$9) RETURNING id,public_id,kind,status,desired_version,attempts,created_at,updated_at`, id, workspaceID, deploymentID, actorID, kind, idem, payload, intentJSON, version).Scan(&op.ID, &op.PublicID, &op.Kind, &op.Status, &op.DesiredVersion, &op.Attempts, &op.CreatedAt, &op.UpdatedAt)
+		if uniqueConstraint(err) == "operations_public_id_key" {
+			if _, rollbackErr := tx.Exec(ctx, `ROLLBACK TO SAVEPOINT operation_public_id`); rollbackErr != nil {
+				return domain.Operation{}, rollbackErr
+			}
+			continue
+		}
+		if err == nil {
+			_, err = tx.Exec(ctx, `RELEASE SAVEPOINT operation_public_id`)
+		}
+		if err == nil {
+			err = jsonUnmarshal(intentJSON, &op.Intent)
+		}
+		op.DeploymentID = deploymentID
+		op.DeploymentPublicID = deploymentPublicID
+		op.ActorID = actorID
+		return op, err
 	}
-	var op domain.Operation
-	err = tx.QueryRow(ctx, `INSERT INTO operations(public_id,workspace_id,deployment_id,actor_id,kind,status,idempotency_hash,payload_hash,intent_json,desired_version,sequence) VALUES($1,$2,$3,$4,$5,'Pending',$6,$7,$8,$9,$9) RETURNING id,public_id,kind,status,desired_version,attempts,created_at,updated_at`, id, workspaceID, deploymentID, actorID, kind, idem, payload, intentJSON, version).Scan(&op.ID, &op.PublicID, &op.Kind, &op.Status, &op.DesiredVersion, &op.Attempts, &op.CreatedAt, &op.UpdatedAt)
-	if err == nil {
-		err = jsonUnmarshal(intentJSON, &op.Intent)
-	}
-	op.DeploymentID = deploymentID
-	op.DeploymentPublicID = deploymentPublicID
-	op.ActorID = actorID
-	return op, err
+	return domain.Operation{}, ErrPublicIDCollision
 }
 
-func (s *Store) ListDeployments(ctx context.Context, workspaceID int64, limit int) ([]domain.Deployment, error) {
-	rows, err := s.Pool.Query(ctx, `SELECT id,public_id,workspace_id,runtime_name,intent_json::text,desired_version,observed_version,observed_release,last_state,last_message,deletion_requested_at,created_at,updated_at FROM deployments WHERE workspace_id=$1 AND deleted_at IS NULL ORDER BY id DESC LIMIT $2`, workspaceID, limit)
+func (s *Store) ListDeployments(ctx context.Context, workspaceID, beforeID int64, limit int) ([]domain.Deployment, string, error) {
+	rows, err := s.Pool.Query(ctx, `SELECT id,public_id,workspace_id,runtime_name,intent_json::text,desired_version,observed_version,observed_release,last_state,last_message,deletion_requested_at,created_at,updated_at FROM deployments WHERE workspace_id=$1 AND id < $2 AND deleted_at IS NULL ORDER BY id DESC LIMIT $3`, workspaceID, beforeID, limit+1)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	defer rows.Close()
 	out := []domain.Deployment{}
@@ -480,14 +599,22 @@ func (s *Store) ListDeployments(ctx context.Context, workspaceID int64, limit in
 		var d domain.Deployment
 		var raw []byte
 		if err = rows.Scan(&d.ID, &d.PublicID, &d.WorkspaceID, &d.RuntimeName, &raw, &d.DesiredVersion, &d.ObservedVersion, &d.ObservedRelease, &d.State, &d.Message, &d.DeletionRequestedAt, &d.CreatedAt, &d.UpdatedAt); err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		if err = jsonUnmarshal(raw, &d.Intent); err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		out = append(out, d)
 	}
-	return out, rows.Err()
+	if err = rows.Err(); err != nil {
+		return nil, "", err
+	}
+	nextCursor := ""
+	if len(out) > limit {
+		out = out[:limit]
+		nextCursor = domain.EncodeCursor(out[len(out)-1].ID)
+	}
+	return out, nextCursor, nil
 }
 
 func (s *Store) FindDeployment(ctx context.Context, workspaceID int64, publicID string) (domain.Deployment, error) {
@@ -524,6 +651,9 @@ func (s *Store) ListOperations(ctx context.Context, workspaceID, deploymentID in
 func (s *Store) GetOperation(ctx context.Context, workspaceID int64, publicID string) (domain.Operation, error) {
 	var op domain.Operation
 	err := s.Pool.QueryRow(ctx, `SELECT o.id,o.public_id,o.deployment_id,d.public_id,o.kind,o.status,o.desired_version,o.attempts,o.error_code,o.error_message,o.created_at,o.updated_at FROM operations o JOIN deployments d ON d.id=o.deployment_id WHERE o.workspace_id=$1 AND o.public_id=$2`, workspaceID, publicID).Scan(&op.ID, &op.PublicID, &op.DeploymentID, &op.DeploymentPublicID, &op.Kind, &op.Status, &op.DesiredVersion, &op.Attempts, &op.ErrorCode, &op.ErrorMessage, &op.CreatedAt, &op.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return op, ErrNotFound
+	}
 	return op, err
 }
 
@@ -535,12 +665,21 @@ func (s *Store) ClaimNext(ctx context.Context, worker string, lease time.Duratio
 	defer tx.Rollback(ctx)
 	var op domain.Operation
 	var operationIntent []byte
-	err = tx.QueryRow(ctx, `WITH candidate AS (SELECT id FROM operations WHERE (status='Pending' OR (status='Running' AND lease_until < now())) AND next_attempt_at <= now() ORDER BY id FOR UPDATE SKIP LOCKED LIMIT 1) UPDATE operations o SET status='Running',attempts=attempts+1,lease_until=now()+$1::interval,worker_id=$2,fencing_token=fencing_token+1,updated_at=now() FROM candidate c WHERE o.id=c.id RETURNING o.id,o.public_id,o.workspace_id,o.deployment_id,o.actor_id,o.kind,o.status,o.desired_version,o.attempts,o.intent_json::text,o.worker_id,o.fencing_token,o.lease_until,o.created_at,o.updated_at`, fmt.Sprintf("%f seconds", lease.Seconds()), worker).Scan(&op.ID, &op.PublicID, &op.WorkspaceID, &op.DeploymentID, &op.ActorID, &op.Kind, &op.Status, &op.DesiredVersion, &op.Attempts, &operationIntent, &op.WorkerID, &op.FencingToken, &op.LeaseUntil, &op.CreatedAt, &op.UpdatedAt)
+	err = tx.QueryRow(ctx, `WITH candidate AS (SELECT id FROM operations WHERE (status='Pending' OR (status='Running' AND lease_until < now())) AND next_attempt_at <= now() ORDER BY id FOR UPDATE SKIP LOCKED LIMIT 1) UPDATE operations o SET status='Running',attempts=attempts+1,started_at=COALESCE(started_at,now()),lease_until=now()+$1::interval,worker_id=$2,fencing_token=fencing_token+1,updated_at=now() FROM candidate c WHERE o.id=c.id RETURNING o.id,o.public_id,o.workspace_id,COALESCE(o.deployment_id,0),o.actor_id,o.kind,o.status,o.desired_version,o.attempts,o.intent_json::text,o.worker_id,o.fencing_token,o.lease_until,o.created_at,o.updated_at`, fmt.Sprintf("%f seconds", lease.Seconds()), worker).Scan(&op.ID, &op.PublicID, &op.WorkspaceID, &op.DeploymentID, &op.ActorID, &op.Kind, &op.Status, &op.DesiredVersion, &op.Attempts, &operationIntent, &op.WorkerID, &op.FencingToken, &op.LeaseUntil, &op.CreatedAt, &op.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.Operation{}, domain.Deployment{}, false, nil
 	}
 	if err != nil {
 		return domain.Operation{}, domain.Deployment{}, false, err
+	}
+	if op.Kind == domain.OperationEnsureWorkspace {
+		if _, err = tx.Exec(ctx, `UPDATE workspaces SET bootstrap_state='Running',updated_at=now() WHERE id=$1`, op.WorkspaceID); err != nil {
+			return domain.Operation{}, domain.Deployment{}, false, err
+		}
+		if err = tx.Commit(ctx); err != nil {
+			return domain.Operation{}, domain.Deployment{}, false, err
+		}
+		return op, domain.Deployment{WorkspaceID: op.WorkspaceID}, true, nil
 	}
 	var d domain.Deployment
 	var deploymentIntent []byte
@@ -578,11 +717,30 @@ func (s *Store) Complete(ctx context.Context, op domain.Operation, state, messag
 	if commandTag.RowsAffected() != 1 {
 		return ErrLeaseLost
 	}
-	commandTag, err = tx.Exec(ctx, `UPDATE operations SET status='Succeeded',lease_until=NULL,worker_id=NULL,updated_at=now() WHERE id=$1 AND status='Running' AND worker_id=$2 AND fencing_token=$3 AND lease_until > now()`, op.ID, op.WorkerID, op.FencingToken)
+	commandTag, err = tx.Exec(ctx, `UPDATE operations SET status='Succeeded',completed_at=now(),lease_until=NULL,worker_id=NULL,updated_at=now() WHERE id=$1 AND status='Running' AND worker_id=$2 AND fencing_token=$3 AND lease_until > now()`, op.ID, op.WorkerID, op.FencingToken)
 	if err != nil {
 		return err
 	}
 	if commandTag.RowsAffected() != 1 {
+		return ErrLeaseLost
+	}
+	return tx.Commit(ctx)
+}
+
+func (s *Store) CompleteWorkspace(ctx context.Context, op domain.Operation) error {
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	if _, err = tx.Exec(ctx, `UPDATE workspaces SET bootstrap_state='Ready',updated_at=now() WHERE id=$1`, op.WorkspaceID); err != nil {
+		return err
+	}
+	tag, err := tx.Exec(ctx, `UPDATE operations SET status='Succeeded',completed_at=now(),lease_until=NULL,worker_id=NULL,updated_at=now() WHERE id=$1 AND kind='EnsureWorkspace' AND status='Running' AND worker_id=$2 AND fencing_token=$3 AND lease_until > now()`, op.ID, op.WorkerID, op.FencingToken)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() != 1 {
 		return ErrLeaseLost
 	}
 	return tx.Commit(ctx)
@@ -593,7 +751,7 @@ func (s *Store) Fail(ctx context.Context, op domain.Operation, code, message str
 	if retry {
 		status = "Pending"
 	}
-	command := `UPDATE operations SET status=$1,next_attempt_at=CASE WHEN $1='Pending' THEN now()+make_interval(secs => LEAST(300, power(2, attempts)::int)) ELSE next_attempt_at END,lease_until=NULL,worker_id=NULL,error_code=$2,error_message=$3,updated_at=now() WHERE id=$4 AND status='Running' AND worker_id=$5 AND fencing_token=$6 AND lease_until > now()`
+	command := `UPDATE operations SET status=$1,next_attempt_at=CASE WHEN $1='Pending' THEN now()+make_interval(secs => LEAST(300, power(2, attempts)::int)) ELSE next_attempt_at END,completed_at=CASE WHEN $1='Failed' THEN now() ELSE NULL END,lease_until=NULL,worker_id=NULL,error_code=$2,error_message=$3,updated_at=now() WHERE id=$4 AND status='Running' AND worker_id=$5 AND fencing_token=$6 AND lease_until > now()`
 	if retry && op.Attempts >= 8 {
 		status = "Failed"
 	}
@@ -604,7 +762,21 @@ func (s *Store) Fail(ctx context.Context, op domain.Operation, code, message str
 	if tag.RowsAffected() != 1 {
 		return ErrLeaseLost
 	}
+	if op.Kind == domain.OperationEnsureWorkspace {
+		workspaceState := "Pending"
+		if status == "Failed" {
+			workspaceState = "Failed"
+		}
+		if _, err = s.Pool.Exec(ctx, `UPDATE workspaces SET bootstrap_state=$1,updated_at=now() WHERE id=$2`, workspaceState, op.WorkspaceID); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+func (s *Store) ReleaseClaims(ctx context.Context, workerID string) error {
+	_, err := s.Pool.Exec(ctx, `UPDATE operations SET status='Pending',next_attempt_at=now(),lease_until=NULL,worker_id=NULL,updated_at=now() WHERE status='Running' AND worker_id=$1`, workerID)
+	return err
 }
 
 func existingOperation(ctx context.Context, tx pgx.Tx, workspaceID, deploymentID int64, kind string, idem, payload []byte) (domain.Operation, bool, error) {
@@ -644,6 +816,8 @@ var ErrNotFound = errors.New("not found")
 
 var ErrSessionInvalid = errors.New("session is no longer valid")
 
+var ErrPublicIDCollision = errors.New("public ID collision")
+
 var ErrNoRows = pgx.ErrNoRows
 
 func translateDBError(err error) error {
@@ -656,6 +830,14 @@ func translateDBError(err error) error {
 func isUniqueViolation(err error) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == "23505"
+}
+
+func uniqueConstraint(err error) string {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.ConstraintName
+	}
+	return ""
 }
 
 func jsonUnmarshal(raw []byte, target any) error { return json.Unmarshal(raw, target) }

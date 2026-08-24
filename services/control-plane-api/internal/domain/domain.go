@@ -13,22 +13,23 @@ import (
 )
 
 const (
-	ExposurePrivate     = "Private"
-	ExposurePublic      = "Public"
-	StatePending        = "Pending"
-	StateProgressing    = "Progressing"
-	StateReady          = "Ready"
-	StateDegraded       = "Degraded"
-	StateUnknown        = "Unknown"
-	Unknown             = StateUnknown
-	Progressing         = StateProgressing
-	Ready               = StateReady
-	Degraded            = StateDegraded
-	OperationPending    = "Pending"
-	OperationRunning    = "Running"
-	OperationSucceeded  = "Succeeded"
-	OperationFailed     = "Failed"
-	OperationSuperseded = "Superseded"
+	ExposurePrivate          = "Private"
+	ExposurePublic           = "Public"
+	StatePending             = "Pending"
+	StateProgressing         = "Progressing"
+	StateReady               = "Ready"
+	StateDegraded            = "Degraded"
+	StateUnknown             = "Unknown"
+	Unknown                  = StateUnknown
+	Progressing              = StateProgressing
+	Ready                    = StateReady
+	Degraded                 = StateDegraded
+	OperationPending         = "Pending"
+	OperationRunning         = "Running"
+	OperationSucceeded       = "Succeeded"
+	OperationFailed          = "Failed"
+	OperationSuperseded      = "Superseded"
+	OperationEnsureWorkspace = "EnsureWorkspace"
 )
 
 var (
@@ -128,12 +129,10 @@ func NewPublicID(prefix string) (string, error) {
 }
 
 func RuntimeName(publicID string) string {
-	const prefix = "ap-"
-	name := strings.TrimPrefix(publicID, "dep-")
-	if name == publicID {
-		name = strings.ReplaceAll(publicID, "_", "-")
+	if strings.HasPrefix(publicID, "ap-") {
+		return publicID
 	}
-	return prefix + name
+	return "ap-" + strings.ReplaceAll(publicID, "_", "-")
 }
 
 func CanonicalJSON(value any) ([]byte, error) { return json.Marshal(value) }

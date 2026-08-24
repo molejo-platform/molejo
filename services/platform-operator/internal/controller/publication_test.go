@@ -104,12 +104,12 @@ func TestReconcileCreatesPublicHTTPRoute(t *testing.T) {
 	if !metav1.IsControlledBy(route, appDeployment) {
 		t.Fatal("expected HTTPRoute to be controlled by AppDeployment")
 	}
-	if len(route.Spec.Hostnames) != 1 || route.Spec.Hostnames[0] != "public-route.fruto.calouro.tech" {
+	if len(route.Spec.Hostnames) != 1 || route.Spec.Hostnames[0] != "public-route.molejo.dev" {
 		t.Fatalf("unexpected HTTPRoute hostnames: %#v", route.Spec.Hostnames)
 	}
 	if len(route.Spec.ParentRefs) != 1 || route.Spec.ParentRefs[0].Name != "fruto" ||
 		route.Spec.ParentRefs[0].Namespace == nil || *route.Spec.ParentRefs[0].Namespace != "fruto-system" ||
-		route.Spec.ParentRefs[0].SectionName == nil || *route.Spec.ParentRefs[0].SectionName != "https" {
+		route.Spec.ParentRefs[0].SectionName == nil || *route.Spec.ParentRefs[0].SectionName != "https-molejo" {
 		t.Fatalf("unexpected HTTPRoute parent references: %#v", route.Spec.ParentRefs)
 	}
 	if len(route.Spec.Rules) != 1 || len(route.Spec.Rules[0].BackendRefs) != 1 {
@@ -224,7 +224,7 @@ func TestGatewayCertificateFailureRevokesPublicReadinessWithoutAppChange(t *test
 		Spec: gatewayv1.GatewaySpec{
 			GatewayClassName: "test-gateway-class",
 			Listeners: []gatewayv1.Listener{{
-				Name: "https", Port: 443, Protocol: gatewayv1.HTTPSProtocolType,
+				Name: "https-molejo", Port: 443, Protocol: gatewayv1.HTTPSProtocolType,
 			}},
 		},
 	}
@@ -413,7 +413,7 @@ func TestReconcileSelectsOneWinnerWhenHostnameClaimsAlreadyExist(t *testing.T) {
 		}
 		winners := make([]gatewayv1.HTTPRoute, 0, 1)
 		for _, route := range routes.Items {
-			if len(route.Spec.Hostnames) == 1 && route.Spec.Hostnames[0] == "simultaneous-claim.fruto.calouro.tech" {
+			if len(route.Spec.Hostnames) == 1 && route.Spec.Hostnames[0] == "simultaneous-claim.molejo.dev" {
 				winners = append(winners, route)
 			}
 		}
@@ -535,7 +535,7 @@ func TestReconcileCorrectsAndRecreatesPublicHTTPRoute(t *testing.T) {
 	}
 
 	route := getHTTPRoute(t, ctx, key)
-	route.Spec.Hostnames = []gatewayv1.Hostname{"drift.fruto.calouro.tech"}
+	route.Spec.Hostnames = []gatewayv1.Hostname{"drift.molejo.dev"}
 	if err := testClient.Update(ctx, route); err != nil {
 		t.Fatalf("introduce HTTPRoute drift: %v", err)
 	}
@@ -782,7 +782,7 @@ func routeWithConditions(conditions ...metav1.Condition) *gatewayv1.HTTPRoute {
 		}
 	}
 	gatewayNamespace := gatewayv1.Namespace("fruto-system")
-	httpsSection := gatewayv1.SectionName("https")
+	httpsSection := gatewayv1.SectionName("https-molejo")
 	return &gatewayv1.HTTPRoute{
 		ObjectMeta: metav1.ObjectMeta{Generation: routeGeneration},
 		Status: gatewayv1.HTTPRouteStatus{RouteStatus: gatewayv1.RouteStatus{
@@ -858,7 +858,7 @@ func setTestGatewayStatus(
 		LastTransitionTime: metav1.Now(),
 	}}
 	gateway.Status.Listeners = []gatewayv1.ListenerStatus{{
-		Name: "https",
+		Name: "https-molejo",
 		Conditions: []metav1.Condition{
 			{
 				Type: string(gatewayv1.ListenerConditionAccepted), Status: conditionStatus,

@@ -11,3 +11,4 @@ images:
     newTag: local
 patches:
   - path: image-pull-policy.yaml
+  - path: configmap.yaml

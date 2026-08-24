@@ -21,9 +21,9 @@ spec:
   parentRefs:
     - name: fruto
       namespace: fruto-system
-      sectionName: https
+      sectionName: https-molejo
   hostnames:
-    - console.fruto.calouro.tech
+    - cloud.molejo.dev
   rules:
     - matches:
         - path: { type: PathPrefix, value: /api }

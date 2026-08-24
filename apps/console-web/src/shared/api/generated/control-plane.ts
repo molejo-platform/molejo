@@ -174,7 +174,7 @@ export interface components {
             id: string;
             deploymentId: string;
             /** @enum {string} */
-            kind: "CreateDeployment" | "UpdateDeployment" | "DeleteDeployment";
+            kind: "CreateDeployment" | "UpdateDeployment" | "DeleteDeployment" | "EnsureWorkspace";
             /** @enum {string} */
             status: "Pending" | "Running" | "Succeeded" | "Failed" | "Superseded";
             desiredVersion: number;
@@ -338,7 +338,10 @@ export interface operations {
     };
     listDeployments: {
         parameters: {
-            query?: never;
+            query?: {
+                cursor?: string;
+                limit?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;

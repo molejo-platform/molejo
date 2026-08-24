@@ -22,7 +22,7 @@ export function WorkspaceHeader() {
   return (
     <>
       <header className="topbar">
-        <Link to="/deployments" className="brand"><span className="mark">F</span><span>Fruto Console</span></Link>
+        <Link to="/deployments" className="brand"><span className="mark">M</span><span>Molejo Console</span></Link>
         <div className="topbar-actions"><span className="actor">{session.data?.actor.id}</span><Button variant="secondary" onClick={signOut} disabled={logout.isPending}>Sair</Button></div>
       </header>
       <section className="hero">

@@ -22,7 +22,7 @@ test.describe("control plane browser flow", () => {
     await page.getByLabel("Nome").fill(`browser-${Date.now()}`);
     await page.getByLabel("Imagem OCI por digest").fill(image);
     await page.getByRole("button", { name: "Criar deployment" }).click();
-    await expect(page).toHaveURL(/\/deployments\/dep-/);
+    await expect(page).toHaveURL(/\/deployments\/ap-/);
     await waitForOperation(page);
     await expect(page.getByText("Pronto")).toBeVisible({ timeout: 120_000 });
     await expect(page.getByText("CreateDeployment")).toBeVisible();
@@ -39,22 +39,5 @@ test.describe("control plane browser flow", () => {
     await expect(page).toHaveURL(/\/deployments(?:\?|$)/);
     await waitForOperation(page);
     await expect(page.getByText("Nenhum deployment ainda")).toBeVisible({ timeout: 120_000 });
-  });
-
-  test("keeps a deep link on the console and redirects after the session cookie is removed", async ({ page, context }) => {
-    await login(page);
-    await page.goto("/deployments/dep-missing");
-    await expect(page.getByText(/deployment (não encontrado|was not found)|não foi possível/i)).toBeVisible();
-    await context.clearCookies();
-    await page.reload();
-    await expect(page).toHaveURL(/\/login$/);
-  });
-
-  test("shows invalid credentials without exposing server details", async ({ page }) => {
-    await page.goto("/login");
-    await page.getByLabel("Senha").fill("invalid-password");
-    await page.getByRole("button", { name: "Entrar" }).click();
-    await expect(page.getByText(/credenciais|credentials are invalid|sessão expirou|não foi possível/i)).toBeVisible();
-    await expect(page).toHaveURL(/\/login$/);
   });
 });

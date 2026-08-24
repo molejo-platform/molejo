@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"math"
 	"net"
 	"net/http"
 	"strconv"
@@ -19,12 +20,19 @@ import (
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/domain"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/runtime"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/store"
+	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
 )
 
 type Config struct {
+	Mode               string
+	PublicURL          string
 	CookieName         string
 	CookieSecure       bool
 	AllowedOrigin      string
+	AllowedHosts       []string
+	AllowedRegistries  []string
+	TrustedProxyCIDRs  []string
 	MaxReplicas        int32
 	MaxCPU             int64
 	MaxMemory          int64
@@ -34,93 +42,29 @@ type Config struct {
 }
 
 func DefaultConfig() Config {
-	return Config{CookieName: "fruto_session", MaxReplicas: 5, MaxCPU: 2000, MaxMemory: 2048, SessionTTL: 12 * time.Hour, OperationLease: 30 * time.Second, WorkspaceNamespace: "fruto-workspaces"}
+	return Config{Mode: "development", PublicURL: "http://127.0.0.1:8080", CookieName: "fruto_session", AllowedOrigin: "http://127.0.0.1:8080", AllowedHosts: []string{"127.0.0.1:8080", "localhost:8080"}, AllowedRegistries: []string{"ghcr.io"}, MaxReplicas: 5, MaxCPU: 2000, MaxMemory: 2048, SessionTTL: 12 * time.Hour, OperationLease: 30 * time.Second, WorkspaceNamespace: "fruto-workspaces"}
 }
 
 type Server struct {
-	Store   *store.Store
-	Runtime runtime.Client
-	Config  Config
-	Logger  *slog.Logger
-	limiter *loginLimiter
-	token   func(int) (string, error)
+	Store        *store.Store
+	Runtime      runtime.Client
+	Config       Config
+	Logger       *slog.Logger
+	Tracer       trace.Tracer
+	limiter      *loginLimiter
+	token        func(int) (string, error)
+	deploymentID func() (string, error)
 }
 
 func NewServer(s *store.Store, r runtime.Client, cfg Config, logger *slog.Logger) *Server {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Server{Store: s, Runtime: r, Config: cfg, Logger: logger, limiter: &loginLimiter{entries: map[string]loginAttempt{}}, token: randomToken}
+	return &Server{Store: s, Runtime: r, Config: cfg, Logger: logger, Tracer: noop.NewTracerProvider().Tracer("github.com/fruto-platform/fruto/services/control-plane-api"), limiter: &loginLimiter{entries: map[string]loginAttempt{}}, token: randomToken, deploymentID: func() (string, error) { return domain.NewPublicID("ap") }}
 }
 
 func (s *Server) Handler() http.Handler {
-	return requestIDMiddleware(securityMiddleware(s, http.HandlerFunc(s.route)))
-}
-
-func (s *Server) route(w http.ResponseWriter, r *http.Request) {
-	if strings.HasPrefix(r.URL.Path, "/healthz") {
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-		return
-	}
-	if strings.HasPrefix(r.URL.Path, "/readyz") {
-		if err := s.Store.SchemaReady(r.Context()); err != nil {
-			s.logger().Error("schema readiness failed", "request_id", requestID(r), "error", err)
-			writeError(w, http.StatusServiceUnavailable, "database_unavailable", "service is not ready", r)
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ready"})
-		return
-	}
-	if !strings.HasPrefix(r.URL.Path, "/api/v1/") {
-		http.NotFound(w, r)
-		return
-	}
-	if r.Method == http.MethodPost && r.URL.Path == "/api/v1/session" {
-		s.login(w, r)
-		return
-	}
-	actorID, csrf, ok := s.session(r)
-	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthenticated", "authentication required", r)
-		return
-	}
-	if r.URL.Path == "/api/v1/session" && r.Method == http.MethodGet {
-		s.sessionInfo(w, r, actorID)
-		return
-	}
-	if r.URL.Path == "/api/v1/session" && r.Method == http.MethodDelete {
-		if !s.validCSRF(r, csrf) {
-			writeError(w, http.StatusForbidden, "csrf_failed", "request could not be verified", r)
-			return
-		}
-		s.logout(w, r)
-		return
-	}
-	if r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodDelete {
-		if !s.validCSRF(r, csrf) {
-			writeError(w, http.StatusForbidden, "csrf_failed", "request could not be verified", r)
-			return
-		}
-	}
-	workspace, err := s.Store.WorkspaceForActor(r.Context(), actorID)
-	if err != nil {
-		writeError(w, http.StatusForbidden, "workspace_forbidden", "workspace access is not configured", r)
-		return
-	}
-	switch {
-	case r.Method == http.MethodGet && r.URL.Path == "/api/v1/workspaces/current":
-		writeJSON(w, http.StatusOK, workspace)
-	case r.Method == http.MethodGet && r.URL.Path == "/api/v1/deployments":
-		s.listDeployments(w, r, workspace)
-	case r.Method == http.MethodPost && r.URL.Path == "/api/v1/deployments":
-		s.createDeployment(w, r, workspace, actorID)
-	case strings.HasPrefix(r.URL.Path, "/api/v1/deployments/"):
-		s.deploymentRoute(w, r, workspace, actorID)
-	case strings.HasPrefix(r.URL.Path, "/api/v1/operations/"):
-		s.operation(w, r, workspace)
-	default:
-		http.NotFound(w, r)
-	}
+	return requestIDMiddleware(tracingMiddleware(s, securityMiddleware(s, s.generatedHandler())))
 }
 
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {
@@ -128,7 +72,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "origin_forbidden", "request origin is not allowed", r)
 		return
 	}
-	ip := remoteIP(r)
+	ip := s.remoteIP(r)
 	if !s.limiter.allow(ip) {
 		writeError(w, http.StatusTooManyRequests, "login_rate_limited", "too many login attempts", r)
 		return
@@ -162,14 +106,13 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "session_failed", "could not create session", r)
 		return
 	}
-	http.SetCookie(w, &http.Cookie{Name: s.Config.CookieName, Value: token, Path: "/", HttpOnly: true, Secure: s.Config.CookieSecure || isHTTPS(r), SameSite: http.SameSiteStrictMode, MaxAge: int(s.Config.SessionTTL.Seconds())})
+	http.SetCookie(w, &http.Cookie{Name: s.Config.CookieName, Value: token, Path: "/", HttpOnly: true, Secure: s.Config.CookieSecure || s.isHTTPS(r), SameSite: http.SameSiteStrictMode, MaxAge: int(s.Config.SessionTTL.Seconds())})
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, map[string]any{"actor": map[string]string{"id": actor.Key, "role": actor.Role}, "csrfToken": csrf})
 }
 
 func (s *Server) sessionInfo(w http.ResponseWriter, r *http.Request, actorID int64) {
-	var actor domain.Actor
-	err := s.Store.Pool.QueryRow(r.Context(), `SELECT id,actor_key,role FROM actors WHERE id=$1`, actorID).Scan(&actor.ID, &actor.Key, &actor.Role)
+	actor, err := s.Store.Actor(r.Context(), actorID)
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, "unauthenticated", "authentication required", r)
 		return
@@ -193,7 +136,7 @@ func (s *Server) sessionInfo(w http.ResponseWriter, r *http.Request, actorID int
 		writeError(w, http.StatusInternalServerError, "session_failed", "could not refresh session", r)
 		return
 	}
-	http.SetCookie(w, &http.Cookie{Name: s.Config.CookieName, Value: token, Path: "/", HttpOnly: true, Secure: s.Config.CookieSecure || isHTTPS(r), SameSite: http.SameSiteStrictMode, MaxAge: int(s.Config.SessionTTL.Seconds())})
+	http.SetCookie(w, &http.Cookie{Name: s.Config.CookieName, Value: token, Path: "/", HttpOnly: true, Secure: s.Config.CookieSecure || s.isHTTPS(r), SameSite: http.SameSiteStrictMode, MaxAge: int(s.Config.SessionTTL.Seconds())})
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, map[string]any{"actor": map[string]string{"id": actor.Key, "role": actor.Role}, "csrfToken": newCSRF})
 }
@@ -210,12 +153,34 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listDeployments(w http.ResponseWriter, r *http.Request, workspace domain.Workspace) {
-	items, err := s.Store.ListDeployments(r.Context(), workspace.ID, 100)
+	beforeID := int64(math.MaxInt64)
+	if cursor := strings.TrimSpace(r.URL.Query().Get("cursor")); cursor != "" {
+		var err error
+		beforeID, err = domain.DecodeCursor(cursor)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_cursor", "cursor is invalid", r)
+			return
+		}
+	}
+	limit := 50
+	if rawLimit := strings.TrimSpace(r.URL.Query().Get("limit")); rawLimit != "" {
+		parsed, err := strconv.Atoi(rawLimit)
+		if err != nil || parsed < 1 || parsed > 100 {
+			writeError(w, http.StatusBadRequest, "invalid_limit", "limit must be between 1 and 100", r)
+			return
+		}
+		limit = parsed
+	}
+	items, nextCursor, err := s.Store.ListDeployments(r.Context(), workspace.ID, beforeID, limit)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "storage_failed", "could not list deployments", r)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items, "nextCursor": nil})
+	var next any
+	if nextCursor != "" {
+		next = nextCursor
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items, "nextCursor": next})
 }
 
 func (s *Server) createDeployment(w http.ResponseWriter, r *http.Request, workspace domain.Workspace, actorID int64) {
@@ -234,10 +199,30 @@ func (s *Server) createDeployment(w http.ResponseWriter, r *http.Request, worksp
 		writeError(w, http.StatusBadRequest, "invalid_intent", err.Error(), r)
 		return
 	}
-	depID, _ := domain.NewPublicID("dep")
-	dep, op, _, err := s.Store.CreateDeployment(r.Context(), workspace.ID, actorID, depID, intent, auth.HashToken(idem), payload)
+	if !s.Config.RegistryAllowed(intent.Image) {
+		writeError(w, http.StatusBadRequest, "registry_not_allowed", "image registry is not allowed", r)
+		return
+	}
+	var dep domain.Deployment
+	var op domain.Operation
+	var err error
+	for range 3 {
+		depID, idErr := s.deploymentID()
+		if idErr != nil {
+			err = idErr
+			break
+		}
+		dep, op, _, err = s.Store.CreateDeployment(r.Context(), workspace.ID, actorID, depID, intent, auth.HashToken(idem), payload)
+		if !errors.Is(err, store.ErrPublicIDCollision) {
+			break
+		}
+	}
 	if errors.Is(err, store.ErrConflict) {
 		writeError(w, http.StatusConflict, "idempotency_conflict", "request conflicts with an existing deployment", r)
+		return
+	}
+	if errors.Is(err, store.ErrPublicIDCollision) {
+		writeError(w, http.StatusServiceUnavailable, "id_generation_failed", "could not allocate a deployment identifier", r)
 		return
 	}
 	if err != nil {
@@ -246,45 +231,6 @@ func (s *Server) createDeployment(w http.ResponseWriter, r *http.Request, worksp
 	}
 	s.logAcceptedOperation(r, op)
 	writeJSON(w, http.StatusAccepted, map[string]any{"deployment": dep, "operation": op})
-}
-
-func (s *Server) deploymentRoute(w http.ResponseWriter, r *http.Request, workspace domain.Workspace, actorID int64) {
-	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/v1/deployments/"), "/")
-	if len(parts) == 0 || parts[0] == "" {
-		http.NotFound(w, r)
-		return
-	}
-	dep, err := s.Store.FindDeployment(r.Context(), workspace.ID, parts[0])
-	if err != nil {
-		if errors.Is(err, store.ErrNotFound) || errors.Is(err, store.ErrNoRows) {
-			writeError(w, http.StatusNotFound, "deployment_not_found", "deployment was not found", r)
-		} else {
-			writeError(w, http.StatusInternalServerError, "storage_failed", "could not read deployment", r)
-		}
-		return
-	}
-	if len(parts) == 2 && parts[1] == "operations" && r.Method == http.MethodGet {
-		ops, err := s.Store.ListOperations(r.Context(), workspace.ID, dep.ID)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "storage_failed", "could not read operations", r)
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"items": ops})
-		return
-	}
-	if r.Method == http.MethodGet && len(parts) == 1 {
-		s.detailDeployment(w, r, workspace, dep)
-		return
-	}
-	if r.Method == http.MethodPut && len(parts) == 1 {
-		s.updateDeployment(w, r, workspace, actorID, dep)
-		return
-	}
-	if r.Method == http.MethodDelete && len(parts) == 1 {
-		s.deleteDeployment(w, r, workspace, actorID, dep)
-		return
-	}
-	http.NotFound(w, r)
 }
 
 func (s *Server) detailDeployment(w http.ResponseWriter, r *http.Request, workspace domain.Workspace, dep domain.Deployment) {
@@ -324,6 +270,10 @@ func (s *Server) updateDeployment(w http.ResponseWriter, r *http.Request, worksp
 	intent = domain.NormalizeIntent(intent)
 	if err = domain.ValidateIntent(intent, s.Config.MaxReplicas, s.Config.MaxCPU, s.Config.MaxMemory); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_intent", err.Error(), r)
+		return
+	}
+	if !s.Config.RegistryAllowed(intent.Image) {
+		writeError(w, http.StatusBadRequest, "registry_not_allowed", "image registry is not allowed", r)
 		return
 	}
 	updated, op, err := s.Store.UpdateDeployment(r.Context(), workspace.ID, actorID, dep.ID, intent, version, auth.HashToken(idem), payload)
@@ -371,16 +321,6 @@ func (s *Server) logAcceptedOperation(r *http.Request, op domain.Operation) {
 	s.logger().Info("operation accepted", "request_id", requestID(r), "operation_id", op.PublicID, "deployment_id", op.DeploymentPublicID, "operation_kind", op.Kind)
 }
 
-func (s *Server) operation(w http.ResponseWriter, r *http.Request, workspace domain.Workspace) {
-	id := strings.TrimPrefix(r.URL.Path, "/api/v1/operations/")
-	op, err := s.Store.GetOperation(r.Context(), workspace.ID, id)
-	if err != nil {
-		writeError(w, http.StatusNotFound, "operation_not_found", "operation was not found", r)
-		return
-	}
-	writeJSON(w, http.StatusOK, op)
-}
-
 func (s *Server) session(r *http.Request) (int64, []byte, bool) {
 	cookie, err := r.Cookie(s.Config.CookieName)
 	if err != nil || cookie.Value == "" {
@@ -394,13 +334,10 @@ func (s *Server) validCSRF(r *http.Request, hash []byte) bool {
 }
 func (s *Server) originAllowed(r *http.Request) bool {
 	origin := r.Header.Get("Origin")
-	if origin == "" {
-		return true
-	}
 	if s.Config.AllowedOrigin != "" {
-		return origin == s.Config.AllowedOrigin
+		return origin != "" && origin == s.Config.AllowedOrigin
 	}
-	return origin == "http://127.0.0.1:8080" || origin == "http://localhost:8080" || origin == "http://127.0.0.1:5173" || origin == "http://localhost:5173"
+	return false
 }
 func equal(a, b []byte) bool {
 	if len(a) != len(b) {
@@ -415,24 +352,74 @@ func equal(a, b []byte) bool {
 
 func securityMiddleware(s *Server, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !s.hostAllowed(r.Host) {
+			writeError(w, http.StatusMisdirectedRequest, "host_not_allowed", "request host is not allowed", r)
+			return
+		}
+		if r.ContentLength > 64<<10 {
+			writeError(w, http.StatusRequestEntityTooLarge, "request_too_large", "request body is too large", r)
+			return
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
-		if isHTTPS(r) {
+		if strings.HasPrefix(r.URL.Path, "/api/v1/session") {
+			w.Header().Set("Cache-Control", "no-store")
+		}
+		if strings.HasPrefix(s.Config.PublicURL, "https://") && s.isHTTPS(r) {
 			w.Header().Set("Strict-Transport-Security", "max-age=31536000")
 		}
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				s.logger().Error("request panic recovered", "request_id", requestID(r))
+				writeError(w, http.StatusInternalServerError, "internal_error", "request could not be completed", r)
+			}
+		}()
 		next.ServeHTTP(w, r)
 	})
 }
-func isHTTPS(r *http.Request) bool {
-	return r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
+func (s *Server) isHTTPS(r *http.Request) bool {
+	return r.TLS != nil || s.proxyTrusted(r) && strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
 }
-func remoteIP(r *http.Request) string {
+func (s *Server) remoteIP(r *http.Request) string {
+	if s.proxyTrusted(r) {
+		if forwarded := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-For"), ",")[0]); net.ParseIP(forwarded) != nil {
+			return forwarded
+		}
+	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err == nil {
 		return host
 	}
 	return r.RemoteAddr
+}
+
+func (s *Server) proxyTrusted(r *http.Request) bool {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		host = r.RemoteAddr
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+	for _, value := range s.Config.TrustedProxyCIDRs {
+		_, cidr, err := net.ParseCIDR(value)
+		if err == nil && cidr.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Server) hostAllowed(host string) bool {
+	for _, allowed := range s.Config.AllowedHosts {
+		if strings.EqualFold(strings.TrimSuffix(host, "."), strings.TrimSuffix(allowed, ".")) {
+			return true
+		}
+	}
+	return false
 }
 func decodeJSON(r *http.Request, target any) error {
 	r.Body = io.NopCloser(io.LimitReader(r.Body, 64<<10))
@@ -553,12 +540,19 @@ func (s *Server) RunOnce(ctx context.Context, workerID string) (bool, error) {
 	if s.Runtime == nil {
 		return true, s.failOperation(ctx, op, "runtime_unconfigured", "runtime is not configured", false)
 	}
-	workspace, err := s.Store.Workspace(ctx, dep.WorkspaceID)
+	workspaceID := dep.WorkspaceID
+	if op.Kind == domain.OperationEnsureWorkspace {
+		workspaceID = op.WorkspaceID
+	}
+	workspace, err := s.Store.Workspace(ctx, workspaceID)
 	if err != nil {
 		return true, s.failOperation(ctx, op, "workspace_unavailable", "workspace is not available", true)
 	}
 	if err = s.Runtime.EnsureWorkspace(ctx, workspace.Namespace); err != nil {
 		return true, s.failOperation(ctx, op, "workspace_unavailable", "workspace is not available", true)
+	}
+	if op.Kind == domain.OperationEnsureWorkspace {
+		return true, s.Store.CompleteWorkspace(ctx, op)
 	}
 	if op.Kind == "DeleteDeployment" {
 		if err = s.Runtime.DeleteDeployment(ctx, workspace.Namespace, dep.RuntimeName); err != nil {
@@ -600,6 +594,13 @@ func (s *Server) completeOperation(ctx context.Context, op domain.Operation, sta
 }
 
 func (s *Server) RunWorker(ctx context.Context, workerID string) {
+	defer func() {
+		releaseCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := s.Store.ReleaseClaims(releaseCtx, workerID); err != nil {
+			s.logger().Error("release worker claims", "worker_id", workerID, "error", err)
+		}
+	}()
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 	for {

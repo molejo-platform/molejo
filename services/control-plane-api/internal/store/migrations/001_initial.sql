@@ -79,11 +79,3 @@ CREATE TABLE IF NOT EXISTS sessions (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS sessions_expiry ON sessions(expires_at);
-
--- +goose Down
-DROP TABLE IF EXISTS sessions;
-DROP TABLE IF EXISTS operations;
-DROP TABLE IF EXISTS deployments;
-DROP TABLE IF EXISTS workspace_actors;
-DROP TABLE IF EXISTS workspaces;
-DROP TABLE IF EXISTS actors;

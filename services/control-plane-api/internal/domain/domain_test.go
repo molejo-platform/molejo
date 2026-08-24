@@ -266,11 +266,11 @@ func contains(values []string, expected string) bool {
 }
 
 func TestNewPublicID(t *testing.T) {
-	id, err := NewPublicID("dep")
+	id, err := NewPublicID("ap")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(id, "dep-") || len(id) != 24 {
+	if !strings.HasPrefix(id, "ap-") || len(id) != 23 {
 		t.Fatalf("unexpected id %q", id)
 	}
 }

@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +14,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/clientcmd"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
@@ -118,6 +121,102 @@ func TestApplyDeploymentKeepsTheRuntimeNameStableAcrossIntentUpdates(t *testing.
 	}
 	if len(list.Items) != 1 {
 		t.Fatalf("expected one AppDeployment for the stable runtime name, got %d", len(list.Items))
+	}
+}
+
+func TestEnsureWorkspaceCreatesAndReusesTheManagedNamespace(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	kubernetesClient := &KubernetesClient{
+		client:       fake.NewClientBuilder().WithScheme(scheme).Build(),
+		fieldManager: "test-control-plane",
+		applyTimeout: time.Second,
+	}
+
+	for range 2 {
+		if err := kubernetesClient.EnsureWorkspace(context.Background(), "fruto-workspaces"); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	current := &corev1.Namespace{}
+	if err := kubernetesClient.client.Get(context.Background(), client.ObjectKey{Name: "fruto-workspaces"}, current); err != nil {
+		t.Fatal(err)
+	}
+	if current.Annotations[controlPlaneOwnerAnnotation] != workspaceOwnerValue {
+		t.Fatalf("namespace owner marker = %q", current.Annotations[controlPlaneOwnerAnnotation])
+	}
+}
+
+func TestEnsureWorkspaceRejectsAnUnmanagedNamespace(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	existing := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "fruto-workspaces"}}
+	kubernetesClient := &KubernetesClient{
+		client:       fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build(),
+		fieldManager: "test-control-plane",
+		applyTimeout: time.Second,
+	}
+
+	err := kubernetesClient.EnsureWorkspace(context.Background(), "fruto-workspaces")
+	if !errors.Is(err, ErrOwnershipConflict) {
+		t.Fatalf("expected ErrOwnershipConflict, got %v", err)
+	}
+}
+
+func TestPreflightRejectsAnUnexpectedClusterUID(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	systemNamespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: metav1.NamespaceSystem, UID: "actual-cluster-uid"}}
+	kubernetesClient := &KubernetesClient{
+		client:             fake.NewClientBuilder().WithScheme(scheme).WithObjects(systemNamespace).Build(),
+		applyTimeout:       time.Second,
+		expectedClusterUID: "different-cluster-uid",
+	}
+
+	if err := kubernetesClient.Preflight(context.Background()); err == nil || !strings.Contains(err.Error(), "does not match") {
+		t.Fatalf("expected cluster identity mismatch, got %v", err)
+	}
+	kubernetesClient.expectedClusterUID = "actual-cluster-uid"
+	if err := kubernetesClient.Preflight(context.Background()); err != nil {
+		t.Fatalf("matching cluster identity was rejected: %v", err)
+	}
+}
+
+func TestExternalClientFailsClosedOnUnexpectedContextOrServer(t *testing.T) {
+	kubeconfig := filepath.Join(t.TempDir(), "kubeconfig")
+	raw := clientcmdapi.Config{
+		CurrentContext: "actual-context",
+		Contexts: map[string]*clientcmdapi.Context{
+			"actual-context": {Cluster: "actual-cluster", AuthInfo: "actor"},
+		},
+		Clusters: map[string]*clientcmdapi.Cluster{
+			"actual-cluster": {Server: "https://127.0.0.1:6443", InsecureSkipTLSVerify: true},
+		},
+		AuthInfos: map[string]*clientcmdapi.AuthInfo{"actor": {Token: "test-only"}},
+	}
+	if err := clientcmd.WriteToFile(raw, kubeconfig); err != nil {
+		t.Fatal(err)
+	}
+
+	base := ExternalConfig{Kubeconfig: kubeconfig, Context: "wrong-context", Server: "https://127.0.0.1:6443", ExpectedClusterUID: "expected-uid"}
+	if _, err := NewKubernetesClient(base, "test", time.Second); err == nil || !strings.Contains(err.Error(), "current context") {
+		t.Fatalf("unexpected context was not rejected: %v", err)
+	}
+	base.Context = "actual-context"
+	base.Server = "https://127.0.0.1:7443"
+	if _, err := NewKubernetesClient(base, "test", time.Second); err == nil || !strings.Contains(err.Error(), "expected server") {
+		t.Fatalf("unexpected server was not rejected: %v", err)
+	}
+	base.Server = "https://127.0.0.1:6443/"
+	if _, err := NewKubernetesClient(base, "test", time.Second); err != nil {
+		t.Fatalf("exact external identity was rejected: %v", err)
 	}
 }
 

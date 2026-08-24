@@ -42,7 +42,7 @@ const (
 	tracerName             = "github.com/fruto-platform/fruto/services/platform-operator"
 	sharedGatewayName      = "fruto"
 	sharedGatewayNamespace = "fruto-system"
-	sharedGatewaySection   = "https"
+	sharedGatewaySection   = "https-molejo"
 
 	ownershipConflictRequeueAfter = 5 * time.Minute
 	persistentFailureRequeueAfter = 5 * time.Minute
@@ -378,7 +378,7 @@ func hostnameClaimPrecedes(left, right *platformv1alpha1.AppDeployment) bool {
 }
 
 func publicHostname(slug string) string {
-	return slug + ".fruto.calouro.tech"
+	return slug + ".molejo.dev"
 }
 
 func (r *AppDeploymentReconciler) getPublicationGateway(ctx context.Context) (*gatewayv1.Gateway, error) {

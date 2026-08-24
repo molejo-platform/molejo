@@ -4,7 +4,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { userFacingError } from "../../shared/api/errors";
 import { Alert } from "../../shared/ui/Alert";
 import { deploymentQueryKey, deploymentsQueryKey } from "../deployments/queries";
-import { deploymentOperationsQueryKey, isOperationTerminal, useOperationQuery } from "./queries";
+import { isOperationTerminal } from "./model";
+import { deploymentOperationsQueryKey, useOperationQuery } from "./queries";
 
 export function OperationBanner({ operationId, deploymentId }: { operationId: string; deploymentId: string }) {
   const queryClient = useQueryClient();

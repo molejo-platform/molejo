@@ -124,7 +124,7 @@ spec:
   selector:
     app.kubernetes.io/name: traefik-e2e
   ports:
-    - name: https
+    - name: https-molejo
       port: 8443
       targetPort: websecure
 ---
@@ -143,8 +143,8 @@ metadata:
 spec:
   gatewayClassName: traefik-e2e
   listeners:
-    - name: https
-      hostname: "*.fruto.calouro.tech"
+    - name: https-molejo
+      hostname: "*.molejo.dev"
       port: 8443
       protocol: HTTPS
       tls:

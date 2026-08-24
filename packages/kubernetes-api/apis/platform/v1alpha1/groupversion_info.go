@@ -1,4 +1,4 @@
-// Package v1alpha1 contains the first Kubernetes API contract for Fruto Platform.
+// Package v1alpha1 contains the first Kubernetes API contract for Molejo.
 // +kubebuilder:object:generate=true
 // +groupName=platform.fruto.calouro.tech
 package v1alpha1

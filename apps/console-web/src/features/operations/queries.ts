@@ -1,6 +1,7 @@
 import { queryOptions, useQuery } from "@tanstack/react-query";
 
 import { getOperation, listDeploymentOperations } from "./api";
+import { isOperationTerminal } from "./model";
 
 export const deploymentOperationsQueryKey = (id: string) => ["deployments", "operations", id] as const;
 export const operationQueryKey = (id: string) => ["operations", "detail", id] as const;
@@ -22,11 +23,7 @@ export function useOperationQuery(id: string) {
     ...operationQueryOptions(id),
     refetchInterval: (query) => {
       const status = query.state.data?.status;
-      return status === "Succeeded" || status === "Failed" || status === "Superseded" ? false : 1_000;
+      return status && isOperationTerminal(status) ? false : 1_000;
     },
   });
-}
-
-export function isOperationTerminal(status: string) {
-  return status === "Succeeded" || status === "Failed" || status === "Superseded";
 }

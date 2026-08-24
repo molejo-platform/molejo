@@ -131,6 +131,46 @@ func TestConcurrentMigratorsSerializeAndProduceAReadySchema(t *testing.T) {
 	}
 }
 
+func TestWorkspaceBootstrapIsDurableIdempotentAndFenced(t *testing.T) {
+	ctx := context.Background()
+	s := newSchemaReadyFixture(t)
+	workspace := domain.Workspace{PublicID: "ws-durable-bootstrap", Name: "Durable Bootstrap", Namespace: "durable-bootstrap"}
+	actors := map[string]struct{ Role, PasswordHash string }{
+		"owner": {Role: "owner", PasswordHash: "integration-only"},
+	}
+	for range 2 {
+		if err := s.Bootstrap(ctx, workspace, actors); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var operationCount int
+	if err := s.Pool.QueryRow(ctx, `SELECT count(*) FROM operations WHERE kind='EnsureWorkspace'`).Scan(&operationCount); err != nil {
+		t.Fatal(err)
+	}
+	if operationCount != 1 {
+		t.Fatalf("EnsureWorkspace operation count = %d, want 1", operationCount)
+	}
+	operation, deployment, ok, err := s.ClaimNext(ctx, "workspace-worker", time.Minute)
+	if err != nil || !ok {
+		t.Fatalf("claim workspace operation: ok=%v err=%v", ok, err)
+	}
+	if operation.Kind != domain.OperationEnsureWorkspace || deployment.ID != 0 {
+		t.Fatalf("claimed operation = %+v deployment=%+v", operation, deployment)
+	}
+	if err := s.CompleteWorkspace(ctx, operation); err != nil {
+		t.Fatal(err)
+	}
+	var workspaceState, operationStatus string
+	var startedAt, completedAt *time.Time
+	if err := s.Pool.QueryRow(ctx, `SELECT w.bootstrap_state,o.status,o.started_at,o.completed_at FROM workspaces w JOIN operations o ON o.workspace_id=w.id WHERE o.id=$1`, operation.ID).Scan(&workspaceState, &operationStatus, &startedAt, &completedAt); err != nil {
+		t.Fatal(err)
+	}
+	if workspaceState != "Ready" || operationStatus != domain.OperationSucceeded || startedAt == nil || completedAt == nil {
+		t.Fatalf("workspace=%q operation=%q started=%v completed=%v", workspaceState, operationStatus, startedAt, completedAt)
+	}
+}
+
 func TestSchemaReadyFixtureCleansSchemaAfterSetupFailure(t *testing.T) {
 	const childKey = "FRUTO_SCHEMA_READY_SETUP_FAILURE_CHILD"
 	if os.Getenv(childKey) == "1" {
@@ -272,7 +312,7 @@ func TestCompleteRejectsAStaleWorkerAfterLeaseHandoff(t *testing.T) {
 	ctx := context.Background()
 	s, workspaceID, actorID := newIntegrationFixture(t)
 
-	publicID, err := domain.NewPublicID("dep")
+	publicID, err := domain.NewPublicID("ap")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -327,7 +367,7 @@ func TestCompleteRejectsAStaleWorkerAfterLeaseHandoff(t *testing.T) {
 func TestFailEnforcesFencingBackoffAndRetryExhaustion(t *testing.T) {
 	ctx := context.Background()
 	s, workspaceID, actorID := newIntegrationFixture(t)
-	publicID, err := domain.NewPublicID("dep")
+	publicID, err := domain.NewPublicID("ap")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -432,7 +472,7 @@ func TestClaimNextReturnsThePersistedOperationSnapshot(t *testing.T) {
 	ctx := context.Background()
 	s, workspaceID, actorID := newIntegrationFixture(t)
 
-	publicID, err := domain.NewPublicID("dep")
+	publicID, err := domain.NewPublicID("ap")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -463,7 +503,7 @@ func TestClaimNextReturnsThePersistedOperationSnapshot(t *testing.T) {
 func TestUpdateSupersedesPendingSnapshotsAndClaimsOnlyTheLatestVersion(t *testing.T) {
 	ctx := context.Background()
 	s, workspaceID, actorID := newIntegrationFixture(t)
-	publicID, err := domain.NewPublicID("dep")
+	publicID, err := domain.NewPublicID("ap")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -509,7 +549,7 @@ func TestUpdateSupersedesPendingSnapshotsAndClaimsOnlyTheLatestVersion(t *testin
 func TestOperationExposesThePublicDeploymentID(t *testing.T) {
 	ctx := context.Background()
 	s, workspaceID, actorID := newIntegrationFixture(t)
-	publicID, err := domain.NewPublicID("dep")
+	publicID, err := domain.NewPublicID("ap")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -530,7 +570,7 @@ func TestOperationExposesThePublicDeploymentID(t *testing.T) {
 func TestUpdateRejectsChangingThePublicDeploymentName(t *testing.T) {
 	ctx := context.Background()
 	s, workspaceID, actorID := newIntegrationFixture(t)
-	publicID, err := domain.NewPublicID("dep")
+	publicID, err := domain.NewPublicID("ap")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -562,16 +602,19 @@ func TestDeploymentLookupIsScopedToTheWorkspace(t *testing.T) {
 		_, _ = s.Pool.Exec(ctx, `DELETE FROM workspaces WHERE id=$1`, otherWorkspaceID)
 	})
 
-	publicID, err := domain.NewPublicID("dep")
+	publicID, err := domain.NewPublicID("ap")
 	if err != nil {
 		t.Fatal(err)
 	}
-	deployment, _, _, err := s.CreateDeployment(ctx, otherWorkspaceID, actorID, publicID, integrationIntent("other-workspace"), domain.SHA256([]byte("other-workspace-idem")), domain.SHA256([]byte("other-workspace-payload")))
+	deployment, operation, _, err := s.CreateDeployment(ctx, otherWorkspaceID, actorID, publicID, integrationIntent("other-workspace"), domain.SHA256([]byte("other-workspace-idem")), domain.SHA256([]byte("other-workspace-payload")))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.FindDeployment(ctx, workspaceID, deployment.PublicID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("expected cross-workspace lookup to be hidden, got %v", err)
+	}
+	if _, err := s.GetOperation(ctx, workspaceID, operation.PublicID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected cross-workspace operation to be hidden, got %v", err)
 	}
 }
 
@@ -594,7 +637,7 @@ func TestConcurrentCreateWithTheSameIdempotencyKeyReusesTheCommittedOperation(t 
 		group.Add(1)
 		go func() {
 			defer group.Done()
-			publicID, err := domain.NewPublicID("dep")
+			publicID, err := domain.NewPublicID("ap")
 			if err != nil {
 				results <- result{err: err}
 				return
@@ -625,6 +668,67 @@ func TestConcurrentCreateWithTheSameIdempotencyKeyReusesTheCommittedOperation(t 
 	}
 	if deployments != 1 || operations != 1 {
 		t.Fatalf("expected one deployment and operation, got deployments=%d operations=%d", deployments, operations)
+	}
+}
+
+func TestListDeploymentsUsesAStableKeysetCursor(t *testing.T) {
+	ctx := context.Background()
+	s, workspaceID, actorID := newIntegrationFixture(t)
+
+	created := make([]string, 0, 3)
+	for index := range 3 {
+		publicID, err := domain.NewPublicID("ap")
+		if err != nil {
+			t.Fatal(err)
+		}
+		deployment, _, _, err := s.CreateDeployment(
+			ctx,
+			workspaceID,
+			actorID,
+			publicID,
+			integrationIntent(fmt.Sprintf("keyset-%d-%d", time.Now().UnixNano(), index)),
+			domain.SHA256([]byte(fmt.Sprintf("keyset-idem-%d", index))),
+			domain.SHA256([]byte(fmt.Sprintf("keyset-payload-%d", index))),
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		created = append(created, deployment.PublicID)
+	}
+
+	first, cursor, err := s.ListDeployments(ctx, workspaceID, 1<<62, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(first) != 2 || cursor == "" {
+		t.Fatalf("first page = %d items, cursor %q", len(first), cursor)
+	}
+
+	insertedAfterCursor, err := domain.NewPublicID("ap")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err = s.CreateDeployment(ctx, workspaceID, actorID, insertedAfterCursor, integrationIntent(fmt.Sprintf("keyset-later-%d", time.Now().UnixNano())), domain.SHA256([]byte("keyset-idem-later")), domain.SHA256([]byte("keyset-payload-later"))); err != nil {
+		t.Fatal(err)
+	}
+
+	beforeID, err := domain.DecodeCursor(cursor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, next, err := s.ListDeployments(ctx, workspaceID, beforeID, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(second) != 1 || next != "" || second[0].PublicID != created[0] {
+		t.Fatalf("second page = %+v, next %q; expected original oldest %q", second, next, created[0])
+	}
+	for _, item := range second {
+		for _, previous := range first {
+			if item.PublicID == previous.PublicID {
+				t.Fatalf("deployment %s appeared in both pages", item.PublicID)
+			}
+		}
 	}
 }
 
@@ -681,6 +785,12 @@ func newIntegrationFixture(t *testing.T) (*Store, int64, int64) {
 		t.Fatal(err)
 	}
 	if err := s.Pool.QueryRow(ctx, `SELECT id FROM actors WHERE actor_key=$1`, actorKey).Scan(&actorID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Pool.Exec(ctx, `UPDATE workspaces SET bootstrap_state='Ready',updated_at=now() WHERE id=$1`, workspaceID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Pool.Exec(ctx, `UPDATE operations SET status='Succeeded',started_at=COALESCE(started_at,now()),completed_at=now(),updated_at=now() WHERE workspace_id=$1 AND kind='EnsureWorkspace'`, workspaceID); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {

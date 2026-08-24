@@ -36,7 +36,7 @@ var (
 	buildInfo = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "fruto_platform_operator",
 		Name:      "build_info",
-		Help:      "Build information for the Fruto platform operator.",
+		Help:      "Build information for the Molejo platform operator.",
 	}, []string{"version", "commit"})
 )
 

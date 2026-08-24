@@ -13,7 +13,7 @@ export default defineConfig({
   use: {
     baseURL,
     ...devices["Desktop Chrome"],
-    ignoreHTTPSErrors: true,
+    ignoreHTTPSErrors: process.env.FRUTO_E2E_ALLOW_UNTRUSTED_TLS === "true",
     launchOptions: host ? { args: [`--host-resolver-rules=MAP ${host} 127.0.0.1`] } : undefined,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",

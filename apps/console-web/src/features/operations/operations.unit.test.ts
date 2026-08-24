@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isOperationTerminal } from "./queries";
+import { isOperationTerminal } from "./model";
 
 describe("operations slice", () => {
   it.each(["Succeeded", "Failed", "Superseded"])("stops polling at %s", (status) => {

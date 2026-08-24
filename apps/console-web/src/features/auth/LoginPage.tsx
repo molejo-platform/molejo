@@ -26,7 +26,7 @@ export function LoginPage() {
 
   return (
     <main className="shell narrow">
-      <div className="brand"><span className="mark">F</span><span>Fruto Console</span></div>
+      <div className="brand"><span className="mark">M</span><span>Molejo Console</span></div>
       <section className="card">
         <p className="eyebrow">Laboratório privado</p>
         <h1>Entre para gerenciar seu Workspace</h1>

@@ -11,6 +11,11 @@ generated_files=(
   "deploy/crds/platform.fruto.calouro.tech_appdeployments.yaml"
   "deploy/operator/rbac/role.yaml"
   "packages/kubernetes-api/apis/platform/v1alpha1/zz_generated.deepcopy.go"
+  "services/control-plane-api/internal/api/generated/control-plane.gen.go"
+  "services/control-plane-api/internal/store/sqlc/db.go"
+  "services/control-plane-api/internal/store/sqlc/models.go"
+  "services/control-plane-api/internal/store/sqlc/querier.go"
+  "services/control-plane-api/internal/store/sqlc/control_plane.sql.go"
 )
 
 cd "${repo_root}"

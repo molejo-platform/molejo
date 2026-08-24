@@ -38,7 +38,7 @@ func TestWorkerResumesAcrossRuntimeCrashWindows(t *testing.T) {
 		t.Run(tt.kind+"/"+window, func(t *testing.T) {
 			ctx := context.Background()
 			s, workspaceID, actorID, workspaceNamespace := newExecutorIntegrationFixture(t)
-			publicID, err := domain.NewPublicID("dep")
+			publicID, err := domain.NewPublicID("ap")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -134,7 +134,7 @@ func TestWorkerDoesNotHideADeploymentBeforeRuntimeRemovalIsObserved(t *testing.T
 	defer cancel()
 
 	s, workspaceID, actorID, workspaceNamespace := newExecutorIntegrationFixture(t)
-	publicID, err := domain.NewPublicID("dep")
+	publicID, err := domain.NewPublicID("ap")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -194,7 +194,7 @@ func TestWorkerDoesNotHideADeploymentBeforeRuntimeRemovalIsObserved(t *testing.T
 func TestWorkerLogsOperationAndWorkerCorrelation(t *testing.T) {
 	ctx := context.Background()
 	s, workspaceID, actorID, _ := newExecutorIntegrationFixture(t)
-	publicID, err := domain.NewPublicID("dep")
+	publicID, err := domain.NewPublicID("ap")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -396,6 +396,12 @@ func newExecutorIntegrationFixture(t *testing.T) (*store.Store, int64, int64, st
 		t.Fatal(err)
 	}
 	if err := s.Pool.QueryRow(ctx, `SELECT id FROM actors WHERE actor_key=$1`, actorKey).Scan(&actorID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Pool.Exec(ctx, `UPDATE workspaces SET bootstrap_state='Ready',updated_at=now() WHERE id=$1`, workspaceID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Pool.Exec(ctx, `UPDATE operations SET status='Succeeded',started_at=COALESCE(started_at,now()),completed_at=now(),updated_at=now() WHERE workspace_id=$1 AND kind='EnsureWorkspace'`, workspaceID); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
