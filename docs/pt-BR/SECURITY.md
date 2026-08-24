@@ -7,7 +7,7 @@ Esta é uma tradução informativa. A versão canônica está em
 
 ## Versões Suportadas
 
-A Fruto Platform é um projeto experimental em pre-alpha e não possui uma release
+A Molejo é um projeto experimental em pre-alpha e não possui uma release
 suportada ou versão pronta para produção. Correções de segurança são aplicadas à
 branch padrão conforme a disponibilidade dos mantenedores.
 

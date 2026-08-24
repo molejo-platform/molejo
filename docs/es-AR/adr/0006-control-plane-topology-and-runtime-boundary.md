@@ -4,7 +4,7 @@ Status: Draft
 
 ## Contexto
 
-El primer beta de Fruto necesita una API de producto y una consola pequeña sin
+El primer beta de Molejo necesita una API de producto y una consola pequeña sin
 convertir Kubernetes en la API pública. PostgreSQL guarda intención e historial
 mientras el operator existente controla los hijos de runtime.
 

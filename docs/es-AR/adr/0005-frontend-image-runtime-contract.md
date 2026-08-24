@@ -36,7 +36,7 @@ inmutable por un año.
 
 El repositorio contiene fixtures mínimas para ambos contratos. La fixture Vite
 es un consumidor del workspace pnpm usado para comprobar build y runtime; no es
-la aplicación web del producto Fruto. Comprueba el fallback del servidor, pero no
+la aplicación web del producto Molejo. Comprueba el fallback del servidor, pero no
 proporciona una página Not Found específica de un router. Las imágenes se
 despliegan solo por digest.
 

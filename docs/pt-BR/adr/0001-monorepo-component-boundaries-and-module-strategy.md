@@ -6,7 +6,7 @@ Draft
 
 ## Context
 
-A Fruto Platform conterá interfaces de usuário, ferramentas de linha de comando,
+A Molejo conterá interfaces de usuário, ferramentas de linha de comando,
 controllers Kubernetes, APIs HTTP, workers, contratos compartilhados e SDKs
 gerados em várias linguagens. Colocar o primeiro código Go diretamente em
 diretórios globais `api/`, `cmd/` e `internal/` simplificaria o scaffold inicial,
@@ -20,7 +20,7 @@ uma única aplicação na raiz. Criar um módulo por componente antes de existir
 necessidade de versionamento independente adicionaria overhead de sincronização
 de dependências, testes e releases.
 
-A Fruto também considera como ator tanto uma pessoa quanto um agente de software.
+A Molejo também considera como ator tanto uma pessoa quanto um agente de software.
 Entry points voltados a atores podem, portanto, incluir aplicações web, desktop,
 TUI e CLI, além de futuros adaptadores de protocolo usados diretamente por
 agentes. A localização de um futuro MCP server permanece incerta porque ele pode

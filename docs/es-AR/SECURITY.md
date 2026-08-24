@@ -7,7 +7,7 @@ Esta es una traducción informativa. La versión canónica está en
 
 ## Versiones Compatibles
 
-Fruto Platform es un proyecto experimental en pre-alfa y no tiene una release
+Molejo es un proyecto experimental en pre-alfa y no tiene una release
 compatible ni una versión lista para producción. Las correcciones de seguridad se
 aplican a la rama predeterminada según la disponibilidad de los mantenedores.
 

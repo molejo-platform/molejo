@@ -8,7 +8,7 @@ métricas e traces explicam como o controller chegou ao estado atual.
 
 | Condition ativa | Significado | Primeiras verificações |
 | --- | --- | --- |
-| `Ready=True` | Service e Deployment convergiram; um workload público também possui HTTPRoute atual e aceito e Gateway HTTPS compartilhado programado. | Confirme Service, release observada, réplicas, parent do HTTPRoute, Gateway e listener `https`. |
+| `Ready=True` | Service e Deployment convergiram; um workload público também possui HTTPRoute atual e aceito e Gateway HTTPS compartilhado programado. | Confirme Service, release observada, réplicas, parent do HTTPRoute, Gateway e listener `https-molejo`. |
 | `Progressing=True` | O rollout do workload, a rota ou o Gateway compartilhado ainda está convergindo. | Inspecione Deployment e, para workloads públicos, Conditions do parent do HTTPRoute e do Gateway. |
 | `Degraded=True` | Uma falha conhecida de workload, ownership, hostname, rota ou Gateway bloqueia a convergência. | Inspecione `reason`, Conditions dos filhos e do Gateway e Events. |
 
@@ -49,17 +49,17 @@ status do Deployment permanece como fonte do rollout.
 `spec.exposure` possui default `Private`. Um workload privado não possui
 HTTPRoute e permanece acessível pelo Service ClusterIP. Um workload público exige
 um label DNS em `spec.slug` e possui um HTTPRoute com o mesmo nome para
-`{slug}.fruto.calouro.tech`. A rota se conecta ao listener `https` do Gateway
+`{slug}.molejo.dev`. A rota se conecta ao listener `https-molejo` do Gateway
 compartilhado `fruto`, em `fruto-system`, e encaminha para o Service de mesmo nome.
 
 O operator considera a publicação convergida somente quando o parent esperado da
 rota possui Conditions `Accepted=True` e `ResolvedRefs=True` da geração atual, o
-Gateway compartilhado possui `Programmed=True` atual e seu único listener `https`
+Gateway compartilhado possui `Programmed=True` atual e seu único listener `https-molejo`
 possui `Accepted=True`, `Programmed=True` e `ResolvedRefs=True` atuais. Múltiplos
 controllers reportando o mesmo parent efetivo da rota são ambíguos e mantêm a rota
 em progresso. Estado ausente ou obsoleto do Gateway/listener reporta
 `GatewayProgressing` enquanto o Gateway converge. Gateway ausente,
-Gateway/listener atualmente rejeitado ou ausência de um único listener `https`
+Gateway/listener atualmente rejeitado ou ausência de um único listener `https-molejo`
 depois que o Gateway reporta `Programmed=True` reporta `GatewayRejected`. Uma
 falha conhecida
 do Deployment tem precedência sobre o progresso da publicação. Claims duplicados

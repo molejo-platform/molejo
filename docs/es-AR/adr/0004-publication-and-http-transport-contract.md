@@ -23,11 +23,11 @@ unicidad.
 
 `AppDeploymentSpec` usa el enum cerrado `Private | Public`. `Private` es el default
 y exige que el slug esté ausente. `Public` exige un único label DNS en minúsculas
-en `spec.slug`; el hostname resultante es `{slug}.fruto.calouro.tech`.
+en `spec.slug`; el hostname resultante es `{slug}.molejo.dev`.
 
 Cada workload continúa poseyendo un Deployment y un Service ClusterIP con el mismo
 nombre. Un workload público también posee un HTTPRoute con el mismo nombre en su
-namespace. La ruta se conecta al listener `https` del Gateway compartido `fruto`,
+namespace. La ruta se conecta al listener `https-molejo` del Gateway compartido `fruto`,
 en `fruto-system`, y reenvía al Service del workload. Volver a `Private` elimina
 solamente el HTTPRoute controlado. El operator no crea Gateways, registros DNS ni
 certificados.
@@ -45,12 +45,12 @@ comportamiento externo.
 La disponibilidad pública exige un rollout completo del Deployment, Conditions
 actuales del HTTPRoute para el parent esperado (`Accepted=True` y
 `ResolvedRefs=True`) y un Gateway compartido actual. El Gateway debe informar
-`Programmed=True`, y su único listener `https` debe informar `Accepted=True`,
+`Programmed=True`, y su único listener `https-molejo` debe informar `Accepted=True`,
 `Programmed=True` y `ResolvedRefs=True`. Múltiples controllers informando el mismo
 parent efectivo de la ruta son ambiguos y mantienen la ruta en progreso.
 Conditions ausentes u obsoletas del Gateway/listener usan `GatewayProgressing`
 mientras el Gateway converge. Un Gateway ausente, un Gateway/listener actual
-rechazado o la ausencia de un único listener `https` después de que el Gateway
+rechazado o la ausencia de un único listener `https-molejo` después de que el Gateway
 informa `Programmed=True` usa `GatewayRejected`. Una falla conocida del workload
 tiene precedencia sobre el progreso de publicación. Las fallas de la ruta o del
 Gateway producen Conditions públicas sanitizadas sin exponer errores técnicos.

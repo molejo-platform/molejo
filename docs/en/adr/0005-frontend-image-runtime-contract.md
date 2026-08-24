@@ -34,7 +34,7 @@ and is revalidated; fingerprinted assets use a one-year immutable cache policy.
 
 The repository contains minimal fixtures for both contracts. The Vite fixture is
 a pnpm workspace consumer used to prove build and runtime behavior; it is not the
-Fruto product web application. It proves the server fallback but does not provide
+Molejo product web application. It proves the server fallback but does not provide
 a router-specific Not Found page. Images are deployed only by immutable digest.
 
 ## Consequences

@@ -7,7 +7,7 @@ English is the canonical version of this policy.
 
 ## Supported Versions
 
-Fruto Platform is an experimental pre-alpha project and has no supported release
+Molejo is an experimental pre-alpha project and has no supported release
 or production-ready version. Security fixes are applied to the default branch on
 a best-effort basis.
 

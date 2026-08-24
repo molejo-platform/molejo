@@ -8,7 +8,7 @@ and traces explain how the controller reached that state.
 
 | Active condition | Meaning | First checks |
 | --- | --- | --- |
-| `Ready=True` | The Service and Deployment converged; a public workload also has a current accepted HTTPRoute and a programmed shared HTTPS Gateway. | Confirm the Service, observed release, replicas, HTTPRoute parent, Gateway, and `https` listener. |
+| `Ready=True` | The Service and Deployment converged; a public workload also has a current accepted HTTPRoute and a programmed shared HTTPS Gateway. | Confirm the Service, observed release, replicas, HTTPRoute parent, Gateway, and `https-molejo` listener. |
 | `Progressing=True` | The workload rollout, route, or shared Gateway is still converging. | Inspect the Deployment and, for public workloads, HTTPRoute parent and Gateway conditions. |
 | `Degraded=True` | A known workload, ownership, hostname, route, or Gateway failure blocks convergence. | Inspect `reason`, child and Gateway conditions, and Events. |
 
@@ -47,17 +47,17 @@ Deployment status remains the rollout source of truth.
 `spec.exposure` defaults to `Private`. A private workload owns no HTTPRoute and
 remains reachable through its ClusterIP Service. A public workload requires a DNS
 label in `spec.slug` and owns a same-named HTTPRoute for
-`{slug}.fruto.calouro.tech`. The route attaches to the `https` listener of the
+`{slug}.molejo.dev`. The route attaches to the `https-molejo` listener of the
 shared `fruto` Gateway in `fruto-system` and forwards to the same-named Service.
 
 The operator considers publication converged only when the expected route parent
 has current-generation `Accepted=True` and `ResolvedRefs=True` conditions, the
-shared Gateway has current `Programmed=True`, and its single `https` listener has
+shared Gateway has current `Programmed=True`, and its single `https-molejo` listener has
 current `Accepted=True`, `Programmed=True`, and `ResolvedRefs=True`. Multiple
 controllers reporting the same effective route parent are ambiguous and keep the
 route progressing. Missing or stale Gateway/listener state reports
 `GatewayProgressing` while the Gateway converges. An absent Gateway, a currently
-rejected Gateway/listener, or the absence of one unique `https` listener after the
+rejected Gateway/listener, or the absence of one unique `https-molejo` listener after the
 Gateway reports `Programmed=True`, reports `GatewayRejected`. A known Deployment failure
 takes precedence over publication progress. Duplicate hostname claims converge to
 one deterministic owner; a loser removes only its own route, reports

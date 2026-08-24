@@ -4,7 +4,7 @@ Status: Draft
 
 ## Context
 
-The first Fruto beta needs a small product API and web console without making
+The first Molejo beta needs a small product API and web console without making
 Kubernetes the public API. PostgreSQL stores product intent and history while
 the existing platform operator owns runtime children.
 

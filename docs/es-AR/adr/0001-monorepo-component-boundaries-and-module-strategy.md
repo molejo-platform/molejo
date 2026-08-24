@@ -6,7 +6,7 @@ Draft
 
 ## Context
 
-Fruto Platform contendrá interfaces de usuario, herramientas de línea de comandos,
+Molejo contendrá interfaces de usuario, herramientas de línea de comandos,
 controllers de Kubernetes, APIs HTTP, workers, contratos compartidos y SDKs
 generados en varios lenguajes. Colocar el primer código Go directamente en
 directorios globales `api/`, `cmd/` e `internal/` simplificaría el scaffold
@@ -20,7 +20,7 @@ módulo Go, y un `go.mod` en la raíz no implica que el repositorio contenga una
 versionado independiente agregaría overhead de sincronización de dependencias,
 pruebas y releases.
 
-Fruto también considera actor tanto a una persona como a un agente de software.
+Molejo también considera actor tanto a una persona como a un agente de software.
 Por lo tanto, los entry points orientados a actores pueden incluir aplicaciones
 web, desktop, TUI y CLI, además de futuros adaptadores de protocolo usados
 directamente por agentes. La ubicación de un futuro MCP server permanece incierta

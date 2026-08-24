@@ -8,7 +8,7 @@ métricas y traces explican cómo el controller llegó al estado actual.
 
 | Condition activa | Significado | Primeras verificaciones |
 | --- | --- | --- |
-| `Ready=True` | Service y Deployment convergieron; un workload público también tiene un HTTPRoute actual y aceptado y un Gateway HTTPS compartido programado. | Confirmar Service, release observada, réplicas, parent del HTTPRoute, Gateway y listener `https`. |
+| `Ready=True` | Service y Deployment convergieron; un workload público también tiene un HTTPRoute actual y aceptado y un Gateway HTTPS compartido programado. | Confirmar Service, release observada, réplicas, parent del HTTPRoute, Gateway y listener `https-molejo`. |
 | `Progressing=True` | El rollout del workload, la ruta o el Gateway compartido todavía está convergiendo. | Inspeccionar Deployment y, para workloads públicos, las Conditions del parent del HTTPRoute y del Gateway. |
 | `Degraded=True` | Una falla conocida de workload, ownership, hostname, ruta o Gateway bloquea la convergencia. | Inspeccionar `reason`, Conditions de los hijos y del Gateway y Events. |
 
@@ -49,18 +49,18 @@ status del Deployment sigue siendo la fuente del rollout.
 `spec.exposure` tiene como default `Private`. Un workload privado no posee un
 HTTPRoute y continúa accesible mediante su Service ClusterIP. Un workload público
 requiere un label DNS en `spec.slug` y posee un HTTPRoute con el mismo nombre para
-`{slug}.fruto.calouro.tech`. La ruta se conecta al listener `https` del Gateway
+`{slug}.molejo.dev`. La ruta se conecta al listener `https-molejo` del Gateway
 compartido `fruto`, en `fruto-system`, y reenvía al Service con el mismo nombre.
 
 El operator considera que la publicación convergió solamente cuando el parent
 esperado de la ruta tiene Conditions `Accepted=True` y `ResolvedRefs=True` de la
 generación actual, el Gateway compartido tiene `Programmed=True` actual y su único
-listener `https` tiene `Accepted=True`, `Programmed=True` y `ResolvedRefs=True`
+listener `https-molejo` tiene `Accepted=True`, `Programmed=True` y `ResolvedRefs=True`
 actuales. Múltiples controllers informando el mismo parent efectivo de la ruta son
 ambiguos y mantienen la ruta en progreso. Un estado ausente u obsoleto del
 Gateway/listener informa `GatewayProgressing` mientras el Gateway converge. Un
 Gateway ausente, un Gateway/listener actualmente rechazado o la ausencia de un
-único listener `https` después de que el Gateway informa `Programmed=True` informa
+único listener `https-molejo` después de que el Gateway informa `Programmed=True` informa
 `GatewayRejected`. Una falla conocida del Deployment tiene precedencia sobre el
 progreso de publicación. Claims duplicados de hostname convergen a un owner
 determinístico; el perdedor elimina solo su propia ruta, informa

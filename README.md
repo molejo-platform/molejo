@@ -1,13 +1,13 @@
-# Fruto Platform
+# Molejo
 
-> Experimental pre-alpha project. Fruto Platform is not ready for production.
+> Experimental pre-alpha project. Molejo is not ready for production.
 
-Fruto Platform is a public and portable Kubernetes Application Platform. It aims
+Molejo is a public and portable Kubernetes Application Platform. It aims
 to let people create, publish, and operate applications without requiring them to
 understand Kubernetes, `kubectl`, YAML, or the underlying infrastructure.
 
 This repository is the public monorepo for the product. Kubernetes is its execution
-substrate, while Fruto contracts and APIs represent the product intent exposed to
+substrate, while Molejo contracts and APIs represent the product intent exposed to
 users.
 
 ## What you can reproduce today
@@ -22,7 +22,7 @@ AppDeployment v1alpha1 -> platform-operator -> Deployment + ClusterIP Service
 
 The operator creates and maintains one Kubernetes Deployment and one private
 ClusterIP Service for each `AppDeployment`. Public workloads additionally receive
-a same-named HTTPRoute at `{slug}.fruto.calouro.tech`; private workloads keep only
+a same-named HTTPRoute at `{slug}.molejo.dev`; private workloads keep only
 their internal Service. The operator projects immutable images, resources, probes,
 and a restricted container runtime, reports rollout and publication state through
 Conditions, and exposes protected metrics plus optional OpenTelemetry tracing.
@@ -166,7 +166,7 @@ databases change independently of the repository.
 Maintainers with access to the personal cluster can run
 `just e2e-frontend-k3s`. This separate manual target publishes amd64 fixtures to
 the private registry, deploys them by digest through the explicit `fruto-lab`
-context, and leaves `static.fruto.calouro.tech` and `spa.fruto.calouro.tech`
+context, and leaves `static.molejo.dev` and `spa.molejo.dev`
 available for browser inspection. Its detailed prerequisites and persistent side
 effects are documented in the operator runbook.
 
@@ -184,6 +184,12 @@ effects are documented in the operator runbook.
 | `just e2e` | Exercise the complete flow in a disposable Kind cluster. |
 | `just e2e-public` | Add a non-deterministic outbound public HTTPS check to the E2E flow. |
 | `just e2e-frontend-k3s` | Manually publish and validate frontend fixtures on `fruto-lab`. |
+| `just control-plane-build-release` | Publish the Phase 7 API and Console as `linux/amd64` digests. |
+| `just control-plane-preflight-k3s` | Validate the approved k3s target without mutations. |
+| `just control-plane-render-release` | Render the external digest-pinned Phase 7 bundle. |
+| `just control-plane-prepare-k3s` | Generate external lab credentials and Kubernetes Secrets. |
+| `just control-plane-apply-k3s` | Apply migrations, bootstrap, workloads, and routes in order. |
+| `just control-plane-accept-k3s` | Check release digests, routes, RBAC, TLS, and redirect. |
 | `just ci` | Run the complete local acceptance gate. |
 
 ## Repository layout

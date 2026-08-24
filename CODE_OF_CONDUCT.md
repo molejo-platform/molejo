@@ -7,7 +7,7 @@ English is the canonical version of this policy.
 
 ## Our Commitment
 
-We are committed to making participation in the Fruto Platform community a
+We are committed to making participation in the Molejo community a
 welcoming, safe, and respectful experience for everyone.
 
 ## Expected Behavior

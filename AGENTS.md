@@ -2,15 +2,17 @@
 
 ## Identidade e objetivo
 
-- A Fruto Platform é uma Kubernetes Application Platform pública, portátil e
+- A Molejo é uma Kubernetes Application Platform pública, portátil e
   experimental.
 - Este repositório é OSS e ainda está em pre-alpha; não apresentar capacidades de
   laboratório como prontas para produção.
 - Kubernetes é o substrato de execução, não a API pública do produto.
 - A experiência voltada a pessoas ou agentes deve abstrair `kubectl`, YAML e
   detalhes internos da infraestrutura.
-- `fruto.calouro.tech` e a marca Fruto são provisórios antes do beta; não criar
-  abstrações preventivas sem um caso de uso real.
+- A marca pública é Molejo, o Console usa `cloud.molejo.dev` e workloads públicos
+  usam `{slug}.molejo.dev`.
+- Identificadores técnicos legados que ainda contêm `fruto` exigem uma migração
+  explícita; não renomeá-los como efeito colateral de mudanças de marca.
 
 ## Escopo deste repositório
 

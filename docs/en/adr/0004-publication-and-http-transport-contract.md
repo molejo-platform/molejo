@@ -22,11 +22,11 @@ database in which to enforce a transactional uniqueness constraint.
 `AppDeploymentSpec` uses the closed enum `Private | Public`. `Private` is the
 default and requires the slug to be absent. `Public` requires one lowercase DNS
 label in `spec.slug`; the resulting hostname is
-`{slug}.fruto.calouro.tech`.
+`{slug}.molejo.dev`.
 
 Every workload continues to own one same-named Deployment and ClusterIP Service.
 A public workload additionally owns one same-named HTTPRoute in its namespace.
-The route attaches to the `https` listener of the shared `fruto` Gateway in
+The route attaches to the `https-molejo` listener of the shared `fruto` Gateway in
 `fruto-system` and forwards to the workload Service. Returning to `Private`
 deletes only the owned HTTPRoute. The operator does not create Gateways, DNS
 records, or certificates.
@@ -42,12 +42,12 @@ with an atomic uniqueness constraint while keeping the external behavior.
 Public readiness requires a complete Deployment rollout, current HTTPRoute
 conditions from the expected parent (`Accepted=True` and `ResolvedRefs=True`),
 and a current shared Gateway. The Gateway must report `Programmed=True`, and its
-single `https` listener must report `Accepted=True`, `Programmed=True`, and
+single `https-molejo` listener must report `Accepted=True`, `Programmed=True`, and
 `ResolvedRefs=True`. Multiple controllers reporting the same effective route
 parent are ambiguous and keep the route progressing. Missing or stale
 Gateway/listener conditions use `GatewayProgressing` while the Gateway converges.
 An absent Gateway, a current rejected Gateway/listener, or the absence of one
-unique `https` listener after the Gateway reports `Programmed=True` uses
+unique `https-molejo` listener after the Gateway reports `Programmed=True` uses
 `GatewayRejected`. A known workload failure takes precedence over publication
 progress. Route or Gateway failures produce sanitized public conditions without
 exposing technical errors.
