@@ -37,7 +37,7 @@ yq ea 'select(.kind == "Deployment" or .kind == "HTTPRoute")' "$release_file" |
 kubectl --context "$context" -n fruto-control-plane rollout status deployment/control-plane-api --timeout=300s
 kubectl --context "$context" -n fruto-control-plane rollout status deployment/console-web --timeout=300s
 
-for route in control-plane-console control-plane-redirect; do
+for route in control-plane-console; do
   for _ in $(seq 1 60); do
     accepted="$(kubectl --context "$context" -n fruto-control-plane get httproute "$route" -o jsonpath='{.status.parents[0].conditions[?(@.type=="Accepted")].status}' 2>/dev/null || true)"
     resolved="$(kubectl --context "$context" -n fruto-control-plane get httproute "$route" -o jsonpath='{.status.parents[0].conditions[?(@.type=="ResolvedRefs")].status}' 2>/dev/null || true)"

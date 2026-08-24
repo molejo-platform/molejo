@@ -19,7 +19,7 @@ done
 [[ "$(kubectl --context "$context" -n fruto-control-plane get deployment control-plane-api -o jsonpath='{.spec.template.spec.containers[0].image}')" == "$api_image" ]]
 [[ "$(kubectl --context "$context" -n fruto-control-plane get deployment console-web -o jsonpath='{.spec.template.spec.containers[0].image}')" == "$console_image" ]]
 
-for route in control-plane-console control-plane-redirect; do
+for route in control-plane-console; do
   conditions="$(kubectl --context "$context" -n fruto-control-plane get httproute "$route" -o json)"
   jq -e 'any(.status.parents[].conditions[]; .type == "Accepted" and .status == "True")' <<<"$conditions" >/dev/null
   jq -e 'any(.status.parents[].conditions[]; .type == "ResolvedRefs" and .status == "True")' <<<"$conditions" >/dev/null

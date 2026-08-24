@@ -237,9 +237,14 @@ func TestControlPlanePhase7ArtifactsAreExplicitAndReproducible(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, expected := range []string{"name: control-plane-redirect", "sectionName: http", "type: RequestRedirect", "scheme: https"} {
+	for _, expected := range []string{"name: control-plane-console", "sectionName: https-molejo", "cloud.molejo.dev"} {
 		if !strings.Contains(string(route), expected) {
 			t.Errorf("control-plane route is missing %q", expected)
+		}
+	}
+	for _, forbidden := range []string{"control-plane-redirect", "type: RequestRedirect"} {
+		if strings.Contains(string(route), forbidden) {
+			t.Errorf("control-plane route assumes foundation-owned redirect %q", forbidden)
 		}
 	}
 
@@ -292,7 +297,7 @@ func TestControlPlanePhase7ArtifactsAreExplicitAndReproducible(t *testing.T) {
 			"--dry-run=server", "control-plane-migrate", "control-plane-bootstrap", "control-plane-console",
 		},
 		"accept-control-plane-k3s.sh": {
-			"control-plane-redirect", "ResolvedRefs", "auth can-i", "ssl_verify_result",
+			"http://cloud.molejo.dev/", "ResolvedRefs", "auth can-i", "ssl_verify_result",
 		},
 	} {
 		contents, err := os.ReadFile(path)
