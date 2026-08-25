@@ -334,6 +334,22 @@ func TestCIGateRequiresPostgreSQLBackedControlPlaneTests(t *testing.T) {
 	}
 }
 
+func TestControlPlaneApplyDryRunExcludesImmutableJobs(t *testing.T) {
+	contents, err := os.ReadFile("apply-control-plane-k3s.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(contents)
+	if strings.Contains(script, `--dry-run=server -f "$release_file"`) {
+		t.Fatal("server-side dry-run attempts to update immutable Jobs from the complete release bundle")
+	}
+	for _, expected := range []string{`select(.kind != "Job")`, `--dry-run=server -f -`} {
+		if !strings.Contains(script, expected) {
+			t.Errorf("server-side dry-run is missing %q", expected)
+		}
+	}
+}
+
 func TestE2ECoversFrontendImageContracts(t *testing.T) {
 	contents, err := os.ReadFile("run.sh")
 	if err != nil {

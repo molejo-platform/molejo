@@ -16,7 +16,8 @@ for secret in fruto-control-plane-postgres fruto-control-plane-db fruto-control-
   kubectl --context "$context" -n fruto-control-plane get secret "$secret" >/dev/null
 done
 
-kubectl --context "$context" apply --server-side --dry-run=server -f "$release_file" >/dev/null
+yq ea 'select(.kind != "Job")' "$release_file" |
+  kubectl --context "$context" apply --server-side --dry-run=server -f - >/dev/null
 
 yq ea 'select(.kind != "Deployment" and .kind != "Job" and .kind != "HTTPRoute")' "$release_file" |
   kubectl --context "$context" apply --server-side -f - >/dev/null
