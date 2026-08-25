@@ -717,7 +717,7 @@ func (s *Store) Complete(ctx context.Context, op domain.Operation, state, messag
 	if commandTag.RowsAffected() != 1 {
 		return ErrLeaseLost
 	}
-	commandTag, err = tx.Exec(ctx, `UPDATE operations SET status='Succeeded',completed_at=now(),lease_until=NULL,worker_id=NULL,updated_at=now() WHERE id=$1 AND status='Running' AND worker_id=$2 AND fencing_token=$3 AND lease_until > now()`, op.ID, op.WorkerID, op.FencingToken)
+	commandTag, err = tx.Exec(ctx, `UPDATE operations SET status='Succeeded',completed_at=now(),lease_until=NULL,worker_id=NULL,error_code='',error_message='',updated_at=now() WHERE id=$1 AND status='Running' AND worker_id=$2 AND fencing_token=$3 AND lease_until > now()`, op.ID, op.WorkerID, op.FencingToken)
 	if err != nil {
 		return err
 	}
@@ -736,7 +736,7 @@ func (s *Store) CompleteWorkspace(ctx context.Context, op domain.Operation) erro
 	if _, err = tx.Exec(ctx, `UPDATE workspaces SET bootstrap_state='Ready',updated_at=now() WHERE id=$1`, op.WorkspaceID); err != nil {
 		return err
 	}
-	tag, err := tx.Exec(ctx, `UPDATE operations SET status='Succeeded',completed_at=now(),lease_until=NULL,worker_id=NULL,updated_at=now() WHERE id=$1 AND kind='EnsureWorkspace' AND status='Running' AND worker_id=$2 AND fencing_token=$3 AND lease_until > now()`, op.ID, op.WorkerID, op.FencingToken)
+	tag, err := tx.Exec(ctx, `UPDATE operations SET status='Succeeded',completed_at=now(),lease_until=NULL,worker_id=NULL,error_code='',error_message='',updated_at=now() WHERE id=$1 AND kind='EnsureWorkspace' AND status='Running' AND worker_id=$2 AND fencing_token=$3 AND lease_until > now()`, op.ID, op.WorkerID, op.FencingToken)
 	if err != nil {
 		return err
 	}

@@ -364,6 +364,45 @@ func TestCompleteRejectsAStaleWorkerAfterLeaseHandoff(t *testing.T) {
 	}
 }
 
+func TestCompleteClearsTransientOperationError(t *testing.T) {
+	ctx := context.Background()
+	s, workspaceID, actorID := newIntegrationFixture(t)
+	publicID, err := domain.NewPublicID("ap")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, operation, _, err := s.CreateDeployment(ctx, workspaceID, actorID, publicID, integrationIntent("retry-success"), domain.SHA256([]byte("retry-success-idem")), domain.SHA256([]byte("retry-success-payload")))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	claimed, _, ok, err := s.ClaimNext(ctx, "worker-a", time.Second)
+	if err != nil || !ok {
+		t.Fatalf("initial claim: ok=%v err=%v", ok, err)
+	}
+	if err := s.Fail(ctx, claimed, "runtime_not_ready", "runtime has not observed the requested release", true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Pool.Exec(ctx, `UPDATE operations SET next_attempt_at=now()-interval '1 second' WHERE id=$1`, operation.ID); err != nil {
+		t.Fatal(err)
+	}
+	claimed, _, ok, err = s.ClaimNext(ctx, "worker-b", time.Second)
+	if err != nil || !ok {
+		t.Fatalf("replacement claim: ok=%v err=%v", ok, err)
+	}
+	if err := s.Complete(ctx, claimed, domain.Ready, "runtime ready", claimed.DesiredVersion, claimed.Intent.Image, false); err != nil {
+		t.Fatal(err)
+	}
+
+	completed, err := s.GetOperation(ctx, workspaceID, operation.PublicID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if completed.Status != domain.OperationSucceeded || completed.ErrorCode != "" || completed.ErrorMessage != "" {
+		t.Fatalf("completed operation retained a transient error: %+v", completed)
+	}
+}
+
 func TestFailEnforcesFencingBackoffAndRetryExhaustion(t *testing.T) {
 	ctx := context.Background()
 	s, workspaceID, actorID := newIntegrationFixture(t)
