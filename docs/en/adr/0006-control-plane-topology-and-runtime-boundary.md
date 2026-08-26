@@ -13,8 +13,11 @@ the existing platform operator owns runtime children.
 The control plane is a single-replica Go service with a React/Vite console and a
 PostgreSQL dependency. It applies only `AppDeployment` resources through a
 consumer-owned runtime interface. The operator remains the sole owner of
-Deployments, Services, and HTTPRoutes. The first installation uses one shared
-Workspace Namespace and explicit kubeconfig or in-cluster credentials.
+Deployments, Services, and HTTPRoutes. Actors may belong to multiple Workspaces;
+each Workspace contains Projects, while Apps and Environments are siblings under
+one Project. An AppDeployment binds exactly one App to one Environment in that
+same Project. Each Workspace is materialized as a managed Namespace through a
+durable operation, using explicit kubeconfig or in-cluster credentials.
 
 This is a pre-alpha, non-HA topology. The API exposes sanitized product
 resources and never returns Kubernetes metadata or raw objects.

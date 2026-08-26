@@ -16,6 +16,30 @@ type Actor struct {
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 }
 
+type App struct {
+	ID         int64              `json:"id"`
+	PublicID   string             `json:"public_id"`
+	ProjectID  int64              `json:"project_id"`
+	Name       string             `json:"name"`
+	NameKey    string             `json:"name_key"`
+	Version    int64              `json:"version"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+	ArchivedAt pgtype.Timestamptz `json:"archived_at"`
+}
+
+type AppGithubSource struct {
+	AppID                int64              `json:"app_id"`
+	GithubInstallationID int64              `json:"github_installation_id"`
+	RepositoryID         int64              `json:"repository_id"`
+	RepositoryName       string             `json:"repository_name"`
+	RepositoryFullName   string             `json:"repository_full_name"`
+	RepositoryPrivate    bool               `json:"repository_private"`
+	DefaultBranch        string             `json:"default_branch"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Deployment struct {
 	ID                  int64              `json:"id"`
 	PublicID            string             `json:"public_id"`
@@ -33,6 +57,48 @@ type Deployment struct {
 	DeletedAt           pgtype.Timestamptz `json:"deleted_at"`
 	RuntimeName         string             `json:"runtime_name"`
 	DeletionRequestedAt pgtype.Timestamptz `json:"deletion_requested_at"`
+	ProjectID           int64              `json:"project_id"`
+	AppID               int64              `json:"app_id"`
+	EnvironmentID       int64              `json:"environment_id"`
+}
+
+type Environment struct {
+	ID         int64              `json:"id"`
+	PublicID   string             `json:"public_id"`
+	ProjectID  int64              `json:"project_id"`
+	Name       string             `json:"name"`
+	NameKey    string             `json:"name_key"`
+	Version    int64              `json:"version"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+	ArchivedAt pgtype.Timestamptz `json:"archived_at"`
+}
+
+type GithubConnectionState struct {
+	ID                   int64              `json:"id"`
+	StateHash            []byte             `json:"state_hash"`
+	BrowserHash          []byte             `json:"browser_hash"`
+	ActorID              int64              `json:"actor_id"`
+	WorkspaceID          int64              `json:"workspace_id"`
+	Step                 string             `json:"step"`
+	GithubInstallationID pgtype.Int8        `json:"github_installation_id"`
+	ExpiresAt            pgtype.Timestamptz `json:"expires_at"`
+	ConsumedAt           pgtype.Timestamptz `json:"consumed_at"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+}
+
+type GithubInstallation struct {
+	ID                   int64              `json:"id"`
+	PublicID             string             `json:"public_id"`
+	WorkspaceID          int64              `json:"workspace_id"`
+	ConnectedByActorID   int64              `json:"connected_by_actor_id"`
+	GithubInstallationID int64              `json:"github_installation_id"`
+	AccountID            int64              `json:"account_id"`
+	AccountLogin         string             `json:"account_login"`
+	AccountType          string             `json:"account_type"`
+	RepositorySelection  string             `json:"repository_selection"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Operation struct {
@@ -61,6 +127,18 @@ type Operation struct {
 	CompletedAt     pgtype.Timestamptz `json:"completed_at"`
 }
 
+type Project struct {
+	ID          int64              `json:"id"`
+	PublicID    string             `json:"public_id"`
+	WorkspaceID int64              `json:"workspace_id"`
+	Name        string             `json:"name"`
+	NameKey     string             `json:"name_key"`
+	Version     int64              `json:"version"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	ArchivedAt  pgtype.Timestamptz `json:"archived_at"`
+}
+
 type Session struct {
 	ID        int64              `json:"id"`
 	TokenHash []byte             `json:"token_hash"`
@@ -79,6 +157,7 @@ type Workspace struct {
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	BootstrapState string             `json:"bootstrap_state"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	Version        int64              `json:"version"`
 }
 
 type WorkspaceActor struct {

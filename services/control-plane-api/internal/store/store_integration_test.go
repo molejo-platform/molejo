@@ -3,8 +3,10 @@ package store
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net/url"
 	"os"
 	"os/exec"
@@ -16,6 +18,7 @@ import (
 
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/domain"
 	"github.com/jackc/pgx/v5"
+	"github.com/pressly/goose/v3"
 )
 
 func TestSchemaReadyAcceptsTheEmbeddedMigrationSet(t *testing.T) {
@@ -131,6 +134,89 @@ func TestConcurrentMigratorsSerializeAndProduceAReadySchema(t *testing.T) {
 	}
 }
 
+func TestLegacyDeploymentBackfillIsDeterministicAndIdempotent(t *testing.T) {
+	ctx := context.Background()
+	s := newSchemaReadyFixtureWithoutMigrations(t)
+	db, err := sql.Open("pgx", s.Pool.Config().ConnString())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	migrationFiles, err := fs.Sub(migrationFS, "migrations")
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider, err := goose.NewProvider(goose.DialectPostgres, db, migrationFiles)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = provider.UpTo(ctx, 4); err != nil {
+		t.Fatal(err)
+	}
+
+	workspacePublicID := mustPublicID(t, "ws")
+	deploymentPublicID := mustPublicID(t, "ap")
+	operationPublicID := mustPublicID(t, "op")
+	var workspaceID, deploymentID, actorID int64
+	if err = s.Pool.QueryRow(ctx, `INSERT INTO workspaces(public_id,name,namespace_name,bootstrap_state) VALUES ($1,'Legacy',$1,'Ready') RETURNING id`, workspacePublicID).Scan(&workspaceID); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.Pool.QueryRow(ctx, `INSERT INTO actors(actor_key,role,password_hash) VALUES ('legacy-owner','owner','integration-only') RETURNING id`).Scan(&actorID); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.Pool.QueryRow(ctx, `INSERT INTO deployments(public_id,workspace_id,name,runtime_name,intent_json) VALUES ($1,$2,'legacy-app',$1,'{}'::jsonb) RETURNING id`, deploymentPublicID, workspaceID).Scan(&deploymentID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.Pool.Exec(ctx, `INSERT INTO operations(public_id,workspace_id,deployment_id,actor_id,kind,status,idempotency_hash,payload_hash,intent_json,desired_version,sequence) VALUES ($1,$2,$3,$4,'CreateDeployment','Pending',$5,$6,'{}'::jsonb,1,1)`, operationPublicID, workspaceID, deploymentID, actorID, domain.SHA256([]byte("legacy-operation")), domain.SHA256([]byte("legacy-payload"))); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = provider.UpTo(ctx, 5); err != nil {
+		t.Fatal(err)
+	}
+	status, err := s.HierarchyBackfillStatus(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.PendingDeployments != 1 || status.ProjectsToCreate != 1 || status.EnvironmentsToCreate != 1 || status.AppsToCreate != 1 {
+		t.Fatalf("backfill dry-run status=%+v", status)
+	}
+
+	if err = s.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	status, err = s.HierarchyBackfillStatus(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.Deployments != 1 || status.PendingDeployments != 0 || status.AffectedWorkspaces != 1 {
+		t.Fatalf("backfill status=%+v", status)
+	}
+	if status.ProjectsToCreate != 0 || status.EnvironmentsToCreate != 0 || status.AppsToCreate != 0 {
+		t.Fatalf("backfill still plans resources: %+v", status)
+	}
+	var projectID, appID, environmentID string
+	if err = s.Pool.QueryRow(ctx, `SELECT p.public_id,a.public_id,e.public_id FROM deployments d JOIN projects p ON p.id=d.project_id JOIN apps a ON a.id=d.app_id JOIN environments e ON e.id=d.environment_id WHERE d.public_id=$1`, deploymentPublicID).Scan(&projectID, &appID, &environmentID); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var counts [3]int
+	if err = s.Pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM projects),(SELECT count(*) FROM apps),(SELECT count(*) FROM environments)`).Scan(&counts[0], &counts[1], &counts[2]); err != nil {
+		t.Fatal(err)
+	}
+	if counts != [3]int{1, 1, 1} {
+		t.Fatalf("second migration duplicated hierarchy: %v", counts)
+	}
+	if projectID == "" || appID == "" || environmentID == "" {
+		t.Fatal("backfill produced empty public identifiers")
+	}
+	operation, claimedDeployment, ok, err := s.ClaimNext(ctx, "legacy-worker", time.Minute)
+	if err != nil || !ok || operation.PublicID != operationPublicID || claimedDeployment.PublicID != deploymentPublicID {
+		t.Fatalf("legacy operation did not remain resumable: operation=%+v deployment=%+v ok=%v err=%v", operation, claimedDeployment, ok, err)
+	}
+}
+
 func TestWorkspaceBootstrapIsDurableIdempotentAndFenced(t *testing.T) {
 	ctx := context.Background()
 	s := newSchemaReadyFixture(t)
@@ -169,6 +255,239 @@ func TestWorkspaceBootstrapIsDurableIdempotentAndFenced(t *testing.T) {
 	if workspaceState != "Ready" || operationStatus != domain.OperationSucceeded || startedAt == nil || completedAt == nil {
 		t.Fatalf("workspace=%q operation=%q started=%v completed=%v", workspaceState, operationStatus, startedAt, completedAt)
 	}
+}
+
+func TestHierarchyPersistsAncestryConcurrencyAndDeploymentOwnership(t *testing.T) {
+	ctx := context.Background()
+	s, workspaceID, actorID := newIntegrationFixture(t)
+
+	projectID, err := domain.NewPublicID("prj")
+	if err != nil {
+		t.Fatal(err)
+	}
+	project, err := s.CreateProject(ctx, workspaceID, projectID, "Customer Portal", "customer portal")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.CreateProject(ctx, workspaceID, mustPublicID(t, "prj"), "CUSTOMER PORTAL", "customer portal"); !errors.Is(err, ErrConflict) {
+		t.Fatalf("duplicate normalized project name returned %v", err)
+	}
+
+	environmentID := mustPublicID(t, "env")
+	environment, err := s.CreateEnvironment(ctx, workspaceID, project.PublicID, environmentID, "Production", "production")
+	if err != nil {
+		t.Fatal(err)
+	}
+	appID := mustPublicID(t, "app")
+	app, err := s.CreateApp(ctx, workspaceID, project.PublicID, appID, "Web", "web")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	updated, err := s.UpdateProject(ctx, workspaceID, project.PublicID, project.Version, "Customer Platform", "customer platform")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.UpdateProject(ctx, workspaceID, project.PublicID, project.Version, "Stale", "stale"); !errors.Is(err, ErrConflict) {
+		t.Fatalf("stale project version returned %v", err)
+	}
+	if updated.Version != project.Version+1 {
+		t.Fatalf("project version = %d, want %d", updated.Version, project.Version+1)
+	}
+
+	otherProject, err := s.CreateProject(ctx, workspaceID, mustPublicID(t, "prj"), "Other", "other")
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherApp, err := s.CreateApp(ctx, workspaceID, otherProject.PublicID, mustPublicID(t, "app"), "Other app", "other app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	deploymentID := mustPublicID(t, "ap")
+	if _, _, _, err = s.CreateDeploymentForApp(ctx, workspaceID, actorID, deploymentID, otherApp.PublicID, environment.PublicID, integrationIntent("cross-project"), domain.SHA256([]byte("cross-project")), domain.SHA256([]byte("cross-project-payload"))); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("cross-project deployment returned %v", err)
+	}
+
+	deploymentID = mustPublicID(t, "ap")
+	deployment, _, _, err := s.CreateDeploymentForApp(ctx, workspaceID, actorID, deploymentID, app.PublicID, environment.PublicID, integrationIntent("owned-app"), domain.SHA256([]byte("owned-app")), domain.SHA256([]byte("owned-app-payload")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deployment.ProjectPublicID != project.PublicID || deployment.AppPublicID != app.PublicID || deployment.EnvironmentPublicID != environment.PublicID {
+		t.Fatalf("deployment hierarchy = %+v", deployment)
+	}
+	if _, err = s.ArchiveApp(ctx, workspaceID, project.PublicID, app.PublicID, app.Version); !errors.Is(err, ErrConflict) {
+		t.Fatalf("archive app with active deployment returned %v", err)
+	}
+	if _, err = s.ArchiveEnvironment(ctx, workspaceID, project.PublicID, environment.PublicID, environment.Version); !errors.Is(err, ErrConflict) {
+		t.Fatalf("archive environment with active deployment returned %v", err)
+	}
+	if _, err = s.ArchiveProject(ctx, workspaceID, project.PublicID, updated.Version); !errors.Is(err, ErrConflict) {
+		t.Fatalf("archive project with active children returned %v", err)
+	}
+}
+
+func TestArchiveProjectCannotRaceWithEnvironmentCreation(t *testing.T) {
+	ctx := context.Background()
+	s, workspaceID, _ := newIntegrationFixture(t)
+	project, err := s.CreateProject(ctx, workspaceID, mustPublicID(t, "prj"), "Race Project", "race project")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	lockKey := time.Now().UnixNano()
+	blocker, err := s.Pool.Acquire(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer blocker.Release()
+	locked := true
+	if _, err = blocker.Exec(ctx, `SELECT pg_advisory_lock($1)`, lockKey); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if locked {
+			_, _ = blocker.Exec(context.Background(), `SELECT pg_advisory_unlock($1)`, lockKey)
+		}
+	}()
+
+	triggerFunction := fmt.Sprintf(`
+		CREATE FUNCTION block_environment_insert() RETURNS trigger LANGUAGE plpgsql AS $$
+		BEGIN
+			PERFORM pg_advisory_lock(%d);
+			PERFORM pg_advisory_unlock(%d);
+			RETURN NEW;
+		END
+		$$`, lockKey, lockKey)
+	if _, err = s.Pool.Exec(ctx, triggerFunction); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.Pool.Exec(ctx, `CREATE TRIGGER block_environment_insert BEFORE INSERT ON environments FOR EACH ROW EXECUTE FUNCTION block_environment_insert()`); err != nil {
+		t.Fatal(err)
+	}
+
+	environmentPublicID := mustPublicID(t, "env")
+	createResult := make(chan error, 1)
+	go func() {
+		_, createErr := s.CreateEnvironment(ctx, workspaceID, project.PublicID, environmentPublicID, "Concurrent", "concurrent")
+		createResult <- createErr
+	}()
+
+	deadline := time.Now().Add(5 * time.Second)
+	waiting := false
+	for time.Now().Before(deadline) {
+		if err = s.Pool.QueryRow(ctx, `
+			SELECT EXISTS (
+				SELECT 1 FROM pg_stat_activity
+				WHERE pid <> pg_backend_pid()
+				  AND query ILIKE '%INSERT INTO environments%'
+				  AND wait_event_type = 'Lock'
+				  AND wait_event = 'advisory'
+			)`).Scan(&waiting); err != nil {
+			t.Fatal(err)
+		}
+		if waiting {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !waiting {
+		t.Fatal("environment creation did not reach the controlled race window")
+	}
+
+	archiveResult := make(chan error, 1)
+	go func() {
+		_, archiveErr := s.ArchiveProject(ctx, workspaceID, project.PublicID, project.Version)
+		archiveResult <- archiveErr
+	}()
+	deadline = time.Now().Add(5 * time.Second)
+	waiting = false
+	for time.Now().Before(deadline) {
+		if err = s.Pool.QueryRow(ctx, `
+			SELECT EXISTS (
+				SELECT 1 FROM pg_stat_activity
+				WHERE pid <> pg_backend_pid()
+				  AND query ILIKE '%FROM projects%FOR UPDATE%'
+				  AND wait_event_type = 'Lock'
+			)`).Scan(&waiting); err != nil {
+			t.Fatal(err)
+		}
+		if waiting {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !waiting {
+		t.Fatal("project archive did not wait for the concurrent child creation")
+	}
+	if _, err = blocker.Exec(ctx, `SELECT pg_advisory_unlock($1)`, lockKey); err != nil {
+		t.Fatal(err)
+	}
+	locked = false
+	select {
+	case err = <-createResult:
+		if err != nil {
+			t.Fatalf("create environment after archive: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("environment creation remained blocked")
+	}
+	select {
+	case err = <-archiveResult:
+		if !errors.Is(err, ErrDependencyConflict) {
+			t.Fatalf("archive after concurrent child creation returned %v, want ErrDependencyConflict", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("project archive remained blocked")
+	}
+
+	var projectArchived, activeEnvironment bool
+	if err = s.Pool.QueryRow(ctx, `
+		SELECT p.archived_at IS NOT NULL,
+		       EXISTS (SELECT 1 FROM environments e WHERE e.project_id=p.id AND e.archived_at IS NULL)
+		FROM projects p WHERE p.id=$1`, project.ID).Scan(&projectArchived, &activeEnvironment); err != nil {
+		t.Fatal(err)
+	}
+	if projectArchived || !activeEnvironment {
+		t.Fatalf("race result project_archived=%v active_environment=%v", projectArchived, activeEnvironment)
+	}
+}
+
+func TestHierarchyPaginationDoesNotMixConcurrentInserts(t *testing.T) {
+	ctx := context.Background()
+	s, workspaceID, _ := newIntegrationFixture(t)
+	first, err := s.CreateProject(ctx, workspaceID, mustPublicID(t, "prj"), "First", "first")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := s.CreateProject(ctx, workspaceID, mustPublicID(t, "prj"), "Second", "second")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, cursor, err := s.ListProjects(ctx, workspaceID, 0, 1, false)
+	if err != nil || len(page) != 1 || page[0].PublicID != second.PublicID || cursor == "" {
+		t.Fatalf("first page=%+v cursor=%q err=%v", page, cursor, err)
+	}
+	if _, err = s.CreateProject(ctx, workspaceID, mustPublicID(t, "prj"), "Concurrent", "concurrent"); err != nil {
+		t.Fatal(err)
+	}
+	beforeID, err := domain.DecodeCursor(cursor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, next, err := s.ListProjects(ctx, workspaceID, beforeID, 1, false)
+	if err != nil || len(page) != 1 || page[0].PublicID != first.PublicID || next != "" {
+		t.Fatalf("second page=%+v cursor=%q err=%v", page, next, err)
+	}
+}
+
+func mustPublicID(t *testing.T, prefix string) string {
+	t.Helper()
+	publicID, err := domain.NewPublicID(prefix)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return publicID
 }
 
 func TestSchemaReadyFixtureCleansSchemaAfterSetupFailure(t *testing.T) {
@@ -834,6 +1153,15 @@ func newIntegrationFixture(t *testing.T) (*Store, int64, int64) {
 	}
 	t.Cleanup(func() {
 		cleanupCtx := context.Background()
+		if _, err := s.Pool.Exec(cleanupCtx, `DELETE FROM github_connection_states WHERE workspace_id=$1`, workspaceID); err != nil {
+			t.Errorf("delete integration GitHub states: %v", err)
+		}
+		if _, err := s.Pool.Exec(cleanupCtx, `DELETE FROM app_github_sources WHERE github_installation_id IN (SELECT id FROM github_installations WHERE workspace_id=$1)`, workspaceID); err != nil {
+			t.Errorf("delete integration GitHub sources: %v", err)
+		}
+		if _, err := s.Pool.Exec(cleanupCtx, `DELETE FROM github_installations WHERE workspace_id=$1`, workspaceID); err != nil {
+			t.Errorf("delete integration GitHub installations: %v", err)
+		}
 		if _, err := s.Pool.Exec(cleanupCtx, `DELETE FROM sessions WHERE actor_id=$1`, actorID); err != nil {
 			t.Errorf("delete integration sessions: %v", err)
 		}
@@ -842,6 +1170,15 @@ func newIntegrationFixture(t *testing.T) (*Store, int64, int64) {
 		}
 		if _, err := s.Pool.Exec(cleanupCtx, `DELETE FROM deployments WHERE workspace_id=$1`, workspaceID); err != nil {
 			t.Errorf("delete integration deployments: %v", err)
+		}
+		if _, err := s.Pool.Exec(cleanupCtx, `DELETE FROM apps WHERE project_id IN (SELECT id FROM projects WHERE workspace_id=$1)`, workspaceID); err != nil {
+			t.Errorf("delete integration apps: %v", err)
+		}
+		if _, err := s.Pool.Exec(cleanupCtx, `DELETE FROM environments WHERE project_id IN (SELECT id FROM projects WHERE workspace_id=$1)`, workspaceID); err != nil {
+			t.Errorf("delete integration environments: %v", err)
+		}
+		if _, err := s.Pool.Exec(cleanupCtx, `DELETE FROM projects WHERE workspace_id=$1`, workspaceID); err != nil {
+			t.Errorf("delete integration projects: %v", err)
 		}
 		if _, err := s.Pool.Exec(cleanupCtx, `DELETE FROM workspace_actors WHERE workspace_id=$1`, workspaceID); err != nil {
 			t.Errorf("delete integration memberships: %v", err)

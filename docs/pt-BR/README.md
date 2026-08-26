@@ -20,23 +20,23 @@ O repositório está em sua etapa de fundação. O trabalho é intencionalmente
 incremental: a menor capacidade útil é implementada, observada em execução,
 corrigida a partir de evidências reais e somente então ampliada.
 
-O repositório agora contém um corte vertical executável: um contrato
-`AppDeployment`, um operator Kubernetes, um Service ClusterIP privado, publicação
-opcional por HTTPRoute e Gateway HTTPS compartilhado e testes reproduzíveis de
-integração e end-to-end. Ele também possui contratos de imagem para HTML estático
-e SPA Vite/React que reutilizam a mesma API de runtime. Ainda não existe API pública do produto, CLI, interface
-web, automação de DNS externo ou gestão de workloads pronta para produção.
+O repositório agora contém um corte vertical executável: API de produto e Console
+pre-alpha, um contrato `AppDeployment`, um operator Kubernetes, um Service
+ClusterIP privado, publicação opcional por HTTPRoute e Gateway HTTPS compartilhado
+e testes reproduzíveis de integração e end-to-end. Ainda não existe automação de
+DNS externo ou gestão de workloads pronta para produção.
 
 ## Modelo do Produto
 
 A hierarquia canônica é:
 
 ```text
-Workspace → Project → Environment → App
+Workspace → Project → App + Environment
 ```
 
-Um `App` é a identidade lógica da aplicação. Um `AppDeployment` representa a
-implantação de uma release específica de um App em um Environment.
+`App` e `Environment` são irmãos sob o mesmo Project. Um `App` é a identidade
+lógica da aplicação. Um `AppDeployment` representa a intenção de executar um App
+em um Environment.
 
 A plataforma permanece como fonte confiável da identidade, ownership e autorização
 do produto. Nomes, namespaces, labels e annotations Kubernetes são projeções de

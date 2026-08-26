@@ -47,6 +47,535 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Workspace' }
+  /api/v1/workspaces:
+    get:
+      operationId: listWorkspaces
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Authorized workspaces
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Workspace' } }
+                  nextCursor: { type: [string, 'null'] }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      operationId: createWorkspace
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HierarchyInput' }
+      responses:
+        '202':
+          description: Workspace creation accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [workspace, operation]
+                properties:
+                  workspace: { $ref: '#/components/schemas/Workspace' }
+                  operation: { $ref: '#/components/schemas/Operation' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/workspaces/{workspaceId}:
+    parameters: [{ $ref: '#/components/parameters/WorkspaceId' }]
+    get:
+      operationId: getWorkspace
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Authorized workspace
+          content: { application/json: { schema: { $ref: '#/components/schemas/Workspace' } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      operationId: updateWorkspace
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: '#/components/parameters/IfMatch' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/HierarchyInput' } } }
+      responses:
+        '200':
+          description: Updated workspace
+          content: { application/json: { schema: { $ref: '#/components/schemas/Workspace' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/workspaces/{workspaceId}/projects:
+    parameters: [{ $ref: '#/components/parameters/WorkspaceId' }]
+    get:
+      operationId: listProjects
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/IncludeArchived' }
+      responses:
+        '200':
+          description: Projects
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Project' } }
+                  nextCursor: { type: [string, 'null'] }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      operationId: createProject
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/HierarchyInput' } } }
+      responses:
+        '201':
+          description: Created project
+          content: { application/json: { schema: { $ref: '#/components/schemas/Project' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+    get:
+      operationId: getProject
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Project
+          content: { application/json: { schema: { $ref: '#/components/schemas/Project' } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      operationId: updateProject
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: '#/components/parameters/IfMatch' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/HierarchyInput' } } }
+      responses:
+        '200':
+          description: Updated project
+          content: { application/json: { schema: { $ref: '#/components/schemas/Project' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      operationId: archiveProject
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: '#/components/parameters/IfMatch' }]
+      responses:
+        '204': { description: Project archived }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/environments:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+    get:
+      operationId: listEnvironments
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/IncludeArchived' }
+      responses:
+        '200':
+          description: Environments
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Environment' } }
+                  nextCursor: { type: [string, 'null'] }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      operationId: createEnvironment
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/HierarchyInput' } } }
+      responses:
+        '201':
+          description: Created environment
+          content: { application/json: { schema: { $ref: '#/components/schemas/Environment' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/environments/{environmentId}:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/EnvironmentId' }
+    get:
+      operationId: getEnvironment
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Environment
+          content: { application/json: { schema: { $ref: '#/components/schemas/Environment' } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      operationId: updateEnvironment
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: '#/components/parameters/IfMatch' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/HierarchyInput' } } }
+      responses:
+        '200':
+          description: Updated environment
+          content: { application/json: { schema: { $ref: '#/components/schemas/Environment' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      operationId: archiveEnvironment
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: '#/components/parameters/IfMatch' }]
+      responses:
+        '204': { description: Environment archived }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+    get:
+      operationId: listApps
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/IncludeArchived' }
+      responses:
+        '200':
+          description: Apps
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/App' } }
+                  nextCursor: { type: [string, 'null'] }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      operationId: createApp
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/HierarchyInput' } } }
+      responses:
+        '201':
+          description: Created app
+          content: { application/json: { schema: { $ref: '#/components/schemas/App' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/AppId' }
+    get:
+      operationId: getApp
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: App
+          content: { application/json: { schema: { $ref: '#/components/schemas/App' } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      operationId: updateApp
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: '#/components/parameters/IfMatch' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/HierarchyInput' } } }
+      responses:
+        '200':
+          description: Updated app
+          content: { application/json: { schema: { $ref: '#/components/schemas/App' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      operationId: archiveApp
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: '#/components/parameters/IfMatch' }]
+      responses:
+        '204': { description: App archived }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/workspaces/{workspaceId}/github/installations/connect:
+    parameters: [{ $ref: '#/components/parameters/WorkspaceId' }]
+    post:
+      operationId: connectGitHubInstallation
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Short-lived GitHub App installation URL
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [authorizationUrl]
+                properties:
+                  authorizationUrl: { type: string, format: uri }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/v1/github/installations/callback:
+    get:
+      operationId: completeGitHubInstallation
+      parameters:
+        - name: installation_id
+          in: query
+          required: true
+          schema: { type: integer, format: int64, minimum: 1 }
+        - name: state
+          in: query
+          required: true
+          schema: { type: string, minLength: 32, maxLength: 256 }
+      responses:
+        '302': { description: Continue with GitHub user authorization }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/v1/github/callback:
+    get:
+      operationId: completeGitHubAuthorization
+      parameters:
+        - name: code
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 512 }
+        - name: state
+          in: query
+          required: true
+          schema: { type: string, minLength: 32, maxLength: 256 }
+      responses:
+        '302': { description: Return to the Console }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/v1/workspaces/{workspaceId}/github/installations:
+    parameters: [{ $ref: '#/components/parameters/WorkspaceId' }]
+    get:
+      operationId: listGitHubInstallations
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: GitHub App installations connected to the Workspace
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/GitHubInstallation' } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/workspaces/{workspaceId}/github/installations/{githubInstallationId}:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/GitHubInstallationId' }
+    delete:
+      operationId: disconnectGitHubInstallation
+      security: [{ sessionCookie: [] }]
+      responses:
+        '204': { description: GitHub App installation disconnected and uninstalled }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/v1/workspaces/{workspaceId}/github/installations/{githubInstallationId}/repositories:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/GitHubInstallationId' }
+    get:
+      operationId: listGitHubRepositories
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Repositories accessible to the installation
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/GitHubRepository' } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/source:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/AppId' }
+    get:
+      operationId: getAppSource
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Optional GitHub source configured for the App
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [source]
+                properties:
+                  source:
+                    oneOf:
+                      - { $ref: '#/components/schemas/GitHubSource' }
+                      - { type: 'null' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      operationId: setAppSource
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GitHubSourceInput' }
+      responses:
+        '200':
+          description: GitHub source selected for the App
+          content: { application/json: { schema: { $ref: '#/components/schemas/GitHubSource' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+    delete:
+      operationId: clearAppSource
+      security: [{ sessionCookie: [] }]
+      responses:
+        '204': { description: GitHub source removed from the App }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/workspaces/{workspaceId}/deployments:
+    parameters: [{ $ref: '#/components/parameters/WorkspaceId' }]
+    get:
+      operationId: listWorkspaceDeployments
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Deployments in the authorized workspace
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Deployment' } }
+                  nextCursor: { type: [string, 'null'] }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      operationId: createWorkspaceDeployment
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ScopedDeploymentIntent' }
+      responses:
+        '202': { $ref: '#/components/responses/MutationAccepted' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/workspaces/{workspaceId}/deployments/{deploymentId}:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - name: deploymentId
+        in: path
+        required: true
+        schema: { type: string, pattern: '^ap-[a-z2-7]{20}$' }
+    get:
+      operationId: getWorkspaceDeployment
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Deployment with observed runtime state
+          content: { application/json: { schema: { $ref: '#/components/schemas/Deployment' } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      operationId: updateWorkspaceDeployment
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+        - { $ref: '#/components/parameters/IfMatch' }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ScopedDeploymentIntent' } } }
+      responses:
+        '202': { $ref: '#/components/responses/MutationAccepted' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      operationId: deleteWorkspaceDeployment
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+        - { $ref: '#/components/parameters/IfMatch' }
+      responses:
+        '202': { $ref: '#/components/responses/MutationAccepted' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/workspaces/{workspaceId}/deployments/{deploymentId}/operations:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - name: deploymentId
+        in: path
+        required: true
+        schema: { type: string, pattern: '^ap-[a-z2-7]{20}$' }
+    get:
+      operationId: listWorkspaceDeploymentOperations
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Operation history
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Operation' } }
+        '404': { $ref: '#/components/responses/NotFound' }
   /api/v1/deployments:
     get:
       operationId: listDeployments
@@ -164,6 +693,43 @@ components:
       in: cookie
       name: fruto_session
   parameters:
+    Cursor:
+      name: cursor
+      in: query
+      schema: { type: string, minLength: 1, maxLength: 64 }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+    IncludeArchived:
+      name: includeArchived
+      in: query
+      schema: { type: boolean, default: false }
+    WorkspaceId:
+      name: workspaceId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^ws-[a-z2-7]{20}$' }
+    ProjectId:
+      name: projectId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^prj-[a-z2-7]{20}$' }
+    EnvironmentId:
+      name: environmentId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^env-[a-z2-7]{20}$' }
+    AppId:
+      name: appId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^app-[a-z2-7]{20}$' }
+    GitHubInstallationId:
+      name: githubInstallationId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^ghi-[a-z2-7]{20}$' }
     IdempotencyKey:
       name: Idempotency-Key
       in: header
@@ -178,6 +744,9 @@ components:
     Unauthorized:
       description: Authentication required
       content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Forbidden:
+      description: Authenticated Actor cannot perform this action
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
     BadRequest:
       description: Invalid request
       content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
@@ -186,6 +755,9 @@ components:
       content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
     NotFound:
       description: Resource not found
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Unavailable:
+      description: External integration is not configured or unavailable
       content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
     MutationAccepted:
       description: Mutation accepted for asynchronous execution
@@ -218,10 +790,89 @@ components:
         csrfToken: { type: string, writeOnly: true }
     Workspace:
       type: object
-      required: [id, name]
+      required: [id, name, version, state, createdAt, updatedAt]
+      additionalProperties: false
       properties:
-        id: { type: string, pattern: '^ws-' }
-        name: { type: string }
+        id: { type: string, pattern: '^ws-[a-z2-7]{20}$' }
+        name: { type: string, minLength: 1, maxLength: 80 }
+        version: { type: integer, minimum: 1 }
+        state: { type: string, enum: [Pending, Running, Ready, Failed] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    HierarchyInput:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+    Project:
+      type: object
+      required: [id, name, version, createdAt, updatedAt]
+      additionalProperties: false
+      properties:
+        id: { type: string, pattern: '^prj-[a-z2-7]{20}$' }
+        name: { type: string, minLength: 1, maxLength: 80 }
+        version: { type: integer, minimum: 1 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        archivedAt: { type: [string, 'null'], format: date-time }
+    Environment:
+      type: object
+      required: [id, name, version, createdAt, updatedAt]
+      additionalProperties: false
+      properties:
+        id: { type: string, pattern: '^env-[a-z2-7]{20}$' }
+        name: { type: string, minLength: 1, maxLength: 80 }
+        version: { type: integer, minimum: 1 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        archivedAt: { type: [string, 'null'], format: date-time }
+    App:
+      type: object
+      required: [id, name, version, createdAt, updatedAt]
+      additionalProperties: false
+      properties:
+        id: { type: string, pattern: '^app-[a-z2-7]{20}$' }
+        name: { type: string, minLength: 1, maxLength: 80 }
+        version: { type: integer, minimum: 1 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        archivedAt: { type: [string, 'null'], format: date-time }
+    GitHubInstallation:
+      type: object
+      required: [id, accountLogin, accountType, repositorySelection, createdAt]
+      additionalProperties: false
+      properties:
+        id: { type: string, pattern: '^ghi-[a-z2-7]{20}$' }
+        accountLogin: { type: string, minLength: 1 }
+        accountType: { type: string, enum: [User, Organization, Enterprise] }
+        repositorySelection: { type: string, enum: [all, selected] }
+        createdAt: { type: string, format: date-time }
+    GitHubRepository:
+      type: object
+      required: [id, name, fullName, private, defaultBranch]
+      additionalProperties: false
+      properties:
+        id: { type: string, pattern: '^[1-9][0-9]*$' }
+        name: { type: string, minLength: 1 }
+        fullName: { type: string, minLength: 3 }
+        private: { type: boolean }
+        defaultBranch: { type: string, minLength: 1 }
+    GitHubSourceInput:
+      type: object
+      required: [installationId, repositoryId]
+      additionalProperties: false
+      properties:
+        installationId: { type: string, pattern: '^ghi-[a-z2-7]{20}$' }
+        repositoryId: { type: string, pattern: '^[1-9][0-9]*$' }
+    GitHubSource:
+      type: object
+      required: [installationId, repository, connectedAt]
+      additionalProperties: false
+      properties:
+        installationId: { type: string, pattern: '^ghi-[a-z2-7]{20}$' }
+        repository: { $ref: '#/components/schemas/GitHubRepository' }
+        connectedAt: { type: string, format: date-time }
     DeploymentIntent:
       type: object
       required: [name, image, port, resources, probes]
@@ -236,6 +887,8 @@ components:
               not: { required: [slug] }
       properties:
         name: { type: string, maxLength: 63, pattern: '^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$' }
+        appId: { type: string, pattern: '^app-[a-z2-7]{20}$' }
+        environmentId: { type: string, pattern: '^env-[a-z2-7]{20}$' }
         image: { type: string, pattern: '^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$' }
         replicas: { type: integer, minimum: 1, maximum: 5, default: 1 }
         port: { type: integer, minimum: 1, maximum: 65535 }
@@ -255,6 +908,11 @@ components:
             readiness: { $ref: '#/components/schemas/Probe' }
         exposure: { type: string, enum: [Private, Public], default: Private }
         slug: { type: string, maxLength: 63, pattern: '^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$' }
+    ScopedDeploymentIntent:
+      allOf:
+        - { $ref: '#/components/schemas/DeploymentIntent' }
+        - type: object
+          required: [appId, environmentId]
     ResourceValues:
       type: object
       required: [cpuMillis, memoryMiB]
@@ -273,6 +931,9 @@ components:
       required: [id, intent, version, state, createdAt, updatedAt]
       properties:
         id: { type: string, pattern: '^ap-' }
+        projectId: { type: string, pattern: '^prj-[a-z2-7]{20}$' }
+        appId: { type: string, pattern: '^app-[a-z2-7]{20}$' }
+        environmentId: { type: string, pattern: '^env-[a-z2-7]{20}$' }
         intent: { $ref: '#/components/schemas/DeploymentIntent' }
         version: { type: integer, minimum: 1 }
         observedVersion: { type: integer, minimum: 0 }
@@ -282,7 +943,7 @@ components:
         updatedAt: { type: string, format: date-time }
     Operation:
       type: object
-      required: [id, deploymentId, kind, status, desiredVersion, attempts]
+      required: [id, kind, status, desiredVersion, attempts]
       properties:
         id: { type: string, pattern: '^op-' }
         deploymentId: { type: string, pattern: '^ap-' }

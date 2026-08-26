@@ -380,8 +380,12 @@ func newExecutorIntegrationFixture(t *testing.T) (*store.Store, int64, int64, st
 
 	suffix := strconv.FormatInt(time.Now().UnixNano(), 10)
 	actorKey := "executor-owner-" + suffix
+	workspacePublicID, err := domain.NewPublicID("ws")
+	if err != nil {
+		t.Fatal(err)
+	}
 	workspace := domain.Workspace{
-		PublicID:  "ws-executor-" + suffix,
+		PublicID:  workspacePublicID,
 		Name:      "Executor Integration",
 		Namespace: "executor-" + suffix,
 	}
@@ -406,6 +410,15 @@ func newExecutorIntegrationFixture(t *testing.T) (*store.Store, int64, int64, st
 	}
 	t.Cleanup(func() {
 		cleanupCtx := context.Background()
+		if _, err := s.Pool.Exec(cleanupCtx, `DELETE FROM github_connection_states WHERE workspace_id=$1`, workspaceID); err != nil {
+			t.Errorf("delete executor GitHub states: %v", err)
+		}
+		if _, err := s.Pool.Exec(cleanupCtx, `DELETE FROM app_github_sources WHERE github_installation_id IN (SELECT id FROM github_installations WHERE workspace_id=$1)`, workspaceID); err != nil {
+			t.Errorf("delete executor GitHub sources: %v", err)
+		}
+		if _, err := s.Pool.Exec(cleanupCtx, `DELETE FROM github_installations WHERE workspace_id=$1`, workspaceID); err != nil {
+			t.Errorf("delete executor GitHub installations: %v", err)
+		}
 		if _, err := s.Pool.Exec(cleanupCtx, `DELETE FROM sessions WHERE actor_id=$1`, actorID); err != nil {
 			t.Errorf("delete executor sessions: %v", err)
 		}
@@ -414,6 +427,15 @@ func newExecutorIntegrationFixture(t *testing.T) (*store.Store, int64, int64, st
 		}
 		if _, err := s.Pool.Exec(cleanupCtx, `DELETE FROM deployments WHERE workspace_id=$1`, workspaceID); err != nil {
 			t.Errorf("delete executor deployments: %v", err)
+		}
+		if _, err := s.Pool.Exec(cleanupCtx, `DELETE FROM apps WHERE project_id IN (SELECT id FROM projects WHERE workspace_id=$1)`, workspaceID); err != nil {
+			t.Errorf("delete executor apps: %v", err)
+		}
+		if _, err := s.Pool.Exec(cleanupCtx, `DELETE FROM environments WHERE project_id IN (SELECT id FROM projects WHERE workspace_id=$1)`, workspaceID); err != nil {
+			t.Errorf("delete executor environments: %v", err)
+		}
+		if _, err := s.Pool.Exec(cleanupCtx, `DELETE FROM projects WHERE workspace_id=$1`, workspaceID); err != nil {
+			t.Errorf("delete executor projects: %v", err)
 		}
 		if _, err := s.Pool.Exec(cleanupCtx, `DELETE FROM workspace_actors WHERE workspace_id=$1`, workspaceID); err != nil {
 			t.Errorf("delete executor memberships: %v", err)

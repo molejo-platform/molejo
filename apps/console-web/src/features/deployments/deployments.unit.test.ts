@@ -27,9 +27,9 @@ describe("deployments slice", () => {
   it("creates with an idempotency key and CSRF header", async () => {
     vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({ operation: { id: "op-1", deploymentId: "ap-1", status: "Pending" } }), { status: 202 }));
 
-    await createDeployment(intent);
+    await createDeployment("ws-aaaaaaaaaaaaaaaaaaaa", intent);
 
-    expect(vi.mocked(fetch)).toHaveBeenCalledWith("/api/v1/deployments", expect.objectContaining({ method: "POST" }));
+    expect(vi.mocked(fetch)).toHaveBeenCalledWith("/api/v1/workspaces/ws-aaaaaaaaaaaaaaaaaaaa/deployments", expect.objectContaining({ method: "POST" }));
     const init = vi.mocked(fetch).mock.calls[0]?.[1] as RequestInit;
     expect(new Headers(init.headers).get("Idempotency-Key")).toBe("idem-1");
     expect(new Headers(init.headers).get("X-CSRF-Token")).toBe("csrf-1");
@@ -41,8 +41,8 @@ describe("deployments slice", () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ operation: { id: "op-2", deploymentId: "ap-1", status: "Pending" } }), { status: 202 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ operation: { id: "op-3", deploymentId: "ap-1", status: "Pending" } }), { status: 202 }));
 
-    await updateDeployment({ id: "ap-1", version: 3, intent });
-    await deleteDeployment({ id: "ap-1", version: 4 });
+    await updateDeployment("ws-aaaaaaaaaaaaaaaaaaaa", { id: "ap-1", version: 3, intent });
+    await deleteDeployment("ws-aaaaaaaaaaaaaaaaaaaa", { id: "ap-1", version: 4 });
 
     expect(new Headers((vi.mocked(fetch).mock.calls[0]?.[1] as RequestInit).headers).get("If-Match")).toBe("3");
     expect(new Headers((vi.mocked(fetch).mock.calls[1]?.[1] as RequestInit).headers).get("If-Match")).toBe("4");

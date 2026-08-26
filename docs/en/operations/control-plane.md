@@ -1,6 +1,7 @@
 # Control Plane Operations
 
-The control plane is pre-alpha and intended for one local beta Workspace.
+The control plane is pre-alpha. An Actor may select among its Workspace
+memberships; `owner` can administer the hierarchy and `tester` is read-only.
 
 ## Local bootstrap
 
@@ -22,10 +23,48 @@ certificate and key remain under ignored `.local/certs`; `mkcert` installs its
 local CA in the developer trust store. The HTTP equivalents are
 `just dev-api-http` and `just dev-frontend-http`.
 
-The public Console origin is `https://cloud.molejo.dev`. Phase 7 reserves
-`https://cloud.molejo.dev/api/v1/github/callback` as the exact GitHub OAuth
-callback. The callback will be served by the API through the `/api` route; the client
-secret must remain server-side and outside Git.
+The Console administration page creates Workspaces, Projects, Environments, and
+Apps exclusively through the authenticated REST API. AppDeployment creation is
+scoped by the selected Workspace and requires an App and Environment from the
+same Project. The API returns `404` for resources outside the Actor membership
+boundary and `403` when a tester attempts a mutation.
+
+Hierarchy migrations use versions 005 through 007: expand, deterministic
+backfill, then contract constraints. Run `just hierarchy-backfill-expand` to
+apply only version 005, followed by `just hierarchy-backfill-dry-run` to report
+the exact links and compatibility resources to create. Use
+`just hierarchy-backfill-apply` only after the approved export to apply the
+remaining forward migrations and confirm that no nullable relationship remains.
+The integrated migration Job invokes this same guarded apply flow: it reports
+the pre-mutation plan before backfill and only applies the contract after the
+post-backfill verification, followed by later migrations in version order. The
+commands are idempotent and never print
+connection credentials.
+
+The public Console origin is `https://cloud.molejo.dev`. Repository access uses a
+GitHub App, following an installation model instead of a classic OAuth App. Set
+the exact setup URL to
+`https://cloud.molejo.dev/api/v1/github/installations/callback` and the exact user
+authorization callback to `https://cloud.molejo.dev/api/v1/github/callback`, with
+wildcard matching disabled. Enable only read-only repository `Contents` access;
+`Metadata` remains read-only by default. Do not enable webhooks, checks, write
+permissions, Device Flow, or OAuth authorization during installation.
+
+The API stores the Workspace installation and the immutable repository ID, but
+does not persist GitHub user or installation tokens. The one-time user token is
+revoked after ownership verification; installation tokens are minted on demand
+and discarded after each request. Only an owner may connect,
+disconnect, or change an App source; members can inspect the selected source.
+One App has at most one repository, while multiple Apps may use the same
+repository. Disconnect is rejected while any App still references the
+installation.
+
+Supply the App ID, Client ID, slug, client secret, and RSA private key through an
+out-of-band `molejo-github-app` Secret. The deployment mounts the two credentials
+as files and starts normally when this optional Secret does not exist; GitHub
+endpoints then return `github_not_configured`. Use
+`deploy/control-plane/github-app-secret.example.yaml` only as a shape reference
+and never place real credentials in Git.
 
 ## Phase 6 local evidence
 

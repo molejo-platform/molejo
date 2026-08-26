@@ -84,13 +84,22 @@ control-plane-integration-test:
     fi
     FRUTO_TEST_DATABASE_URL="postgres://fruto:fruto@127.0.0.1:${postgres_port}/fruto?sslmode=disable" \
       GOCACHE="/tmp/fruto-go-cache" GOMODCACHE="/tmp/fruto-go-mod-cache" \
-      go test -count=1 -p=1 ./services/control-plane-api/internal/store ./services/control-plane-api/internal/api
+      go test -count=1 -p=1 ./services/control-plane-api/internal/store ./services/control-plane-api/internal/api ./services/control-plane-api/cmd/hierarchy-backfill
 
 db-up:
     docker compose -f deploy/control-plane/docker-compose.yaml up -d postgres
 
 db-migrate:
     FRUTO_DATABASE_URL="postgres://fruto:fruto@127.0.0.1:55432/fruto?sslmode=disable" GOCACHE="/tmp/fruto-go-cache" GOMODCACHE="/tmp/fruto-go-mod-cache" go run ./services/control-plane-api/cmd/control-plane-api migrate
+
+hierarchy-backfill-dry-run:
+    FRUTO_DATABASE_URL="postgres://fruto:fruto@127.0.0.1:55432/fruto?sslmode=disable" GOCACHE="/tmp/fruto-go-cache" GOMODCACHE="/tmp/fruto-go-mod-cache" go run ./services/control-plane-api/cmd/hierarchy-backfill
+
+hierarchy-backfill-expand:
+    FRUTO_DATABASE_URL="postgres://fruto:fruto@127.0.0.1:55432/fruto?sslmode=disable" GOCACHE="/tmp/fruto-go-cache" GOMODCACHE="/tmp/fruto-go-mod-cache" go run ./services/control-plane-api/cmd/hierarchy-backfill --expand
+
+hierarchy-backfill-apply:
+    FRUTO_DATABASE_URL="postgres://fruto:fruto@127.0.0.1:55432/fruto?sslmode=disable" GOCACHE="/tmp/fruto-go-cache" GOMODCACHE="/tmp/fruto-go-mod-cache" go run ./services/control-plane-api/cmd/hierarchy-backfill --apply
 
 db-down:
     docker compose -f deploy/control-plane/docker-compose.yaml down

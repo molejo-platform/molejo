@@ -13,8 +13,11 @@ enquanto o operator existente controla os filhos de runtime.
 O control plane é um serviço Go de uma réplica, com Console React/Vite e
 PostgreSQL. Ele aplica somente recursos `AppDeployment` por uma interface de
 runtime declarada pelo consumidor. O operator continua sendo o único dono de
-Deployments, Services e HTTPRoutes. A primeira instalação usa um Namespace de
-Workspace compartilhado e kubeconfig explícito ou credenciais in-cluster.
+Deployments, Services e HTTPRoutes. Actors podem participar de vários Workspaces;
+cada Workspace contém Projects, enquanto Apps e Environments são irmãos sob um
+Project. Um AppDeployment vincula exatamente um App a um Environment desse mesmo
+Project. Cada Workspace é materializado como Namespace gerenciado por uma
+operação durável, com kubeconfig explícito ou credenciais in-cluster.
 
 Esta é uma topologia pre-alpha sem HA. A API expõe recursos de produto
 sanitizados e nunca retorna metadados ou objetos Kubernetes brutos.

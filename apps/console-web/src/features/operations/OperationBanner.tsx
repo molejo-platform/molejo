@@ -6,18 +6,21 @@ import { Alert } from "../../shared/ui/Alert";
 import { deploymentQueryKey, deploymentsQueryKey } from "../deployments/queries";
 import { isOperationTerminal } from "./model";
 import { deploymentOperationsQueryKey, useOperationQuery } from "./queries";
+import { useSelectedWorkspace } from "../workspace/WorkspaceContext";
 
 export function OperationBanner({ operationId, deploymentId }: { operationId: string; deploymentId: string }) {
   const queryClient = useQueryClient();
   const operation = useOperationQuery(operationId);
+  const { workspace } = useSelectedWorkspace();
+  const workspaceId = workspace?.id ?? "";
 
   useEffect(() => {
     if (operation.data && isOperationTerminal(operation.data.status)) {
-      void queryClient.invalidateQueries({ queryKey: deploymentsQueryKey });
-      void queryClient.invalidateQueries({ queryKey: deploymentQueryKey(deploymentId) });
-      void queryClient.invalidateQueries({ queryKey: deploymentOperationsQueryKey(deploymentId) });
+      void queryClient.invalidateQueries({ queryKey: deploymentsQueryKey(workspaceId) });
+      void queryClient.invalidateQueries({ queryKey: deploymentQueryKey(workspaceId, deploymentId) });
+      void queryClient.invalidateQueries({ queryKey: deploymentOperationsQueryKey(workspaceId, deploymentId) });
     }
-  }, [deploymentId, operation.data, queryClient]);
+  }, [deploymentId, operation.data, queryClient, workspaceId]);
 
   if (operation.isPending) return <Alert tone="success">Acompanhando operação…</Alert>;
   if (operation.isError) return <Alert>{userFacingError(operation.error)}</Alert>;

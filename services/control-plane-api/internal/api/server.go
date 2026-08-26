@@ -18,6 +18,7 @@ import (
 
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/auth"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/domain"
+	"github.com/fruto-platform/fruto/services/control-plane-api/internal/githubapp"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/runtime"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/store"
 	"go.opentelemetry.io/otel/trace"
@@ -39,10 +40,12 @@ type Config struct {
 	SessionTTL         time.Duration
 	OperationLease     time.Duration
 	WorkspaceNamespace string
+	GitHubStateTTL     time.Duration
+	GitHubCookieName   string
 }
 
 func DefaultConfig() Config {
-	return Config{Mode: "development", PublicURL: "http://127.0.0.1:8080", CookieName: "fruto_session", AllowedOrigin: "http://127.0.0.1:8080", AllowedHosts: []string{"127.0.0.1:8080", "localhost:8080"}, AllowedRegistries: []string{"ghcr.io"}, MaxReplicas: 5, MaxCPU: 2000, MaxMemory: 2048, SessionTTL: 12 * time.Hour, OperationLease: 30 * time.Second, WorkspaceNamespace: "fruto-workspaces"}
+	return Config{Mode: "development", PublicURL: "http://127.0.0.1:8080", CookieName: "fruto_session", AllowedOrigin: "http://127.0.0.1:8080", AllowedHosts: []string{"127.0.0.1:8080", "localhost:8080"}, AllowedRegistries: []string{"ghcr.io"}, MaxReplicas: 5, MaxCPU: 2000, MaxMemory: 2048, SessionTTL: 12 * time.Hour, OperationLease: 30 * time.Second, WorkspaceNamespace: "fruto-workspaces", GitHubStateTTL: 10 * time.Minute, GitHubCookieName: "molejo_github_state"}
 }
 
 type Server struct {
@@ -51,6 +54,7 @@ type Server struct {
 	Config       Config
 	Logger       *slog.Logger
 	Tracer       trace.Tracer
+	GitHub       githubapp.Service
 	limiter      *loginLimiter
 	token        func(int) (string, error)
 	deploymentID func() (string, error)
@@ -184,6 +188,10 @@ func (s *Server) listDeployments(w http.ResponseWriter, r *http.Request, workspa
 }
 
 func (s *Server) createDeployment(w http.ResponseWriter, r *http.Request, workspace domain.Workspace, actorID int64) {
+	s.createDeploymentForWorkspace(w, r, workspace, actorID, false)
+}
+
+func (s *Server) createDeploymentForWorkspace(w http.ResponseWriter, r *http.Request, workspace domain.Workspace, actorID int64, requireHierarchy bool) {
 	idem, payload, ok := idempotency(r)
 	if !ok {
 		writeError(w, http.StatusBadRequest, "idempotency_required", "Idempotency-Key is required", r)
@@ -199,6 +207,12 @@ func (s *Server) createDeployment(w http.ResponseWriter, r *http.Request, worksp
 		writeError(w, http.StatusBadRequest, "invalid_intent", err.Error(), r)
 		return
 	}
+	if requireHierarchy {
+		if err := domain.ValidateHierarchyReferences(intent.AppID, intent.EnvironmentID); err != nil {
+			writeError(w, http.StatusBadRequest, "hierarchy_required", "appId and environmentId are required", r)
+			return
+		}
+	}
 	if !s.Config.RegistryAllowed(intent.Image) {
 		writeError(w, http.StatusBadRequest, "registry_not_allowed", "image registry is not allowed", r)
 		return
@@ -212,13 +226,21 @@ func (s *Server) createDeployment(w http.ResponseWriter, r *http.Request, worksp
 			err = idErr
 			break
 		}
-		dep, op, _, err = s.Store.CreateDeployment(r.Context(), workspace.ID, actorID, depID, intent, auth.HashToken(idem), payload)
+		if requireHierarchy {
+			dep, op, _, err = s.Store.CreateDeploymentForApp(r.Context(), workspace.ID, actorID, depID, intent.AppID, intent.EnvironmentID, intent, auth.HashToken(idem), payload)
+		} else {
+			dep, op, _, err = s.Store.CreateDeployment(r.Context(), workspace.ID, actorID, depID, intent, auth.HashToken(idem), payload)
+		}
 		if !errors.Is(err, store.ErrPublicIDCollision) {
 			break
 		}
 	}
 	if errors.Is(err, store.ErrConflict) {
 		writeError(w, http.StatusConflict, "idempotency_conflict", "request conflicts with an existing deployment", r)
+		return
+	}
+	if errors.Is(err, store.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "hierarchy_not_found", "app or environment was not found", r)
 		return
 	}
 	if errors.Is(err, store.ErrPublicIDCollision) {
@@ -252,6 +274,10 @@ func (s *Server) detailDeployment(w http.ResponseWriter, r *http.Request, worksp
 }
 
 func (s *Server) updateDeployment(w http.ResponseWriter, r *http.Request, workspace domain.Workspace, actorID int64, dep domain.Deployment) {
+	s.updateDeploymentForWorkspace(w, r, workspace, actorID, dep, false)
+}
+
+func (s *Server) updateDeploymentForWorkspace(w http.ResponseWriter, r *http.Request, workspace domain.Workspace, actorID int64, dep domain.Deployment, requireHierarchy bool) {
 	idem, payload, ok := idempotency(r)
 	if !ok {
 		writeError(w, http.StatusBadRequest, "idempotency_required", "Idempotency-Key is required", r)
@@ -272,6 +298,12 @@ func (s *Server) updateDeployment(w http.ResponseWriter, r *http.Request, worksp
 		writeError(w, http.StatusBadRequest, "invalid_intent", err.Error(), r)
 		return
 	}
+	if requireHierarchy {
+		if err = domain.ValidateHierarchyReferences(intent.AppID, intent.EnvironmentID); err != nil {
+			writeError(w, http.StatusBadRequest, "hierarchy_required", "appId and environmentId are required", r)
+			return
+		}
+	}
 	if !s.Config.RegistryAllowed(intent.Image) {
 		writeError(w, http.StatusBadRequest, "registry_not_allowed", "image registry is not allowed", r)
 		return
@@ -279,6 +311,10 @@ func (s *Server) updateDeployment(w http.ResponseWriter, r *http.Request, worksp
 	updated, op, err := s.Store.UpdateDeployment(r.Context(), workspace.ID, actorID, dep.ID, intent, version, auth.HashToken(idem), payload)
 	if errors.Is(err, store.ErrImmutableName) {
 		writeError(w, http.StatusConflict, "deployment_name_immutable", "deployment name cannot be changed", r)
+		return
+	}
+	if errors.Is(err, store.ErrImmutableHierarchy) {
+		writeError(w, http.StatusConflict, "deployment_hierarchy_immutable", "deployment app and environment cannot be changed", r)
 		return
 	}
 	if errors.Is(err, store.ErrConflict) {

@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 
 import { userFacingError } from "../../shared/api/errors";
 import { Alert } from "../../shared/ui/Alert";
@@ -8,17 +9,29 @@ import { Field, SelectField } from "../../shared/ui/Field";
 import type { Deployment, DeploymentIntent } from "../../shared/api/types";
 import { useCreateDeploymentMutation, useUpdateDeploymentMutation } from "./mutations";
 import { emptyIntent, withExposure } from "./model";
+import { listApps, listEnvironments, listProjects } from "../admin/api";
+import { useSelectedWorkspace } from "../workspace/WorkspaceContext";
 
 export function DeploymentForm({ deployment }: { deployment?: Deployment }) {
   const navigate = useNavigate();
-  const [draft, setDraft] = useState<DeploymentIntent>(deployment?.intent ?? emptyIntent);
+  const { workspace } = useSelectedWorkspace();
+  const workspaceId = workspace?.id ?? "";
+  const initialIntent = deployment ? { ...deployment.intent, appId: deployment.appId, environmentId: deployment.environmentId } : emptyIntent;
+  const [draft, setDraft] = useState<DeploymentIntent>(initialIntent);
+  const [projectId, setProjectId] = useState(deployment?.projectId ?? "");
   const create = useCreateDeploymentMutation();
   const update = useUpdateDeploymentMutation();
   const mutation = deployment ? update : create;
 
   useEffect(() => {
-    setDraft(deployment?.intent ?? emptyIntent);
-  }, [deployment?.id]);
+    setDraft(deployment ? { ...deployment.intent, appId: deployment.appId, environmentId: deployment.environmentId } : emptyIntent);
+    setProjectId(deployment?.projectId ?? "");
+  }, [deployment?.id, workspaceId]);
+
+  const projects = useQuery({ queryKey: ["deployment-form", workspaceId, "projects"], queryFn: () => listProjects(workspaceId), enabled: Boolean(workspaceId) });
+  const selectedProjectId = projectId || projects.data?.items[0]?.id || "";
+  const environments = useQuery({ queryKey: ["deployment-form", workspaceId, selectedProjectId, "environments"], queryFn: () => listEnvironments(workspaceId, selectedProjectId), enabled: Boolean(workspaceId && selectedProjectId) });
+  const apps = useQuery({ queryKey: ["deployment-form", workspaceId, selectedProjectId, "apps"], queryFn: () => listApps(workspaceId, selectedProjectId), enabled: Boolean(workspaceId && selectedProjectId) });
 
   function patchDraft(patch: Partial<DeploymentIntent>) {
     setDraft((current) => ({ ...current, ...patch }));
@@ -40,6 +53,17 @@ export function DeploymentForm({ deployment }: { deployment?: Deployment }) {
   const error = mutation.isError ? userFacingError(mutation.error) : "";
   return (
     <form onSubmit={submit} className="stack">
+      <div className="form-row">
+        <SelectField label="Project" value={selectedProjectId} disabled={Boolean(deployment)} onChange={(event) => { setProjectId(event.target.value); patchDraft({ appId: undefined, environmentId: undefined }); }} required>
+          <option value="">Selecione</option>{projects.data?.items.map((project) => <option value={project.id} key={project.id}>{project.name}</option>)}
+        </SelectField>
+        <SelectField label="App" value={draft.appId ?? ""} disabled={Boolean(deployment) || !selectedProjectId} onChange={(event) => patchDraft({ appId: event.target.value })} required>
+          <option value="">Selecione</option>{apps.data?.items.map((app) => <option value={app.id} key={app.id}>{app.name}</option>)}
+        </SelectField>
+        <SelectField label="Environment" value={draft.environmentId ?? ""} disabled={Boolean(deployment) || !selectedProjectId} onChange={(event) => patchDraft({ environmentId: event.target.value })} required>
+          <option value="">Selecione</option>{environments.data?.items.map((environment) => <option value={environment.id} key={environment.id}>{environment.name}</option>)}
+        </SelectField>
+      </div>
       <Field label="Nome" maxLength={63} value={draft.name} onChange={(event) => patchDraft({ name: event.target.value })} required />
       <Field label="Imagem OCI por digest" value={draft.image} onChange={(event) => patchDraft({ image: event.target.value })} required />
       <div className="form-row">

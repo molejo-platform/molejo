@@ -135,11 +135,12 @@ func (h *generatedHandler) ListDeploymentOperations(w http.ResponseWriter, r *ht
 }
 
 func (h *generatedHandler) GetOperation(w http.ResponseWriter, r *http.Request, operationID string) {
-	_, workspace, ok := h.authorize(w, r, false)
+	actorID, _, ok := h.server.session(r)
 	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthenticated", "authentication required", r)
 		return
 	}
-	operation, err := h.server.Store.GetOperation(r.Context(), workspace.ID, operationID)
+	operation, err := h.server.Store.GetOperationForActor(r.Context(), actorID, operationID)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "operation_not_found", "operation was not found", r)
 		return
@@ -156,6 +157,13 @@ func (h *generatedHandler) authorize(w http.ResponseWriter, r *http.Request, mut
 	if mutation && !h.server.validCSRF(r, csrf) {
 		writeError(w, http.StatusForbidden, "csrf_failed", "request could not be verified", r)
 		return 0, domain.Workspace{}, false
+	}
+	if mutation {
+		actor, err := h.server.Store.Actor(r.Context(), actorID)
+		if err != nil || actor.Role != "owner" {
+			writeError(w, http.StatusForbidden, "admin_required", "administrative access is required", r)
+			return 0, domain.Workspace{}, false
+		}
 	}
 	workspace, err := h.server.Store.WorkspaceForActor(r.Context(), actorID)
 	if err != nil {

@@ -20,24 +20,23 @@ El repositorio está en su etapa fundacional. El trabajo es intencionalmente
 incremental: se implementa la capacidad útil más pequeña, se la observa en
 ejecución, se la corrige a partir de evidencia real y solo entonces se la amplía.
 
-El repositorio ahora contiene un corte vertical ejecutable: un contrato
-`AppDeployment`, un operator de Kubernetes, un Service ClusterIP privado,
-publicación opcional mediante HTTPRoute y un Gateway HTTPS compartido, y pruebas
-reproducibles de integración y end-to-end. También contiene contratos de imagen
-para HTML estático y SPA Vite/React que reutilizan la misma API de runtime. Todavía no existe una API pública del
-producto, CLI, interfaz web, automatización de DNS externo ni gestión de workloads
-lista para producción.
+El repositorio ahora contiene un corte vertical ejecutable: API de producto y
+Consola pre-alpha, un contrato `AppDeployment`, un operator de Kubernetes, un
+Service ClusterIP privado, publicación opcional mediante HTTPRoute y un Gateway
+HTTPS compartido, y pruebas reproducibles de integración y end-to-end. Todavía no
+existe automatización de DNS externo ni gestión de workloads lista para producción.
 
 ## Modelo del Producto
 
 La jerarquía canónica es:
 
 ```text
-Workspace → Project → Environment → App
+Workspace → Project → App + Environment
 ```
 
-Un `App` es la identidad lógica de la aplicación. Un `AppDeployment` representa el
-despliegue de una release específica de un App en un Environment.
+`App` y `Environment` son hermanos bajo el mismo Project. Un `App` es la identidad
+lógica de la aplicación. Un `AppDeployment` representa la intención de ejecutar
+un App en un Environment.
 
 La plataforma continúa siendo la fuente confiable de identidad, ownership y
 autorización del producto. Los nombres, namespaces, labels y annotations de

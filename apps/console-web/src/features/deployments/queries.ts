@@ -1,23 +1,27 @@
 import { queryOptions, useQuery } from "@tanstack/react-query";
 
 import { getDeployment, listDeployments } from "./api";
+import { useSelectedWorkspace } from "../workspace/WorkspaceContext";
+import { workspaceScopeKeys } from "../workspace/scope";
 
-export const deploymentsQueryKey = ["deployments", "list"] as const;
+export const deploymentsQueryKey = workspaceScopeKeys.deployments;
 
-export function deploymentsQueryOptions() {
-  return queryOptions({ queryKey: deploymentsQueryKey, queryFn: listDeployments });
+export function deploymentsQueryOptions(workspaceId: string) {
+  return queryOptions({ queryKey: deploymentsQueryKey(workspaceId), queryFn: () => listDeployments(workspaceId), enabled: Boolean(workspaceId) });
 }
 
-export const deploymentQueryKey = (id: string) => ["deployments", "detail", id] as const;
+export const deploymentQueryKey = workspaceScopeKeys.deployment;
 
-export function deploymentQueryOptions(id: string) {
-  return queryOptions({ queryKey: deploymentQueryKey(id), queryFn: () => getDeployment(id), enabled: Boolean(id) });
+export function deploymentQueryOptions(workspaceId: string, id: string) {
+  return queryOptions({ queryKey: deploymentQueryKey(workspaceId, id), queryFn: () => getDeployment(workspaceId, id), enabled: Boolean(workspaceId && id) });
 }
 
 export function useDeploymentsQuery() {
-  return useQuery(deploymentsQueryOptions());
+  const { workspace } = useSelectedWorkspace();
+  return useQuery(deploymentsQueryOptions(workspace?.id ?? ""));
 }
 
 export function useDeploymentQuery(id: string) {
-  return useQuery({ ...deploymentQueryOptions(id), refetchInterval: 3_000 });
+  const { workspace } = useSelectedWorkspace();
+  return useQuery({ ...deploymentQueryOptions(workspace?.id ?? "", id), refetchInterval: 3_000 });
 }

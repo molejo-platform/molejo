@@ -34,6 +34,23 @@ spec:
                 secretKeyRef: { name: fruto-control-plane-db, key: database-url }
             - name: FRUTO_IN_CLUSTER
               value: "true"
+            - name: GITHUB_APP_ID
+              valueFrom:
+                secretKeyRef: { name: molejo-github-app, key: GITHUB_APP_ID, optional: true }
+            - name: GITHUB_APP_CLIENT_ID
+              valueFrom:
+                secretKeyRef: { name: molejo-github-app, key: GITHUB_APP_CLIENT_ID, optional: true }
+            - name: GITHUB_APP_SLUG
+              valueFrom:
+                secretKeyRef: { name: molejo-github-app, key: GITHUB_APP_SLUG, optional: true }
+            - name: GITHUB_APP_CLIENT_SECRET_FILE
+              value: /var/run/secrets/molejo/github-app/client-secret
+            - name: GITHUB_APP_PRIVATE_KEY_FILE
+              value: /var/run/secrets/molejo/github-app/private-key.pem
+          volumeMounts:
+            - name: github-app
+              mountPath: /var/run/secrets/molejo/github-app
+              readOnly: true
           ports: [{ name: http, containerPort: 8080, protocol: TCP }]
           readinessProbe:
             httpGet:
@@ -52,6 +69,14 @@ spec:
             allowPrivilegeEscalation: false
             capabilities: { drop: [ALL] }
             readOnlyRootFilesystem: true
+      volumes:
+        - name: github-app
+          secret:
+            secretName: molejo-github-app
+            optional: true
+            items:
+              - { key: client-secret, path: client-secret }
+              - { key: private-key.pem, path: private-key.pem }
 ---
 apiVersion: apps/v1
 kind: Deployment

@@ -16,6 +16,7 @@ import (
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/api"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/auth"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/domain"
+	"github.com/fruto-platform/fruto/services/control-plane-api/internal/githubapp"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/runtime"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/store"
 )
@@ -121,6 +122,10 @@ func run() error {
 		}
 	}
 	server := api.NewServer(s, rt, cfg, slog.Default())
+	server.GitHub, err = githubService(cfg)
+	if err != nil {
+		return err
+	}
 	workerDone := make(chan struct{})
 	go func() {
 		defer close(workerDone)
@@ -145,6 +150,56 @@ func run() error {
 		return fmt.Errorf("worker shutdown timed out")
 	}
 	return nil
+}
+
+func githubService(cfg api.Config) (githubapp.Service, error) {
+	rawAppID := strings.TrimSpace(os.Getenv("GITHUB_APP_ID"))
+	if rawAppID == "" {
+		return nil, nil
+	}
+	appID, err := strconv.ParseInt(rawAppID, 10, 64)
+	if err != nil || appID < 1 {
+		return nil, fmt.Errorf("invalid GITHUB_APP_ID")
+	}
+	clientSecret, err := readSecretFile("GITHUB_APP_CLIENT_SECRET_FILE")
+	if err != nil {
+		return nil, err
+	}
+	privateKeyPath := strings.TrimSpace(os.Getenv("GITHUB_APP_PRIVATE_KEY_FILE"))
+	if privateKeyPath == "" {
+		return nil, fmt.Errorf("GITHUB_APP_PRIVATE_KEY_FILE is required")
+	}
+	privateKey, err := os.ReadFile(privateKeyPath)
+	if err != nil {
+		return nil, fmt.Errorf("read GitHub App private key: %w", err)
+	}
+	client, err := githubapp.New(githubapp.Config{
+		AppID:        appID,
+		Slug:         os.Getenv("GITHUB_APP_SLUG"),
+		ClientID:     os.Getenv("GITHUB_APP_CLIENT_ID"),
+		ClientSecret: clientSecret,
+		PrivateKey:   privateKey,
+		CallbackURL:  cfg.PublicURL + "/api/v1/github/callback",
+	})
+	if err != nil {
+		return nil, fmt.Errorf("configure GitHub App: %w", err)
+	}
+	return client, nil
+}
+
+func readSecretFile(envName string) (string, error) {
+	path := strings.TrimSpace(os.Getenv(envName))
+	if path == "" {
+		return "", fmt.Errorf("%s is required", envName)
+	}
+	value, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("read %s: %w", envName, err)
+	}
+	if strings.TrimSpace(string(value)) == "" {
+		return "", fmt.Errorf("%s is empty", envName)
+	}
+	return strings.TrimSpace(string(value)), nil
 }
 
 func withStore(fn func(*store.Store) error) error {

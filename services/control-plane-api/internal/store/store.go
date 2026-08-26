@@ -3,6 +3,7 @@ package store
 import (
 	"bytes"
 	"context"
+	"crypto/md5"
 	"crypto/sha256"
 	"database/sql"
 	"embed"
@@ -90,6 +91,22 @@ func embeddedMigrations() ([]migration, error) {
 }
 
 func (s *Store) Migrate(ctx context.Context) error {
+	return s.migrateTo(ctx, 0)
+}
+
+func (s *Store) MigrateHierarchyExpand(ctx context.Context) error {
+	return s.migrateTo(ctx, 5)
+}
+
+func (s *Store) MigrateHierarchyBackfill(ctx context.Context) error {
+	return s.migrateTo(ctx, 6)
+}
+
+func (s *Store) MigrateHierarchyContract(ctx context.Context) error {
+	return s.migrateTo(ctx, 7)
+}
+
+func (s *Store) migrateTo(ctx context.Context, targetVersion int64) error {
 	migrations, err := embeddedMigrations()
 	if err != nil {
 		return err
@@ -139,6 +156,9 @@ func (s *Store) Migrate(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	if targetVersion > 0 && currentVersion > targetVersion {
+		return fmt.Errorf("database schema version %d is newer than requested version %d", currentVersion, targetVersion)
+	}
 	if currentVersion == 0 {
 		for version := range applied {
 			if _, err = db.ExecContext(ctx, `INSERT INTO goose_db_version(version_id,is_applied) SELECT $1,true WHERE NOT EXISTS (SELECT 1 FROM goose_db_version WHERE version_id=$1 AND is_applied=true)`, version); err != nil {
@@ -146,10 +166,17 @@ func (s *Store) Migrate(ctx context.Context) error {
 			}
 		}
 	}
-	if _, err = provider.Up(ctx); err != nil {
+	if targetVersion > 0 {
+		if _, err = provider.UpTo(ctx, targetVersion); err != nil {
+			return err
+		}
+	} else if _, err = provider.Up(ctx); err != nil {
 		return err
 	}
 	for _, migration := range migrations {
+		if targetVersion > 0 && migration.version > targetVersion {
+			continue
+		}
 		if _, err = db.ExecContext(ctx, `INSERT INTO schema_migrations(version,checksum) VALUES ($1,$2) ON CONFLICT(version) DO UPDATE SET checksum=EXCLUDED.checksum`, migration.version, migration.checksum[:]); err != nil {
 			return err
 		}
@@ -254,12 +281,12 @@ func (s *Store) Actor(ctx context.Context, actorID int64) (domain.Actor, error) 
 
 func (s *Store) WorkspaceForActor(ctx context.Context, actorID int64) (domain.Workspace, error) {
 	row, err := s.queries.GetWorkspaceForActor(ctx, actorID)
-	return domain.Workspace{ID: row.ID, PublicID: row.PublicID, Name: row.Name, Namespace: row.NamespaceName}, err
+	return workspaceValue(row.ID, row.PublicID, row.Name, row.NamespaceName, row.Version, row.BootstrapState, row.CreatedAt, row.UpdatedAt), err
 }
 
 func (s *Store) Workspace(ctx context.Context, workspaceID int64) (domain.Workspace, error) {
 	row, err := s.queries.GetWorkspaceByID(ctx, workspaceID)
-	return domain.Workspace{ID: row.ID, PublicID: row.PublicID, Name: row.Name, Namespace: row.NamespaceName}, err
+	return workspaceValue(row.ID, row.PublicID, row.Name, row.NamespaceName, row.Version, row.BootstrapState, row.CreatedAt, row.UpdatedAt), err
 }
 
 func (s *Store) SchemaReady(ctx context.Context) error {
@@ -366,8 +393,16 @@ func (s *Store) RotateSession(ctx context.Context, actorID int64, oldTokenHash, 
 }
 
 func (s *Store) CreateDeployment(ctx context.Context, workspaceID, actorID int64, deploymentID string, intent domain.Intent, idempotencyHash, payloadHash []byte) (domain.Deployment, domain.Operation, bool, error) {
+	return s.createDeploymentWithHierarchy(ctx, workspaceID, actorID, deploymentID, "", "", intent, idempotencyHash, payloadHash)
+}
+
+func (s *Store) CreateDeploymentForApp(ctx context.Context, workspaceID, actorID int64, deploymentID, appPublicID, environmentPublicID string, intent domain.Intent, idempotencyHash, payloadHash []byte) (domain.Deployment, domain.Operation, bool, error) {
+	return s.createDeploymentWithHierarchy(ctx, workspaceID, actorID, deploymentID, appPublicID, environmentPublicID, intent, idempotencyHash, payloadHash)
+}
+
+func (s *Store) createDeploymentWithHierarchy(ctx context.Context, workspaceID, actorID int64, deploymentID, appPublicID, environmentPublicID string, intent domain.Intent, idempotencyHash, payloadHash []byte) (domain.Deployment, domain.Operation, bool, error) {
 	for attempt := 0; attempt < 3; attempt++ {
-		deployment, operation, reused, err := s.createDeployment(ctx, workspaceID, actorID, deploymentID, intent, idempotencyHash, payloadHash)
+		deployment, operation, reused, err := s.createDeployment(ctx, workspaceID, actorID, deploymentID, appPublicID, environmentPublicID, intent, idempotencyHash, payloadHash)
 		if !errors.Is(err, errRetryCreate) {
 			return deployment, operation, reused, err
 		}
@@ -377,7 +412,7 @@ func (s *Store) CreateDeployment(ctx context.Context, workspaceID, actorID int64
 
 var errRetryCreate = errors.New("retry concurrent create")
 
-func (s *Store) createDeployment(ctx context.Context, workspaceID, actorID int64, deploymentID string, intent domain.Intent, idempotencyHash, payloadHash []byte) (domain.Deployment, domain.Operation, bool, error) {
+func (s *Store) createDeployment(ctx context.Context, workspaceID, actorID int64, deploymentID, appPublicID, environmentPublicID string, intent domain.Intent, idempotencyHash, payloadHash []byte) (domain.Deployment, domain.Operation, bool, error) {
 	intentJSON, err := domain.CanonicalJSON(intent)
 	if err != nil {
 		return domain.Deployment{}, domain.Operation{}, false, err
@@ -387,6 +422,9 @@ func (s *Store) createDeployment(ctx context.Context, workspaceID, actorID int64
 		return domain.Deployment{}, domain.Operation{}, false, err
 	}
 	defer tx.Rollback(ctx)
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, "deployment-create:"+fmt.Sprintf("%x", idempotencyHash)); err != nil {
+		return domain.Deployment{}, domain.Operation{}, false, err
+	}
 	var existing domain.Operation
 	var existingIntent []byte
 	err = tx.QueryRow(ctx, `SELECT o.id,o.public_id,o.deployment_id,o.actor_id,o.kind,o.status,o.desired_version,o.attempts,o.intent_json::text,o.created_at,o.updated_at FROM operations o WHERE o.workspace_id=$1 AND o.kind='CreateDeployment' AND o.idempotency_hash=$2`, workspaceID, idempotencyHash).Scan(&existing.ID, &existing.PublicID, &existing.DeploymentID, &existing.ActorID, &existing.Kind, &existing.Status, &existing.DesiredVersion, &existing.Attempts, &existingIntent, &existing.CreatedAt, &existing.UpdatedAt)
@@ -411,9 +449,13 @@ func (s *Store) createDeployment(ctx context.Context, workspaceID, actorID int64
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return domain.Deployment{}, domain.Operation{}, false, err
 	}
+	hierarchy, err := s.resolveDeploymentHierarchy(ctx, tx, workspaceID, deploymentID, appPublicID, environmentPublicID, intent.Name)
+	if err != nil {
+		return domain.Deployment{}, domain.Operation{}, false, err
+	}
 	var deployment domain.Deployment
 	runtimeName := domain.RuntimeName(deploymentID)
-	err = tx.QueryRow(ctx, `INSERT INTO deployments(public_id,workspace_id,name,runtime_name,slug,intent_json) VALUES ($1,$2,$3,$4,NULLIF($5,''),$6) RETURNING id,public_id,workspace_id,runtime_name,intent_json::text,desired_version,observed_version,observed_release,last_state,last_message,created_at,updated_at`, deploymentID, workspaceID, intent.Name, runtimeName, intent.Slug, intentJSON).Scan(&deployment.ID, &deployment.PublicID, &deployment.WorkspaceID, &deployment.RuntimeName, &intentJSON, &deployment.DesiredVersion, &deployment.ObservedVersion, &deployment.ObservedRelease, &deployment.State, &deployment.Message, &deployment.CreatedAt, &deployment.UpdatedAt)
+	err = tx.QueryRow(ctx, `INSERT INTO deployments(public_id,workspace_id,project_id,app_id,environment_id,name,runtime_name,slug,intent_json) VALUES ($1,$2,$3,$4,$5,$6,$7,NULLIF($8,''),$9) RETURNING id,public_id,workspace_id,project_id,app_id,environment_id,runtime_name,intent_json::text,desired_version,observed_version,observed_release,last_state,last_message,created_at,updated_at`, deploymentID, workspaceID, hierarchy.ProjectID, hierarchy.AppID, hierarchy.EnvironmentID, intent.Name, runtimeName, intent.Slug, intentJSON).Scan(&deployment.ID, &deployment.PublicID, &deployment.WorkspaceID, &deployment.ProjectID, &deployment.AppID, &deployment.EnvironmentID, &deployment.RuntimeName, &intentJSON, &deployment.DesiredVersion, &deployment.ObservedVersion, &deployment.ObservedRelease, &deployment.State, &deployment.Message, &deployment.CreatedAt, &deployment.UpdatedAt)
 	if err != nil {
 		if isUniqueViolation(err) {
 			if uniqueConstraint(err) == "deployments_public_id_key" {
@@ -426,6 +468,9 @@ func (s *Store) createDeployment(ctx context.Context, workspaceID, actorID int64
 	if err := jsonUnmarshal(intentJSON, &deployment.Intent); err != nil {
 		return domain.Deployment{}, domain.Operation{}, false, err
 	}
+	deployment.ProjectPublicID = hierarchy.ProjectPublicID
+	deployment.AppPublicID = hierarchy.AppPublicID
+	deployment.EnvironmentPublicID = hierarchy.EnvironmentPublicID
 	op, err := insertOperation(ctx, tx, workspaceID, deployment.ID, deployment.PublicID, actorID, "CreateDeployment", idempotencyHash, payloadHash, intentJSON, deployment.DesiredVersion)
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -437,6 +482,52 @@ func (s *Store) createDeployment(ctx context.Context, workspaceID, actorID int64
 		return domain.Deployment{}, domain.Operation{}, false, err
 	}
 	return deployment, op, false, nil
+}
+
+type deploymentHierarchy struct {
+	ProjectID           int64
+	ProjectPublicID     string
+	AppID               int64
+	AppPublicID         string
+	EnvironmentID       int64
+	EnvironmentPublicID string
+}
+
+func (s *Store) resolveDeploymentHierarchy(ctx context.Context, tx pgx.Tx, workspaceID int64, deploymentID, appPublicID, environmentPublicID, deploymentName string) (deploymentHierarchy, error) {
+	queries := s.queries.WithTx(tx)
+	if appPublicID != "" || environmentPublicID != "" {
+		if err := domain.ValidateHierarchyReferences(appPublicID, environmentPublicID); err != nil {
+			return deploymentHierarchy{}, ErrNotFound
+		}
+		row, err := queries.ResolveDeploymentHierarchy(ctx, storesqlc.ResolveDeploymentHierarchyParams{WorkspaceID: workspaceID, PublicID: appPublicID, PublicID_2: environmentPublicID})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return deploymentHierarchy{}, ErrNotFound
+		}
+		return deploymentHierarchy(row), err
+	}
+	workspace, err := queries.GetWorkspaceByID(ctx, workspaceID)
+	if err != nil {
+		return deploymentHierarchy{}, err
+	}
+	project, err := queries.UpsertCompatibilityProject(ctx, storesqlc.UpsertCompatibilityProjectParams{PublicID: compatibilityPublicID("prj", "project", workspace.PublicID), WorkspaceID: workspaceID})
+	if err != nil {
+		return deploymentHierarchy{}, err
+	}
+	environment, err := queries.UpsertCompatibilityEnvironment(ctx, storesqlc.UpsertCompatibilityEnvironmentParams{PublicID: compatibilityPublicID("env", "environment", workspace.PublicID), ProjectID: project.ID})
+	if err != nil {
+		return deploymentHierarchy{}, err
+	}
+	app, err := queries.UpsertCompatibilityApp(ctx, storesqlc.UpsertCompatibilityAppParams{PublicID: compatibilityPublicID("app", "app", deploymentID), ProjectID: project.ID, Name: deploymentName, NameKey: strings.ToLower(strings.TrimSpace(deploymentName))})
+	if err != nil {
+		return deploymentHierarchy{}, err
+	}
+	return deploymentHierarchy{ProjectID: project.ID, ProjectPublicID: project.PublicID, AppID: app.ID, AppPublicID: app.PublicID, EnvironmentID: environment.ID, EnvironmentPublicID: environment.PublicID}, nil
+}
+
+func compatibilityPublicID(prefix, kind, source string) string {
+	digest := fmt.Sprintf("%x", md5.Sum([]byte(kind+":"+source)))
+	digest = strings.NewReplacer("0", "a", "1", "b", "8", "c", "9", "d").Replace(digest)
+	return prefix + "-" + digest[:20]
 }
 
 func (s *Store) UpdateDeployment(ctx context.Context, workspaceID, actorID, deploymentID int64, intent domain.Intent, version int64, idem, payload []byte) (domain.Deployment, domain.Operation, error) {
@@ -472,6 +563,9 @@ func (s *Store) UpdateDeployment(ctx context.Context, workspaceID, actorID, depl
 	if intent.Name != current.Intent.Name {
 		return domain.Deployment{}, domain.Operation{}, ErrImmutableName
 	}
+	if intent.AppID != "" && (intent.AppID != current.AppPublicID || intent.EnvironmentID != current.EnvironmentPublicID) {
+		return domain.Deployment{}, domain.Operation{}, ErrImmutableHierarchy
+	}
 	var running bool
 	if err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM operations WHERE deployment_id=$1 AND status='Running')`, deploymentID).Scan(&running); err != nil {
 		return domain.Deployment{}, domain.Operation{}, err
@@ -491,6 +585,12 @@ func (s *Store) UpdateDeployment(ctx context.Context, workspaceID, actorID, depl
 	if err = jsonUnmarshal(storedJSON, &deployment.Intent); err != nil {
 		return domain.Deployment{}, domain.Operation{}, err
 	}
+	deployment.ProjectID = current.ProjectID
+	deployment.ProjectPublicID = current.ProjectPublicID
+	deployment.AppID = current.AppID
+	deployment.AppPublicID = current.AppPublicID
+	deployment.EnvironmentID = current.EnvironmentID
+	deployment.EnvironmentPublicID = current.EnvironmentPublicID
 	if _, err = tx.Exec(ctx, `UPDATE operations SET status='Superseded',completed_at=now(),updated_at=now() WHERE deployment_id=$1 AND status='Pending'`, deploymentID); err != nil {
 		return domain.Deployment{}, domain.Operation{}, err
 	}
@@ -589,7 +689,7 @@ func insertOperation(ctx context.Context, tx pgx.Tx, workspaceID, deploymentID i
 }
 
 func (s *Store) ListDeployments(ctx context.Context, workspaceID, beforeID int64, limit int) ([]domain.Deployment, string, error) {
-	rows, err := s.Pool.Query(ctx, `SELECT id,public_id,workspace_id,runtime_name,intent_json::text,desired_version,observed_version,observed_release,last_state,last_message,deletion_requested_at,created_at,updated_at FROM deployments WHERE workspace_id=$1 AND id < $2 AND deleted_at IS NULL ORDER BY id DESC LIMIT $3`, workspaceID, beforeID, limit+1)
+	rows, err := s.Pool.Query(ctx, `SELECT d.id,d.public_id,d.workspace_id,d.project_id,p.public_id,d.app_id,a.public_id,d.environment_id,e.public_id,d.runtime_name,d.intent_json::text,d.desired_version,d.observed_version,d.observed_release,d.last_state,d.last_message,d.deletion_requested_at,d.created_at,d.updated_at FROM deployments d JOIN projects p ON p.id=d.project_id JOIN apps a ON a.id=d.app_id JOIN environments e ON e.id=d.environment_id WHERE d.workspace_id=$1 AND d.id < $2 AND d.deleted_at IS NULL ORDER BY d.id DESC LIMIT $3`, workspaceID, beforeID, limit+1)
 	if err != nil {
 		return nil, "", err
 	}
@@ -598,7 +698,7 @@ func (s *Store) ListDeployments(ctx context.Context, workspaceID, beforeID int64
 	for rows.Next() {
 		var d domain.Deployment
 		var raw []byte
-		if err = rows.Scan(&d.ID, &d.PublicID, &d.WorkspaceID, &d.RuntimeName, &raw, &d.DesiredVersion, &d.ObservedVersion, &d.ObservedRelease, &d.State, &d.Message, &d.DeletionRequestedAt, &d.CreatedAt, &d.UpdatedAt); err != nil {
+		if err = rows.Scan(&d.ID, &d.PublicID, &d.WorkspaceID, &d.ProjectID, &d.ProjectPublicID, &d.AppID, &d.AppPublicID, &d.EnvironmentID, &d.EnvironmentPublicID, &d.RuntimeName, &raw, &d.DesiredVersion, &d.ObservedVersion, &d.ObservedRelease, &d.State, &d.Message, &d.DeletionRequestedAt, &d.CreatedAt, &d.UpdatedAt); err != nil {
 			return nil, "", err
 		}
 		if err = jsonUnmarshal(raw, &d.Intent); err != nil {
@@ -620,7 +720,7 @@ func (s *Store) ListDeployments(ctx context.Context, workspaceID, beforeID int64
 func (s *Store) FindDeployment(ctx context.Context, workspaceID int64, publicID string) (domain.Deployment, error) {
 	var d domain.Deployment
 	var raw []byte
-	err := s.Pool.QueryRow(ctx, `SELECT id,public_id,workspace_id,runtime_name,intent_json::text,desired_version,observed_version,observed_release,last_state,last_message,deletion_requested_at,created_at,updated_at FROM deployments WHERE workspace_id=$1 AND public_id=$2 AND deleted_at IS NULL`, workspaceID, publicID).Scan(&d.ID, &d.PublicID, &d.WorkspaceID, &d.RuntimeName, &raw, &d.DesiredVersion, &d.ObservedVersion, &d.ObservedRelease, &d.State, &d.Message, &d.DeletionRequestedAt, &d.CreatedAt, &d.UpdatedAt)
+	err := s.Pool.QueryRow(ctx, `SELECT d.id,d.public_id,d.workspace_id,d.project_id,p.public_id,d.app_id,a.public_id,d.environment_id,e.public_id,d.runtime_name,d.intent_json::text,d.desired_version,d.observed_version,d.observed_release,d.last_state,d.last_message,d.deletion_requested_at,d.created_at,d.updated_at FROM deployments d JOIN projects p ON p.id=d.project_id JOIN apps a ON a.id=d.app_id JOIN environments e ON e.id=d.environment_id WHERE d.workspace_id=$1 AND d.public_id=$2 AND d.deleted_at IS NULL`, workspaceID, publicID).Scan(&d.ID, &d.PublicID, &d.WorkspaceID, &d.ProjectID, &d.ProjectPublicID, &d.AppID, &d.AppPublicID, &d.EnvironmentID, &d.EnvironmentPublicID, &d.RuntimeName, &raw, &d.DesiredVersion, &d.ObservedVersion, &d.ObservedRelease, &d.State, &d.Message, &d.DeletionRequestedAt, &d.CreatedAt, &d.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return d, ErrNotFound
 	}
@@ -650,7 +750,16 @@ func (s *Store) ListOperations(ctx context.Context, workspaceID, deploymentID in
 
 func (s *Store) GetOperation(ctx context.Context, workspaceID int64, publicID string) (domain.Operation, error) {
 	var op domain.Operation
-	err := s.Pool.QueryRow(ctx, `SELECT o.id,o.public_id,o.deployment_id,d.public_id,o.kind,o.status,o.desired_version,o.attempts,o.error_code,o.error_message,o.created_at,o.updated_at FROM operations o JOIN deployments d ON d.id=o.deployment_id WHERE o.workspace_id=$1 AND o.public_id=$2`, workspaceID, publicID).Scan(&op.ID, &op.PublicID, &op.DeploymentID, &op.DeploymentPublicID, &op.Kind, &op.Status, &op.DesiredVersion, &op.Attempts, &op.ErrorCode, &op.ErrorMessage, &op.CreatedAt, &op.UpdatedAt)
+	err := s.Pool.QueryRow(ctx, `SELECT o.id,o.public_id,COALESCE(o.deployment_id,0),COALESCE(d.public_id,''),o.kind,o.status,o.desired_version,o.attempts,o.error_code,o.error_message,o.created_at,o.updated_at FROM operations o LEFT JOIN deployments d ON d.id=o.deployment_id WHERE o.workspace_id=$1 AND o.public_id=$2`, workspaceID, publicID).Scan(&op.ID, &op.PublicID, &op.DeploymentID, &op.DeploymentPublicID, &op.Kind, &op.Status, &op.DesiredVersion, &op.Attempts, &op.ErrorCode, &op.ErrorMessage, &op.CreatedAt, &op.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return op, ErrNotFound
+	}
+	return op, err
+}
+
+func (s *Store) GetOperationForActor(ctx context.Context, actorID int64, publicID string) (domain.Operation, error) {
+	var op domain.Operation
+	err := s.Pool.QueryRow(ctx, `SELECT o.id,o.public_id,COALESCE(o.deployment_id,0),COALESCE(d.public_id,''),o.workspace_id,o.kind,o.status,o.desired_version,o.attempts,o.error_code,o.error_message,o.created_at,o.updated_at FROM operations o LEFT JOIN deployments d ON d.id=o.deployment_id JOIN workspace_actors wa ON wa.workspace_id=o.workspace_id WHERE wa.actor_id=$1 AND o.public_id=$2`, actorID, publicID).Scan(&op.ID, &op.PublicID, &op.DeploymentID, &op.DeploymentPublicID, &op.WorkspaceID, &op.Kind, &op.Status, &op.DesiredVersion, &op.Attempts, &op.ErrorCode, &op.ErrorMessage, &op.CreatedAt, &op.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return op, ErrNotFound
 	}
@@ -683,7 +792,7 @@ func (s *Store) ClaimNext(ctx context.Context, worker string, lease time.Duratio
 	}
 	var d domain.Deployment
 	var deploymentIntent []byte
-	if err = tx.QueryRow(ctx, `SELECT id,public_id,workspace_id,runtime_name,intent_json::text,desired_version,observed_version,observed_release,last_state,last_message,deletion_requested_at,created_at,updated_at FROM deployments WHERE id=$1`, op.DeploymentID).Scan(&d.ID, &d.PublicID, &d.WorkspaceID, &d.RuntimeName, &deploymentIntent, &d.DesiredVersion, &d.ObservedVersion, &d.ObservedRelease, &d.State, &d.Message, &d.DeletionRequestedAt, &d.CreatedAt, &d.UpdatedAt); err != nil {
+	if err = tx.QueryRow(ctx, `SELECT d.id,d.public_id,d.workspace_id,d.project_id,p.public_id,d.app_id,a.public_id,d.environment_id,e.public_id,d.runtime_name,d.intent_json::text,d.desired_version,d.observed_version,d.observed_release,d.last_state,d.last_message,d.deletion_requested_at,d.created_at,d.updated_at FROM deployments d JOIN projects p ON p.id=d.project_id JOIN apps a ON a.id=d.app_id JOIN environments e ON e.id=d.environment_id WHERE d.id=$1`, op.DeploymentID).Scan(&d.ID, &d.PublicID, &d.WorkspaceID, &d.ProjectID, &d.ProjectPublicID, &d.AppID, &d.AppPublicID, &d.EnvironmentID, &d.EnvironmentPublicID, &d.RuntimeName, &deploymentIntent, &d.DesiredVersion, &d.ObservedVersion, &d.ObservedRelease, &d.State, &d.Message, &d.DeletionRequestedAt, &d.CreatedAt, &d.UpdatedAt); err != nil {
 		return domain.Operation{}, domain.Deployment{}, false, err
 	}
 	if err = jsonUnmarshal(deploymentIntent, &d.Intent); err != nil {
@@ -798,7 +907,7 @@ func existingOperation(ctx context.Context, tx pgx.Tx, workspaceID, deploymentID
 func deploymentByID(ctx context.Context, tx pgx.Tx, id int64) (domain.Deployment, error) {
 	var d domain.Deployment
 	var raw []byte
-	err := tx.QueryRow(ctx, `SELECT id,public_id,workspace_id,runtime_name,intent_json::text,desired_version,observed_version,observed_release,last_state,last_message,deletion_requested_at,deleted_at,created_at,updated_at FROM deployments WHERE id=$1`, id).Scan(&d.ID, &d.PublicID, &d.WorkspaceID, &d.RuntimeName, &raw, &d.DesiredVersion, &d.ObservedVersion, &d.ObservedRelease, &d.State, &d.Message, &d.DeletionRequestedAt, &d.DeletedAt, &d.CreatedAt, &d.UpdatedAt)
+	err := tx.QueryRow(ctx, `SELECT d.id,d.public_id,d.workspace_id,d.project_id,p.public_id,d.app_id,a.public_id,d.environment_id,e.public_id,d.runtime_name,d.intent_json::text,d.desired_version,d.observed_version,d.observed_release,d.last_state,d.last_message,d.deletion_requested_at,d.deleted_at,d.created_at,d.updated_at FROM deployments d JOIN projects p ON p.id=d.project_id JOIN apps a ON a.id=d.app_id JOIN environments e ON e.id=d.environment_id WHERE d.id=$1`, id).Scan(&d.ID, &d.PublicID, &d.WorkspaceID, &d.ProjectID, &d.ProjectPublicID, &d.AppID, &d.AppPublicID, &d.EnvironmentID, &d.EnvironmentPublicID, &d.RuntimeName, &raw, &d.DesiredVersion, &d.ObservedVersion, &d.ObservedRelease, &d.State, &d.Message, &d.DeletionRequestedAt, &d.DeletedAt, &d.CreatedAt, &d.UpdatedAt)
 	if err != nil {
 		return d, err
 	}
@@ -808,7 +917,15 @@ func deploymentByID(ctx context.Context, tx pgx.Tx, id int64) (domain.Deployment
 
 var ErrConflict = errors.New("conflict")
 
+var ErrVersionConflict = fmt.Errorf("version conflict: %w", ErrConflict)
+
+var ErrNameConflict = fmt.Errorf("name conflict: %w", ErrConflict)
+
+var ErrDependencyConflict = fmt.Errorf("dependency conflict: %w", ErrConflict)
+
 var ErrImmutableName = errors.New("deployment name is immutable")
+
+var ErrImmutableHierarchy = errors.New("deployment hierarchy is immutable")
 
 var ErrLeaseLost = errors.New("operation lease lost")
 

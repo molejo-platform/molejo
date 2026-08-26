@@ -98,6 +98,9 @@
 - Testes locais devem usar cluster, kubeconfig, certificados e processos
   descartáveis e limpar tudo por `trap`, inclusive após falha.
 - Não alterar o contexto Kubernetes do usuário como efeito colateral de teste.
+- Para qualquer operação Kubernetes deste repositório, passar explicitamente
+  `--context fruto-lab` ao comando que acessa o cluster; nunca depender do
+  contexto atual nem alterá-lo com `kubectl config use-context`.
 - Antes de qualquer operação não descartável, resolver e informar cluster,
   contexto, Namespace, registry, hostname e recursos exatos.
 - Deploy, push de imagem, mudança em DNS, Gateway, TLS, registry, cluster ou outro

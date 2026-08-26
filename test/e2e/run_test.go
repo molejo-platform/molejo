@@ -218,6 +218,17 @@ func TestControlPlaneManifestsApplyLeastPrivilegeDefaults(t *testing.T) {
 	}
 }
 
+func TestMigrationJobDoesNotBypassHierarchyPreflight(t *testing.T) {
+	migration, err := os.ReadFile("../../deploy/control-plane/migration-job.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	contents := string(migration)
+	if !strings.Contains(contents, `command: ["/hierarchy-backfill"]`) || !strings.Contains(contents, `args: ["--apply"]`) {
+		t.Fatal("migration Job does not run the hierarchy preflight and guarded migration flow")
+	}
+}
+
 func TestControlPlanePhase7ArtifactsAreExplicitAndReproducible(t *testing.T) {
 	preflight, err := os.ReadFile("control-plane-k3s-preflight.sh")
 	if err != nil {

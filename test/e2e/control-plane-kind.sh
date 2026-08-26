@@ -192,7 +192,7 @@ prepare_owner_credentials() {
 }
 
 bootstrap_host_database() {
-  FRUTO_DATABASE_URL="postgres://fruto:fruto@127.0.0.1:${postgres_port}/fruto?sslmode=disable" \
+    FRUTO_DATABASE_URL="postgres://fruto:fruto@127.0.0.1:${postgres_port}/fruto?sslmode=disable" \
     FRUTO_OWNER_PASSWORD_HASH="$owner_hash" \
     FRUTO_WORKSPACE_NAMESPACE=fruto-workspaces \
     "$api_binary" bootstrap >/dev/null

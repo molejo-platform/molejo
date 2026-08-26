@@ -6,9 +6,16 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+	"time"
 )
 
 func (c Config) Validate() error {
+	if c.GitHubStateTTL <= 0 || c.GitHubStateTTL > 30*time.Minute {
+		return fmt.Errorf("GitHub state TTL must be positive and at most 30 minutes")
+	}
+	if strings.TrimSpace(c.GitHubCookieName) == "" {
+		return fmt.Errorf("GitHub state cookie name is required")
+	}
 	if c.Mode != "development" && c.Mode != "production" {
 		return fmt.Errorf("mode must be development or production")
 	}

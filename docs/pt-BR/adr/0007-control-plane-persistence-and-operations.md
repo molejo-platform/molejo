@@ -10,10 +10,13 @@ representados explicitamente.
 
 ## Decisão
 
-PostgreSQL é autoritativo para identidades, membros do Workspace, intenção de
-deployment, IDs públicos, idempotência, sessões e histórico de operações. Cada
-mutação persiste intenção e operação na mesma transação antes do efeito no
-runtime.
+PostgreSQL é autoritativo para identidades Actor, memberships de Workspace, a
+hierarquia Workspace/Project/App/Environment, intenção de AppDeployment, IDs
+públicos, idempotência, sessões e histórico de operações. Constraints compostas
+garantem que App e Environment vinculados por um AppDeployment pertençam ao mesmo
+Project e Workspace. CRUD relacional da hierarquia é síncrono e transacional;
+mutações com efeito no runtime persistem intenção e operação na mesma transação
+antes desse efeito.
 
 As operações usam lease, worker ID, fencing token, versão desejada, backoff
 limitado e estado `Superseded`. Delete cria uma barreira contra updates
@@ -23,5 +26,8 @@ indisponível ou antigo vira `Unknown` ou `Progressing`, nunca `Ready` atual.
 ## Consequências
 
 O executor pode retomar após crash e requisições duplicadas são seguras. O schema
-é forward-only neste pre-alpha e dados locais podem ser descartados; exportação
-manual criptografada é o único auxílio de recuperação documentado.
+é forward-only. AppDeployments existentes atravessam uma sequência
+expand/backfill/contract com recursos de compatibilidade determinísticos; o
+backfill é repetível e as constraints finais só são aplicadas quando nenhuma
+relação nula permanece. Exportação manual criptografada é o único auxílio de
+recuperação documentado.

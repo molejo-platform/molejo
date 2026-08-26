@@ -27,6 +27,281 @@ func (q *Queries) AddWorkspaceActor(ctx context.Context, arg AddWorkspaceActorPa
 	return err
 }
 
+const archiveApp = `-- name: ArchiveApp :one
+UPDATE apps a
+SET archived_at = now(), version = a.version + 1, updated_at = now()
+FROM projects p
+WHERE a.project_id = p.id AND p.workspace_id = $1 AND p.public_id = $2
+  AND a.public_id = $3 AND a.version = $4 AND a.archived_at IS NULL
+  AND NOT EXISTS (SELECT 1 FROM deployments d WHERE d.app_id = a.id AND d.deleted_at IS NULL)
+RETURNING a.id, a.public_id, a.project_id, a.name, a.version, a.created_at, a.updated_at, a.archived_at
+`
+
+type ArchiveAppParams struct {
+	WorkspaceID int64  `json:"workspace_id"`
+	PublicID    string `json:"public_id"`
+	PublicID_2  string `json:"public_id_2"`
+	Version     int64  `json:"version"`
+}
+
+type ArchiveAppRow struct {
+	ID         int64              `json:"id"`
+	PublicID   string             `json:"public_id"`
+	ProjectID  int64              `json:"project_id"`
+	Name       string             `json:"name"`
+	Version    int64              `json:"version"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+	ArchivedAt pgtype.Timestamptz `json:"archived_at"`
+}
+
+func (q *Queries) ArchiveApp(ctx context.Context, arg ArchiveAppParams) (ArchiveAppRow, error) {
+	row := q.db.QueryRow(ctx, archiveApp,
+		arg.WorkspaceID,
+		arg.PublicID,
+		arg.PublicID_2,
+		arg.Version,
+	)
+	var i ArchiveAppRow
+	err := row.Scan(
+		&i.ID,
+		&i.PublicID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Version,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ArchivedAt,
+	)
+	return i, err
+}
+
+const archiveEnvironment = `-- name: ArchiveEnvironment :one
+UPDATE environments e
+SET archived_at = now(), version = e.version + 1, updated_at = now()
+FROM projects p
+WHERE e.project_id = p.id AND p.workspace_id = $1 AND p.public_id = $2
+  AND e.public_id = $3 AND e.version = $4 AND e.archived_at IS NULL
+  AND NOT EXISTS (SELECT 1 FROM deployments d WHERE d.environment_id = e.id AND d.deleted_at IS NULL)
+RETURNING e.id, e.public_id, e.project_id, e.name, e.version, e.created_at, e.updated_at, e.archived_at
+`
+
+type ArchiveEnvironmentParams struct {
+	WorkspaceID int64  `json:"workspace_id"`
+	PublicID    string `json:"public_id"`
+	PublicID_2  string `json:"public_id_2"`
+	Version     int64  `json:"version"`
+}
+
+type ArchiveEnvironmentRow struct {
+	ID         int64              `json:"id"`
+	PublicID   string             `json:"public_id"`
+	ProjectID  int64              `json:"project_id"`
+	Name       string             `json:"name"`
+	Version    int64              `json:"version"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+	ArchivedAt pgtype.Timestamptz `json:"archived_at"`
+}
+
+func (q *Queries) ArchiveEnvironment(ctx context.Context, arg ArchiveEnvironmentParams) (ArchiveEnvironmentRow, error) {
+	row := q.db.QueryRow(ctx, archiveEnvironment,
+		arg.WorkspaceID,
+		arg.PublicID,
+		arg.PublicID_2,
+		arg.Version,
+	)
+	var i ArchiveEnvironmentRow
+	err := row.Scan(
+		&i.ID,
+		&i.PublicID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Version,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ArchivedAt,
+	)
+	return i, err
+}
+
+const archiveProject = `-- name: ArchiveProject :one
+UPDATE projects p
+SET archived_at = now(), version = version + 1, updated_at = now()
+WHERE p.workspace_id = $1 AND p.public_id = $2 AND p.version = $3 AND p.archived_at IS NULL
+  AND NOT EXISTS (SELECT 1 FROM environments e WHERE e.project_id = p.id AND e.archived_at IS NULL)
+  AND NOT EXISTS (SELECT 1 FROM apps a WHERE a.project_id = p.id AND a.archived_at IS NULL)
+RETURNING p.id, p.public_id, p.workspace_id, p.name, p.version, p.created_at, p.updated_at, p.archived_at
+`
+
+type ArchiveProjectParams struct {
+	WorkspaceID int64  `json:"workspace_id"`
+	PublicID    string `json:"public_id"`
+	Version     int64  `json:"version"`
+}
+
+type ArchiveProjectRow struct {
+	ID          int64              `json:"id"`
+	PublicID    string             `json:"public_id"`
+	WorkspaceID int64              `json:"workspace_id"`
+	Name        string             `json:"name"`
+	Version     int64              `json:"version"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	ArchivedAt  pgtype.Timestamptz `json:"archived_at"`
+}
+
+func (q *Queries) ArchiveProject(ctx context.Context, arg ArchiveProjectParams) (ArchiveProjectRow, error) {
+	row := q.db.QueryRow(ctx, archiveProject, arg.WorkspaceID, arg.PublicID, arg.Version)
+	var i ArchiveProjectRow
+	err := row.Scan(
+		&i.ID,
+		&i.PublicID,
+		&i.WorkspaceID,
+		&i.Name,
+		&i.Version,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ArchivedAt,
+	)
+	return i, err
+}
+
+const createApp = `-- name: CreateApp :one
+INSERT INTO apps(public_id, project_id, name, name_key)
+VALUES ($1, $2, $3, $4)
+RETURNING id, public_id, project_id, name, version, created_at, updated_at, archived_at
+`
+
+type CreateAppParams struct {
+	PublicID  string `json:"public_id"`
+	ProjectID int64  `json:"project_id"`
+	Name      string `json:"name"`
+	NameKey   string `json:"name_key"`
+}
+
+type CreateAppRow struct {
+	ID         int64              `json:"id"`
+	PublicID   string             `json:"public_id"`
+	ProjectID  int64              `json:"project_id"`
+	Name       string             `json:"name"`
+	Version    int64              `json:"version"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+	ArchivedAt pgtype.Timestamptz `json:"archived_at"`
+}
+
+func (q *Queries) CreateApp(ctx context.Context, arg CreateAppParams) (CreateAppRow, error) {
+	row := q.db.QueryRow(ctx, createApp,
+		arg.PublicID,
+		arg.ProjectID,
+		arg.Name,
+		arg.NameKey,
+	)
+	var i CreateAppRow
+	err := row.Scan(
+		&i.ID,
+		&i.PublicID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Version,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ArchivedAt,
+	)
+	return i, err
+}
+
+const createEnvironment = `-- name: CreateEnvironment :one
+INSERT INTO environments(public_id, project_id, name, name_key)
+VALUES ($1, $2, $3, $4)
+RETURNING id, public_id, project_id, name, version, created_at, updated_at, archived_at
+`
+
+type CreateEnvironmentParams struct {
+	PublicID  string `json:"public_id"`
+	ProjectID int64  `json:"project_id"`
+	Name      string `json:"name"`
+	NameKey   string `json:"name_key"`
+}
+
+type CreateEnvironmentRow struct {
+	ID         int64              `json:"id"`
+	PublicID   string             `json:"public_id"`
+	ProjectID  int64              `json:"project_id"`
+	Name       string             `json:"name"`
+	Version    int64              `json:"version"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+	ArchivedAt pgtype.Timestamptz `json:"archived_at"`
+}
+
+func (q *Queries) CreateEnvironment(ctx context.Context, arg CreateEnvironmentParams) (CreateEnvironmentRow, error) {
+	row := q.db.QueryRow(ctx, createEnvironment,
+		arg.PublicID,
+		arg.ProjectID,
+		arg.Name,
+		arg.NameKey,
+	)
+	var i CreateEnvironmentRow
+	err := row.Scan(
+		&i.ID,
+		&i.PublicID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Version,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ArchivedAt,
+	)
+	return i, err
+}
+
+const createProject = `-- name: CreateProject :one
+INSERT INTO projects(public_id, workspace_id, name, name_key)
+VALUES ($1, $2, $3, $4)
+RETURNING id, public_id, workspace_id, name, version, created_at, updated_at, archived_at
+`
+
+type CreateProjectParams struct {
+	PublicID    string `json:"public_id"`
+	WorkspaceID int64  `json:"workspace_id"`
+	Name        string `json:"name"`
+	NameKey     string `json:"name_key"`
+}
+
+type CreateProjectRow struct {
+	ID          int64              `json:"id"`
+	PublicID    string             `json:"public_id"`
+	WorkspaceID int64              `json:"workspace_id"`
+	Name        string             `json:"name"`
+	Version     int64              `json:"version"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	ArchivedAt  pgtype.Timestamptz `json:"archived_at"`
+}
+
+func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (CreateProjectRow, error) {
+	row := q.db.QueryRow(ctx, createProject,
+		arg.PublicID,
+		arg.WorkspaceID,
+		arg.Name,
+		arg.NameKey,
+	)
+	var i CreateProjectRow
+	err := row.Scan(
+		&i.ID,
+		&i.PublicID,
+		&i.WorkspaceID,
+		&i.Name,
+		&i.Version,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ArchivedAt,
+	)
+	return i, err
+}
+
 const createSession = `-- name: CreateSession :exec
 INSERT INTO sessions (token_hash, actor_id, csrf_hash, expires_at)
 VALUES ($1, $2, $3, $4)
@@ -47,6 +322,338 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) er
 		arg.ExpiresAt,
 	)
 	return err
+}
+
+const findActiveAppForUpdate = `-- name: FindActiveAppForUpdate :one
+SELECT a.id, a.public_id, a.project_id, a.name, a.version, a.created_at, a.updated_at, a.archived_at
+FROM apps a
+JOIN projects p ON p.id = a.project_id
+WHERE p.workspace_id = $1 AND p.public_id = $2 AND a.public_id = $3 AND a.archived_at IS NULL
+FOR UPDATE OF a
+`
+
+type FindActiveAppForUpdateParams struct {
+	WorkspaceID int64  `json:"workspace_id"`
+	PublicID    string `json:"public_id"`
+	PublicID_2  string `json:"public_id_2"`
+}
+
+type FindActiveAppForUpdateRow struct {
+	ID         int64              `json:"id"`
+	PublicID   string             `json:"public_id"`
+	ProjectID  int64              `json:"project_id"`
+	Name       string             `json:"name"`
+	Version    int64              `json:"version"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+	ArchivedAt pgtype.Timestamptz `json:"archived_at"`
+}
+
+func (q *Queries) FindActiveAppForUpdate(ctx context.Context, arg FindActiveAppForUpdateParams) (FindActiveAppForUpdateRow, error) {
+	row := q.db.QueryRow(ctx, findActiveAppForUpdate, arg.WorkspaceID, arg.PublicID, arg.PublicID_2)
+	var i FindActiveAppForUpdateRow
+	err := row.Scan(
+		&i.ID,
+		&i.PublicID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Version,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ArchivedAt,
+	)
+	return i, err
+}
+
+const findActiveEnvironmentForUpdate = `-- name: FindActiveEnvironmentForUpdate :one
+SELECT e.id, e.public_id, e.project_id, e.name, e.version, e.created_at, e.updated_at, e.archived_at
+FROM environments e
+JOIN projects p ON p.id = e.project_id
+WHERE p.workspace_id = $1 AND p.public_id = $2 AND e.public_id = $3 AND e.archived_at IS NULL
+FOR UPDATE OF e
+`
+
+type FindActiveEnvironmentForUpdateParams struct {
+	WorkspaceID int64  `json:"workspace_id"`
+	PublicID    string `json:"public_id"`
+	PublicID_2  string `json:"public_id_2"`
+}
+
+type FindActiveEnvironmentForUpdateRow struct {
+	ID         int64              `json:"id"`
+	PublicID   string             `json:"public_id"`
+	ProjectID  int64              `json:"project_id"`
+	Name       string             `json:"name"`
+	Version    int64              `json:"version"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+	ArchivedAt pgtype.Timestamptz `json:"archived_at"`
+}
+
+func (q *Queries) FindActiveEnvironmentForUpdate(ctx context.Context, arg FindActiveEnvironmentForUpdateParams) (FindActiveEnvironmentForUpdateRow, error) {
+	row := q.db.QueryRow(ctx, findActiveEnvironmentForUpdate, arg.WorkspaceID, arg.PublicID, arg.PublicID_2)
+	var i FindActiveEnvironmentForUpdateRow
+	err := row.Scan(
+		&i.ID,
+		&i.PublicID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Version,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ArchivedAt,
+	)
+	return i, err
+}
+
+const findActiveProjectForUpdate = `-- name: FindActiveProjectForUpdate :one
+SELECT id, public_id, workspace_id, name, version, created_at, updated_at, archived_at
+FROM projects
+WHERE workspace_id = $1 AND public_id = $2 AND archived_at IS NULL
+FOR UPDATE
+`
+
+type FindActiveProjectForUpdateParams struct {
+	WorkspaceID int64  `json:"workspace_id"`
+	PublicID    string `json:"public_id"`
+}
+
+type FindActiveProjectForUpdateRow struct {
+	ID          int64              `json:"id"`
+	PublicID    string             `json:"public_id"`
+	WorkspaceID int64              `json:"workspace_id"`
+	Name        string             `json:"name"`
+	Version     int64              `json:"version"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	ArchivedAt  pgtype.Timestamptz `json:"archived_at"`
+}
+
+func (q *Queries) FindActiveProjectForUpdate(ctx context.Context, arg FindActiveProjectForUpdateParams) (FindActiveProjectForUpdateRow, error) {
+	row := q.db.QueryRow(ctx, findActiveProjectForUpdate, arg.WorkspaceID, arg.PublicID)
+	var i FindActiveProjectForUpdateRow
+	err := row.Scan(
+		&i.ID,
+		&i.PublicID,
+		&i.WorkspaceID,
+		&i.Name,
+		&i.Version,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ArchivedAt,
+	)
+	return i, err
+}
+
+const findApp = `-- name: FindApp :one
+SELECT a.id, a.public_id, a.project_id, a.name, a.version, a.created_at, a.updated_at, a.archived_at
+FROM apps a
+JOIN projects p ON p.id = a.project_id
+WHERE p.workspace_id = $1 AND p.public_id = $2 AND a.public_id = $3
+`
+
+type FindAppParams struct {
+	WorkspaceID int64  `json:"workspace_id"`
+	PublicID    string `json:"public_id"`
+	PublicID_2  string `json:"public_id_2"`
+}
+
+type FindAppRow struct {
+	ID         int64              `json:"id"`
+	PublicID   string             `json:"public_id"`
+	ProjectID  int64              `json:"project_id"`
+	Name       string             `json:"name"`
+	Version    int64              `json:"version"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+	ArchivedAt pgtype.Timestamptz `json:"archived_at"`
+}
+
+func (q *Queries) FindApp(ctx context.Context, arg FindAppParams) (FindAppRow, error) {
+	row := q.db.QueryRow(ctx, findApp, arg.WorkspaceID, arg.PublicID, arg.PublicID_2)
+	var i FindAppRow
+	err := row.Scan(
+		&i.ID,
+		&i.PublicID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Version,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ArchivedAt,
+	)
+	return i, err
+}
+
+const findEnvironment = `-- name: FindEnvironment :one
+SELECT e.id, e.public_id, e.project_id, e.name, e.version, e.created_at, e.updated_at, e.archived_at
+FROM environments e
+JOIN projects p ON p.id = e.project_id
+WHERE p.workspace_id = $1 AND p.public_id = $2 AND e.public_id = $3
+`
+
+type FindEnvironmentParams struct {
+	WorkspaceID int64  `json:"workspace_id"`
+	PublicID    string `json:"public_id"`
+	PublicID_2  string `json:"public_id_2"`
+}
+
+type FindEnvironmentRow struct {
+	ID         int64              `json:"id"`
+	PublicID   string             `json:"public_id"`
+	ProjectID  int64              `json:"project_id"`
+	Name       string             `json:"name"`
+	Version    int64              `json:"version"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+	ArchivedAt pgtype.Timestamptz `json:"archived_at"`
+}
+
+func (q *Queries) FindEnvironment(ctx context.Context, arg FindEnvironmentParams) (FindEnvironmentRow, error) {
+	row := q.db.QueryRow(ctx, findEnvironment, arg.WorkspaceID, arg.PublicID, arg.PublicID_2)
+	var i FindEnvironmentRow
+	err := row.Scan(
+		&i.ID,
+		&i.PublicID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Version,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ArchivedAt,
+	)
+	return i, err
+}
+
+const findProject = `-- name: FindProject :one
+SELECT id, public_id, workspace_id, name, version, created_at, updated_at, archived_at
+FROM projects
+WHERE workspace_id = $1 AND public_id = $2
+`
+
+type FindProjectParams struct {
+	WorkspaceID int64  `json:"workspace_id"`
+	PublicID    string `json:"public_id"`
+}
+
+type FindProjectRow struct {
+	ID          int64              `json:"id"`
+	PublicID    string             `json:"public_id"`
+	WorkspaceID int64              `json:"workspace_id"`
+	Name        string             `json:"name"`
+	Version     int64              `json:"version"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	ArchivedAt  pgtype.Timestamptz `json:"archived_at"`
+}
+
+func (q *Queries) FindProject(ctx context.Context, arg FindProjectParams) (FindProjectRow, error) {
+	row := q.db.QueryRow(ctx, findProject, arg.WorkspaceID, arg.PublicID)
+	var i FindProjectRow
+	err := row.Scan(
+		&i.ID,
+		&i.PublicID,
+		&i.WorkspaceID,
+		&i.Name,
+		&i.Version,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ArchivedAt,
+	)
+	return i, err
+}
+
+const findWorkspaceForActor = `-- name: FindWorkspaceForActor :one
+SELECT w.id, w.public_id, w.name, w.namespace_name, w.version, w.bootstrap_state, w.created_at, w.updated_at
+FROM workspaces AS w
+JOIN workspace_actors AS wa ON wa.workspace_id = w.id
+WHERE wa.actor_id = $1 AND w.public_id = $2
+`
+
+type FindWorkspaceForActorParams struct {
+	ActorID  int64  `json:"actor_id"`
+	PublicID string `json:"public_id"`
+}
+
+type FindWorkspaceForActorRow struct {
+	ID             int64              `json:"id"`
+	PublicID       string             `json:"public_id"`
+	Name           string             `json:"name"`
+	NamespaceName  string             `json:"namespace_name"`
+	Version        int64              `json:"version"`
+	BootstrapState string             `json:"bootstrap_state"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) FindWorkspaceForActor(ctx context.Context, arg FindWorkspaceForActorParams) (FindWorkspaceForActorRow, error) {
+	row := q.db.QueryRow(ctx, findWorkspaceForActor, arg.ActorID, arg.PublicID)
+	var i FindWorkspaceForActorRow
+	err := row.Scan(
+		&i.ID,
+		&i.PublicID,
+		&i.Name,
+		&i.NamespaceName,
+		&i.Version,
+		&i.BootstrapState,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const findWorkspaceOperationByIdempotency = `-- name: FindWorkspaceOperationByIdempotency :one
+SELECT o.id, o.public_id, o.workspace_id, o.actor_id, o.kind, o.status,
+       o.desired_version, o.attempts, o.created_at, o.updated_at,
+       o.error_code, o.error_message, o.payload_hash
+FROM operations o
+WHERE o.actor_id = $1
+  AND o.kind = 'EnsureWorkspace'
+  AND o.deployment_id IS NULL
+  AND o.intent_json <> '{}'::jsonb
+  AND o.idempotency_hash = $2
+`
+
+type FindWorkspaceOperationByIdempotencyParams struct {
+	ActorID         int64  `json:"actor_id"`
+	IdempotencyHash []byte `json:"idempotency_hash"`
+}
+
+type FindWorkspaceOperationByIdempotencyRow struct {
+	ID             int64              `json:"id"`
+	PublicID       string             `json:"public_id"`
+	WorkspaceID    int64              `json:"workspace_id"`
+	ActorID        int64              `json:"actor_id"`
+	Kind           string             `json:"kind"`
+	Status         string             `json:"status"`
+	DesiredVersion int64              `json:"desired_version"`
+	Attempts       int32              `json:"attempts"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	ErrorCode      string             `json:"error_code"`
+	ErrorMessage   string             `json:"error_message"`
+	PayloadHash    []byte             `json:"payload_hash"`
+}
+
+func (q *Queries) FindWorkspaceOperationByIdempotency(ctx context.Context, arg FindWorkspaceOperationByIdempotencyParams) (FindWorkspaceOperationByIdempotencyRow, error) {
+	row := q.db.QueryRow(ctx, findWorkspaceOperationByIdempotency, arg.ActorID, arg.IdempotencyHash)
+	var i FindWorkspaceOperationByIdempotencyRow
+	err := row.Scan(
+		&i.ID,
+		&i.PublicID,
+		&i.WorkspaceID,
+		&i.ActorID,
+		&i.Kind,
+		&i.Status,
+		&i.DesiredVersion,
+		&i.Attempts,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ErrorCode,
+		&i.ErrorMessage,
+		&i.PayloadHash,
+	)
+	return i, err
 }
 
 const getActiveSession = `-- name: GetActiveSession :one
@@ -113,17 +720,61 @@ func (q *Queries) GetActorByKey(ctx context.Context, actorKey string) (GetActorB
 	return i, err
 }
 
+const getHierarchyBackfillStatus = `-- name: GetHierarchyBackfillStatus :one
+SELECT
+    count(*)::bigint AS deployments,
+    count(*) FILTER (WHERE project_id IS NULL OR app_id IS NULL OR environment_id IS NULL)::bigint AS pending_deployments,
+    count(DISTINCT workspace_id)::bigint AS affected_workspaces,
+    (SELECT count(*)::bigint FROM workspaces w
+      WHERE EXISTS (SELECT 1 FROM deployments d WHERE d.workspace_id = w.id AND (d.project_id IS NULL OR d.app_id IS NULL OR d.environment_id IS NULL))
+        AND NOT EXISTS (SELECT 1 FROM projects p WHERE p.public_id = 'prj-' || translate(substring(md5('project:' || w.public_id), 1, 20), '0189', 'abcd'))) AS projects_to_create,
+    (SELECT count(*)::bigint FROM workspaces w
+      WHERE EXISTS (SELECT 1 FROM deployments d WHERE d.workspace_id = w.id AND (d.project_id IS NULL OR d.app_id IS NULL OR d.environment_id IS NULL))
+        AND NOT EXISTS (SELECT 1 FROM environments e WHERE e.public_id = 'env-' || translate(substring(md5('environment:' || w.public_id), 1, 20), '0189', 'abcd'))) AS environments_to_create,
+    (SELECT count(*)::bigint FROM deployments d
+      WHERE (d.project_id IS NULL OR d.app_id IS NULL OR d.environment_id IS NULL)
+        AND NOT EXISTS (SELECT 1 FROM apps a WHERE a.public_id = 'app-' || translate(substring(md5('app:' || d.public_id), 1, 20), '0189', 'abcd'))) AS apps_to_create
+FROM deployments
+`
+
+type GetHierarchyBackfillStatusRow struct {
+	Deployments          int64 `json:"deployments"`
+	PendingDeployments   int64 `json:"pending_deployments"`
+	AffectedWorkspaces   int64 `json:"affected_workspaces"`
+	ProjectsToCreate     int64 `json:"projects_to_create"`
+	EnvironmentsToCreate int64 `json:"environments_to_create"`
+	AppsToCreate         int64 `json:"apps_to_create"`
+}
+
+func (q *Queries) GetHierarchyBackfillStatus(ctx context.Context) (GetHierarchyBackfillStatusRow, error) {
+	row := q.db.QueryRow(ctx, getHierarchyBackfillStatus)
+	var i GetHierarchyBackfillStatusRow
+	err := row.Scan(
+		&i.Deployments,
+		&i.PendingDeployments,
+		&i.AffectedWorkspaces,
+		&i.ProjectsToCreate,
+		&i.EnvironmentsToCreate,
+		&i.AppsToCreate,
+	)
+	return i, err
+}
+
 const getWorkspaceByID = `-- name: GetWorkspaceByID :one
-SELECT id, public_id, name, namespace_name
+SELECT id, public_id, name, namespace_name, version, bootstrap_state, created_at, updated_at
 FROM workspaces
 WHERE id = $1
 `
 
 type GetWorkspaceByIDRow struct {
-	ID            int64  `json:"id"`
-	PublicID      string `json:"public_id"`
-	Name          string `json:"name"`
-	NamespaceName string `json:"namespace_name"`
+	ID             int64              `json:"id"`
+	PublicID       string             `json:"public_id"`
+	Name           string             `json:"name"`
+	NamespaceName  string             `json:"namespace_name"`
+	Version        int64              `json:"version"`
+	BootstrapState string             `json:"bootstrap_state"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 }
 
 func (q *Queries) GetWorkspaceByID(ctx context.Context, id int64) (GetWorkspaceByIDRow, error) {
@@ -134,12 +785,16 @@ func (q *Queries) GetWorkspaceByID(ctx context.Context, id int64) (GetWorkspaceB
 		&i.PublicID,
 		&i.Name,
 		&i.NamespaceName,
+		&i.Version,
+		&i.BootstrapState,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
 
 const getWorkspaceForActor = `-- name: GetWorkspaceForActor :one
-SELECT w.id, w.public_id, w.name, w.namespace_name
+SELECT w.id, w.public_id, w.name, w.namespace_name, w.version, w.bootstrap_state, w.created_at, w.updated_at
 FROM workspaces AS w
 JOIN workspace_actors AS wa ON wa.workspace_id = w.id
 WHERE wa.actor_id = $1
@@ -148,10 +803,14 @@ LIMIT 1
 `
 
 type GetWorkspaceForActorRow struct {
-	ID            int64  `json:"id"`
-	PublicID      string `json:"public_id"`
-	Name          string `json:"name"`
-	NamespaceName string `json:"namespace_name"`
+	ID             int64              `json:"id"`
+	PublicID       string             `json:"public_id"`
+	Name           string             `json:"name"`
+	NamespaceName  string             `json:"namespace_name"`
+	Version        int64              `json:"version"`
+	BootstrapState string             `json:"bootstrap_state"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 }
 
 func (q *Queries) GetWorkspaceForActor(ctx context.Context, actorID int64) (GetWorkspaceForActorRow, error) {
@@ -162,6 +821,402 @@ func (q *Queries) GetWorkspaceForActor(ctx context.Context, actorID int64) (GetW
 		&i.PublicID,
 		&i.Name,
 		&i.NamespaceName,
+		&i.Version,
+		&i.BootstrapState,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const insertWorkspace = `-- name: InsertWorkspace :one
+INSERT INTO workspaces(public_id, name, namespace_name)
+VALUES ($1, $2, $3)
+RETURNING id, public_id, name, namespace_name, version, bootstrap_state, created_at, updated_at
+`
+
+type InsertWorkspaceParams struct {
+	PublicID      string `json:"public_id"`
+	Name          string `json:"name"`
+	NamespaceName string `json:"namespace_name"`
+}
+
+type InsertWorkspaceRow struct {
+	ID             int64              `json:"id"`
+	PublicID       string             `json:"public_id"`
+	Name           string             `json:"name"`
+	NamespaceName  string             `json:"namespace_name"`
+	Version        int64              `json:"version"`
+	BootstrapState string             `json:"bootstrap_state"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) InsertWorkspace(ctx context.Context, arg InsertWorkspaceParams) (InsertWorkspaceRow, error) {
+	row := q.db.QueryRow(ctx, insertWorkspace, arg.PublicID, arg.Name, arg.NamespaceName)
+	var i InsertWorkspaceRow
+	err := row.Scan(
+		&i.ID,
+		&i.PublicID,
+		&i.Name,
+		&i.NamespaceName,
+		&i.Version,
+		&i.BootstrapState,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const insertWorkspaceOperation = `-- name: InsertWorkspaceOperation :one
+INSERT INTO operations(
+    public_id, workspace_id, deployment_id, actor_id, kind, status,
+    idempotency_hash, payload_hash, intent_json, desired_version, sequence
+)
+VALUES ($1, $2, NULL, $3, 'EnsureWorkspace', 'Pending', $4, $5, $6, 1, 1)
+RETURNING id, public_id, workspace_id, actor_id, kind, status,
+          desired_version, attempts, created_at, updated_at, error_code, error_message
+`
+
+type InsertWorkspaceOperationParams struct {
+	PublicID        string `json:"public_id"`
+	WorkspaceID     int64  `json:"workspace_id"`
+	ActorID         int64  `json:"actor_id"`
+	IdempotencyHash []byte `json:"idempotency_hash"`
+	PayloadHash     []byte `json:"payload_hash"`
+	IntentJson      []byte `json:"intent_json"`
+}
+
+type InsertWorkspaceOperationRow struct {
+	ID             int64              `json:"id"`
+	PublicID       string             `json:"public_id"`
+	WorkspaceID    int64              `json:"workspace_id"`
+	ActorID        int64              `json:"actor_id"`
+	Kind           string             `json:"kind"`
+	Status         string             `json:"status"`
+	DesiredVersion int64              `json:"desired_version"`
+	Attempts       int32              `json:"attempts"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	ErrorCode      string             `json:"error_code"`
+	ErrorMessage   string             `json:"error_message"`
+}
+
+func (q *Queries) InsertWorkspaceOperation(ctx context.Context, arg InsertWorkspaceOperationParams) (InsertWorkspaceOperationRow, error) {
+	row := q.db.QueryRow(ctx, insertWorkspaceOperation,
+		arg.PublicID,
+		arg.WorkspaceID,
+		arg.ActorID,
+		arg.IdempotencyHash,
+		arg.PayloadHash,
+		arg.IntentJson,
+	)
+	var i InsertWorkspaceOperationRow
+	err := row.Scan(
+		&i.ID,
+		&i.PublicID,
+		&i.WorkspaceID,
+		&i.ActorID,
+		&i.Kind,
+		&i.Status,
+		&i.DesiredVersion,
+		&i.Attempts,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ErrorCode,
+		&i.ErrorMessage,
+	)
+	return i, err
+}
+
+const listApps = `-- name: ListApps :many
+SELECT a.id, a.public_id, a.project_id, a.name, a.version, a.created_at, a.updated_at, a.archived_at
+FROM apps a
+JOIN projects p ON p.id = a.project_id
+WHERE p.workspace_id = $1 AND p.public_id = $2
+  AND a.id < $3
+  AND ($5::boolean OR a.archived_at IS NULL)
+ORDER BY a.id DESC
+LIMIT $4
+`
+
+type ListAppsParams struct {
+	WorkspaceID int64  `json:"workspace_id"`
+	PublicID    string `json:"public_id"`
+	ID          int64  `json:"id"`
+	Limit       int32  `json:"limit"`
+	Column5     bool   `json:"column_5"`
+}
+
+type ListAppsRow struct {
+	ID         int64              `json:"id"`
+	PublicID   string             `json:"public_id"`
+	ProjectID  int64              `json:"project_id"`
+	Name       string             `json:"name"`
+	Version    int64              `json:"version"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+	ArchivedAt pgtype.Timestamptz `json:"archived_at"`
+}
+
+func (q *Queries) ListApps(ctx context.Context, arg ListAppsParams) ([]ListAppsRow, error) {
+	rows, err := q.db.Query(ctx, listApps,
+		arg.WorkspaceID,
+		arg.PublicID,
+		arg.ID,
+		arg.Limit,
+		arg.Column5,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAppsRow{}
+	for rows.Next() {
+		var i ListAppsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PublicID,
+			&i.ProjectID,
+			&i.Name,
+			&i.Version,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.ArchivedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEnvironments = `-- name: ListEnvironments :many
+SELECT e.id, e.public_id, e.project_id, e.name, e.version, e.created_at, e.updated_at, e.archived_at
+FROM environments e
+JOIN projects p ON p.id = e.project_id
+WHERE p.workspace_id = $1 AND p.public_id = $2
+  AND e.id < $3
+  AND ($5::boolean OR e.archived_at IS NULL)
+ORDER BY e.id DESC
+LIMIT $4
+`
+
+type ListEnvironmentsParams struct {
+	WorkspaceID int64  `json:"workspace_id"`
+	PublicID    string `json:"public_id"`
+	ID          int64  `json:"id"`
+	Limit       int32  `json:"limit"`
+	Column5     bool   `json:"column_5"`
+}
+
+type ListEnvironmentsRow struct {
+	ID         int64              `json:"id"`
+	PublicID   string             `json:"public_id"`
+	ProjectID  int64              `json:"project_id"`
+	Name       string             `json:"name"`
+	Version    int64              `json:"version"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+	ArchivedAt pgtype.Timestamptz `json:"archived_at"`
+}
+
+func (q *Queries) ListEnvironments(ctx context.Context, arg ListEnvironmentsParams) ([]ListEnvironmentsRow, error) {
+	rows, err := q.db.Query(ctx, listEnvironments,
+		arg.WorkspaceID,
+		arg.PublicID,
+		arg.ID,
+		arg.Limit,
+		arg.Column5,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListEnvironmentsRow{}
+	for rows.Next() {
+		var i ListEnvironmentsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PublicID,
+			&i.ProjectID,
+			&i.Name,
+			&i.Version,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.ArchivedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProjects = `-- name: ListProjects :many
+SELECT id, public_id, workspace_id, name, version, created_at, updated_at, archived_at
+FROM projects
+WHERE workspace_id = $1
+  AND id < $2
+  AND ($4::boolean OR archived_at IS NULL)
+ORDER BY id DESC
+LIMIT $3
+`
+
+type ListProjectsParams struct {
+	WorkspaceID int64 `json:"workspace_id"`
+	ID          int64 `json:"id"`
+	Limit       int32 `json:"limit"`
+	Column4     bool  `json:"column_4"`
+}
+
+type ListProjectsRow struct {
+	ID          int64              `json:"id"`
+	PublicID    string             `json:"public_id"`
+	WorkspaceID int64              `json:"workspace_id"`
+	Name        string             `json:"name"`
+	Version     int64              `json:"version"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	ArchivedAt  pgtype.Timestamptz `json:"archived_at"`
+}
+
+func (q *Queries) ListProjects(ctx context.Context, arg ListProjectsParams) ([]ListProjectsRow, error) {
+	rows, err := q.db.Query(ctx, listProjects,
+		arg.WorkspaceID,
+		arg.ID,
+		arg.Limit,
+		arg.Column4,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListProjectsRow{}
+	for rows.Next() {
+		var i ListProjectsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PublicID,
+			&i.WorkspaceID,
+			&i.Name,
+			&i.Version,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.ArchivedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listWorkspacesForActor = `-- name: ListWorkspacesForActor :many
+SELECT w.id, w.public_id, w.name, w.namespace_name, w.version, w.bootstrap_state, w.created_at, w.updated_at
+FROM workspaces AS w
+JOIN workspace_actors AS wa ON wa.workspace_id = w.id
+WHERE wa.actor_id = $1 AND w.id < $2
+ORDER BY w.id DESC
+LIMIT $3
+`
+
+type ListWorkspacesForActorParams struct {
+	ActorID int64 `json:"actor_id"`
+	ID      int64 `json:"id"`
+	Limit   int32 `json:"limit"`
+}
+
+type ListWorkspacesForActorRow struct {
+	ID             int64              `json:"id"`
+	PublicID       string             `json:"public_id"`
+	Name           string             `json:"name"`
+	NamespaceName  string             `json:"namespace_name"`
+	Version        int64              `json:"version"`
+	BootstrapState string             `json:"bootstrap_state"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) ListWorkspacesForActor(ctx context.Context, arg ListWorkspacesForActorParams) ([]ListWorkspacesForActorRow, error) {
+	rows, err := q.db.Query(ctx, listWorkspacesForActor, arg.ActorID, arg.ID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListWorkspacesForActorRow{}
+	for rows.Next() {
+		var i ListWorkspacesForActorRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PublicID,
+			&i.Name,
+			&i.NamespaceName,
+			&i.Version,
+			&i.BootstrapState,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const resolveDeploymentHierarchy = `-- name: ResolveDeploymentHierarchy :one
+SELECT p.id AS project_id, p.public_id AS project_public_id,
+       a.id AS app_id, a.public_id AS app_public_id,
+       e.id AS environment_id, e.public_id AS environment_public_id
+FROM projects p
+JOIN apps a ON a.project_id = p.id
+JOIN environments e ON e.project_id = p.id
+WHERE p.workspace_id = $1
+  AND a.public_id = $2
+  AND e.public_id = $3
+  AND p.archived_at IS NULL
+  AND a.archived_at IS NULL
+  AND e.archived_at IS NULL
+FOR UPDATE OF p, a, e
+`
+
+type ResolveDeploymentHierarchyParams struct {
+	WorkspaceID int64  `json:"workspace_id"`
+	PublicID    string `json:"public_id"`
+	PublicID_2  string `json:"public_id_2"`
+}
+
+type ResolveDeploymentHierarchyRow struct {
+	ProjectID           int64  `json:"project_id"`
+	ProjectPublicID     string `json:"project_public_id"`
+	AppID               int64  `json:"app_id"`
+	AppPublicID         string `json:"app_public_id"`
+	EnvironmentID       int64  `json:"environment_id"`
+	EnvironmentPublicID string `json:"environment_public_id"`
+}
+
+func (q *Queries) ResolveDeploymentHierarchy(ctx context.Context, arg ResolveDeploymentHierarchyParams) (ResolveDeploymentHierarchyRow, error) {
+	row := q.db.QueryRow(ctx, resolveDeploymentHierarchy, arg.WorkspaceID, arg.PublicID, arg.PublicID_2)
+	var i ResolveDeploymentHierarchyRow
+	err := row.Scan(
+		&i.ProjectID,
+		&i.ProjectPublicID,
+		&i.AppID,
+		&i.AppPublicID,
+		&i.EnvironmentID,
+		&i.EnvironmentPublicID,
 	)
 	return i, err
 }
@@ -199,6 +1254,198 @@ func (q *Queries) RevokeSession(ctx context.Context, tokenHash []byte) error {
 	return err
 }
 
+const updateApp = `-- name: UpdateApp :one
+UPDATE apps a
+SET name = $5, name_key = $6, version = a.version + 1, updated_at = now()
+FROM projects p
+WHERE a.project_id = p.id AND p.workspace_id = $1 AND p.public_id = $2
+  AND a.public_id = $3 AND a.version = $4 AND a.archived_at IS NULL
+RETURNING a.id, a.public_id, a.project_id, a.name, a.version, a.created_at, a.updated_at, a.archived_at
+`
+
+type UpdateAppParams struct {
+	WorkspaceID int64  `json:"workspace_id"`
+	PublicID    string `json:"public_id"`
+	PublicID_2  string `json:"public_id_2"`
+	Version     int64  `json:"version"`
+	Name        string `json:"name"`
+	NameKey     string `json:"name_key"`
+}
+
+type UpdateAppRow struct {
+	ID         int64              `json:"id"`
+	PublicID   string             `json:"public_id"`
+	ProjectID  int64              `json:"project_id"`
+	Name       string             `json:"name"`
+	Version    int64              `json:"version"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+	ArchivedAt pgtype.Timestamptz `json:"archived_at"`
+}
+
+func (q *Queries) UpdateApp(ctx context.Context, arg UpdateAppParams) (UpdateAppRow, error) {
+	row := q.db.QueryRow(ctx, updateApp,
+		arg.WorkspaceID,
+		arg.PublicID,
+		arg.PublicID_2,
+		arg.Version,
+		arg.Name,
+		arg.NameKey,
+	)
+	var i UpdateAppRow
+	err := row.Scan(
+		&i.ID,
+		&i.PublicID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Version,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ArchivedAt,
+	)
+	return i, err
+}
+
+const updateEnvironment = `-- name: UpdateEnvironment :one
+UPDATE environments e
+SET name = $5, name_key = $6, version = e.version + 1, updated_at = now()
+FROM projects p
+WHERE e.project_id = p.id AND p.workspace_id = $1 AND p.public_id = $2
+  AND e.public_id = $3 AND e.version = $4 AND e.archived_at IS NULL
+RETURNING e.id, e.public_id, e.project_id, e.name, e.version, e.created_at, e.updated_at, e.archived_at
+`
+
+type UpdateEnvironmentParams struct {
+	WorkspaceID int64  `json:"workspace_id"`
+	PublicID    string `json:"public_id"`
+	PublicID_2  string `json:"public_id_2"`
+	Version     int64  `json:"version"`
+	Name        string `json:"name"`
+	NameKey     string `json:"name_key"`
+}
+
+type UpdateEnvironmentRow struct {
+	ID         int64              `json:"id"`
+	PublicID   string             `json:"public_id"`
+	ProjectID  int64              `json:"project_id"`
+	Name       string             `json:"name"`
+	Version    int64              `json:"version"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+	ArchivedAt pgtype.Timestamptz `json:"archived_at"`
+}
+
+func (q *Queries) UpdateEnvironment(ctx context.Context, arg UpdateEnvironmentParams) (UpdateEnvironmentRow, error) {
+	row := q.db.QueryRow(ctx, updateEnvironment,
+		arg.WorkspaceID,
+		arg.PublicID,
+		arg.PublicID_2,
+		arg.Version,
+		arg.Name,
+		arg.NameKey,
+	)
+	var i UpdateEnvironmentRow
+	err := row.Scan(
+		&i.ID,
+		&i.PublicID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Version,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ArchivedAt,
+	)
+	return i, err
+}
+
+const updateProject = `-- name: UpdateProject :one
+UPDATE projects
+SET name = $4, name_key = $5, version = version + 1, updated_at = now()
+WHERE workspace_id = $1 AND public_id = $2 AND version = $3 AND archived_at IS NULL
+RETURNING id, public_id, workspace_id, name, version, created_at, updated_at, archived_at
+`
+
+type UpdateProjectParams struct {
+	WorkspaceID int64  `json:"workspace_id"`
+	PublicID    string `json:"public_id"`
+	Version     int64  `json:"version"`
+	Name        string `json:"name"`
+	NameKey     string `json:"name_key"`
+}
+
+type UpdateProjectRow struct {
+	ID          int64              `json:"id"`
+	PublicID    string             `json:"public_id"`
+	WorkspaceID int64              `json:"workspace_id"`
+	Name        string             `json:"name"`
+	Version     int64              `json:"version"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	ArchivedAt  pgtype.Timestamptz `json:"archived_at"`
+}
+
+func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (UpdateProjectRow, error) {
+	row := q.db.QueryRow(ctx, updateProject,
+		arg.WorkspaceID,
+		arg.PublicID,
+		arg.Version,
+		arg.Name,
+		arg.NameKey,
+	)
+	var i UpdateProjectRow
+	err := row.Scan(
+		&i.ID,
+		&i.PublicID,
+		&i.WorkspaceID,
+		&i.Name,
+		&i.Version,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ArchivedAt,
+	)
+	return i, err
+}
+
+const updateWorkspaceName = `-- name: UpdateWorkspaceName :one
+UPDATE workspaces
+SET name = $3, version = version + 1, updated_at = now()
+WHERE id = $1 AND version = $2
+RETURNING id, public_id, name, namespace_name, version, bootstrap_state, created_at, updated_at
+`
+
+type UpdateWorkspaceNameParams struct {
+	ID      int64  `json:"id"`
+	Version int64  `json:"version"`
+	Name    string `json:"name"`
+}
+
+type UpdateWorkspaceNameRow struct {
+	ID             int64              `json:"id"`
+	PublicID       string             `json:"public_id"`
+	Name           string             `json:"name"`
+	NamespaceName  string             `json:"namespace_name"`
+	Version        int64              `json:"version"`
+	BootstrapState string             `json:"bootstrap_state"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) UpdateWorkspaceName(ctx context.Context, arg UpdateWorkspaceNameParams) (UpdateWorkspaceNameRow, error) {
+	row := q.db.QueryRow(ctx, updateWorkspaceName, arg.ID, arg.Version, arg.Name)
+	var i UpdateWorkspaceNameRow
+	err := row.Scan(
+		&i.ID,
+		&i.PublicID,
+		&i.Name,
+		&i.NamespaceName,
+		&i.Version,
+		&i.BootstrapState,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const upsertActor = `-- name: UpsertActor :one
 INSERT INTO actors (actor_key, role, password_hash)
 VALUES ($1, $2, $3)
@@ -219,6 +1466,88 @@ func (q *Queries) UpsertActor(ctx context.Context, arg UpsertActorParams) (int64
 	var id int64
 	err := row.Scan(&id)
 	return id, err
+}
+
+const upsertCompatibilityApp = `-- name: UpsertCompatibilityApp :one
+INSERT INTO apps(public_id, project_id, name, name_key)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (public_id) DO UPDATE SET public_id = EXCLUDED.public_id
+RETURNING id, public_id, project_id
+`
+
+type UpsertCompatibilityAppParams struct {
+	PublicID  string `json:"public_id"`
+	ProjectID int64  `json:"project_id"`
+	Name      string `json:"name"`
+	NameKey   string `json:"name_key"`
+}
+
+type UpsertCompatibilityAppRow struct {
+	ID        int64  `json:"id"`
+	PublicID  string `json:"public_id"`
+	ProjectID int64  `json:"project_id"`
+}
+
+func (q *Queries) UpsertCompatibilityApp(ctx context.Context, arg UpsertCompatibilityAppParams) (UpsertCompatibilityAppRow, error) {
+	row := q.db.QueryRow(ctx, upsertCompatibilityApp,
+		arg.PublicID,
+		arg.ProjectID,
+		arg.Name,
+		arg.NameKey,
+	)
+	var i UpsertCompatibilityAppRow
+	err := row.Scan(&i.ID, &i.PublicID, &i.ProjectID)
+	return i, err
+}
+
+const upsertCompatibilityEnvironment = `-- name: UpsertCompatibilityEnvironment :one
+INSERT INTO environments(public_id, project_id, name, name_key)
+VALUES ($1, $2, 'Imported', 'imported')
+ON CONFLICT (public_id) DO UPDATE SET public_id = EXCLUDED.public_id
+RETURNING id, public_id, project_id
+`
+
+type UpsertCompatibilityEnvironmentParams struct {
+	PublicID  string `json:"public_id"`
+	ProjectID int64  `json:"project_id"`
+}
+
+type UpsertCompatibilityEnvironmentRow struct {
+	ID        int64  `json:"id"`
+	PublicID  string `json:"public_id"`
+	ProjectID int64  `json:"project_id"`
+}
+
+func (q *Queries) UpsertCompatibilityEnvironment(ctx context.Context, arg UpsertCompatibilityEnvironmentParams) (UpsertCompatibilityEnvironmentRow, error) {
+	row := q.db.QueryRow(ctx, upsertCompatibilityEnvironment, arg.PublicID, arg.ProjectID)
+	var i UpsertCompatibilityEnvironmentRow
+	err := row.Scan(&i.ID, &i.PublicID, &i.ProjectID)
+	return i, err
+}
+
+const upsertCompatibilityProject = `-- name: UpsertCompatibilityProject :one
+INSERT INTO projects(public_id, workspace_id, name, name_key)
+VALUES ($1, $2, 'Imported', 'imported')
+ON CONFLICT (public_id) DO UPDATE SET public_id = EXCLUDED.public_id
+RETURNING id, public_id, workspace_id
+`
+
+type UpsertCompatibilityProjectParams struct {
+	PublicID    string `json:"public_id"`
+	WorkspaceID int64  `json:"workspace_id"`
+}
+
+type UpsertCompatibilityProjectRow struct {
+	ID          int64  `json:"id"`
+	PublicID    string `json:"public_id"`
+	WorkspaceID int64  `json:"workspace_id"`
+}
+
+func (q *Queries) UpsertCompatibilityProject(ctx context.Context, arg UpsertCompatibilityProjectParams) (UpsertCompatibilityProjectRow, error) {
+	row := q.db.QueryRow(ctx, upsertCompatibilityProject, arg.PublicID, arg.WorkspaceID)
+	var i UpsertCompatibilityProjectRow
+	err := row.Scan(&i.ID, &i.PublicID, &i.WorkspaceID)
+	return i, err
 }
 
 const upsertWorkspace = `-- name: UpsertWorkspace :one

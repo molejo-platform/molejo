@@ -5,8 +5,10 @@ RUN go mod download
 COPY packages packages
 COPY services/control-plane-api services/control-plane-api
 RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/control-plane-api ./services/control-plane-api/cmd/control-plane-api
+RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/hierarchy-backfill ./services/control-plane-api/cmd/hierarchy-backfill
 
 FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
 COPY --from=build /out/control-plane-api /control-plane-api
+COPY --from=build /out/hierarchy-backfill /hierarchy-backfill
 USER 65532:65532
 ENTRYPOINT ["/control-plane-api"]
