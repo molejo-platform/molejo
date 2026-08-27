@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createIdempotencyKey, setCsrfToken } from "../../shared/api/http-client";
 import type { DeploymentIntent } from "../../shared/api/types";
-import { createDeployment, deleteDeployment, updateDeployment } from "./api";
+import { createDeployment, createReleaseDeployment, deleteDeployment, updateDeployment } from "./api";
 import { publicDeploymentURL, withExposure } from "./model";
 
 const intent: DeploymentIntent = {
@@ -46,6 +46,17 @@ describe("deployments slice", () => {
 
     expect(new Headers((vi.mocked(fetch).mock.calls[0]?.[1] as RequestInit).headers).get("If-Match")).toBe("3");
     expect(new Headers((vi.mocked(fetch).mock.calls[1]?.[1] as RequestInit).headers).get("If-Match")).toBe("4");
+  });
+
+  it("creates from a release without sending a client-controlled image", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({ operation: { id: "op-4", deploymentId: "ap-1", status: "Pending" } }), { status: 202 }));
+    await createReleaseDeployment("ws-aaaaaaaaaaaaaaaaaaaa", "prj-aaaaaaaaaaaaaaaaaaaa", "app-aaaaaaaaaaaaaaaaaaaa", "rel-aaaaaaaaaaaaaaaaaaaa", { ...intent, appId: "app-aaaaaaaaaaaaaaaaaaaa", environmentId: "env-aaaaaaaaaaaaaaaaaaaa" });
+
+    expect(vi.mocked(fetch).mock.calls[0]?.[0]).toBe("/api/v1/workspaces/ws-aaaaaaaaaaaaaaaaaaaa/projects/prj-aaaaaaaaaaaaaaaaaaaa/apps/app-aaaaaaaaaaaaaaaaaaaa/releases/rel-aaaaaaaaaaaaaaaaaaaa/deployments");
+    const body = JSON.parse(String((vi.mocked(fetch).mock.calls[0]?.[1] as RequestInit).body));
+    expect(body).toMatchObject({ environmentId: "env-aaaaaaaaaaaaaaaaaaaa", name: "demo" });
+    expect(body).not.toHaveProperty("image");
+    expect(body).not.toHaveProperty("appId");
   });
 });
 

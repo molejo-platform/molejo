@@ -31,6 +31,14 @@ reuse this API without a frontend-specific CRD field. It includes unit tests,
 Kubernetes API integration tests, container checks, and a disposable Kind
 end-to-end environment.
 
+The pre-alpha control plane also models Workspace/Project/App/Environment,
+GitHub App repository sources, exact-commit Builds, bounded logs, and immutable
+digest-pinned Releases. An owner can build a repository's root `Dockerfile` for
+`linux/amd64` through a separate rootless BuildKit service and create a
+deployment from the promoted Release. The deterministic gate validates the
+contracts and failure behavior; it does not claim that the external builder,
+registry, DNS, or k3s deployment is live.
+
 The local environment validates Gateway routing and TLS with an ephemeral trusted
 certificate. Public DNS and a publicly trusted certificate remain an external
 foundation acceptance step and are not claimed by the repository gate.
@@ -71,18 +79,16 @@ corepack pnpm --version
 
 ## Verify the current development checkout
 
-The implementation described by this README is currently being prepared on the
-local `release/v0.0.1` branch and has not been published to GitHub. Consequently,
-the default branch cannot yet reproduce this slice from a clean clone. From the
-existing development checkout, run:
+The implementation described by this README is developed on the
+`release/v0.0.1` branch. From that checkout, run:
 
 ```bash
 git switch release/v0.0.1
 just verify
 ```
 
-Before the first public release, the branch must be published or integrated into
-the default branch and this onboarding must be revalidated from a clean clone.
+Before the first public release, this onboarding must be revalidated from a clean
+clone of the exact release commit.
 
 `just verify` performs the fast local validation cycle:
 
@@ -190,13 +196,20 @@ effects are documented in the operator runbook.
 | `just control-plane-prepare-k3s` | Generate external lab credentials and Kubernetes Secrets. |
 | `just control-plane-apply-k3s` | Apply migrations, bootstrap, workloads, and routes in order. |
 | `just control-plane-accept-k3s` | Check release digests, routes, RBAC, TLS, and redirect. |
+| `just builds-build-release` | Publish the Phase 8 build worker as a `linux/amd64` digest. |
+| `just builds-render-release` | Render the external digest-pinned build-plane bundle. |
+| `just builds-prepare-k3s` | Prepare BuildKit mTLS and external build credentials on `fruto-lab`. |
+| `just builds-apply-k3s` | Apply the separately authorized build plane on `fruto-lab`. |
 | `just ci` | Run the complete local acceptance gate. |
 
 ## Repository layout
 
 ```text
 deploy/                         Kubernetes manifests and examples
+apps/                           User-facing Console entry points
+contracts/                      Language-neutral public API contracts
 packages/kubernetes-api/       Versioned Kubernetes API contracts
+services/control-plane-api/     Product API, operation executor, and build worker
 services/platform-operator/    AppDeployment controller and manager
 test/                           Backend/frontend fixtures, generated checks, and end-to-end tests
 docs/                           Architecture, operations, and localized documentation

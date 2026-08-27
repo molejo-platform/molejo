@@ -124,6 +124,7 @@ export FRUTO_EXPECTED_KUBE_SERVER='<approved-kube-api-url>'
 export FRUTO_EXPECTED_CLUSTER_UID='<approved-kube-system-uid>'
 export FRUTO_TRUSTED_PROXY_CIDR='<approved-pod-cidr>'
 export FRUTO_TESTKIT_IMAGE=ghcr.io/molejo-platform/testkit@sha256:1b5a36a776cc16dd3fa728c2269109ca45fca2a4af622b3a166e4e578b9cdb08
+export MOLEJO_BUILD_IMAGE_REPOSITORY='<registry>/<repository-prefix>'
 
 just ci
 just control-plane-build-release
@@ -166,3 +167,66 @@ The repository's NetworkPolicy is an incomplete, non-installed example. Its
 PostgreSQL egress is intentionally not destination-scoped because the portable
 installation has no database destination contract yet. Do not install it as-is;
 select the database destination and CNI first, then validate the resulting policy.
+
+## Phase 8 build plane
+
+An owner starts a Build for an App with a connected GitHub source. The API
+records the exact default-branch commit before enqueueing. The worker accepts
+only a root `Dockerfile`, builds `linux/amd64`, pushes a commit-SHA tag, and
+promotes a Release only after recording the OCI digest. Logs are bounded and
+sanitized. A failed Build never creates a Release.
+
+The build plane is installed separately in `molejo-builds`. Its BuildKit daemon
+is rootless and reachable only from the worker over mutual TLS. The upstream
+Kubernetes rootless mode requires unconfined seccomp/AppArmor and
+`--oci-worker-no-process-sandbox`; this is an explicit pre-alpha boundary, not a
+production isolation claim. CPU, memory, temporary disk, one-build concurrency,
+and a 15-minute timeout bound the first implementation.
+Both Pods select the lab's existing `runtime` node role and `amd64`; this keeps
+untrusted builds away from control-plane and data nodes but still shares a node
+with managed workloads. Public HTTP/HTTPS egress is allowed for Dockerfile
+dependencies while private, link-local, and cluster ranges remain denied except
+for DNS, PostgreSQL, and BuildKit's explicit paths.
+
+From a clean committed checkout, prepare an external release directory and run:
+
+```bash
+export FRUTO_RELEASE_DIR=/private/tmp/molejo-control-plane-release
+export FRUTO_EXPECTED_CLUSTER_UID='<approved-kube-system-uid>'
+export FRUTO_TRUSTED_PROXY_CIDR='<approved-pod-cidr>'
+export FRUTO_TESTKIT_IMAGE='<approved-testkit-digest-reference>'
+export MOLEJO_BUILD_IMAGE_REPOSITORY='<registry>/<repository-prefix>'
+
+just ci
+just control-plane-build-release
+just builds-build-release
+source "$FRUTO_RELEASE_DIR/images.env"
+source "$FRUTO_RELEASE_DIR/builds.env"
+export FRUTO_RELEASE_OUTPUT="$FRUTO_RELEASE_DIR/control-plane.yaml"
+export FRUTO_BUILDS_RELEASE_OUTPUT="$FRUTO_RELEASE_DIR/builds.yaml"
+just control-plane-render-release
+just builds-render-release
+
+export GITHUB_APP_ID='<github-app-id>'
+export GITHUB_APP_PRIVATE_KEY_FILE='<protected-github-app-pem>'
+just control-plane-prepare-k3s
+just builds-prepare-k3s
+just control-plane-apply-k3s
+just builds-apply-k3s
+```
+
+The preparation command always uses Kubernetes context `fruto-lab`, derives a
+cross-namespace build-worker URL from the existing control-plane database Secret, creates a
+private CA plus server/client certificates outside Git, mounts the existing
+GitHub App key only on the worker, and copies the existing registry credential
+into `molejo-builds`. The build database URL must use the cross-namespace
+`postgres.fruto-control-plane.svc` Service name. `MOLEJO_BUILD_DATABASE_URL_FILE`
+may override that source with a protected file. Rendering, secret preparation,
+and apply are separate gates; do not run the mutating commands without explicit
+authorization for their exact resources.
+
+Acceptance requires creating a Build from the Console, observing the recorded
+SHA and bounded logs, seeing one digest-pinned Release only after success, and
+creating a deployment from that Release. Verify that a failed Dockerfile creates
+no Release and that an update cannot replace a Release-controlled image. Record
+only public IDs, commit SHAs, digests, states, and sanitized logs.

@@ -44,6 +44,10 @@ vi.mock("./api", () => ({
   disconnectGitHubInstallation: vi.fn(),
   setAppSource: mocks.setAppSource,
   clearAppSource: vi.fn(),
+  listAppBuilds: vi.fn().mockResolvedValue({ items: [], nextCursor: null }),
+  listAppBuildLogs: vi.fn().mockResolvedValue({ items: [] }),
+  listAppReleases: vi.fn().mockResolvedValue({ items: [], nextCursor: null }),
+  createAppBuild: vi.fn(),
 }));
 
 import { AdminPage } from "./AdminPage";

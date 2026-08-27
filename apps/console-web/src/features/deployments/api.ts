@@ -1,5 +1,5 @@
 import { createIdempotencyKey, request } from "../../shared/api/http-client";
-import type { Deployment, DeploymentIntent, MutationAccepted } from "../../shared/api/types";
+import type { Deployment, DeploymentIntent, MutationAccepted, ReleaseDeploymentIntent } from "../../shared/api/types";
 
 const deploymentsPath = (workspaceId: string) => `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/deployments`;
 
@@ -16,6 +16,17 @@ export function createDeployment(workspaceId: string, intent: DeploymentIntent) 
     method: "POST",
     headers: { "Idempotency-Key": createIdempotencyKey() },
     body: JSON.stringify(intent),
+  });
+}
+
+export function createReleaseDeployment(workspaceId: string, projectId: string, appId: string, releaseId: string, intent: DeploymentIntent) {
+  const { appId: _appId, image: _image, environmentId, ...releaseFields } = intent;
+  const payload: ReleaseDeploymentIntent = { ...releaseFields, environmentId: environmentId ?? "" };
+  const path = `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/projects/${encodeURIComponent(projectId)}/apps/${encodeURIComponent(appId)}/releases/${encodeURIComponent(releaseId)}/deployments`;
+  return request<MutationAccepted>(path, {
+    method: "POST",
+    headers: { "Idempotency-Key": createIdempotencyKey() },
+    body: JSON.stringify(payload),
   });
 }
 

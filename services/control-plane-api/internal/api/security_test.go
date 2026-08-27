@@ -144,6 +144,21 @@ func TestCSRFValidation(t *testing.T) {
 	}
 }
 
+func TestIdempotencyPayloadIncludesTheMutationPath(t *testing.T) {
+	first := httptest.NewRequest(http.MethodPost, "/api/v1/apps/app-a/builds", strings.NewReader(`{}`))
+	first.Header.Set("Idempotency-Key", "same-key")
+	second := httptest.NewRequest(http.MethodPost, "/api/v1/apps/app-b/builds", strings.NewReader(`{}`))
+	second.Header.Set("Idempotency-Key", "same-key")
+
+	_, firstBodyHash, firstOK := idempotency(first)
+	_, secondBodyHash, secondOK := idempotency(second)
+	firstHash := scopedBuildPayloadHash(first, firstBodyHash)
+	secondHash := scopedBuildPayloadHash(second, secondBodyHash)
+	if !firstOK || !secondOK || bytes.Equal(firstHash, secondHash) {
+		t.Fatal("the same key and body on different build resources were treated as the same mutation")
+	}
+}
+
 func TestSessionEndpointsRejectInvalidOriginAndDisableCaching(t *testing.T) {
 	server := NewServer(nil, nil, Config{
 		CookieName:    "fruto_session",

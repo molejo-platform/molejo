@@ -160,6 +160,7 @@ type Deployment struct {
 	ProjectPublicID     string     `json:"projectId"`
 	AppPublicID         string     `json:"appId"`
 	EnvironmentPublicID string     `json:"environmentId"`
+	ReleasePublicID     string     `json:"releaseId,omitempty"`
 	RuntimeName         string     `json:"-"`
 	Intent              Intent     `json:"intent"`
 	DesiredVersion      int64      `json:"version"`

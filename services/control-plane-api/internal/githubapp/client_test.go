@@ -1,6 +1,7 @@
 package githubapp
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -14,6 +15,40 @@ import (
 	"testing"
 	"time"
 )
+
+func TestClientResolvesAndDownloadsOnlyAnExactCommit(t *testing.T) {
+	const sha = "0123456789abcdef0123456789abcdef01234567"
+	var archive bytes.Buffer
+	httpClient := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.Path {
+		case "/app/installations/42/access_tokens":
+			return jsonResponse(http.StatusCreated, `{"token":"ephemeral-installation-token"}`), nil
+		case "/repositories/99/commits/main":
+			return jsonResponse(http.StatusOK, `{"sha":"`+sha+`"}`), nil
+		case "/repositories/99/tarball/" + sha:
+			if r.Header.Get("Authorization") != "Bearer ephemeral-installation-token" {
+				t.Fatalf("archive authorization=%q", r.Header.Get("Authorization"))
+			}
+			response := jsonResponse(http.StatusOK, "archive-bytes")
+			response.Header.Set("Content-Type", "application/x-gzip")
+			return response, nil
+		default:
+			return jsonResponse(http.StatusNotFound, `{}`), nil
+		}
+	})}
+	client := newTestClient(t, "https://api.github.test", time.Now())
+	client.httpClient = httpClient
+	resolved, err := client.ResolveCommit(context.Background(), 42, 99, "main")
+	if err != nil || resolved != sha {
+		t.Fatalf("resolved=%q err=%v", resolved, err)
+	}
+	if err = client.Archive(context.Background(), 42, 99, resolved, &archive); err != nil {
+		t.Fatal(err)
+	}
+	if archive.String() != "archive-bytes" {
+		t.Fatalf("archive=%q", archive.String())
+	}
+}
 
 func TestClientUsesShortLivedAppJWTAndDoesNotPersistInstallationTokens(t *testing.T) {
 	fixed := time.Date(2026, 8, 26, 12, 0, 0, 0, time.UTC)

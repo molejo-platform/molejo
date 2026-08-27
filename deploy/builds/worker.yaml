@@ -1,0 +1,107 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: build-worker
+  namespace: molejo-builds
+  labels:
+    app.kubernetes.io/name: build-worker
+    app.kubernetes.io/part-of: molejo-platform
+spec:
+  replicas: 1
+  strategy: { type: Recreate }
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: build-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: build-worker
+        app.kubernetes.io/part-of: molejo-platform
+    spec:
+      automountServiceAccountToken: false
+      imagePullSecrets: [{ name: molejo-build-registry }]
+      nodeSelector:
+        kubernetes.io/arch: amd64
+        fruto.cleidsonoliveira.dev/role: runtime
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: worker
+          image: ghcr.io/molejo-platform/build-worker@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          env:
+            - name: FRUTO_DATABASE_URL
+              valueFrom:
+                secretKeyRef: { name: molejo-build-worker, key: database-url }
+            - name: GITHUB_APP_ID
+              valueFrom:
+                secretKeyRef: { name: molejo-build-worker, key: github-app-id }
+            - name: GITHUB_APP_PRIVATE_KEY_FILE
+              value: /var/run/secrets/molejo/github-app/private-key.pem
+            - name: FRUTO_BUILDKIT_ADDRESS
+              value: tcp://buildkitd.molejo-builds.svc:1234
+            - name: FRUTO_BUILDKIT_TLS_CA_FILE
+              value: /var/run/secrets/molejo/buildkit/ca.pem
+            - name: FRUTO_BUILDKIT_TLS_CERT_FILE
+              value: /var/run/secrets/molejo/buildkit/client-cert.pem
+            - name: FRUTO_BUILDKIT_TLS_KEY_FILE
+              value: /var/run/secrets/molejo/buildkit/client-key.pem
+            - name: FRUTO_BUILD_IMAGE_REPOSITORY
+              value: CHANGE_ME
+            - name: FRUTO_BUILD_TIMEOUT
+              value: 15m
+            - name: FRUTO_BUILD_LEASE
+              value: 16m
+            - name: FRUTO_BUILD_TEMP_ROOT
+              value: /var/lib/molejo-builds
+            - name: TMPDIR
+              value: /var/lib/molejo-builds
+            - name: HOME
+              value: /var/lib/molejo-builds
+            - name: DOCKER_CONFIG
+              value: /var/run/secrets/molejo/registry
+          resources:
+            requests: { cpu: 100m, memory: 128Mi, ephemeral-storage: 256Mi }
+            limits: { cpu: 500m, memory: 512Mi, ephemeral-storage: 1Gi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: work
+              mountPath: /var/lib/molejo-builds
+            - name: github-app
+              mountPath: /var/run/secrets/molejo/github-app
+              readOnly: true
+            - name: buildkit-tls
+              mountPath: /var/run/secrets/molejo/buildkit
+              readOnly: true
+            - name: registry
+              mountPath: /var/run/secrets/molejo/registry
+              readOnly: true
+      volumes:
+        - name: work
+          emptyDir: { sizeLimit: 1Gi }
+        - name: github-app
+          secret:
+            secretName: molejo-build-worker
+            defaultMode: 0440
+            items:
+              - { key: github-private-key.pem, path: private-key.pem }
+        - name: buildkit-tls
+          secret:
+            secretName: molejo-buildkit-tls
+            defaultMode: 0440
+            items:
+              - { key: ca.pem, path: ca.pem }
+              - { key: client-cert.pem, path: client-cert.pem }
+              - { key: client-key.pem, path: client-key.pem }
+        - name: registry
+          secret:
+            secretName: molejo-build-registry
+            defaultMode: 0440
+            items:
+              - { key: .dockerconfigjson, path: config.json }

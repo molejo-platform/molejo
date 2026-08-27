@@ -428,6 +428,12 @@ func newExecutorIntegrationFixture(t *testing.T) (*store.Store, int64, int64, st
 		if _, err := s.Pool.Exec(cleanupCtx, `DELETE FROM deployments WHERE workspace_id=$1`, workspaceID); err != nil {
 			t.Errorf("delete executor deployments: %v", err)
 		}
+		if _, err := s.Pool.Exec(cleanupCtx, `DELETE FROM releases WHERE workspace_id=$1`, workspaceID); err != nil {
+			t.Errorf("delete executor releases: %v", err)
+		}
+		if _, err := s.Pool.Exec(cleanupCtx, `DELETE FROM builds WHERE workspace_id=$1`, workspaceID); err != nil {
+			t.Errorf("delete executor builds: %v", err)
+		}
 		if _, err := s.Pool.Exec(cleanupCtx, `DELETE FROM apps WHERE project_id IN (SELECT id FROM projects WHERE workspace_id=$1)`, workspaceID); err != nil {
 			t.Errorf("delete executor apps: %v", err)
 		}

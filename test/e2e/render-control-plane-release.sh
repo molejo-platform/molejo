@@ -15,6 +15,7 @@ esac
 api_image="${FRUTO_API_IMAGE:?set FRUTO_API_IMAGE}"
 console_image="${FRUTO_CONSOLE_IMAGE:?set FRUTO_CONSOLE_IMAGE}"
 testkit_image="${FRUTO_TESTKIT_IMAGE:?set FRUTO_TESTKIT_IMAGE}"
+build_image_repository="${MOLEJO_BUILD_IMAGE_REPOSITORY:?set MOLEJO_BUILD_IMAGE_REPOSITORY}"
 cluster_uid="${FRUTO_EXPECTED_CLUSTER_UID:?set FRUTO_EXPECTED_CLUSTER_UID}"
 proxy_cidr="${FRUTO_TRUSTED_PROXY_CIDR:?set FRUTO_TRUSTED_PROXY_CIDR}"
 for reference in "$api_image" "$console_image" "$testkit_image"; do
@@ -25,6 +26,8 @@ for reference in "$api_image" "$console_image" "$testkit_image"; do
 done
 [[ -n "$cluster_uid" && "$cluster_uid" != required-* ]]
 [[ "$proxy_cidr" =~ ^[^[:space:]]+/[0-9]{1,3}$ ]]
+[[ "$build_image_repository" =~ ^[a-z0-9][a-z0-9._:/-]*$ && "$build_image_repository" == */* ]] || { echo "MOLEJO_BUILD_IMAGE_REPOSITORY must include an OCI registry and repository prefix" >&2; exit 2; }
+build_registry="${build_image_repository%%/*}"
 
 git diff --quiet
 git diff --cached --quiet
@@ -39,11 +42,12 @@ commit="$(git rev-parse HEAD)"
 {
   printf '# Molejo pre-alpha control-plane release\n'
   printf '# source_commit=%s architecture=linux/amd64 api=%s console=%s testkit=%s\n' "$commit" "$api_image" "$console_image" "$testkit_image"
-  kubectl kustomize deploy/control-plane-lab |
+  kubectl --context fruto-lab kustomize deploy/control-plane-lab |
     sed -e "s|ghcr.io/fruto-platform/control-plane-api@sha256:0000000000000000000000000000000000000000000000000000000000000000|$api_image|g" \
       -e "s|ghcr.io/fruto-platform/console-web@sha256:0000000000000000000000000000000000000000000000000000000000000000|$console_image|g" \
       -e "s|required-external-cluster-uid|$cluster_uid|g" \
-      -e "s|required-external-proxy-cidr|$proxy_cidr|g"
+      -e "s|required-external-proxy-cidr|$proxy_cidr|g" \
+      -e "s|required-external-build-registry|$build_registry|g"
 } >"$temporary"
 
 if grep -Eq 'sha256:0{64}|required-external-' "$temporary"; then

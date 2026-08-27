@@ -317,6 +317,10 @@ func (s *Server) updateDeploymentForWorkspace(w http.ResponseWriter, r *http.Req
 		writeError(w, http.StatusConflict, "deployment_hierarchy_immutable", "deployment app and environment cannot be changed", r)
 		return
 	}
+	if errors.Is(err, store.ErrImmutableRelease) {
+		writeError(w, http.StatusConflict, "deployment_release_immutable", "deployment image is controlled by its release", r)
+		return
+	}
 	if errors.Is(err, store.ErrConflict) {
 		writeError(w, http.StatusConflict, "version_conflict", "deployment changed since it was read", r)
 		return

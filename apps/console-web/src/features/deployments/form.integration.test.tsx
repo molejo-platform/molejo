@@ -6,16 +6,19 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   create: vi.fn(),
+  createRelease: vi.fn(),
   update: vi.fn(),
   workspaceId: "ws-aaaaaaaaaaaaaaaaaaaa",
   listProjects: vi.fn(),
   listApps: vi.fn(),
   listEnvironments: vi.fn(),
+  listReleases: vi.fn(),
 }));
 
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => mocks.navigate }));
 vi.mock("./mutations", () => ({
   useCreateDeploymentMutation: () => ({ mutateAsync: mocks.create, isPending: false, isError: false }),
+  useCreateReleaseDeploymentMutation: () => ({ mutateAsync: mocks.createRelease, isPending: false, isError: false }),
   useUpdateDeploymentMutation: () => ({ mutateAsync: mocks.update, isPending: false, isError: false }),
 }));
 vi.mock("../workspace/WorkspaceContext", () => ({ useSelectedWorkspace: () => ({ workspace: { id: mocks.workspaceId, name: "Default" } }) }));
@@ -23,6 +26,7 @@ vi.mock("../admin/api", () => ({
   listProjects: (...args: unknown[]) => mocks.listProjects(...args),
   listApps: (...args: unknown[]) => mocks.listApps(...args),
   listEnvironments: (...args: unknown[]) => mocks.listEnvironments(...args),
+  listAppReleases: (...args: unknown[]) => mocks.listReleases(...args),
 }));
 
 import { DeploymentForm } from "./DeploymentForm";
@@ -32,16 +36,19 @@ beforeEach(() => {
   mocks.listProjects.mockResolvedValue({ items: [{ id: "prj-aaaaaaaaaaaaaaaaaaaa", name: "Portal" }], nextCursor: null });
   mocks.listApps.mockResolvedValue({ items: [{ id: "app-aaaaaaaaaaaaaaaaaaaa", name: "Web" }], nextCursor: null });
   mocks.listEnvironments.mockResolvedValue({ items: [{ id: "env-aaaaaaaaaaaaaaaaaaaa", name: "Production" }], nextCursor: null });
+  mocks.listReleases.mockResolvedValue({ items: [{ id: "rel-aaaaaaaaaaaaaaaaaaaa", commitSha: "0123456789abcdef0123456789abcdef01234567", image: "registry.example/molejo/apps/app-aaaaaaaaaaaaaaaaaaaa@sha256:" + "a".repeat(64), platform: "linux/amd64" }], nextCursor: null });
 });
 
 afterEach(() => {
   cleanup();
   mocks.navigate.mockReset();
   mocks.create.mockReset();
+  mocks.createRelease.mockReset();
   mocks.update.mockReset();
   mocks.listProjects.mockReset();
   mocks.listApps.mockReset();
   mocks.listEnvironments.mockReset();
+  mocks.listReleases.mockReset();
 });
 
 describe("deployment form integration", () => {
@@ -91,6 +98,26 @@ describe("deployment form integration", () => {
     await user.click(screen.getByRole("button", { name: "Criar deployment" }));
 
     expect(mocks.create.mock.calls[0]?.[0]).toMatchObject({ exposure: "Public", slug: "phase7-testkit" });
+  });
+
+  it("creates from a selected immutable release", async () => {
+    mocks.createRelease.mockResolvedValue({
+      deployment: { id: "ap-cccccccccccccccccccc" },
+      operation: { id: "op-cccccccccccccccccccc", deploymentId: "ap-cccccccccccccccccccc" },
+    });
+    mocks.navigate.mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    renderForm();
+
+    await screen.findByRole("option", { name: "Web" });
+    await user.selectOptions(screen.getByLabelText("App"), "app-aaaaaaaaaaaaaaaaaaaa");
+    await user.selectOptions(screen.getByLabelText("Environment"), "env-aaaaaaaaaaaaaaaaaaaa");
+    await screen.findByRole("option", { name: /0123456789ab/ });
+    await user.selectOptions(screen.getByLabelText("Release construída"), "rel-aaaaaaaaaaaaaaaaaaaa");
+    await user.click(screen.getByRole("button", { name: "Criar deployment" }));
+
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(mocks.createRelease).toHaveBeenCalledWith(expect.objectContaining({ projectId: "prj-aaaaaaaaaaaaaaaaaaaa", appId: "app-aaaaaaaaaaaaaaaaaaaa", releaseId: "rel-aaaaaaaaaaaaaaaaaaaa", intent: expect.objectContaining({ image: expect.stringContaining("@sha256:") }) }));
   });
 
   it("resets the selected hierarchy when the Workspace changes", async () => {

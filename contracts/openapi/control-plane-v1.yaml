@@ -479,6 +479,117 @@ paths:
         '204': { description: GitHub source removed from the App }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/builds:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/AppId' }
+    get:
+      operationId: listAppBuilds
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Builds for the App
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Build' } }
+                  nextCursor: { type: [string, 'null'] }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      operationId: createAppBuild
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      responses:
+        '202':
+          description: Build of the current default-branch commit accepted
+          content: { application/json: { schema: { $ref: '#/components/schemas/Build' } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/builds/{buildId}:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/AppId' }
+      - { $ref: '#/components/parameters/BuildId' }
+    get:
+      operationId: getAppBuild
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Build state
+          content: { application/json: { schema: { $ref: '#/components/schemas/Build' } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/builds/{buildId}/logs:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/AppId' }
+      - { $ref: '#/components/parameters/BuildId' }
+    get:
+      operationId: listAppBuildLogs
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Sanitized bounded build logs
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/BuildLog' } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/releases:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/AppId' }
+    get:
+      operationId: listAppReleases
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Immutable releases for the App
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Release' } }
+                  nextCursor: { type: [string, 'null'] }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/releases/{releaseId}/deployments:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/AppId' }
+      - { $ref: '#/components/parameters/ReleaseId' }
+    post:
+      operationId: createReleaseDeployment
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ReleaseDeploymentIntent' } } }
+      responses:
+        '202': { $ref: '#/components/responses/MutationAccepted' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
   /api/v1/workspaces/{workspaceId}/deployments:
     parameters: [{ $ref: '#/components/parameters/WorkspaceId' }]
     get:
@@ -730,6 +841,16 @@ components:
       in: path
       required: true
       schema: { type: string, pattern: '^ghi-[a-z2-7]{20}$' }
+    BuildId:
+      name: buildId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^bld-[a-z2-7]{20}$' }
+    ReleaseId:
+      name: releaseId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^rel-[a-z2-7]{20}$' }
     IdempotencyKey:
       name: Idempotency-Key
       in: header
@@ -873,6 +994,77 @@ components:
         installationId: { type: string, pattern: '^ghi-[a-z2-7]{20}$' }
         repository: { $ref: '#/components/schemas/GitHubRepository' }
         connectedAt: { type: string, format: date-time }
+    Build:
+      type: object
+      required: [id, projectId, appId, repository, commitSha, platform, status, attempts, createdAt, updatedAt]
+      additionalProperties: false
+      properties:
+        id: { type: string, pattern: '^bld-[a-z2-7]{20}$' }
+        projectId: { type: string, pattern: '^prj-[a-z2-7]{20}$' }
+        appId: { type: string, pattern: '^app-[a-z2-7]{20}$' }
+        repository: { type: string, minLength: 3 }
+        commitSha: { type: string, pattern: '^[a-f0-9]{40}$' }
+        platform: { type: string, enum: [linux/amd64] }
+        status: { type: string, enum: [Pending, Running, Succeeded, Failed] }
+        attempts: { type: integer, minimum: 0, maximum: 3 }
+        errorCode: { type: string }
+        errorMessage: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    BuildLog:
+      type: object
+      required: [sequence, message, createdAt]
+      additionalProperties: false
+      properties:
+        sequence: { type: integer, minimum: 1 }
+        message: { type: string, minLength: 1, maxLength: 4000 }
+        createdAt: { type: string, format: date-time }
+    Release:
+      type: object
+      required: [id, projectId, appId, buildId, commitSha, image, platform, createdAt]
+      additionalProperties: false
+      properties:
+        id: { type: string, pattern: '^rel-[a-z2-7]{20}$' }
+        projectId: { type: string, pattern: '^prj-[a-z2-7]{20}$' }
+        appId: { type: string, pattern: '^app-[a-z2-7]{20}$' }
+        buildId: { type: string, pattern: '^bld-[a-z2-7]{20}$' }
+        commitSha: { type: string, pattern: '^[a-f0-9]{40}$' }
+        image: { type: string, pattern: '^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$' }
+        platform: { type: string, enum: [linux/amd64] }
+        createdAt: { type: string, format: date-time }
+    ReleaseDeploymentIntent:
+      type: object
+      required: [name, environmentId, port, resources, probes]
+      additionalProperties: false
+      allOf:
+        - oneOf:
+            - required: [exposure, slug]
+              properties:
+                exposure: { type: string, enum: [Public] }
+            - properties:
+                exposure: { type: string, enum: [Private] }
+              not: { required: [slug] }
+      properties:
+        name: { type: string, maxLength: 63, pattern: '^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$' }
+        environmentId: { type: string, pattern: '^env-[a-z2-7]{20}$' }
+        replicas: { type: integer, minimum: 1, maximum: 5, default: 1 }
+        port: { type: integer, minimum: 1, maximum: 65535 }
+        resources:
+          type: object
+          required: [requests, limits]
+          additionalProperties: false
+          properties:
+            requests: { $ref: '#/components/schemas/ResourceValues' }
+            limits: { $ref: '#/components/schemas/ResourceValues' }
+        probes:
+          type: object
+          required: [liveness, readiness]
+          additionalProperties: false
+          properties:
+            liveness: { $ref: '#/components/schemas/Probe' }
+            readiness: { $ref: '#/components/schemas/Probe' }
+        exposure: { type: string, enum: [Private, Public], default: Private }
+        slug: { type: string, maxLength: 63, pattern: '^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$' }
     DeploymentIntent:
       type: object
       required: [name, image, port, resources, probes]
@@ -934,6 +1126,7 @@ components:
         projectId: { type: string, pattern: '^prj-[a-z2-7]{20}$' }
         appId: { type: string, pattern: '^app-[a-z2-7]{20}$' }
         environmentId: { type: string, pattern: '^env-[a-z2-7]{20}$' }
+        releaseId: { type: string, pattern: '^rel-[a-z2-7]{20}$' }
         intent: { $ref: '#/components/schemas/DeploymentIntent' }
         version: { type: integer, minimum: 1 }
         observedVersion: { type: integer, minimum: 0 }

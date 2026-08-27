@@ -9,4 +9,7 @@ export const workspaceScopeKeys = {
   githubInstallations: (workspaceId: string) => ["admin", workspaceId, "github", "installations"] as const,
   githubRepositories: (workspaceId: string, installationId: string) => ["admin", workspaceId, "github", installationId, "repositories"] as const,
   appSource: (workspaceId: string, projectId: string, appId: string) => ["admin", workspaceId, projectId, appId, "source"] as const,
+  appBuilds: (workspaceId: string, projectId: string, appId: string) => ["admin", workspaceId, projectId, appId, "builds"] as const,
+  appBuildLogs: (workspaceId: string, projectId: string, appId: string, buildId: string) => ["admin", workspaceId, projectId, appId, "builds", buildId, "logs"] as const,
+  appReleases: (workspaceId: string, projectId: string, appId: string) => ["admin", workspaceId, projectId, appId, "releases"] as const,
 };

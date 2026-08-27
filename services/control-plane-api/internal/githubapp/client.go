@@ -41,6 +41,8 @@ type Service interface {
 	Installation(context.Context, int64) (Installation, error)
 	UserCanAccessInstallation(context.Context, string, int64) (bool, error)
 	Repositories(context.Context, int64) ([]domain.GitHubRepository, error)
+	ResolveCommit(context.Context, int64, int64, string) (string, error)
+	Archive(context.Context, int64, int64, string, io.Writer) error
 	DeleteInstallation(context.Context, int64) error
 }
 
@@ -71,8 +73,18 @@ type Client struct {
 }
 
 func New(config Config) (*Client, error) {
-	if config.AppID < 1 || strings.TrimSpace(config.Slug) == "" || strings.TrimSpace(config.ClientID) == "" || strings.TrimSpace(config.ClientSecret) == "" || strings.TrimSpace(config.CallbackURL) == "" {
+	if config.AppID < 1 {
 		return nil, errors.New("github app configuration is incomplete")
+	}
+	oauthValues := []string{config.Slug, config.ClientID, config.ClientSecret, config.CallbackURL}
+	oauthConfigured := 0
+	for _, value := range oauthValues {
+		if strings.TrimSpace(value) != "" {
+			oauthConfigured++
+		}
+	}
+	if oauthConfigured != 0 && oauthConfigured != len(oauthValues) {
+		return nil, errors.New("github app OAuth configuration is incomplete")
 	}
 	key, err := parsePrivateKey(config.PrivateKey)
 	if err != nil {
@@ -221,6 +233,64 @@ func (c *Client) Repositories(ctx context.Context, installationID int64) ([]doma
 		}
 	}
 	return items, nil
+}
+
+func (c *Client) ResolveCommit(ctx context.Context, installationID, repositoryID int64, ref string) (string, error) {
+	if repositoryID < 1 || strings.TrimSpace(ref) == "" {
+		return "", errors.New("repository and ref are required")
+	}
+	token, err := c.installationToken(ctx, installationID)
+	if err != nil {
+		return "", err
+	}
+	var response struct {
+		SHA string `json:"sha"`
+	}
+	path := "/repositories/" + strconv.FormatInt(repositoryID, 10) + "/commits/" + url.PathEscape(ref)
+	if err = c.tokenRequest(ctx, http.MethodGet, path, token, nil, &response); err != nil {
+		return "", err
+	}
+	if err = domain.ValidateCommitSHA(response.SHA); err != nil {
+		return "", errors.New("github returned an invalid commit SHA")
+	}
+	return response.SHA, nil
+}
+
+func (c *Client) Archive(ctx context.Context, installationID, repositoryID int64, commitSHA string, destination io.Writer) error {
+	if repositoryID < 1 {
+		return errors.New("repository is required")
+	}
+	if err := domain.ValidateCommitSHA(commitSHA); err != nil {
+		return err
+	}
+	token, err := c.installationToken(ctx, installationID)
+	if err != nil {
+		return err
+	}
+	path := "/repositories/" + strconv.FormatInt(repositoryID, 10) + "/tarball/" + commitSHA
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, c.apiBaseURL+path, nil)
+	if err != nil {
+		return err
+	}
+	request.Header.Set("Accept", "application/vnd.github+json")
+	request.Header.Set("Authorization", "Bearer "+token)
+	request.Header.Set("X-GitHub-Api-Version", apiVersion)
+	response, err := c.httpClient.Do(request)
+	if err != nil {
+		return err
+	}
+	defer response.Body.Close()
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return responseError(response)
+	}
+	limited := &io.LimitedReader{R: response.Body, N: (256 << 20) + 1}
+	if _, err = io.Copy(destination, limited); err != nil {
+		return err
+	}
+	if limited.N <= 0 {
+		return errors.New("github source archive exceeds the size limit")
+	}
+	return nil
 }
 
 func (c *Client) DeleteInstallation(ctx context.Context, installationID int64) error {

@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
-import { createDeployment, deleteDeployment, updateDeployment } from "./api";
+import { createDeployment, createReleaseDeployment, deleteDeployment, updateDeployment } from "./api";
 import { deploymentQueryKey, deploymentsQueryKey } from "./queries";
 import { useSelectedWorkspace } from "../workspace/WorkspaceContext";
 import type { DeploymentIntent, MutationAccepted } from "../../shared/api/types";
@@ -11,6 +11,16 @@ export function useCreateDeploymentMutation() {
   const workspaceId = workspace?.id ?? "";
   return useMutation<MutationAccepted, Error, DeploymentIntent>({
     mutationFn: (intent) => createDeployment(workspaceId, intent),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: deploymentsQueryKey(workspaceId) }),
+  });
+}
+
+export function useCreateReleaseDeploymentMutation() {
+  const queryClient = useQueryClient();
+  const { workspace } = useSelectedWorkspace();
+  const workspaceId = workspace?.id ?? "";
+  return useMutation<MutationAccepted, Error, { projectId: string; appId: string; releaseId: string; intent: DeploymentIntent }>({
+    mutationFn: ({ projectId, appId, releaseId, intent }) => createReleaseDeployment(workspaceId, projectId, appId, releaseId, intent),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: deploymentsQueryKey(workspaceId) }),
   });
 }

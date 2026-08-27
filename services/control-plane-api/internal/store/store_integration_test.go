@@ -1171,6 +1171,12 @@ func newIntegrationFixture(t *testing.T) (*Store, int64, int64) {
 		if _, err := s.Pool.Exec(cleanupCtx, `DELETE FROM deployments WHERE workspace_id=$1`, workspaceID); err != nil {
 			t.Errorf("delete integration deployments: %v", err)
 		}
+		if _, err := s.Pool.Exec(cleanupCtx, `DELETE FROM releases WHERE workspace_id=$1`, workspaceID); err != nil {
+			t.Errorf("delete integration releases: %v", err)
+		}
+		if _, err := s.Pool.Exec(cleanupCtx, `DELETE FROM builds WHERE workspace_id=$1`, workspaceID); err != nil {
+			t.Errorf("delete integration builds: %v", err)
+		}
 		if _, err := s.Pool.Exec(cleanupCtx, `DELETE FROM apps WHERE project_id IN (SELECT id FROM projects WHERE workspace_id=$1)`, workspaceID); err != nil {
 			t.Errorf("delete integration apps: %v", err)
 		}

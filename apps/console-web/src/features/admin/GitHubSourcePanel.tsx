@@ -6,7 +6,7 @@ import { userFacingError } from "../../shared/api/errors";
 import { Alert } from "../../shared/ui/Alert";
 import { Button } from "../../shared/ui/Button";
 import { workspaceScopeKeys } from "../workspace/scope";
-import { clearAppSource, connectGitHubInstallation, disconnectGitHubInstallation, getAppSource, listGitHubInstallations, listGitHubRepositories, setAppSource } from "./api";
+import { clearAppSource, connectGitHubInstallation, createAppBuild, disconnectGitHubInstallation, getAppSource, listAppBuildLogs, listAppBuilds, listAppReleases, listGitHubInstallations, listGitHubRepositories, setAppSource } from "./api";
 
 export function GitHubSourcePanel({ workspaceId, projectId, apps, canMutate }: { workspaceId: string; projectId: string; apps: App[]; canMutate: boolean }) {
   const queryClient = useQueryClient();
@@ -20,6 +20,11 @@ export function GitHubSourcePanel({ workspaceId, projectId, apps, canMutate }: {
   const source = useQuery({ queryKey: workspaceScopeKeys.appSource(workspaceId, projectId, selectedApp?.id ?? ""), queryFn: () => getAppSource(workspaceId, projectId, selectedApp!.id), enabled: Boolean(workspaceId && projectId && selectedApp) });
   const selectedInstallation = installations.data?.items.find((item) => item.id === installationId) ?? installations.data?.items[0];
   const repositories = useQuery({ queryKey: workspaceScopeKeys.githubRepositories(workspaceId, selectedInstallation?.id ?? ""), queryFn: () => listGitHubRepositories(workspaceId, selectedInstallation!.id), enabled: Boolean(workspaceId && selectedInstallation) });
+  const builds = useQuery({ queryKey: workspaceScopeKeys.appBuilds(workspaceId, projectId, selectedApp?.id ?? ""), queryFn: () => listAppBuilds(workspaceId, projectId, selectedApp!.id), enabled: Boolean(workspaceId && projectId && selectedApp), refetchInterval: (query) => query.state.data?.items.some((build) => build.status === "Pending" || build.status === "Running") ? 2_000 : false });
+  const latestBuild = builds.data?.items[0];
+  const activeBuild = builds.data?.items.some((build) => build.status === "Pending" || build.status === "Running") ?? false;
+  const buildLogs = useQuery({ queryKey: workspaceScopeKeys.appBuildLogs(workspaceId, projectId, selectedApp?.id ?? "", latestBuild?.id ?? ""), queryFn: () => listAppBuildLogs(workspaceId, projectId, selectedApp!.id, latestBuild!.id), enabled: Boolean(workspaceId && projectId && selectedApp && latestBuild), refetchInterval: activeBuild ? 2_000 : false });
+  const releases = useQuery({ queryKey: workspaceScopeKeys.appReleases(workspaceId, projectId, selectedApp?.id ?? ""), queryFn: () => listAppReleases(workspaceId, projectId, selectedApp!.id), enabled: Boolean(workspaceId && projectId && selectedApp) });
 
   useEffect(() => {
     if (selectedApp && selectedApp.id !== appId) setAppId(selectedApp.id);
@@ -34,12 +39,16 @@ export function GitHubSourcePanel({ workspaceId, projectId, apps, canMutate }: {
     if (preferred && repositories.data?.items.some((item) => item.id === preferred)) setRepositoryId(preferred);
     else if (repositories.data?.items[0] && !repositories.data.items.some((item) => item.id === repositoryId)) setRepositoryId(repositories.data.items[0].id);
   }, [source.data?.source, installationId, repositories.data?.items, repositoryId]);
+  useEffect(() => {
+    if (latestBuild) void queryClient.invalidateQueries({ queryKey: workspaceScopeKeys.appBuildLogs(workspaceId, projectId, selectedApp?.id ?? "", latestBuild.id) });
+  }, [latestBuild?.updatedAt, latestBuild?.id, projectId, queryClient, selectedApp?.id, workspaceId]);
 
   const connect = useMutation({ mutationFn: () => connectGitHubInstallation(workspaceId), onSuccess: ({ authorizationUrl }) => window.location.assign(authorizationUrl) });
   const disconnect = useMutation({ mutationFn: (id: string) => disconnectGitHubInstallation(workspaceId, id), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: workspaceScopeKeys.githubInstallations(workspaceId) }); setFeedback("Instalação GitHub desconectada."); } });
   const save = useMutation({ mutationFn: () => setAppSource(workspaceId, projectId, selectedApp!.id, { installationId: selectedInstallation!.id, repositoryId }), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: workspaceScopeKeys.appSource(workspaceId, projectId, selectedApp!.id) }); setFeedback("Repositório vinculado ao App."); } });
   const clear = useMutation({ mutationFn: () => clearAppSource(workspaceId, projectId, selectedApp!.id), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: workspaceScopeKeys.appSource(workspaceId, projectId, selectedApp!.id) }); setFeedback("Repositório removido do App."); } });
-  const currentError = installations.error ?? repositories.error ?? source.error ?? connect.error ?? disconnect.error ?? save.error ?? clear.error;
+  const createBuild = useMutation({ mutationFn: () => createAppBuild(workspaceId, projectId, selectedApp!.id), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: workspaceScopeKeys.appBuilds(workspaceId, projectId, selectedApp!.id) }); setFeedback("Build enfileirado com o SHA atual da branch padrão."); } });
+  const currentError = installations.error ?? repositories.error ?? source.error ?? builds.error ?? buildLogs.error ?? releases.error ?? connect.error ?? disconnect.error ?? save.error ?? clear.error ?? createBuild.error;
 
   return <section className="card stack">
     <div className="section-heading"><div><p className="eyebrow">GitHub</p><h2>Fonte dos Apps</h2></div>{canMutate && <Button onClick={() => connect.mutate()} disabled={connect.isPending}>Conectar conta GitHub</Button>}</div>
@@ -56,5 +65,12 @@ export function GitHubSourcePanel({ workspaceId, projectId, apps, canMutate }: {
       {canMutate && source.data?.source && <Button variant="secondary" onClick={() => clear.mutate()} disabled={clear.isPending}>Remover fonte</Button>}
     </div> : null}
     {selectedApp && source.data?.source && <p className="muted">Fonte atual de <strong>{selectedApp.name}</strong>: {source.data.source.repository.fullName} ({source.data.source.repository.defaultBranch}).</p>}
+    {selectedApp && <div className="stack build-panel">
+      <div className="section-heading"><div><p className="eyebrow">Builds</p><h3>{selectedApp.name}</h3></div>{canMutate && <Button onClick={() => createBuild.mutate()} disabled={!source.data?.source || createBuild.isPending || activeBuild}>Construir branch padrão</Button>}</div>
+      {!source.data?.source && <p className="muted">Vincule um repositório antes de iniciar o build.</p>}
+      {latestBuild && <div className="resource"><strong>{latestBuild.status}</strong><small>{latestBuild.commitSha.slice(0, 12)} · {latestBuild.platform}</small>{latestBuild.errorMessage && <span>{latestBuild.errorMessage}</span>}</div>}
+      {buildLogs.data?.items.length ? <pre className="build-logs">{buildLogs.data.items.map((item) => item.message).join("\n")}</pre> : null}
+      <p className="muted">{releases.data?.items.length ?? 0} Release(s) imutável(is) disponível(is) para deployment.</p>
+    </div>}
   </section>;
 }

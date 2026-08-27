@@ -129,6 +129,7 @@ export FRUTO_EXPECTED_KUBE_SERVER='<approved-kube-api-url>'
 export FRUTO_EXPECTED_CLUSTER_UID='<approved-kube-system-uid>'
 export FRUTO_TRUSTED_PROXY_CIDR='<approved-pod-cidr>'
 export FRUTO_TESTKIT_IMAGE=ghcr.io/molejo-platform/testkit@sha256:1b5a36a776cc16dd3fa728c2269109ca45fca2a4af622b3a166e4e578b9cdb08
+export MOLEJO_BUILD_IMAGE_REPOSITORY='<registry>/<prefijo-de-repositorio>'
 
 just ci
 just control-plane-build-release
@@ -173,3 +174,71 @@ La NetworkPolicy del repositorio es un ejemplo incompleto y no instalado. El
 egress hacia PostgreSQL no restringe destino porque la instalación portátil aún
 no tiene un contrato de destino de la base. No la instales tal como está:
 primero definí el destino de la base y el CNI y después validá la política.
+
+## Build plane de la Fase 8
+
+Un owner inicia un Build para una App con fuente GitHub conectada. La API registra
+el commit exacto de la branch por defecto antes de encolarlo. El worker acepta
+solamente un `Dockerfile` en la raíz, construye `linux/amd64`, publica un tag con
+el SHA del commit y promueve una Release solamente después de registrar el digest
+OCI. Los logs son limitados y sanitizados. Un Build fallido nunca crea una
+Release.
+
+El build plane se instala por separado en `molejo-builds`. Su daemon BuildKit es
+rootless y solamente el worker puede acceder mediante TLS mutuo. El modo rootless
+upstream para Kubernetes requiere seccomp/AppArmor unconfined y
+`--oci-worker-no-process-sandbox`; esta es una frontera pre-alpha explícita, no
+una declaración de aislamiento de producción. CPU, memoria, disco temporario,
+concurrencia de un build y timeout de 15 minutos limitan la primera
+implementación.
+Ambos Pods seleccionan el rol de node `runtime` existente en el laboratorio y
+`amd64`; esto mantiene builds no confiables fuera de los nodes de control plane y
+datos, aunque todavía comparte un node con workloads administrados. Se permite
+egress HTTP/HTTPS público para dependencias del Dockerfile, mientras rangos
+privados, link-local y del cluster permanecen denegados salvo las rutas
+explícitas de DNS, PostgreSQL y BuildKit.
+
+Desde un checkout limpio y con commit, prepará un directorio externo de release y
+ejecutá:
+
+```bash
+export FRUTO_RELEASE_DIR=/private/tmp/molejo-control-plane-release
+export FRUTO_EXPECTED_CLUSTER_UID='<uid-aprobado-de-kube-system>'
+export FRUTO_TRUSTED_PROXY_CIDR='<cidr-aprobado-de-pods>'
+export FRUTO_TESTKIT_IMAGE='<referencia-aprobada-de-testkit-por-digest>'
+export MOLEJO_BUILD_IMAGE_REPOSITORY='<registry>/<prefijo-de-repositorio>'
+
+just ci
+just control-plane-build-release
+just builds-build-release
+source "$FRUTO_RELEASE_DIR/images.env"
+source "$FRUTO_RELEASE_DIR/builds.env"
+export FRUTO_RELEASE_OUTPUT="$FRUTO_RELEASE_DIR/control-plane.yaml"
+export FRUTO_BUILDS_RELEASE_OUTPUT="$FRUTO_RELEASE_DIR/builds.yaml"
+just control-plane-render-release
+just builds-render-release
+
+export GITHUB_APP_ID='<github-app-id>'
+export GITHUB_APP_PRIVATE_KEY_FILE='<pem-protegido-de-github-app>'
+just control-plane-prepare-k3s
+just builds-prepare-k3s
+just control-plane-apply-k3s
+just builds-apply-k3s
+```
+
+El comando de preparación siempre usa el contexto Kubernetes `fruto-lab`, deriva
+una URL cross-namespace del Secret existente de la base del control plane, crea
+una CA privada y certificados de servidor/cliente fuera de Git, monta la clave
+de GitHub App solamente en el worker y copia la credencial existente del registry
+a `molejo-builds`. La URL de base debe usar el Service cross-namespace
+`postgres.fruto-control-plane.svc`. `MOLEJO_BUILD_DATABASE_URL_FILE` puede
+reemplazar esa fuente con un archivo protegido. Renderizado, preparación de Secrets y apply
+son gates separados; no ejecutes comandos mutables sin autorización explícita
+para sus recursos exactos.
+
+La aceptación requiere crear un Build desde la Consola, observar el SHA
+registrado y logs limitados, ver una Release fijada por digest solamente después
+del éxito y crear un deployment desde esa Release. Comprobá que un Dockerfile
+fallido no crea Release y que una actualización no reemplaza la imagen controlada
+por la Release. Registrá solamente IDs públicos, SHAs, digests, estados y logs
+sanitizados.

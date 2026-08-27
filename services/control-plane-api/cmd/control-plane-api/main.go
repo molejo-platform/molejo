@@ -15,6 +15,7 @@ import (
 
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/api"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/auth"
+	controlbuild "github.com/fruto-platform/fruto/services/control-plane-api/internal/build"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/domain"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/githubapp"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/runtime"
@@ -40,6 +41,8 @@ func run() error {
 		return withStore(func(s *store.Store) error { return s.Migrate(context.Background()) })
 	case "bootstrap":
 		return bootstrap()
+	case "build-worker":
+		return runBuildWorker()
 	}
 	if command != "serve" {
 		return fmt.Errorf("unknown command %q", command)
@@ -152,6 +155,71 @@ func run() error {
 	return nil
 }
 
+func runBuildWorker() error {
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+	databaseURL := strings.TrimSpace(os.Getenv("FRUTO_DATABASE_URL"))
+	if databaseURL == "" {
+		return fmt.Errorf("FRUTO_DATABASE_URL is required")
+	}
+	s, err := store.New(ctx, databaseURL)
+	if err != nil {
+		return err
+	}
+	defer s.Close()
+	if err = s.SchemaReady(ctx); err != nil {
+		return fmt.Errorf("build schema is not ready: %w", err)
+	}
+	buildTimeout, err := durationEnv("FRUTO_BUILD_TIMEOUT", 15*time.Minute)
+	if err != nil {
+		return err
+	}
+	github, err := githubBuildService(buildTimeout)
+	if err != nil {
+		return err
+	}
+	buildLease, err := durationEnv("FRUTO_BUILD_LEASE", buildTimeout+time.Minute)
+	if err != nil {
+		return err
+	}
+	if buildLease <= buildTimeout {
+		return fmt.Errorf("FRUTO_BUILD_LEASE must be greater than FRUTO_BUILD_TIMEOUT")
+	}
+	imageRepository := strings.TrimRight(strings.TrimSpace(os.Getenv("FRUTO_BUILD_IMAGE_REPOSITORY")), "/")
+	if imageRepository == "" {
+		return fmt.Errorf("FRUTO_BUILD_IMAGE_REPOSITORY is required")
+	}
+	if _, err = domain.ReleaseImageReference(imageRepository+"/app-abcdefghijklmnopqrst", "sha256:"+strings.Repeat("0", 64)); err != nil {
+		return fmt.Errorf("invalid FRUTO_BUILD_IMAGE_REPOSITORY: %w", err)
+	}
+	buildkitAddress := strings.TrimSpace(os.Getenv("FRUTO_BUILDKIT_ADDRESS"))
+	if buildkitAddress == "" {
+		return fmt.Errorf("FRUTO_BUILDKIT_ADDRESS is required")
+	}
+	buildkitCA := strings.TrimSpace(os.Getenv("FRUTO_BUILDKIT_TLS_CA_FILE"))
+	buildkitCert := strings.TrimSpace(os.Getenv("FRUTO_BUILDKIT_TLS_CERT_FILE"))
+	buildkitKey := strings.TrimSpace(os.Getenv("FRUTO_BUILDKIT_TLS_KEY_FILE"))
+	if buildkitCA == "" || buildkitCert == "" || buildkitKey == "" {
+		return fmt.Errorf("FRUTO_BUILDKIT_TLS_CA_FILE, FRUTO_BUILDKIT_TLS_CERT_FILE, and FRUTO_BUILDKIT_TLS_KEY_FILE are required")
+	}
+	worker := controlbuild.Worker{
+		Queue:  s,
+		Source: github,
+		Builder: controlbuild.BuildKitRunner{
+			Address:               buildkitAddress,
+			ImageRepositoryPrefix: imageRepository,
+			TLSCACert:             buildkitCA,
+			TLSCert:               buildkitCert,
+			TLSKey:                buildkitKey,
+		},
+		Lease:    buildLease,
+		Timeout:  buildTimeout,
+		TempRoot: strings.TrimSpace(os.Getenv("FRUTO_BUILD_TEMP_ROOT")),
+	}
+	worker.Run(ctx, env("FRUTO_BUILD_WORKER_ID", "build-worker-1"))
+	return nil
+}
+
 func githubService(cfg api.Config) (githubapp.Service, error) {
 	rawAppID := strings.TrimSpace(os.Getenv("GITHUB_APP_ID"))
 	if rawAppID == "" {
@@ -185,6 +253,39 @@ func githubService(cfg api.Config) (githubapp.Service, error) {
 		return nil, fmt.Errorf("configure GitHub App: %w", err)
 	}
 	return client, nil
+}
+
+func githubBuildService(httpTimeout time.Duration) (githubapp.Service, error) {
+	rawAppID := strings.TrimSpace(os.Getenv("GITHUB_APP_ID"))
+	appID, err := strconv.ParseInt(rawAppID, 10, 64)
+	if err != nil || appID < 1 {
+		return nil, fmt.Errorf("invalid GITHUB_APP_ID")
+	}
+	privateKeyPath := strings.TrimSpace(os.Getenv("GITHUB_APP_PRIVATE_KEY_FILE"))
+	if privateKeyPath == "" {
+		return nil, fmt.Errorf("GITHUB_APP_PRIVATE_KEY_FILE is required")
+	}
+	privateKey, err := os.ReadFile(privateKeyPath)
+	if err != nil {
+		return nil, fmt.Errorf("read GitHub App private key: %w", err)
+	}
+	client, err := githubapp.New(githubapp.Config{AppID: appID, PrivateKey: privateKey, HTTPClient: &http.Client{Timeout: httpTimeout}})
+	if err != nil {
+		return nil, fmt.Errorf("configure GitHub App for builds: %w", err)
+	}
+	return client, nil
+}
+
+func durationEnv(key string, fallback time.Duration) (time.Duration, error) {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback, nil
+	}
+	duration, err := time.ParseDuration(value)
+	if err != nil || duration <= 0 {
+		return 0, fmt.Errorf("invalid %s", key)
+	}
+	return duration, nil
 }
 
 func readSecretFile(envName string) (string, error) {

@@ -7,9 +7,9 @@ import { Alert } from "../../shared/ui/Alert";
 import { Button } from "../../shared/ui/Button";
 import { Field, SelectField } from "../../shared/ui/Field";
 import type { Deployment, DeploymentIntent } from "../../shared/api/types";
-import { useCreateDeploymentMutation, useUpdateDeploymentMutation } from "./mutations";
+import { useCreateDeploymentMutation, useCreateReleaseDeploymentMutation, useUpdateDeploymentMutation } from "./mutations";
 import { emptyIntent, withExposure } from "./model";
-import { listApps, listEnvironments, listProjects } from "../admin/api";
+import { listAppReleases, listApps, listEnvironments, listProjects } from "../admin/api";
 import { useSelectedWorkspace } from "../workspace/WorkspaceContext";
 
 export function DeploymentForm({ deployment }: { deployment?: Deployment }) {
@@ -19,19 +19,22 @@ export function DeploymentForm({ deployment }: { deployment?: Deployment }) {
   const initialIntent = deployment ? { ...deployment.intent, appId: deployment.appId, environmentId: deployment.environmentId } : emptyIntent;
   const [draft, setDraft] = useState<DeploymentIntent>(initialIntent);
   const [projectId, setProjectId] = useState(deployment?.projectId ?? "");
+  const [releaseId, setReleaseId] = useState(deployment?.releaseId ?? "");
   const create = useCreateDeploymentMutation();
+  const createRelease = useCreateReleaseDeploymentMutation();
   const update = useUpdateDeploymentMutation();
-  const mutation = deployment ? update : create;
 
   useEffect(() => {
     setDraft(deployment ? { ...deployment.intent, appId: deployment.appId, environmentId: deployment.environmentId } : emptyIntent);
     setProjectId(deployment?.projectId ?? "");
+    setReleaseId(deployment?.releaseId ?? "");
   }, [deployment?.id, workspaceId]);
 
   const projects = useQuery({ queryKey: ["deployment-form", workspaceId, "projects"], queryFn: () => listProjects(workspaceId), enabled: Boolean(workspaceId) });
   const selectedProjectId = projectId || projects.data?.items[0]?.id || "";
   const environments = useQuery({ queryKey: ["deployment-form", workspaceId, selectedProjectId, "environments"], queryFn: () => listEnvironments(workspaceId, selectedProjectId), enabled: Boolean(workspaceId && selectedProjectId) });
   const apps = useQuery({ queryKey: ["deployment-form", workspaceId, selectedProjectId, "apps"], queryFn: () => listApps(workspaceId, selectedProjectId), enabled: Boolean(workspaceId && selectedProjectId) });
+  const releases = useQuery({ queryKey: ["deployment-form", workspaceId, selectedProjectId, draft.appId, "releases"], queryFn: () => listAppReleases(workspaceId, selectedProjectId, draft.appId ?? ""), enabled: Boolean(!deployment && workspaceId && selectedProjectId && draft.appId) });
 
   function patchDraft(patch: Partial<DeploymentIntent>) {
     setDraft((current) => ({ ...current, ...patch }));
@@ -42,7 +45,9 @@ export function DeploymentForm({ deployment }: { deployment?: Deployment }) {
     try {
       const result = deployment
         ? await update.mutateAsync({ id: deployment.id, version: deployment.version, intent: draft })
-        : await create.mutateAsync(draft);
+        : releaseId
+          ? await createRelease.mutateAsync({ projectId: selectedProjectId, appId: draft.appId ?? "", releaseId, intent: draft })
+          : await create.mutateAsync(draft);
       const id = result.deployment?.id ?? result.operation.deploymentId;
       await navigate({ to: "/deployments/$deploymentId", params: { deploymentId: id }, search: { operationId: result.operation.id }, replace: true });
     } catch {
@@ -50,14 +55,15 @@ export function DeploymentForm({ deployment }: { deployment?: Deployment }) {
     }
   }
 
+  const mutation = deployment ? update : releaseId ? createRelease : create;
   const error = mutation.isError ? userFacingError(mutation.error) : "";
   return (
     <form onSubmit={submit} className="stack">
       <div className="form-row">
-        <SelectField label="Project" value={selectedProjectId} disabled={Boolean(deployment)} onChange={(event) => { setProjectId(event.target.value); patchDraft({ appId: undefined, environmentId: undefined }); }} required>
+        <SelectField label="Project" value={selectedProjectId} disabled={Boolean(deployment)} onChange={(event) => { setProjectId(event.target.value); setReleaseId(""); patchDraft({ appId: undefined, environmentId: undefined, image: emptyIntent.image }); }} required>
           <option value="">Selecione</option>{projects.data?.items.map((project) => <option value={project.id} key={project.id}>{project.name}</option>)}
         </SelectField>
-        <SelectField label="App" value={draft.appId ?? ""} disabled={Boolean(deployment) || !selectedProjectId} onChange={(event) => patchDraft({ appId: event.target.value })} required>
+        <SelectField label="App" value={draft.appId ?? ""} disabled={Boolean(deployment) || !selectedProjectId} onChange={(event) => { setReleaseId(""); patchDraft({ appId: event.target.value, image: emptyIntent.image }); }} required>
           <option value="">Selecione</option>{apps.data?.items.map((app) => <option value={app.id} key={app.id}>{app.name}</option>)}
         </SelectField>
         <SelectField label="Environment" value={draft.environmentId ?? ""} disabled={Boolean(deployment) || !selectedProjectId} onChange={(event) => patchDraft({ environmentId: event.target.value })} required>
@@ -65,7 +71,15 @@ export function DeploymentForm({ deployment }: { deployment?: Deployment }) {
         </SelectField>
       </div>
       <Field label="Nome" maxLength={63} value={draft.name} onChange={(event) => patchDraft({ name: event.target.value })} required />
-      <Field label="Imagem OCI por digest" value={draft.image} onChange={(event) => patchDraft({ image: event.target.value })} required />
+      {!deployment && draft.appId && <SelectField label="Release construída" value={releaseId} onChange={(event) => {
+        const selectedRelease = releases.data?.items.find((release) => release.id === event.target.value);
+        setReleaseId(event.target.value);
+        patchDraft({ image: selectedRelease?.image ?? emptyIntent.image });
+      }}>
+        <option value="">Imagem informada manualmente</option>
+        {releases.data?.items.map((release) => <option value={release.id} key={release.id}>{release.commitSha.slice(0, 12)} · {release.platform}</option>)}
+      </SelectField>}
+      <Field label="Imagem OCI por digest" value={draft.image} disabled={Boolean(releaseId || deployment?.releaseId)} onChange={(event) => patchDraft({ image: event.target.value })} required />
       <div className="form-row">
         <SelectField label="Exposição" value={draft.exposure} onChange={(event) => setDraft((current) => withExposure(current, event.target.value as DeploymentIntent["exposure"]))}>
           <option value="Private">Privado</option>

@@ -23,8 +23,12 @@ ejecución, se la corrige a partir de evidencia real y solo entonces se la ampl�
 El repositorio ahora contiene un corte vertical ejecutable: API de producto y
 Consola pre-alpha, un contrato `AppDeployment`, un operator de Kubernetes, un
 Service ClusterIP privado, publicación opcional mediante HTTPRoute y un Gateway
-HTTPS compartido, y pruebas reproducibles de integración y end-to-end. Todavía no
-existe automatización de DNS externo ni gestión de workloads lista para producción.
+HTTPS compartido, fuentes de repositorio mediante GitHub App, Builds de commit
+exacto, Releases inmutables fijadas por digest y pruebas reproducibles de
+integración y end-to-end. El primer contrato de build acepta un `Dockerfile` en
+la raíz para `linux/amd64` mediante un servicio BuildKit rootless separado.
+Todavía no existe automatización de DNS externo ni aislamiento de workloads y
+builds listo para producción.
 
 ## Modelo del Producto
 
@@ -122,7 +126,8 @@ acceso a `fruto-lab`. Despliega imágenes del registry privado por digest y deja
 El [runbook del platform operator](operations/platform-operator.md) documenta el
 contrato de estado, flujo de diagnóstico, métricas protegidas y tracing opcional.
 El [runbook del control plane](operations/control-plane.md) documenta el TLS local
-y el flujo autorizado de release y recuperación de la Fase 7 en k3s.
+y los flujos autorizados de release, build y recuperación de las Fases 7 y 8 en
+k3s.
 
 ## Documentación
 

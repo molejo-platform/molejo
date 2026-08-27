@@ -20,3 +20,5 @@
   — Draft
 - [ADR-0007: Control Plane Persistence and Operations](0007-control-plane-persistence-and-operations.md)
   — Draft
+- [ADR-0008: Exact Source Builds and Immutable Releases](0008-exact-source-builds-and-immutable-releases.md)
+  — Draft

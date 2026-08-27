@@ -22,9 +22,12 @@ corrigida a partir de evidências reais e somente então ampliada.
 
 O repositório agora contém um corte vertical executável: API de produto e Console
 pre-alpha, um contrato `AppDeployment`, um operator Kubernetes, um Service
-ClusterIP privado, publicação opcional por HTTPRoute e Gateway HTTPS compartilhado
-e testes reproduzíveis de integração e end-to-end. Ainda não existe automação de
-DNS externo ou gestão de workloads pronta para produção.
+ClusterIP privado, publicação opcional por HTTPRoute e Gateway HTTPS compartilhado,
+fontes de repositório por GitHub App, Builds de commit exato, Releases imutáveis
+pinadas por digest e testes reproduzíveis de integração e end-to-end. O primeiro
+contrato de build aceita um `Dockerfile` na raiz para `linux/amd64` por um serviço
+BuildKit rootless separado. Ainda não existe automação de DNS externo nem
+isolamento de workloads e builds pronto para produção.
 
 ## Modelo do Produto
 
@@ -121,7 +124,7 @@ O alvo manual `just e2e-frontend-k3s` é reservado a mantenedores com acesso ao
 O [runbook do platform operator](operations/platform-operator.md) documenta o
 contrato de estado, fluxo de diagnóstico, métricas protegidas e tracing opcional.
 O [runbook do control plane](operations/control-plane.md) documenta o TLS local e
-o fluxo autorizado de release e recuperação da Fase 7 no k3s.
+os fluxos autorizados de release, build e recuperação das Fases 7 e 8 no k3s.
 
 ## Documentação
 

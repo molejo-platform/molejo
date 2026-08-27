@@ -30,7 +30,7 @@ test.describe("control plane browser flow", () => {
     const appForm = page.locator("form").filter({ has: page.getByLabel("Novo App") });
     await appForm.getByLabel("Novo App").fill("Browser app");
     await appForm.getByRole("button", { name: "Criar", exact: true }).click();
-    await expect(page.getByText("Browser app", { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Browser app", exact: true })).toBeVisible();
     await page.getByRole("link", { name: "Deployments" }).click();
     await page.getByRole("link", { name: /Novo deployment/i }).click();
     await page.getByLabel("App").selectOption({ label: "Browser app" });

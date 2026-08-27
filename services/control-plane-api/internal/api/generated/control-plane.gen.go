@@ -16,6 +16,45 @@ import (
 	"github.com/oapi-codegen/runtime"
 )
 
+// Defines values for BuildPlatform.
+const (
+	BuildPlatformLinuxamd64 BuildPlatform = "linux/amd64"
+)
+
+// Valid indicates whether the value is a known member of the BuildPlatform enum.
+func (e BuildPlatform) Valid() bool {
+	switch e {
+	case BuildPlatformLinuxamd64:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for BuildStatus.
+const (
+	BuildStatusFailed    BuildStatus = "Failed"
+	BuildStatusPending   BuildStatus = "Pending"
+	BuildStatusRunning   BuildStatus = "Running"
+	BuildStatusSucceeded BuildStatus = "Succeeded"
+)
+
+// Valid indicates whether the value is a known member of the BuildStatus enum.
+func (e BuildStatus) Valid() bool {
+	switch e {
+	case BuildStatusFailed:
+		return true
+	case BuildStatusPending:
+		return true
+	case BuildStatusRunning:
+		return true
+	case BuildStatusSucceeded:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for DeploymentState.
 const (
 	DeploymentStateDegraded    DeploymentState = "Degraded"
@@ -202,6 +241,69 @@ func (e OperationStatus) Valid() bool {
 	}
 }
 
+// Defines values for ReleasePlatform.
+const (
+	ReleasePlatformLinuxamd64 ReleasePlatform = "linux/amd64"
+)
+
+// Valid indicates whether the value is a known member of the ReleasePlatform enum.
+func (e ReleasePlatform) Valid() bool {
+	switch e {
+	case ReleasePlatformLinuxamd64:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ReleaseDeploymentIntentExposure.
+const (
+	ReleaseDeploymentIntentExposurePrivate ReleaseDeploymentIntentExposure = "Private"
+	ReleaseDeploymentIntentExposurePublic  ReleaseDeploymentIntentExposure = "Public"
+)
+
+// Valid indicates whether the value is a known member of the ReleaseDeploymentIntentExposure enum.
+func (e ReleaseDeploymentIntentExposure) Valid() bool {
+	switch e {
+	case ReleaseDeploymentIntentExposurePrivate:
+		return true
+	case ReleaseDeploymentIntentExposurePublic:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ReleaseDeploymentIntent0Exposure.
+const (
+	ReleaseDeploymentIntent0ExposurePublic ReleaseDeploymentIntent0Exposure = "Public"
+)
+
+// Valid indicates whether the value is a known member of the ReleaseDeploymentIntent0Exposure enum.
+func (e ReleaseDeploymentIntent0Exposure) Valid() bool {
+	switch e {
+	case ReleaseDeploymentIntent0ExposurePublic:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ReleaseDeploymentIntent1Exposure.
+const (
+	ReleaseDeploymentIntent1ExposurePrivate ReleaseDeploymentIntent1Exposure = "Private"
+)
+
+// Valid indicates whether the value is a known member of the ReleaseDeploymentIntent1Exposure enum.
+func (e ReleaseDeploymentIntent1Exposure) Valid() bool {
+	switch e {
+	case ReleaseDeploymentIntent1ExposurePrivate:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ScopedDeploymentIntent0Exposure.
 const (
 	ScopedDeploymentIntent0ExposurePublic ScopedDeploymentIntent0Exposure = "Public"
@@ -284,6 +386,35 @@ type App struct {
 	Version    int        `json:"version"`
 }
 
+// Build defines model for Build.
+type Build struct {
+	AppId        string        `json:"appId"`
+	Attempts     int           `json:"attempts"`
+	CommitSha    string        `json:"commitSha"`
+	CreatedAt    time.Time     `json:"createdAt"`
+	ErrorCode    *string       `json:"errorCode,omitempty"`
+	ErrorMessage *string       `json:"errorMessage,omitempty"`
+	Id           string        `json:"id"`
+	Platform     BuildPlatform `json:"platform"`
+	ProjectId    string        `json:"projectId"`
+	Repository   string        `json:"repository"`
+	Status       BuildStatus   `json:"status"`
+	UpdatedAt    time.Time     `json:"updatedAt"`
+}
+
+// BuildPlatform defines model for Build.Platform.
+type BuildPlatform string
+
+// BuildStatus defines model for Build.Status.
+type BuildStatus string
+
+// BuildLog defines model for BuildLog.
+type BuildLog struct {
+	CreatedAt time.Time `json:"createdAt"`
+	Message   string    `json:"message"`
+	Sequence  int       `json:"sequence"`
+}
+
 // Deployment defines model for Deployment.
 type Deployment struct {
 	AppId           *string          `json:"appId,omitempty"`
@@ -294,6 +425,7 @@ type Deployment struct {
 	Message         *string          `json:"message,omitempty"`
 	ObservedVersion *int             `json:"observedVersion,omitempty"`
 	ProjectId       *string          `json:"projectId,omitempty"`
+	ReleaseId       *string          `json:"releaseId,omitempty"`
 	State           DeploymentState  `json:"state"`
 	UpdatedAt       time.Time        `json:"updatedAt"`
 	Version         int              `json:"version"`
@@ -445,6 +577,59 @@ type Project struct {
 	Version    int        `json:"version"`
 }
 
+// Release defines model for Release.
+type Release struct {
+	AppId     string          `json:"appId"`
+	BuildId   string          `json:"buildId"`
+	CommitSha string          `json:"commitSha"`
+	CreatedAt time.Time       `json:"createdAt"`
+	Id        string          `json:"id"`
+	Image     string          `json:"image"`
+	Platform  ReleasePlatform `json:"platform"`
+	ProjectId string          `json:"projectId"`
+}
+
+// ReleasePlatform defines model for Release.Platform.
+type ReleasePlatform string
+
+// ReleaseDeploymentIntent defines model for ReleaseDeploymentIntent.
+type ReleaseDeploymentIntent struct {
+	EnvironmentId string                           `json:"environmentId"`
+	Exposure      *ReleaseDeploymentIntentExposure `json:"exposure,omitempty"`
+	Name          string                           `json:"name"`
+	Port          int                              `json:"port"`
+	Probes        struct {
+		Liveness  Probe `json:"liveness"`
+		Readiness Probe `json:"readiness"`
+	} `json:"probes"`
+	Replicas  *int `json:"replicas,omitempty"`
+	Resources struct {
+		Limits   ResourceValues `json:"limits"`
+		Requests ResourceValues `json:"requests"`
+	} `json:"resources"`
+	Slug  *string `json:"slug,omitempty"`
+	union json.RawMessage
+}
+
+// ReleaseDeploymentIntentExposure defines model for ReleaseDeploymentIntent.Exposure.
+type ReleaseDeploymentIntentExposure string
+
+// ReleaseDeploymentIntent0 defines model for ReleaseDeploymentIntent.0.
+type ReleaseDeploymentIntent0 struct {
+	Exposure ReleaseDeploymentIntent0Exposure `json:"exposure"`
+}
+
+// ReleaseDeploymentIntent0Exposure defines model for ReleaseDeploymentIntent.0.Exposure.
+type ReleaseDeploymentIntent0Exposure string
+
+// ReleaseDeploymentIntent1 defines model for ReleaseDeploymentIntent.1.
+type ReleaseDeploymentIntent1 struct {
+	Exposure *ReleaseDeploymentIntent1Exposure `json:"exposure,omitempty"`
+}
+
+// ReleaseDeploymentIntent1Exposure defines model for ReleaseDeploymentIntent.1.Exposure.
+type ReleaseDeploymentIntent1Exposure string
+
 // ResourceValues defines model for ResourceValues.
 type ResourceValues struct {
 	CpuMillis int `json:"cpuMillis"`
@@ -500,6 +685,9 @@ type WorkspaceState string
 // AppId defines model for AppId.
 type AppId = string
 
+// BuildId defines model for BuildId.
+type BuildId = string
+
 // Cursor defines model for Cursor.
 type Cursor = string
 
@@ -523,6 +711,9 @@ type Limit = int
 
 // ProjectId defines model for ProjectId.
 type ProjectId = string
+
+// ReleaseId defines model for ReleaseId.
+type ReleaseId = string
 
 // WorkspaceId defines model for WorkspaceId.
 type WorkspaceId = string
@@ -659,6 +850,28 @@ type UpdateAppParams struct {
 	IfMatch IfMatch `json:"If-Match"`
 }
 
+// ListAppBuildsParams defines parameters for ListAppBuilds.
+type ListAppBuildsParams struct {
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// CreateAppBuildParams defines parameters for CreateAppBuild.
+type CreateAppBuildParams struct {
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// ListAppReleasesParams defines parameters for ListAppReleases.
+type ListAppReleasesParams struct {
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// CreateReleaseDeploymentParams defines parameters for CreateReleaseDeployment.
+type CreateReleaseDeploymentParams struct {
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
 // ListEnvironmentsParams defines parameters for ListEnvironments.
 type ListEnvironmentsParams struct {
 	Cursor          *Cursor          `form:"cursor,omitempty" json:"cursor,omitempty"`
@@ -708,6 +921,9 @@ type CreateAppJSONRequestBody = HierarchyInput
 
 // UpdateAppJSONRequestBody defines body for UpdateApp for application/json ContentType.
 type UpdateAppJSONRequestBody = HierarchyInput
+
+// CreateReleaseDeploymentJSONRequestBody defines body for CreateReleaseDeployment for application/json ContentType.
+type CreateReleaseDeploymentJSONRequestBody = ReleaseDeploymentIntent
 
 // SetAppSourceJSONRequestBody defines body for SetAppSource for application/json ContentType.
 type SetAppSourceJSONRequestBody = GitHubSourceInput
@@ -882,6 +1098,190 @@ func (t *DeploymentIntent) UnmarshalJSON(b []byte) error {
 		err = json.Unmarshal(raw, &t.Image)
 		if err != nil {
 			return fmt.Errorf("error reading 'image': %w", err)
+		}
+	}
+
+	if raw, found := object["name"]; found {
+		err = json.Unmarshal(raw, &t.Name)
+		if err != nil {
+			return fmt.Errorf("error reading 'name': %w", err)
+		}
+	}
+
+	if raw, found := object["port"]; found {
+		err = json.Unmarshal(raw, &t.Port)
+		if err != nil {
+			return fmt.Errorf("error reading 'port': %w", err)
+		}
+	}
+
+	if raw, found := object["probes"]; found {
+		err = json.Unmarshal(raw, &t.Probes)
+		if err != nil {
+			return fmt.Errorf("error reading 'probes': %w", err)
+		}
+	}
+
+	if raw, found := object["replicas"]; found {
+		err = json.Unmarshal(raw, &t.Replicas)
+		if err != nil {
+			return fmt.Errorf("error reading 'replicas': %w", err)
+		}
+	}
+
+	if raw, found := object["resources"]; found {
+		err = json.Unmarshal(raw, &t.Resources)
+		if err != nil {
+			return fmt.Errorf("error reading 'resources': %w", err)
+		}
+	}
+
+	if raw, found := object["slug"]; found {
+		err = json.Unmarshal(raw, &t.Slug)
+		if err != nil {
+			return fmt.Errorf("error reading 'slug': %w", err)
+		}
+	}
+
+	return err
+}
+
+// AsReleaseDeploymentIntent0 returns the union data inside the ReleaseDeploymentIntent as a ReleaseDeploymentIntent0
+func (t ReleaseDeploymentIntent) AsReleaseDeploymentIntent0() (ReleaseDeploymentIntent0, error) {
+	var body ReleaseDeploymentIntent0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromReleaseDeploymentIntent0 overwrites any union data inside the ReleaseDeploymentIntent as the provided ReleaseDeploymentIntent0
+func (t *ReleaseDeploymentIntent) FromReleaseDeploymentIntent0(v ReleaseDeploymentIntent0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeReleaseDeploymentIntent0 performs a merge with any union data inside the ReleaseDeploymentIntent, using the provided ReleaseDeploymentIntent0
+func (t *ReleaseDeploymentIntent) MergeReleaseDeploymentIntent0(v ReleaseDeploymentIntent0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsReleaseDeploymentIntent1 returns the union data inside the ReleaseDeploymentIntent as a ReleaseDeploymentIntent1
+func (t ReleaseDeploymentIntent) AsReleaseDeploymentIntent1() (ReleaseDeploymentIntent1, error) {
+	var body ReleaseDeploymentIntent1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromReleaseDeploymentIntent1 overwrites any union data inside the ReleaseDeploymentIntent as the provided ReleaseDeploymentIntent1
+func (t *ReleaseDeploymentIntent) FromReleaseDeploymentIntent1(v ReleaseDeploymentIntent1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeReleaseDeploymentIntent1 performs a merge with any union data inside the ReleaseDeploymentIntent, using the provided ReleaseDeploymentIntent1
+func (t *ReleaseDeploymentIntent) MergeReleaseDeploymentIntent1(v ReleaseDeploymentIntent1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t ReleaseDeploymentIntent) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+	object := make(map[string]json.RawMessage)
+	if t.union != nil {
+		err = json.Unmarshal(b, &object)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	object["environmentId"], err = json.Marshal(t.EnvironmentId)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'environmentId': %w", err)
+	}
+
+	if t.Exposure != nil {
+		object["exposure"], err = json.Marshal(t.Exposure)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'exposure': %w", err)
+		}
+	}
+
+	object["name"], err = json.Marshal(t.Name)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'name': %w", err)
+	}
+
+	object["port"], err = json.Marshal(t.Port)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'port': %w", err)
+	}
+
+	object["probes"], err = json.Marshal(t.Probes)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'probes': %w", err)
+	}
+
+	if t.Replicas != nil {
+		object["replicas"], err = json.Marshal(t.Replicas)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'replicas': %w", err)
+		}
+	}
+
+	object["resources"], err = json.Marshal(t.Resources)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'resources': %w", err)
+	}
+
+	if t.Slug != nil {
+		object["slug"], err = json.Marshal(t.Slug)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'slug': %w", err)
+		}
+	}
+	b, err = json.Marshal(object)
+	return b, err
+}
+
+func (t *ReleaseDeploymentIntent) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	if err != nil {
+		return err
+	}
+	object := make(map[string]json.RawMessage)
+	err = json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["environmentId"]; found {
+		err = json.Unmarshal(raw, &t.EnvironmentId)
+		if err != nil {
+			return fmt.Errorf("error reading 'environmentId': %w", err)
+		}
+	}
+
+	if raw, found := object["exposure"]; found {
+		err = json.Unmarshal(raw, &t.Exposure)
+		if err != nil {
+			return fmt.Errorf("error reading 'exposure': %w", err)
 		}
 	}
 
@@ -1106,6 +1506,24 @@ type ServerInterface interface {
 	// (PUT /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId})
 	UpdateApp(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, params UpdateAppParams)
 
+	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/builds)
+	ListAppBuilds(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, params ListAppBuildsParams)
+
+	// (POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/builds)
+	CreateAppBuild(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, params CreateAppBuildParams)
+
+	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/builds/{buildId})
+	GetAppBuild(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, buildId BuildId)
+
+	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/builds/{buildId}/logs)
+	ListAppBuildLogs(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, buildId BuildId)
+
+	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/releases)
+	ListAppReleases(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, params ListAppReleasesParams)
+
+	// (POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/releases/{releaseId}/deployments)
+	CreateReleaseDeployment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, releaseId ReleaseId, params CreateReleaseDeploymentParams)
+
 	// (DELETE /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/source)
 	ClearAppSource(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId)
 
@@ -1317,6 +1735,36 @@ func (_ Unimplemented) GetApp(w http.ResponseWriter, r *http.Request, workspaceI
 
 // (PUT /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId})
 func (_ Unimplemented) UpdateApp(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, params UpdateAppParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/builds)
+func (_ Unimplemented) ListAppBuilds(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, params ListAppBuildsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/builds)
+func (_ Unimplemented) CreateAppBuild(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, params CreateAppBuildParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/builds/{buildId})
+func (_ Unimplemented) GetAppBuild(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, buildId BuildId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/builds/{buildId}/logs)
+func (_ Unimplemented) ListAppBuildLogs(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, buildId BuildId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/releases)
+func (_ Unimplemented) ListAppReleases(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, params ListAppReleasesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/releases/{releaseId}/deployments)
+func (_ Unimplemented) CreateReleaseDeployment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, releaseId ReleaseId, params CreateReleaseDeploymentParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -3039,6 +3487,411 @@ func (siw *ServerInterfaceWrapper) UpdateApp(w http.ResponseWriter, r *http.Requ
 	handler.ServeHTTP(w, r)
 }
 
+// ListAppBuilds operation middleware
+func (siw *ServerInterfaceWrapper) ListAppBuilds(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appId" -------------
+	var appId AppId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appId", chi.URLParam(r, "appId"), &appId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAppBuildsParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAppBuilds(w, r, workspaceId, projectId, appId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateAppBuild operation middleware
+func (siw *ServerInterfaceWrapper) CreateAppBuild(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appId" -------------
+	var appId AppId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appId", chi.URLParam(r, "appId"), &appId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateAppBuildParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateAppBuild(w, r, workspaceId, projectId, appId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAppBuild operation middleware
+func (siw *ServerInterfaceWrapper) GetAppBuild(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appId" -------------
+	var appId AppId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appId", chi.URLParam(r, "appId"), &appId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "buildId" -------------
+	var buildId BuildId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "buildId", chi.URLParam(r, "buildId"), &buildId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "buildId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAppBuild(w, r, workspaceId, projectId, appId, buildId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListAppBuildLogs operation middleware
+func (siw *ServerInterfaceWrapper) ListAppBuildLogs(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appId" -------------
+	var appId AppId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appId", chi.URLParam(r, "appId"), &appId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "buildId" -------------
+	var buildId BuildId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "buildId", chi.URLParam(r, "buildId"), &buildId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "buildId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAppBuildLogs(w, r, workspaceId, projectId, appId, buildId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListAppReleases operation middleware
+func (siw *ServerInterfaceWrapper) ListAppReleases(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appId" -------------
+	var appId AppId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appId", chi.URLParam(r, "appId"), &appId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAppReleasesParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAppReleases(w, r, workspaceId, projectId, appId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateReleaseDeployment operation middleware
+func (siw *ServerInterfaceWrapper) CreateReleaseDeployment(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appId" -------------
+	var appId AppId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appId", chi.URLParam(r, "appId"), &appId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "releaseId" -------------
+	var releaseId ReleaseId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "releaseId", chi.URLParam(r, "releaseId"), &releaseId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "releaseId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateReleaseDeploymentParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateReleaseDeployment(w, r, workspaceId, projectId, appId, releaseId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ClearAppSource operation middleware
 func (siw *ServerInterfaceWrapper) ClearAppSource(w http.ResponseWriter, r *http.Request) {
 
@@ -3679,6 +4532,24 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Put(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/source", wrapper.SetAppSource)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/builds", wrapper.ListAppBuilds)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/builds", wrapper.CreateAppBuild)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/builds/{buildId}", wrapper.GetAppBuild)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/builds/{buildId}/logs", wrapper.ListAppBuildLogs)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/releases", wrapper.ListAppReleases)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/releases/{releaseId}/deployments", wrapper.CreateReleaseDeployment)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/deployments", wrapper.ListWorkspaceDeployments)
@@ -5591,6 +6462,334 @@ func (response UpdateApp409JSONResponse) VisitUpdateAppResponse(w http.ResponseW
 	return err
 }
 
+type ListAppBuildsRequestObject struct {
+	WorkspaceId WorkspaceId `json:"workspaceId"`
+	ProjectId   ProjectId   `json:"projectId"`
+	AppId       AppId       `json:"appId"`
+	Params      ListAppBuildsParams
+}
+
+type ListAppBuildsResponseObject interface {
+	VisitListAppBuildsResponse(w http.ResponseWriter) error
+}
+
+type ListAppBuilds200JSONResponse struct {
+	Items      []Build `json:"items"`
+	NextCursor *string `json:"nextCursor,omitempty"`
+}
+
+func (response ListAppBuilds200JSONResponse) VisitListAppBuildsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAppBuilds404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ListAppBuilds404JSONResponse) VisitListAppBuildsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateAppBuildRequestObject struct {
+	WorkspaceId WorkspaceId `json:"workspaceId"`
+	ProjectId   ProjectId   `json:"projectId"`
+	AppId       AppId       `json:"appId"`
+	Params      CreateAppBuildParams
+}
+
+type CreateAppBuildResponseObject interface {
+	VisitCreateAppBuildResponse(w http.ResponseWriter) error
+}
+
+type CreateAppBuild202JSONResponse Build
+
+func (response CreateAppBuild202JSONResponse) VisitCreateAppBuildResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(202)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateAppBuild403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response CreateAppBuild403JSONResponse) VisitCreateAppBuildResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateAppBuild404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response CreateAppBuild404JSONResponse) VisitCreateAppBuildResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateAppBuild409JSONResponse struct{ ConflictJSONResponse }
+
+func (response CreateAppBuild409JSONResponse) VisitCreateAppBuildResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateAppBuild503JSONResponse struct{ UnavailableJSONResponse }
+
+func (response CreateAppBuild503JSONResponse) VisitCreateAppBuildResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAppBuildRequestObject struct {
+	WorkspaceId WorkspaceId `json:"workspaceId"`
+	ProjectId   ProjectId   `json:"projectId"`
+	AppId       AppId       `json:"appId"`
+	BuildId     BuildId     `json:"buildId"`
+}
+
+type GetAppBuildResponseObject interface {
+	VisitGetAppBuildResponse(w http.ResponseWriter) error
+}
+
+type GetAppBuild200JSONResponse Build
+
+func (response GetAppBuild200JSONResponse) VisitGetAppBuildResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAppBuild404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response GetAppBuild404JSONResponse) VisitGetAppBuildResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAppBuildLogsRequestObject struct {
+	WorkspaceId WorkspaceId `json:"workspaceId"`
+	ProjectId   ProjectId   `json:"projectId"`
+	AppId       AppId       `json:"appId"`
+	BuildId     BuildId     `json:"buildId"`
+}
+
+type ListAppBuildLogsResponseObject interface {
+	VisitListAppBuildLogsResponse(w http.ResponseWriter) error
+}
+
+type ListAppBuildLogs200JSONResponse struct {
+	Items []BuildLog `json:"items"`
+}
+
+func (response ListAppBuildLogs200JSONResponse) VisitListAppBuildLogsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAppBuildLogs404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ListAppBuildLogs404JSONResponse) VisitListAppBuildLogsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAppReleasesRequestObject struct {
+	WorkspaceId WorkspaceId `json:"workspaceId"`
+	ProjectId   ProjectId   `json:"projectId"`
+	AppId       AppId       `json:"appId"`
+	Params      ListAppReleasesParams
+}
+
+type ListAppReleasesResponseObject interface {
+	VisitListAppReleasesResponse(w http.ResponseWriter) error
+}
+
+type ListAppReleases200JSONResponse struct {
+	Items      []Release `json:"items"`
+	NextCursor *string   `json:"nextCursor,omitempty"`
+}
+
+func (response ListAppReleases200JSONResponse) VisitListAppReleasesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAppReleases404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ListAppReleases404JSONResponse) VisitListAppReleasesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateReleaseDeploymentRequestObject struct {
+	WorkspaceId WorkspaceId `json:"workspaceId"`
+	ProjectId   ProjectId   `json:"projectId"`
+	AppId       AppId       `json:"appId"`
+	ReleaseId   ReleaseId   `json:"releaseId"`
+	Params      CreateReleaseDeploymentParams
+	Body        *CreateReleaseDeploymentJSONRequestBody
+}
+
+type CreateReleaseDeploymentResponseObject interface {
+	VisitCreateReleaseDeploymentResponse(w http.ResponseWriter) error
+}
+
+type CreateReleaseDeployment202JSONResponse struct{ MutationAcceptedJSONResponse }
+
+func (response CreateReleaseDeployment202JSONResponse) VisitCreateReleaseDeploymentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(202)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateReleaseDeployment400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response CreateReleaseDeployment400JSONResponse) VisitCreateReleaseDeploymentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateReleaseDeployment403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response CreateReleaseDeployment403JSONResponse) VisitCreateReleaseDeploymentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateReleaseDeployment404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response CreateReleaseDeployment404JSONResponse) VisitCreateReleaseDeploymentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateReleaseDeployment409JSONResponse struct{ ConflictJSONResponse }
+
+func (response CreateReleaseDeployment409JSONResponse) VisitCreateReleaseDeploymentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ClearAppSourceRequestObject struct {
 	WorkspaceId WorkspaceId `json:"workspaceId"`
 	ProjectId   ProjectId   `json:"projectId"`
@@ -6173,6 +7372,24 @@ type StrictServerInterface interface {
 
 	// (PUT /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId})
 	UpdateApp(ctx context.Context, request UpdateAppRequestObject) (UpdateAppResponseObject, error)
+
+	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/builds)
+	ListAppBuilds(ctx context.Context, request ListAppBuildsRequestObject) (ListAppBuildsResponseObject, error)
+
+	// (POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/builds)
+	CreateAppBuild(ctx context.Context, request CreateAppBuildRequestObject) (CreateAppBuildResponseObject, error)
+
+	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/builds/{buildId})
+	GetAppBuild(ctx context.Context, request GetAppBuildRequestObject) (GetAppBuildResponseObject, error)
+
+	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/builds/{buildId}/logs)
+	ListAppBuildLogs(ctx context.Context, request ListAppBuildLogsRequestObject) (ListAppBuildLogsResponseObject, error)
+
+	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/releases)
+	ListAppReleases(ctx context.Context, request ListAppReleasesRequestObject) (ListAppReleasesResponseObject, error)
+
+	// (POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/releases/{releaseId}/deployments)
+	CreateReleaseDeployment(ctx context.Context, request CreateReleaseDeploymentRequestObject) (CreateReleaseDeploymentResponseObject, error)
 
 	// (DELETE /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/source)
 	ClearAppSource(ctx context.Context, request ClearAppSourceRequestObject) (ClearAppSourceResponseObject, error)
@@ -7292,6 +8509,188 @@ func (sh *strictHandler) UpdateApp(w http.ResponseWriter, r *http.Request, works
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateAppResponseObject); ok {
 		if err := validResponse.VisitUpdateAppResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListAppBuilds operation middleware
+func (sh *strictHandler) ListAppBuilds(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, params ListAppBuildsParams) {
+	var request ListAppBuildsRequestObject
+
+	request.WorkspaceId = workspaceId
+	request.ProjectId = projectId
+	request.AppId = appId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListAppBuilds(ctx, request.(ListAppBuildsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListAppBuilds")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListAppBuildsResponseObject); ok {
+		if err := validResponse.VisitListAppBuildsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateAppBuild operation middleware
+func (sh *strictHandler) CreateAppBuild(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, params CreateAppBuildParams) {
+	var request CreateAppBuildRequestObject
+
+	request.WorkspaceId = workspaceId
+	request.ProjectId = projectId
+	request.AppId = appId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateAppBuild(ctx, request.(CreateAppBuildRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateAppBuild")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateAppBuildResponseObject); ok {
+		if err := validResponse.VisitCreateAppBuildResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAppBuild operation middleware
+func (sh *strictHandler) GetAppBuild(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, buildId BuildId) {
+	var request GetAppBuildRequestObject
+
+	request.WorkspaceId = workspaceId
+	request.ProjectId = projectId
+	request.AppId = appId
+	request.BuildId = buildId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAppBuild(ctx, request.(GetAppBuildRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAppBuild")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAppBuildResponseObject); ok {
+		if err := validResponse.VisitGetAppBuildResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListAppBuildLogs operation middleware
+func (sh *strictHandler) ListAppBuildLogs(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, buildId BuildId) {
+	var request ListAppBuildLogsRequestObject
+
+	request.WorkspaceId = workspaceId
+	request.ProjectId = projectId
+	request.AppId = appId
+	request.BuildId = buildId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListAppBuildLogs(ctx, request.(ListAppBuildLogsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListAppBuildLogs")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListAppBuildLogsResponseObject); ok {
+		if err := validResponse.VisitListAppBuildLogsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListAppReleases operation middleware
+func (sh *strictHandler) ListAppReleases(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, params ListAppReleasesParams) {
+	var request ListAppReleasesRequestObject
+
+	request.WorkspaceId = workspaceId
+	request.ProjectId = projectId
+	request.AppId = appId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListAppReleases(ctx, request.(ListAppReleasesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListAppReleases")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListAppReleasesResponseObject); ok {
+		if err := validResponse.VisitListAppReleasesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateReleaseDeployment operation middleware
+func (sh *strictHandler) CreateReleaseDeployment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, releaseId ReleaseId, params CreateReleaseDeploymentParams) {
+	var request CreateReleaseDeploymentRequestObject
+
+	request.WorkspaceId = workspaceId
+	request.ProjectId = projectId
+	request.AppId = appId
+	request.ReleaseId = releaseId
+	request.Params = params
+
+	var body CreateReleaseDeploymentJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateReleaseDeployment(ctx, request.(CreateReleaseDeploymentRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateReleaseDeployment")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateReleaseDeploymentResponseObject); ok {
+		if err := validResponse.VisitCreateReleaseDeploymentResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

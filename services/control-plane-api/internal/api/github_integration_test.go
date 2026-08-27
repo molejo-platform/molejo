@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -72,6 +73,7 @@ func TestGitHubConnectionRequiresOwnerBrowserStateAndUserInstallationAccess(t *t
 type fakeGitHubService struct {
 	installation githubapp.Installation
 	userAllowed  bool
+	commitSHA    string
 }
 
 func (f *fakeGitHubService) InstallationURL(state string) string {
@@ -92,6 +94,17 @@ func (f *fakeGitHubService) UserCanAccessInstallation(context.Context, string, i
 
 func (f *fakeGitHubService) Repositories(context.Context, int64) ([]domain.GitHubRepository, error) {
 	return []domain.GitHubRepository{{ID: "99", Name: "platform", FullName: "molejo/platform", DefaultBranch: "main"}}, nil
+}
+
+func (f *fakeGitHubService) ResolveCommit(context.Context, int64, int64, string) (string, error) {
+	if f.commitSHA != "" {
+		return f.commitSHA, nil
+	}
+	return "0123456789abcdef0123456789abcdef01234567", nil
+}
+
+func (f *fakeGitHubService) Archive(context.Context, int64, int64, string, io.Writer) error {
+	return nil
 }
 
 func (f *fakeGitHubService) DeleteInstallation(context.Context, int64) error { return nil }

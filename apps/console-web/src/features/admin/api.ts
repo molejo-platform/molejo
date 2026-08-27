@@ -1,5 +1,5 @@
-import { request } from "../../shared/api/http-client";
-import type { App, Environment, GitHubInstallation, GitHubRepository, GitHubSource, GitHubSourceInput, HierarchyInput, Project } from "../../shared/api/types";
+import { createIdempotencyKey, request } from "../../shared/api/http-client";
+import type { App, Build, BuildLog, Environment, GitHubInstallation, GitHubRepository, GitHubSource, GitHubSourceInput, HierarchyInput, Project, Release } from "../../shared/api/types";
 
 type ResourceList<T> = { items: T[]; nextCursor: string | null };
 
@@ -87,4 +87,23 @@ export function setAppSource(workspaceId: string, projectId: string, appId: stri
 
 export function clearAppSource(workspaceId: string, projectId: string, appId: string) {
   return request<void>(appSourceBase(workspaceId, projectId, appId), { method: "DELETE" });
+}
+
+const appBuildBase = (workspaceId: string, projectId: string, appId: string) => `${appBase(workspaceId, projectId)}/${encodeURIComponent(appId)}/builds`;
+
+export function listAppBuilds(workspaceId: string, projectId: string, appId: string) {
+  return request<ResourceList<Build>>(appBuildBase(workspaceId, projectId, appId));
+}
+
+export function createAppBuild(workspaceId: string, projectId: string, appId: string) {
+  return request<Build>(appBuildBase(workspaceId, projectId, appId), { method: "POST", headers: { "Idempotency-Key": createIdempotencyKey() } });
+}
+
+export function listAppBuildLogs(workspaceId: string, projectId: string, appId: string, buildId: string) {
+  return request<{ items: BuildLog[] }>(`${appBuildBase(workspaceId, projectId, appId)}/${encodeURIComponent(buildId)}/logs`);
+}
+
+export function listAppReleases(workspaceId: string, projectId: string, appId: string) {
+  const path = `${appBase(workspaceId, projectId)}/${encodeURIComponent(appId)}/releases`;
+  return request<ResourceList<Release>>(path);
 }

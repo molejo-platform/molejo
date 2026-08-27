@@ -125,7 +125,7 @@ func (s *Store) DeleteGitHubInstallation(ctx context.Context, workspaceID int64,
 
 func (s *Store) GitHubInstallationInUse(ctx context.Context, installationID int64) (bool, error) {
 	var inUse bool
-	err := s.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM app_github_sources WHERE github_installation_id=$1)`, installationID).Scan(&inUse)
+	err := s.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM app_github_sources WHERE github_installation_id=$1) OR EXISTS(SELECT 1 FROM builds WHERE github_installation_id=$1 AND status IN ('Pending','Running'))`, installationID).Scan(&inUse)
 	return inUse, err
 }
 

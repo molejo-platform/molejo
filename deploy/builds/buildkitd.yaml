@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: buildkitd
+  namespace: molejo-builds
+  labels:
+    app.kubernetes.io/name: buildkitd
+    app.kubernetes.io/part-of: molejo-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: buildkitd
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: buildkitd
+        app.kubernetes.io/part-of: molejo-platform
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 1000
+      nodeSelector:
+        kubernetes.io/arch: amd64
+        fruto.cleidsonoliveira.dev/role: runtime
+      containers:
+        - name: buildkitd
+          image: moby/buildkit:v0.32.2-rootless@sha256:504731e577c20559c00f968f33219f30115e70be29ab96728d1d06e963fc494b
+          args:
+            - --addr
+            - unix:///run/user/1000/buildkit/buildkitd.sock
+            - --addr
+            - tcp://0.0.0.0:1234
+            - --tlscacert
+            - /var/run/secrets/molejo/buildkit/ca.pem
+            - --tlscert
+            - /var/run/secrets/molejo/buildkit/server-cert.pem
+            - --tlskey
+            - /var/run/secrets/molejo/buildkit/server-key.pem
+            - --oci-worker-no-process-sandbox
+          ports:
+            - name: grpc-tls
+              containerPort: 1234
+              protocol: TCP
+          readinessProbe:
+            exec: { command: [buildctl, debug, workers] }
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          livenessProbe:
+            exec: { command: [buildctl, debug, workers] }
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+            requests: { cpu: 500m, memory: 512Mi, ephemeral-storage: 1Gi }
+            limits: { cpu: "2", memory: 2Gi, ephemeral-storage: 10Gi }
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            seccompProfile: { type: Unconfined }
+            appArmorProfile: { type: Unconfined }
+          volumeMounts:
+            - name: state
+              mountPath: /home/user/.local/share/buildkit
+            - name: tls
+              mountPath: /var/run/secrets/molejo/buildkit
+              readOnly: true
+      volumes:
+        - name: state
+          emptyDir: { sizeLimit: 10Gi }
+        - name: tls
+          secret:
+            secretName: molejo-buildkit-tls
+            defaultMode: 0440
+            items:
+              - { key: ca.pem, path: ca.pem }
+              - { key: server-cert.pem, path: server-cert.pem }
+              - { key: server-key.pem, path: server-key.pem }

@@ -22,8 +22,11 @@ real evidence, and only then extended.
 The repository now contains an executable vertical slice: a pre-alpha product
 API and Console, an `AppDeployment` contract, a Kubernetes operator, a private
 ClusterIP Service, optional publication through HTTPRoute and a shared HTTPS
-Gateway, and reproducible integration and end-to-end tests. It does not yet
-provide external DNS automation or production-ready workload management.
+Gateway, GitHub App repository sources, exact-commit Builds, immutable
+digest-pinned Releases, and reproducible integration and end-to-end tests. The
+first build contract accepts a root `Dockerfile` for `linux/amd64` through a
+separate rootless BuildKit service. It does not yet provide external DNS
+automation or production-ready workload and build isolation.
 
 ## Product Model
 
@@ -119,7 +122,7 @@ to `fruto-lab`. It deploys private-registry images by digest and leaves
 The [platform operator runbook](operations/platform-operator.md) documents its
 state contract, diagnostic workflow, protected metrics, and optional tracing.
 The [control plane runbook](operations/control-plane.md) documents local TLS and
-the authorized Phase 7 k3s release and recovery workflow.
+the authorized Phase 7 and Phase 8 k3s release, build, and recovery workflows.
 
 ## Documentation
 

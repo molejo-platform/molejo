@@ -125,6 +125,7 @@ export FRUTO_EXPECTED_KUBE_SERVER='<approved-kube-api-url>'
 export FRUTO_EXPECTED_CLUSTER_UID='<approved-kube-system-uid>'
 export FRUTO_TRUSTED_PROXY_CIDR='<approved-pod-cidr>'
 export FRUTO_TESTKIT_IMAGE=ghcr.io/molejo-platform/testkit@sha256:1b5a36a776cc16dd3fa728c2269109ca45fca2a4af622b3a166e4e578b9cdb08
+export MOLEJO_BUILD_IMAGE_REPOSITORY='<registry>/<prefixo-de-repositorio>'
 
 just ci
 just control-plane-build-release
@@ -168,3 +169,67 @@ A NetworkPolicy do repositório é um exemplo incompleto e não instalado. O egr
 para PostgreSQL não restringe destino porque a instalação portátil ainda não
 possui um contrato de destino do banco. Não a instale como está: primeiro defina
 o destino do banco e o CNI e depois valide a política resultante.
+
+## Build plane da Fase 8
+
+Um owner inicia um Build para um App com fonte GitHub conectada. A API registra o
+commit exato da branch padrão antes do enfileiramento. O worker aceita somente um
+`Dockerfile` na raiz, constrói `linux/amd64`, publica uma tag com o SHA do commit e
+promove uma Release somente após registrar o digest OCI. Logs são limitados e
+sanitizados. Um Build com falha nunca cria Release.
+
+O build plane é instalado separadamente em `molejo-builds`. Seu daemon BuildKit
+é rootless e acessível apenas pelo worker com TLS mútuo. O modo rootless upstream
+para Kubernetes exige seccomp/AppArmor unconfined e
+`--oci-worker-no-process-sandbox`; esta é uma fronteira pre-alpha explícita, não
+uma declaração de isolamento de produção. CPU, memória, disco temporário,
+concorrência de um build e timeout de 15 minutos limitam a primeira implementação.
+Os dois Pods selecionam o papel de node `runtime` existente no laboratório e
+`amd64`; isso mantém builds não confiáveis fora dos nodes de control plane e
+dados, mas ainda compartilha um node com workloads gerenciados. Egress HTTP/HTTPS
+público é permitido para dependências do Dockerfile, enquanto faixas privadas,
+link-local e do cluster permanecem negadas, exceto pelos caminhos explícitos de
+DNS, PostgreSQL e BuildKit.
+
+Em checkout limpo e commitado, prepare um diretório externo de release e execute:
+
+```bash
+export FRUTO_RELEASE_DIR=/private/tmp/molejo-control-plane-release
+export FRUTO_EXPECTED_CLUSTER_UID='<uid-aprovado-do-kube-system>'
+export FRUTO_TRUSTED_PROXY_CIDR='<cidr-aprovado-dos-pods>'
+export FRUTO_TESTKIT_IMAGE='<referencia-aprovada-do-testkit-por-digest>'
+export MOLEJO_BUILD_IMAGE_REPOSITORY='<registry>/<prefixo-de-repositorio>'
+
+just ci
+just control-plane-build-release
+just builds-build-release
+source "$FRUTO_RELEASE_DIR/images.env"
+source "$FRUTO_RELEASE_DIR/builds.env"
+export FRUTO_RELEASE_OUTPUT="$FRUTO_RELEASE_DIR/control-plane.yaml"
+export FRUTO_BUILDS_RELEASE_OUTPUT="$FRUTO_RELEASE_DIR/builds.yaml"
+just control-plane-render-release
+just builds-render-release
+
+export GITHUB_APP_ID='<github-app-id>'
+export GITHUB_APP_PRIVATE_KEY_FILE='<pem-protegido-do-github-app>'
+just control-plane-prepare-k3s
+just builds-prepare-k3s
+just control-plane-apply-k3s
+just builds-apply-k3s
+```
+
+O comando de preparação sempre usa o contexto Kubernetes `fruto-lab`, deriva uma
+URL cross-namespace do Secret existente do banco do control plane, cria uma
+CA privada e certificados de servidor/cliente fora do Git, monta a chave do
+GitHub App somente no worker e copia a credencial existente do registry para
+`molejo-builds`. A URL do banco precisa usar o Service cross-namespace
+`postgres.fruto-control-plane.svc`. `MOLEJO_BUILD_DATABASE_URL_FILE` pode
+sobrescrever essa origem com um arquivo protegido. Renderização, preparação dos Secrets e apply
+são gates separados; não execute os comandos mutáveis sem autorização explícita
+para seus recursos exatos.
+
+O aceite exige criar um Build pelo Console, observar SHA registrado e logs
+limitados, ver uma Release pinada por digest somente após sucesso e criar um
+deployment a partir dela. Comprove que um Dockerfile com falha não cria Release
+e que uma atualização não substitui a imagem controlada pela Release. Registre
+somente IDs públicos, SHAs, digests, estados e logs sanitizados.

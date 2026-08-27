@@ -171,6 +171,18 @@ control-plane-apply-k3s:
 control-plane-accept-k3s:
     bash test/e2e/accept-control-plane-k3s.sh
 
+builds-build-release:
+    bash test/e2e/build-build-worker-release.sh
+
+builds-render-release:
+    bash test/e2e/render-builds-release.sh
+
+builds-prepare-k3s:
+    bash test/e2e/prepare-builds-k3s.sh
+
+builds-apply-k3s:
+    bash test/e2e/apply-builds-k3s.sh
+
 verify: generate fmt-check lint test control-plane-verify frontend-check frontend-test
 
 ci:
