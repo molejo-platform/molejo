@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 )
@@ -27,6 +28,7 @@ func ExtractArchive(source io.Reader, destination string) error {
 
 	tarReader := tar.NewReader(gzipReader)
 	var extracted int64
+	archiveRoot := ""
 	entries := 0
 	for {
 		header, nextErr := tarReader.Next()
@@ -40,16 +42,35 @@ func ExtractArchive(source io.Reader, destination string) error {
 		if entries > maxArchiveEntries {
 			return errors.New("source archive contains too many entries")
 		}
-		_, relative, ok := strings.Cut(strings.TrimPrefix(header.Name, "./"), "/")
-		if !ok || relative == "" {
-			continue
+		name := strings.TrimPrefix(header.Name, "./")
+		if header.Typeflag == tar.TypeDir {
+			name = strings.TrimSuffix(name, "/")
 		}
-		if filepath.IsAbs(relative) || relative != filepath.Clean(relative) || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		if name == "" || path.IsAbs(name) || name != path.Clean(name) || name == ".." || strings.HasPrefix(name, "../") {
 			return errors.New("source archive contains an unsafe path")
 		}
-		target := filepath.Join(destination, relative)
-		root := filepath.Clean(destination) + string(filepath.Separator)
-		if !strings.HasPrefix(filepath.Clean(target)+string(filepath.Separator), root) {
+		root, relative, nested := strings.Cut(name, "/")
+		if root == "" || root == "." || root == ".." {
+			return errors.New("source archive contains an unsafe path")
+		}
+		if archiveRoot == "" {
+			archiveRoot = root
+		} else if root != archiveRoot {
+			return errors.New("source archive contains multiple roots")
+		}
+		if !nested {
+			if header.Typeflag == tar.TypeDir {
+				continue
+			}
+			return errors.New("source archive contains an unsafe path")
+		}
+		localRelative := filepath.FromSlash(relative)
+		if filepath.IsAbs(localRelative) || filepath.VolumeName(localRelative) != "" {
+			return errors.New("source archive contains an unsafe path")
+		}
+		target := filepath.Join(destination, localRelative)
+		contained, relErr := filepath.Rel(destination, target)
+		if relErr != nil || contained == ".." || strings.HasPrefix(contained, ".."+string(filepath.Separator)) {
 			return errors.New("source archive path escapes the build context")
 		}
 		switch header.Typeflag {

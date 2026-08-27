@@ -25,6 +25,12 @@ func TestExtractArchiveRequiresRootDockerfileAndRejectsTraversal(t *testing.T) {
 		}
 	})
 
+	t.Run("GitHub directory entries", func(t *testing.T) {
+		if err := ExtractArchive(bytes.NewReader(testGitHubArchive(t)), t.TempDir()); err != nil {
+			t.Fatal(err)
+		}
+	})
+
 	t.Run("missing root Dockerfile", func(t *testing.T) {
 		archive := testArchive(t, map[string]string{"repository-sha/deploy/Dockerfile": "FROM scratch\n"})
 		if err := ExtractArchive(bytes.NewReader(archive), t.TempDir()); err == nil {
@@ -38,6 +44,15 @@ func TestExtractArchiveRequiresRootDockerfileAndRejectsTraversal(t *testing.T) {
 			t.Fatal("archive traversal was accepted")
 		}
 	})
+
+	for _, name := range []string{"/Dockerfile", "../Dockerfile"} {
+		t.Run("unsafe archive root "+name, func(t *testing.T) {
+			archive := testArchive(t, map[string]string{name: "FROM scratch\n"})
+			if err := ExtractArchive(bytes.NewReader(archive), t.TempDir()); err == nil {
+				t.Fatalf("unsafe archive root %q was accepted", name)
+			}
+		})
+	}
 
 	t.Run("symbolic link", func(t *testing.T) {
 		var compressed bytes.Buffer
@@ -69,6 +84,39 @@ func testArchive(t *testing.T, files map[string]string) []byte {
 		}
 		if _, err := tarWriter.Write([]byte(contents)); err != nil {
 			t.Fatal(err)
+		}
+	}
+	if err := tarWriter.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gzipWriter.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return compressed.Bytes()
+}
+
+func testGitHubArchive(t *testing.T) []byte {
+	t.Helper()
+	var compressed bytes.Buffer
+	gzipWriter := gzip.NewWriter(&compressed)
+	tarWriter := tar.NewWriter(gzipWriter)
+	entries := []struct {
+		header   tar.Header
+		contents string
+	}{
+		{header: tar.Header{Name: "repository-sha/", Mode: 0o755, Typeflag: tar.TypeDir}},
+		{header: tar.Header{Name: "repository-sha/src/", Mode: 0o755, Typeflag: tar.TypeDir}},
+		{header: tar.Header{Name: "repository-sha/Dockerfile", Mode: 0o644, Size: int64(len("FROM scratch\n")), Typeflag: tar.TypeReg}, contents: "FROM scratch\n"},
+		{header: tar.Header{Name: "repository-sha/src/main.go", Mode: 0o644, Size: int64(len("package main\n")), Typeflag: tar.TypeReg}, contents: "package main\n"},
+	}
+	for _, entry := range entries {
+		if err := tarWriter.WriteHeader(&entry.header); err != nil {
+			t.Fatal(err)
+		}
+		if entry.contents != "" {
+			if _, err := tarWriter.Write([]byte(entry.contents)); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 	if err := tarWriter.Close(); err != nil {

@@ -33,6 +33,20 @@ func TestWorkerDoesNotPromoteAReleaseWhenBuildKitFailsAndSanitizesLogs(t *testin
 	}
 }
 
+func TestWorkerBuildsGitHubArchiveWithDirectories(t *testing.T) {
+	queue := &fakeBuildQueue{build: domain.Build{ID: 1, PublicID: "bld-abcdefghijklmnopqrst", AppPublicID: "app-abcdefghijklmnopqrst", InstallationExternalID: 42, RepositoryID: 99, CommitSHA: "0123456789abcdef0123456789abcdef01234567", Status: domain.BuildRunning, Attempts: 1, WorkerID: "worker", FencingToken: 1}}
+	worker := Worker{
+		Queue:   queue,
+		Source:  fakeArchiveSource{contents: testGitHubArchive(t)},
+		Builder: fakeBuilder{},
+		Timeout: time.Minute,
+	}
+	worked, err := worker.RunOnce(context.Background(), "worker")
+	if err != nil || !worked || queue.failed || !queue.completed {
+		t.Fatalf("worked=%v err=%v failed=%v completed=%v", worked, err, queue.failed, queue.completed)
+	}
+}
+
 func TestSanitizeLogBoundsUntrustedOutput(t *testing.T) {
 	value := SanitizeLog(strings.Repeat("x", maxPersistedLogBytes+100), []string{"not-present"})
 	if len(value) > maxPersistedLogBytes || !strings.HasSuffix(value, "[truncated]") {
