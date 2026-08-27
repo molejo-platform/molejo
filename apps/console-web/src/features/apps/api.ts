@@ -1,5 +1,5 @@
 import { createIdempotencyKey, request } from "../../shared/api/http-client";
-import type { Build, BuildInput, BuildLog, GitHubSource, GitHubSourceInput, Release } from "../../shared/api/types";
+import type { Build, BuildInput, BuildLog, DeploymentMutationAccepted, GitHubSource, GitHubSourceInput, Release, ReleaseDeploymentIntent } from "../../shared/api/types";
 
 type ResourceList<T> = { items: T[]; nextCursor: string | null };
 const appBase = (workspaceId: string, projectId: string, appId: string) => `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/projects/${encodeURIComponent(projectId)}/apps/${encodeURIComponent(appId)}`;
@@ -14,3 +14,4 @@ export const createAppBuild = (workspaceId: string, projectId: string, appId: st
 export const getAppBuild = (workspaceId: string, projectId: string, appId: string, buildId: string) => request<Build>(`${buildBase(workspaceId, projectId, appId)}/${encodeURIComponent(buildId)}`);
 export const listAppBuildLogs = (workspaceId: string, projectId: string, appId: string, buildId: string) => request<{ items: BuildLog[] }>(`${buildBase(workspaceId, projectId, appId)}/${encodeURIComponent(buildId)}/logs`);
 export const listAppReleases = (workspaceId: string, projectId: string, appId: string) => request<ResourceList<Release>>(`${appBase(workspaceId, projectId, appId)}/releases`);
+export const createReleaseDeployment = (workspaceId: string, projectId: string, appId: string, releaseId: string, input: ReleaseDeploymentIntent) => request<DeploymentMutationAccepted>(`${appBase(workspaceId, projectId, appId)}/releases/${encodeURIComponent(releaseId)}/deployments`, { method: "POST", headers: { "Idempotency-Key": createIdempotencyKey() }, body: JSON.stringify(input) });
