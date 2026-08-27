@@ -393,7 +393,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/releases/{releaseId}/deployments": {
+    "/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments": {
         parameters: {
             query?: never;
             header?: never;
@@ -401,117 +401,74 @@ export interface paths {
                 workspaceId: components["parameters"]["WorkspaceId"];
                 projectId: components["parameters"]["ProjectId"];
                 appId: components["parameters"]["AppId"];
-                releaseId: components["parameters"]["ReleaseId"];
             };
             cookie?: never;
         };
-        get?: never;
+        get: operations["listAppEnvironments"];
         put?: never;
-        post: operations["createReleaseDeployment"];
+        post: operations["createAppEnvironment"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspaceId}/deployments": {
+    "/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}": {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 workspaceId: components["parameters"]["WorkspaceId"];
+                projectId: components["parameters"]["ProjectId"];
+                appId: components["parameters"]["AppId"];
+                appEnvironmentId: components["parameters"]["AppEnvironmentId"];
             };
             cookie?: never;
         };
-        get: operations["listWorkspaceDeployments"];
-        put?: never;
-        post: operations["createWorkspaceDeployment"];
-        delete?: never;
+        get: operations["getAppEnvironment"];
+        put: operations["updateAppEnvironment"];
+        post?: never;
+        delete: operations["deleteAppEnvironment"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspaceId}/deployments/{deploymentId}": {
+    "/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/deployments": {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 workspaceId: components["parameters"]["WorkspaceId"];
-                deploymentId: string;
+                projectId: components["parameters"]["ProjectId"];
+                appId: components["parameters"]["AppId"];
+                appEnvironmentId: components["parameters"]["AppEnvironmentId"];
             };
             cookie?: never;
         };
-        get: operations["getWorkspaceDeployment"];
-        put: operations["updateWorkspaceDeployment"];
-        post?: never;
-        delete: operations["deleteWorkspaceDeployment"];
+        get: operations["listAppEnvironmentDeployments"];
+        put?: never;
+        post: operations["createAppEnvironmentDeployment"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspaceId}/deployments/{deploymentId}/operations": {
+    "/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/deployments/{deploymentId}": {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 workspaceId: components["parameters"]["WorkspaceId"];
-                deploymentId: string;
+                projectId: components["parameters"]["ProjectId"];
+                appId: components["parameters"]["AppId"];
+                appEnvironmentId: components["parameters"]["AppEnvironmentId"];
+                deploymentId: components["parameters"]["DeploymentId"];
             };
             cookie?: never;
         };
-        get: operations["listWorkspaceDeploymentOperations"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/deployments": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["listDeployments"];
-        put?: never;
-        post: operations["createDeployment"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/deployments/{deploymentId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                deploymentId: string;
-            };
-            cookie?: never;
-        };
-        get: operations["getDeployment"];
-        put: operations["updateDeployment"];
-        post?: never;
-        delete: operations["deleteDeployment"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/deployments/{deploymentId}/operations": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["listDeploymentOperations"];
+        get: operations["getAppEnvironmentDeployment"];
         put?: never;
         post?: never;
         delete?: never;
@@ -620,22 +577,21 @@ export interface components {
         GitHubSourceInput: {
             installationId: string;
             repositoryId: string;
-            primaryBranch: string;
         };
         GitHubSource: {
             installationId: string;
             repository: components["schemas"]["GitHubRepository"];
-            primaryBranch: string;
             /** Format: date-time */
             connectedAt: string;
         };
         BuildInput: {
-            branch?: string;
+            appEnvironmentId: string;
         };
         Build: {
             id: string;
             projectId: string;
             appId: string;
+            appEnvironmentId: string;
             repository: string;
             branch: string;
             commitSha: string;
@@ -670,63 +626,63 @@ export interface components {
             /** Format: date-time */
             createdAt: string;
         };
-        ReleaseDeploymentIntent: {
+        Variable: {
             name: string;
+            value: string;
+        };
+        RuntimeConfiguration: {
+            /** @default 1 */
+            replicas: number;
+            port: number;
+            resources: {
+                requests: components["schemas"]["ResourceValues"];
+                limits: components["schemas"]["ResourceValues"];
+            };
+            probes: {
+                liveness: components["schemas"]["Probe"];
+                readiness: components["schemas"]["Probe"];
+            };
+            /**
+             * @default Private
+             * @enum {string}
+             */
+            exposure: "Private" | "Public";
+            slug?: string;
+            variables: components["schemas"]["Variable"][];
+        };
+        AppEnvironmentInput: {
+            branch: string;
+            configuration: components["schemas"]["RuntimeConfiguration"];
+        };
+        AppEnvironmentCreateInput: {
             environmentId: string;
-            /** @default 1 */
-            replicas: number;
-            port: number;
-            resources: {
-                requests: components["schemas"]["ResourceValues"];
-                limits: components["schemas"]["ResourceValues"];
-            };
-            probes: {
-                liveness: components["schemas"]["Probe"];
-                readiness: components["schemas"]["Probe"];
-            };
-            /**
-             * @default Private
-             * @enum {string}
-             */
-            exposure: "Private" | "Public";
-            slug?: string;
-        } & ({
+            branch: string;
+            configuration: components["schemas"]["RuntimeConfiguration"];
+        };
+        AppEnvironment: {
+            id: string;
+            projectId: string;
+            appId: string;
+            environmentId: string;
+            environmentName: string;
+            branch: string;
+            configuration: components["schemas"]["RuntimeConfiguration"];
+            configurationVersion: number;
+            version: number;
+            desiredDeploymentId?: string;
+            currentDeploymentId?: string;
+            currentReleaseId?: string;
             /** @enum {string} */
-            exposure: "Public";
-        } | {
-            /** @enum {string} */
-            exposure?: "Private";
-        });
-        DeploymentIntent: {
-            name: string;
-            appId?: string;
-            environmentId?: string;
-            image: string;
-            /** @default 1 */
-            replicas: number;
-            port: number;
-            resources: {
-                requests: components["schemas"]["ResourceValues"];
-                limits: components["schemas"]["ResourceValues"];
-            };
-            probes: {
-                liveness: components["schemas"]["Probe"];
-                readiness: components["schemas"]["Probe"];
-            };
-            /**
-             * @default Private
-             * @enum {string}
-             */
-            exposure: "Private" | "Public";
-            slug?: string;
-        } & ({
-            /** @enum {string} */
-            exposure: "Public";
-        } | {
-            /** @enum {string} */
-            exposure?: "Private";
-        });
-        ScopedDeploymentIntent: components["schemas"]["DeploymentIntent"] & Record<string, never>;
+            state: "Pending" | "Progressing" | "Ready" | "Degraded" | "Unknown";
+            message?: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        DeploymentInput: {
+            releaseId: string;
+        };
         ResourceValues: {
             cpuMillis: number;
             memoryMiB: number;
@@ -736,15 +692,12 @@ export interface components {
         };
         Deployment: {
             id: string;
-            projectId?: string;
-            appId?: string;
-            environmentId?: string;
-            releaseId?: string;
-            intent: components["schemas"]["DeploymentIntent"];
-            version: number;
-            observedVersion?: number;
+            appEnvironmentId: string;
+            releaseId: string;
+            configurationVersion: number;
+            configuration: components["schemas"]["RuntimeConfiguration"];
             /** @enum {string} */
-            state: "Pending" | "Progressing" | "Ready" | "Degraded" | "Unknown";
+            state: "Pending" | "Progressing" | "Ready" | "Degraded";
             message?: string;
             /** Format: date-time */
             createdAt: string;
@@ -753,11 +706,12 @@ export interface components {
         };
         Operation: {
             id: string;
+            appEnvironmentId?: string;
             deploymentId?: string;
             /** @enum {string} */
-            kind: "CreateDeployment" | "UpdateDeployment" | "DeleteDeployment" | "EnsureWorkspace";
+            kind: "ApplyDeployment" | "DeleteAppEnvironment" | "EnsureWorkspace";
             /** @enum {string} */
-            status: "Pending" | "Running" | "Succeeded" | "Failed" | "Superseded";
+            status: "Pending" | "Running" | "Succeeded" | "Failed";
             desiredVersion: number;
             attempts: number;
             errorCode?: string;
@@ -849,6 +803,8 @@ export interface components {
         ProjectId: string;
         EnvironmentId: string;
         AppId: string;
+        AppEnvironmentId: string;
+        DeploymentId: string;
         GitHubInstallationId: string;
         BuildId: string;
         ReleaseId: string;
@@ -1779,7 +1735,7 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: {
+        requestBody: {
             content: {
                 "application/json": components["schemas"]["BuildInput"];
             };
@@ -1885,7 +1841,194 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
-    createReleaseDeployment: {
+    listAppEnvironments: {
+        parameters: {
+            query?: {
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                projectId: components["parameters"]["ProjectId"];
+                appId: components["parameters"]["AppId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Configured Environments for the App */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["AppEnvironment"][];
+                        nextCursor?: string | null;
+                    };
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createAppEnvironment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                projectId: components["parameters"]["ProjectId"];
+                appId: components["parameters"]["AppId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AppEnvironmentCreateInput"];
+            };
+        };
+        responses: {
+            /** @description App Environment created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppEnvironment"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getAppEnvironment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                projectId: components["parameters"]["ProjectId"];
+                appId: components["parameters"]["AppId"];
+                appEnvironmentId: components["parameters"]["AppEnvironmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description App Environment */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppEnvironment"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateAppEnvironment: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                projectId: components["parameters"]["ProjectId"];
+                appId: components["parameters"]["AppId"];
+                appEnvironmentId: components["parameters"]["AppEnvironmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AppEnvironmentInput"];
+            };
+        };
+        responses: {
+            /** @description App Environment updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppEnvironment"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    deleteAppEnvironment: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                projectId: components["parameters"]["ProjectId"];
+                appId: components["parameters"]["AppId"];
+                appEnvironmentId: components["parameters"]["AppEnvironmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Runtime removal accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Operation"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listAppEnvironmentDeployments: {
+        parameters: {
+            query?: {
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                projectId: components["parameters"]["ProjectId"];
+                appId: components["parameters"]["AppId"];
+                appEnvironmentId: components["parameters"]["AppEnvironmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Immutable Deployment history */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["Deployment"][];
+                        nextCursor?: string | null;
+                    };
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createAppEnvironmentDeployment: {
         parameters: {
             query?: never;
             header: {
@@ -1895,13 +2038,13 @@ export interface operations {
                 workspaceId: components["parameters"]["WorkspaceId"];
                 projectId: components["parameters"]["ProjectId"];
                 appId: components["parameters"]["AppId"];
-                releaseId: components["parameters"]["ReleaseId"];
+                appEnvironmentId: components["parameters"]["AppEnvironmentId"];
             };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ReleaseDeploymentIntent"];
+                "application/json": components["schemas"]["DeploymentInput"];
             };
         };
         responses: {
@@ -1912,72 +2055,22 @@ export interface operations {
             409: components["responses"]["Conflict"];
         };
     };
-    listWorkspaceDeployments: {
-        parameters: {
-            query?: {
-                cursor?: components["parameters"]["Cursor"];
-                limit?: components["parameters"]["Limit"];
-            };
-            header?: never;
-            path: {
-                workspaceId: components["parameters"]["WorkspaceId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Deployments in the authorized workspace */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        items: components["schemas"]["Deployment"][];
-                        nextCursor?: string | null;
-                    };
-                };
-            };
-            404: components["responses"]["NotFound"];
-        };
-    };
-    createWorkspaceDeployment: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-            };
-            path: {
-                workspaceId: components["parameters"]["WorkspaceId"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ScopedDeploymentIntent"];
-            };
-        };
-        responses: {
-            202: components["responses"]["MutationAccepted"];
-            400: components["responses"]["BadRequest"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-        };
-    };
-    getWorkspaceDeployment: {
+    getAppEnvironmentDeployment: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 workspaceId: components["parameters"]["WorkspaceId"];
-                deploymentId: string;
+                projectId: components["parameters"]["ProjectId"];
+                appId: components["parameters"]["AppId"];
+                appEnvironmentId: components["parameters"]["AppEnvironmentId"];
+                deploymentId: components["parameters"]["DeploymentId"];
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Deployment with observed runtime state */
+            /** @description Immutable Deployment */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1987,211 +2080,6 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
-        };
-    };
-    updateWorkspaceDeployment: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-                "If-Match": components["parameters"]["IfMatch"];
-            };
-            path: {
-                workspaceId: components["parameters"]["WorkspaceId"];
-                deploymentId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ScopedDeploymentIntent"];
-            };
-        };
-        responses: {
-            202: components["responses"]["MutationAccepted"];
-            400: components["responses"]["BadRequest"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-        };
-    };
-    deleteWorkspaceDeployment: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-                "If-Match": components["parameters"]["IfMatch"];
-            };
-            path: {
-                workspaceId: components["parameters"]["WorkspaceId"];
-                deploymentId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            202: components["responses"]["MutationAccepted"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-        };
-    };
-    listWorkspaceDeploymentOperations: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                workspaceId: components["parameters"]["WorkspaceId"];
-                deploymentId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Operation history */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        items: components["schemas"]["Operation"][];
-                    };
-                };
-            };
-            404: components["responses"]["NotFound"];
-        };
-    };
-    listDeployments: {
-        parameters: {
-            query?: {
-                cursor?: string;
-                limit?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Deployments */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        items: components["schemas"]["Deployment"][];
-                        nextCursor?: string | null;
-                    };
-                };
-            };
-        };
-    };
-    createDeployment: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["DeploymentIntent"];
-            };
-        };
-        responses: {
-            202: components["responses"]["MutationAccepted"];
-            400: components["responses"]["BadRequest"];
-            409: components["responses"]["Conflict"];
-        };
-    };
-    getDeployment: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                deploymentId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Deployment with observed runtime state */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Deployment"];
-                };
-            };
-            404: components["responses"]["NotFound"];
-        };
-    };
-    updateDeployment: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-                "If-Match": components["parameters"]["IfMatch"];
-            };
-            path: {
-                deploymentId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["DeploymentIntent"];
-            };
-        };
-        responses: {
-            202: components["responses"]["MutationAccepted"];
-            409: components["responses"]["Conflict"];
-        };
-    };
-    deleteDeployment: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-                "If-Match": components["parameters"]["IfMatch"];
-            };
-            path: {
-                deploymentId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            202: components["responses"]["MutationAccepted"];
-        };
-    };
-    listDeploymentOperations: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                deploymentId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Operation history */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        items?: components["schemas"]["Operation"][];
-                    };
-                };
-            };
         };
     };
     getOperation: {

@@ -32,10 +32,11 @@ Kubernetes API integration tests, container checks, and a disposable Kind
 end-to-end environment.
 
 The pre-alpha control plane also models Workspace/Project/App/Environment,
-GitHub App repository sources, exact-commit Builds, bounded logs, and immutable
-digest-pinned Releases. An owner can build a repository's root `Dockerfile` for
-`linux/amd64` through a separate rootless BuildKit service and create a
-deployment from the promoted Release. The deterministic gate validates the
+durable AppEnvironments, immutable Deployment history, GitHub App repository
+sources, exact-commit Builds, bounded logs, and digest-pinned Releases. An owner
+can build the AppEnvironment branch from a repository root `Dockerfile` for
+`linux/amd64` through a separate rootless BuildKit service and deploy a promoted
+Release to that configured target. The deterministic gate validates the
 contracts and failure behavior; it does not claim that the external builder,
 registry, DNS, or k3s deployment is live.
 

@@ -70,7 +70,7 @@ func TestGitHubConnectionRequiresOwnerBrowserStateAndUserInstallationAccess(t *t
 	}
 }
 
-func TestAppSourceStoresVerifiedPrimaryBranch(t *testing.T) {
+func TestAppSourceStoresOnlyTheVerifiedRepository(t *testing.T) {
 	ctx := context.Background()
 	storage, workspaceID, ownerID, _ := newExecutorIntegrationFixture(t)
 	workspace, err := storage.Workspace(ctx, workspaceID)
@@ -99,7 +99,7 @@ func TestAppSourceStoresVerifiedPrimaryBranch(t *testing.T) {
 	server.GitHub = github
 	owner := createAPISession(t, storage, ownerID, "source-owner-session", "source-owner-csrf")
 	path := "/api/v1/workspaces/" + workspace.PublicID + "/projects/" + project.PublicID + "/apps/" + app.PublicID + "/source"
-	body := `{"installationId":"` + installation.PublicID + `","repositoryId":"99","primaryBranch":"develop"}`
+	body := `{"installationId":"` + installation.PublicID + `","repositoryId":"99"}`
 
 	response := hierarchyRequest(t, server, owner, http.MethodPut, path, body, nil)
 	if response.Code != http.StatusOK {
@@ -107,11 +107,11 @@ func TestAppSourceStoresVerifiedPrimaryBranch(t *testing.T) {
 	}
 	var source domain.GitHubSource
 	decodeResponse(t, response, &source)
-	if source.PrimaryBranch != "develop" || source.Repository.DefaultBranch != "main" {
+	if source.Repository.ID != "99" || source.Repository.DefaultBranch != "main" {
 		t.Fatalf("source=%+v", source)
 	}
-	if len(github.resolvedRefs) != 1 || github.resolvedRefs[0] != "develop" {
-		t.Fatalf("resolved refs=%v", github.resolvedRefs)
+	if len(github.resolvedRefs) != 0 {
+		t.Fatalf("setting a repository unexpectedly resolved branches: %v", github.resolvedRefs)
 	}
 }
 

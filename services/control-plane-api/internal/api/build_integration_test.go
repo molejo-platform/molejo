@@ -10,7 +10,7 @@ import (
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/domain"
 )
 
-func TestBuildAPIResolvesExactCommitAndCreatesDeploymentFromPromotedRelease(t *testing.T) {
+func TestBuildAPIUsesTheAppEnvironmentBranchAndDeploysAReleaseSnapshot(t *testing.T) {
 	ctx := context.Background()
 	storage, workspaceID, ownerID, _ := newExecutorIntegrationFixture(t)
 	workspace, err := storage.Workspace(ctx, workspaceID)
@@ -29,11 +29,15 @@ func TestBuildAPIResolvesExactCommitAndCreatesDeploymentFromPromotedRelease(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
+	target, err := storage.CreateAppEnvironment(ctx, workspaceID, mustAPIID(t, "aev"), project.PublicID, app.PublicID, environment.PublicID, "develop", apiRuntimeConfiguration("api-production"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	installation, err := storage.ConnectGitHubInstallation(ctx, mustAPIID(t, "ghi"), workspaceID, ownerID, 4242, 7, "molejo", "Organization", "selected")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = storage.SetAppGitHubSource(ctx, workspaceID, project.PublicID, app.PublicID, installation.PublicID, domain.GitHubRepository{ID: "99", Name: "platform", FullName: "molejo/platform", DefaultBranch: "main"}, "main"); err != nil {
+	if _, err = storage.SetAppGitHubSource(ctx, workspaceID, project.PublicID, app.PublicID, installation.PublicID, domain.GitHubRepository{ID: "99", Name: "platform", FullName: "molejo/platform", DefaultBranch: "main"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -47,33 +51,25 @@ func TestBuildAPIResolvesExactCommitAndCreatesDeploymentFromPromotedRelease(t *t
 	server.GitHub = &fakeGitHubService{commitSHA: commitSHA}
 	owner := createAPISession(t, storage, ownerID, "build-owner-session", "build-owner-csrf")
 	base := "/api/v1/workspaces/" + workspace.PublicID + "/projects/" + project.PublicID + "/apps/" + app.PublicID
+	body := `{"appEnvironmentId":"` + target.PublicID + `"}`
 
-	response := hierarchyRequest(t, server, owner, http.MethodPost, base+"/builds", `{"branch":"develop"}`, map[string]string{"Idempotency-Key": "build-develop"})
+	response := hierarchyRequest(t, server, owner, http.MethodPost, base+"/builds", body, map[string]string{"Idempotency-Key": "build-target"})
 	if response.Code != http.StatusAccepted {
 		t.Fatalf("create build status=%d body=%s", response.Code, response.Body.String())
 	}
 	var build domain.Build
 	decodeResponse(t, response, &build)
-	if build.SourceBranch != "develop" || build.CommitSHA != commitSHA || build.RepositoryFullName != "molejo/platform" || build.Platform != domain.BuildPlatform {
+	if build.AppEnvironmentPublicID != target.PublicID || build.SourceBranch != "develop" || build.CommitSHA != commitSHA || build.RepositoryFullName != "molejo/platform" {
 		t.Fatalf("build=%+v", build)
 	}
-	if len(server.GitHub.(*fakeGitHubService).resolvedRefs) != 1 || server.GitHub.(*fakeGitHubService).resolvedRefs[0] != "develop" {
-		t.Fatalf("resolved refs=%v", server.GitHub.(*fakeGitHubService).resolvedRefs)
+	if refs := server.GitHub.(*fakeGitHubService).resolvedRefs; len(refs) != 1 || refs[0] != "develop" {
+		t.Fatalf("resolved refs=%v", refs)
 	}
-	response = hierarchyRequest(t, server, owner, http.MethodPost, base+"/builds", `{"branch":"develop"}`, map[string]string{"Idempotency-Key": "build-develop"})
+	response = hierarchyRequest(t, server, owner, http.MethodPost, base+"/builds", body, map[string]string{"Idempotency-Key": "build-target"})
 	var retried domain.Build
 	decodeResponse(t, response, &retried)
-	if response.Code != http.StatusAccepted || retried.PublicID != build.PublicID {
-		t.Fatalf("retry status=%d build=%+v", response.Code, retried)
-	}
-	response = hierarchyRequest(t, server, owner, http.MethodPost, base+"/builds", "", map[string]string{"Idempotency-Key": "build-primary"})
-	var primary domain.Build
-	decodeResponse(t, response, &primary)
-	if response.Code != http.StatusAccepted || primary.SourceBranch != "main" {
-		t.Fatalf("primary status=%d build=%+v", response.Code, primary)
-	}
-	if got := server.GitHub.(*fakeGitHubService).resolvedRefs; len(got) != 2 || got[0] != "develop" || got[1] != "main" {
-		t.Fatalf("resolved refs=%v", got)
+	if response.Code != http.StatusAccepted || retried.PublicID != build.PublicID || len(server.GitHub.(*fakeGitHubService).resolvedRefs) != 1 {
+		t.Fatalf("idempotent retry status=%d build=%+v refs=%v", response.Code, retried, server.GitHub.(*fakeGitHubService).resolvedRefs)
 	}
 
 	claimed, ok, err := storage.ClaimNextBuild(ctx, "integration-builder", time.Minute)
@@ -85,9 +81,7 @@ func TestBuildAPIResolvesExactCommitAndCreatesDeploymentFromPromotedRelease(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	intent := `{"name":"api","environmentId":"` + environment.PublicID + `","replicas":1,"port":8080,"resources":{"requests":{"cpuMillis":50,"memoryMiB":64},"limits":{"cpuMillis":250,"memoryMiB":128}},"probes":{"liveness":{"path":"/healthz"},"readiness":{"path":"/readyz"}},"exposure":"Private"}`
-	response = hierarchyRequest(t, server, owner, http.MethodPost, base+"/releases/"+release.PublicID+"/deployments", intent, map[string]string{"Idempotency-Key": "deploy-release"})
+	response = hierarchyRequest(t, server, owner, http.MethodPost, base+"/environments/"+target.PublicID+"/deployments", `{"releaseId":"`+release.PublicID+`"}`, map[string]string{"Idempotency-Key": "deploy-release"})
 	if response.Code != http.StatusAccepted {
 		t.Fatalf("release deployment status=%d body=%s", response.Code, response.Body.String())
 	}
@@ -95,19 +89,23 @@ func TestBuildAPIResolvesExactCommitAndCreatesDeploymentFromPromotedRelease(t *t
 		Deployment domain.Deployment `json:"deployment"`
 	}
 	decodeResponse(t, response, &accepted)
-	if accepted.Deployment.ReleasePublicID != release.PublicID || accepted.Deployment.Intent.Image != image || accepted.Deployment.AppPublicID != app.PublicID {
+	if accepted.Deployment.ReleasePublicID != release.PublicID || accepted.Deployment.AppEnvironmentPublicID != target.PublicID || accepted.Deployment.Configuration.Slug != "api-production" {
 		t.Fatalf("deployment=%+v", accepted.Deployment)
 	}
+}
 
-	mutated := accepted.Deployment.Intent
-	mutated.Image = "registry.example/molejo/apps/other@sha256:" + strings.Repeat("b", 64)
-	payload, err := domain.CanonicalJSON(mutated)
-	if err != nil {
-		t.Fatal(err)
-	}
-	response = hierarchyRequest(t, server, owner, http.MethodPut, "/api/v1/workspaces/"+workspace.PublicID+"/deployments/"+accepted.Deployment.PublicID, string(payload), map[string]string{"Idempotency-Key": "mutate-release", "If-Match": "1"})
-	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "deployment_release_immutable") {
-		t.Fatalf("release mutation status=%d body=%s", response.Code, response.Body.String())
+func apiRuntimeConfiguration(slug string) domain.RuntimeConfig {
+	return domain.RuntimeConfig{
+		Replicas: 1,
+		Port:     8080,
+		Resources: domain.Resources{
+			Requests: domain.ResourceValues{CPUMillis: 50, MemoryMiB: 64},
+			Limits:   domain.ResourceValues{CPUMillis: 250, MemoryMiB: 128},
+		},
+		Probes:    domain.Probes{Liveness: domain.Probe{Path: "/healthz"}, Readiness: domain.Probe{Path: "/readyz"}},
+		Exposure:  domain.ExposurePrivate,
+		Slug:      slug,
+		Variables: []domain.Variable{{Name: "APP_MODE", Value: "production"}},
 	}
 }
 

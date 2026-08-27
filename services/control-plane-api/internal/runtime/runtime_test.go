@@ -88,6 +88,7 @@ func TestApplyDeploymentKeepsTheRuntimeNameStableAcrossIntentUpdates(t *testing.
 	second.Probes.Readiness.Path = "/ready"
 	second.Exposure = domain.ExposurePublic
 	second.Slug = "demo-public"
+	second.Variables = []domain.Variable{{Name: "APP_MODE", Value: "production"}}
 
 	if err := kubernetesClient.ApplyDeployment(context.Background(), "fruto-workspaces", "ap-deployment-id", first); err != nil {
 		t.Fatal(err)
@@ -114,6 +115,9 @@ func TestApplyDeploymentKeepsTheRuntimeNameStableAcrossIntentUpdates(t *testing.
 	}
 	if current.Spec.Exposure != platformv1alpha1.ExposurePublic || current.Spec.Slug != second.Slug {
 		t.Fatalf("runtime exposure projection does not match intent: exposure=%q slug=%q", current.Spec.Exposure, current.Spec.Slug)
+	}
+	if len(current.Spec.Variables) != 1 || current.Spec.Variables[0].Name != "APP_MODE" || current.Spec.Variables[0].Value != "production" {
+		t.Fatalf("runtime variables do not match intent: %+v", current.Spec.Variables)
 	}
 	list := &platformv1alpha1.AppDeploymentList{}
 	if err := kubernetesClient.client.List(context.Background(), list, client.InNamespace("fruto-workspaces")); err != nil {
@@ -298,7 +302,6 @@ func TestApplyDeploymentRejectsAnObjectCreatedAfterTheOwnershipCheck(t *testing.
 
 func runtimeTestIntent(name string) domain.Intent {
 	return domain.Intent{
-		Name:     name,
 		Image:    "ghcr.io/fruto-platform/testkit@sha256:" + strings.Repeat("a", 64),
 		Replicas: 1,
 		Port:     8080,

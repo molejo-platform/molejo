@@ -15,8 +15,11 @@ PostgreSQL dependency. It applies only `AppDeployment` resources through a
 consumer-owned runtime interface. The operator remains the sole owner of
 Deployments, Services, and HTTPRoutes. Actors may belong to multiple Workspaces;
 each Workspace contains Projects, while Apps and Environments are siblings under
-one Project. An AppDeployment binds exactly one App to one Environment in that
-same Project. Each Workspace is materialized as a managed Namespace through a
+one Project. A durable `AppEnvironment` binds exactly one App to one Environment
+in that Project and owns branch and runtime configuration. An immutable
+`Deployment` records a Release plus the configuration snapshot sent to the
+runtime. The internal Kubernetes `AppDeployment` remains the stable runtime
+resource for one AppEnvironment. Each Workspace is materialized as a managed Namespace through a
 durable operation, using explicit kubeconfig or in-cluster credentials.
 
 This is a pre-alpha, non-HA topology. The API exposes sanitized product

@@ -927,6 +927,9 @@ func newAppDeployment(namespace string, name string, image string) *platformv1al
 		Spec: platformv1alpha1.AppDeploymentSpec{
 			Image: image,
 			Port:  8080,
+			Variables: []platformv1alpha1.AppDeploymentVariable{
+				{Name: "APP_MODE", Value: "test"},
+			},
 			Resources: platformv1alpha1.AppDeploymentResources{
 				Requests: platformv1alpha1.AppDeploymentResourceValues{CPUMillis: 50, MemoryMiB: 64},
 				Limits:   platformv1alpha1.AppDeploymentResourceValues{CPUMillis: 500, MemoryMiB: 256},
@@ -967,6 +970,9 @@ func assertDeploymentRuntime(
 		t.Fatalf("expected exactly one container, got %d", len(deployment.Spec.Template.Spec.Containers))
 	}
 	container := deployment.Spec.Template.Spec.Containers[0]
+	if len(container.Env) != len(spec.Variables) || container.Env[0].Name != spec.Variables[0].Name || container.Env[0].Value != spec.Variables[0].Value {
+		t.Fatalf("unexpected environment variables: %#v", container.Env)
+	}
 	if len(container.Ports) != 1 || container.Ports[0].Name != httpPortName ||
 		container.Ports[0].ContainerPort != spec.Port || container.Ports[0].Protocol != corev1.ProtocolTCP {
 		t.Fatalf("unexpected HTTP container port: %#v", container.Ports)

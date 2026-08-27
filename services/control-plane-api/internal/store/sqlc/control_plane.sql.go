@@ -33,7 +33,7 @@ SET archived_at = now(), version = a.version + 1, updated_at = now()
 FROM projects p
 WHERE a.project_id = p.id AND p.workspace_id = $1 AND p.public_id = $2
   AND a.public_id = $3 AND a.version = $4 AND a.archived_at IS NULL
-  AND NOT EXISTS (SELECT 1 FROM deployments d WHERE d.app_id = a.id AND d.deleted_at IS NULL)
+  AND NOT EXISTS (SELECT 1 FROM app_environments ae WHERE ae.app_id = a.id AND ae.archived_at IS NULL)
 RETURNING a.id, a.public_id, a.project_id, a.name, a.version, a.created_at, a.updated_at, a.archived_at
 `
 
@@ -82,7 +82,7 @@ SET archived_at = now(), version = e.version + 1, updated_at = now()
 FROM projects p
 WHERE e.project_id = p.id AND p.workspace_id = $1 AND p.public_id = $2
   AND e.public_id = $3 AND e.version = $4 AND e.archived_at IS NULL
-  AND NOT EXISTS (SELECT 1 FROM deployments d WHERE d.environment_id = e.id AND d.deleted_at IS NULL)
+  AND NOT EXISTS (SELECT 1 FROM app_environments ae WHERE ae.environment_id = e.id AND ae.archived_at IS NULL)
 RETURNING e.id, e.public_id, e.project_id, e.name, e.version, e.created_at, e.updated_at, e.archived_at
 `
 
@@ -609,8 +609,8 @@ SELECT o.id, o.public_id, o.workspace_id, o.actor_id, o.kind, o.status,
 FROM operations o
 WHERE o.actor_id = $1
   AND o.kind = 'EnsureWorkspace'
+  AND o.app_environment_id IS NULL
   AND o.deployment_id IS NULL
-  AND o.intent_json <> '{}'::jsonb
   AND o.idempotency_hash = $2
 `
 
@@ -716,46 +716,6 @@ func (q *Queries) GetActorByKey(ctx context.Context, actorKey string) (GetActorB
 		&i.ActorKey,
 		&i.Role,
 		&i.PasswordHash,
-	)
-	return i, err
-}
-
-const getHierarchyBackfillStatus = `-- name: GetHierarchyBackfillStatus :one
-SELECT
-    count(*)::bigint AS deployments,
-    count(*) FILTER (WHERE project_id IS NULL OR app_id IS NULL OR environment_id IS NULL)::bigint AS pending_deployments,
-    count(DISTINCT workspace_id)::bigint AS affected_workspaces,
-    (SELECT count(*)::bigint FROM workspaces w
-      WHERE EXISTS (SELECT 1 FROM deployments d WHERE d.workspace_id = w.id AND (d.project_id IS NULL OR d.app_id IS NULL OR d.environment_id IS NULL))
-        AND NOT EXISTS (SELECT 1 FROM projects p WHERE p.public_id = 'prj-' || translate(substring(md5('project:' || w.public_id), 1, 20), '0189', 'abcd'))) AS projects_to_create,
-    (SELECT count(*)::bigint FROM workspaces w
-      WHERE EXISTS (SELECT 1 FROM deployments d WHERE d.workspace_id = w.id AND (d.project_id IS NULL OR d.app_id IS NULL OR d.environment_id IS NULL))
-        AND NOT EXISTS (SELECT 1 FROM environments e WHERE e.public_id = 'env-' || translate(substring(md5('environment:' || w.public_id), 1, 20), '0189', 'abcd'))) AS environments_to_create,
-    (SELECT count(*)::bigint FROM deployments d
-      WHERE (d.project_id IS NULL OR d.app_id IS NULL OR d.environment_id IS NULL)
-        AND NOT EXISTS (SELECT 1 FROM apps a WHERE a.public_id = 'app-' || translate(substring(md5('app:' || d.public_id), 1, 20), '0189', 'abcd'))) AS apps_to_create
-FROM deployments
-`
-
-type GetHierarchyBackfillStatusRow struct {
-	Deployments          int64 `json:"deployments"`
-	PendingDeployments   int64 `json:"pending_deployments"`
-	AffectedWorkspaces   int64 `json:"affected_workspaces"`
-	ProjectsToCreate     int64 `json:"projects_to_create"`
-	EnvironmentsToCreate int64 `json:"environments_to_create"`
-	AppsToCreate         int64 `json:"apps_to_create"`
-}
-
-func (q *Queries) GetHierarchyBackfillStatus(ctx context.Context) (GetHierarchyBackfillStatusRow, error) {
-	row := q.db.QueryRow(ctx, getHierarchyBackfillStatus)
-	var i GetHierarchyBackfillStatusRow
-	err := row.Scan(
-		&i.Deployments,
-		&i.PendingDeployments,
-		&i.AffectedWorkspaces,
-		&i.ProjectsToCreate,
-		&i.EnvironmentsToCreate,
-		&i.AppsToCreate,
 	)
 	return i, err
 }
@@ -870,10 +830,10 @@ func (q *Queries) InsertWorkspace(ctx context.Context, arg InsertWorkspaceParams
 
 const insertWorkspaceOperation = `-- name: InsertWorkspaceOperation :one
 INSERT INTO operations(
-    public_id, workspace_id, deployment_id, actor_id, kind, status,
-    idempotency_hash, payload_hash, intent_json, desired_version, sequence
+    public_id, workspace_id, app_environment_id, deployment_id, actor_id, kind, status,
+    idempotency_hash, payload_hash, desired_version
 )
-VALUES ($1, $2, NULL, $3, 'EnsureWorkspace', 'Pending', $4, $5, $6, 1, 1)
+VALUES ($1, $2, NULL, NULL, $3, 'EnsureWorkspace', 'Pending', $4, $5, 1)
 RETURNING id, public_id, workspace_id, actor_id, kind, status,
           desired_version, attempts, created_at, updated_at, error_code, error_message
 `
@@ -884,7 +844,6 @@ type InsertWorkspaceOperationParams struct {
 	ActorID         int64  `json:"actor_id"`
 	IdempotencyHash []byte `json:"idempotency_hash"`
 	PayloadHash     []byte `json:"payload_hash"`
-	IntentJson      []byte `json:"intent_json"`
 }
 
 type InsertWorkspaceOperationRow struct {
@@ -909,7 +868,6 @@ func (q *Queries) InsertWorkspaceOperation(ctx context.Context, arg InsertWorksp
 		arg.ActorID,
 		arg.IdempotencyHash,
 		arg.PayloadHash,
-		arg.IntentJson,
 	)
 	var i InsertWorkspaceOperationRow
 	err := row.Scan(
@@ -1176,51 +1134,6 @@ func (q *Queries) ListWorkspacesForActor(ctx context.Context, arg ListWorkspaces
 	return items, nil
 }
 
-const resolveDeploymentHierarchy = `-- name: ResolveDeploymentHierarchy :one
-SELECT p.id AS project_id, p.public_id AS project_public_id,
-       a.id AS app_id, a.public_id AS app_public_id,
-       e.id AS environment_id, e.public_id AS environment_public_id
-FROM projects p
-JOIN apps a ON a.project_id = p.id
-JOIN environments e ON e.project_id = p.id
-WHERE p.workspace_id = $1
-  AND a.public_id = $2
-  AND e.public_id = $3
-  AND p.archived_at IS NULL
-  AND a.archived_at IS NULL
-  AND e.archived_at IS NULL
-FOR UPDATE OF p, a, e
-`
-
-type ResolveDeploymentHierarchyParams struct {
-	WorkspaceID int64  `json:"workspace_id"`
-	PublicID    string `json:"public_id"`
-	PublicID_2  string `json:"public_id_2"`
-}
-
-type ResolveDeploymentHierarchyRow struct {
-	ProjectID           int64  `json:"project_id"`
-	ProjectPublicID     string `json:"project_public_id"`
-	AppID               int64  `json:"app_id"`
-	AppPublicID         string `json:"app_public_id"`
-	EnvironmentID       int64  `json:"environment_id"`
-	EnvironmentPublicID string `json:"environment_public_id"`
-}
-
-func (q *Queries) ResolveDeploymentHierarchy(ctx context.Context, arg ResolveDeploymentHierarchyParams) (ResolveDeploymentHierarchyRow, error) {
-	row := q.db.QueryRow(ctx, resolveDeploymentHierarchy, arg.WorkspaceID, arg.PublicID, arg.PublicID_2)
-	var i ResolveDeploymentHierarchyRow
-	err := row.Scan(
-		&i.ProjectID,
-		&i.ProjectPublicID,
-		&i.AppID,
-		&i.AppPublicID,
-		&i.EnvironmentID,
-		&i.EnvironmentPublicID,
-	)
-	return i, err
-}
-
 const revokeActiveSession = `-- name: RevokeActiveSession :execrows
 UPDATE sessions
 SET revoked_at = now()
@@ -1466,88 +1379,6 @@ func (q *Queries) UpsertActor(ctx context.Context, arg UpsertActorParams) (int64
 	var id int64
 	err := row.Scan(&id)
 	return id, err
-}
-
-const upsertCompatibilityApp = `-- name: UpsertCompatibilityApp :one
-INSERT INTO apps(public_id, project_id, name, name_key)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (public_id) DO UPDATE SET public_id = EXCLUDED.public_id
-RETURNING id, public_id, project_id
-`
-
-type UpsertCompatibilityAppParams struct {
-	PublicID  string `json:"public_id"`
-	ProjectID int64  `json:"project_id"`
-	Name      string `json:"name"`
-	NameKey   string `json:"name_key"`
-}
-
-type UpsertCompatibilityAppRow struct {
-	ID        int64  `json:"id"`
-	PublicID  string `json:"public_id"`
-	ProjectID int64  `json:"project_id"`
-}
-
-func (q *Queries) UpsertCompatibilityApp(ctx context.Context, arg UpsertCompatibilityAppParams) (UpsertCompatibilityAppRow, error) {
-	row := q.db.QueryRow(ctx, upsertCompatibilityApp,
-		arg.PublicID,
-		arg.ProjectID,
-		arg.Name,
-		arg.NameKey,
-	)
-	var i UpsertCompatibilityAppRow
-	err := row.Scan(&i.ID, &i.PublicID, &i.ProjectID)
-	return i, err
-}
-
-const upsertCompatibilityEnvironment = `-- name: UpsertCompatibilityEnvironment :one
-INSERT INTO environments(public_id, project_id, name, name_key)
-VALUES ($1, $2, 'Imported', 'imported')
-ON CONFLICT (public_id) DO UPDATE SET public_id = EXCLUDED.public_id
-RETURNING id, public_id, project_id
-`
-
-type UpsertCompatibilityEnvironmentParams struct {
-	PublicID  string `json:"public_id"`
-	ProjectID int64  `json:"project_id"`
-}
-
-type UpsertCompatibilityEnvironmentRow struct {
-	ID        int64  `json:"id"`
-	PublicID  string `json:"public_id"`
-	ProjectID int64  `json:"project_id"`
-}
-
-func (q *Queries) UpsertCompatibilityEnvironment(ctx context.Context, arg UpsertCompatibilityEnvironmentParams) (UpsertCompatibilityEnvironmentRow, error) {
-	row := q.db.QueryRow(ctx, upsertCompatibilityEnvironment, arg.PublicID, arg.ProjectID)
-	var i UpsertCompatibilityEnvironmentRow
-	err := row.Scan(&i.ID, &i.PublicID, &i.ProjectID)
-	return i, err
-}
-
-const upsertCompatibilityProject = `-- name: UpsertCompatibilityProject :one
-INSERT INTO projects(public_id, workspace_id, name, name_key)
-VALUES ($1, $2, 'Imported', 'imported')
-ON CONFLICT (public_id) DO UPDATE SET public_id = EXCLUDED.public_id
-RETURNING id, public_id, workspace_id
-`
-
-type UpsertCompatibilityProjectParams struct {
-	PublicID    string `json:"public_id"`
-	WorkspaceID int64  `json:"workspace_id"`
-}
-
-type UpsertCompatibilityProjectRow struct {
-	ID          int64  `json:"id"`
-	PublicID    string `json:"public_id"`
-	WorkspaceID int64  `json:"workspace_id"`
-}
-
-func (q *Queries) UpsertCompatibilityProject(ctx context.Context, arg UpsertCompatibilityProjectParams) (UpsertCompatibilityProjectRow, error) {
-	row := q.db.QueryRow(ctx, upsertCompatibilityProject, arg.PublicID, arg.WorkspaceID)
-	var i UpsertCompatibilityProjectRow
-	err := row.Scan(&i.ID, &i.PublicID, &i.WorkspaceID)
-	return i, err
 }
 
 const upsertWorkspace = `-- name: UpsertWorkspace :one

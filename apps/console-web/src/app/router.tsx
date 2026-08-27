@@ -2,6 +2,7 @@ import { Outlet, createRootRouteWithContext, createRoute, createRouter, createBr
 import type { QueryClient } from "@tanstack/react-query";
 
 import { AppBuildsPage, BuildDetailPage } from "../features/apps/AppBuildPages";
+import { AppEnvironmentDetailPage, AppEnvironmentsPage } from "../features/apps/AppEnvironmentPages";
 import { AppOverviewPage } from "../features/apps/AppOverviewPage";
 import { AppReleasesPage } from "../features/apps/AppReleasesPage";
 import { AppSourcePage } from "../features/apps/AppSourcePage";
@@ -54,6 +55,8 @@ const projectAppsRoute = createRoute({ getParentRoute: () => protectedRoute, pat
 const projectEnvironmentsRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/$workspaceId/projects/$projectId/environments", component: ProjectEnvironmentsPage });
 const appOverviewRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/$workspaceId/projects/$projectId/apps/$appId", component: AppOverviewPage });
 const appSourceRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/$workspaceId/projects/$projectId/apps/$appId/source", component: AppSourcePage });
+const appEnvironmentsRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/$workspaceId/projects/$projectId/apps/$appId/environments", component: AppEnvironmentsPage });
+const appEnvironmentDetailRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/$workspaceId/projects/$projectId/apps/$appId/environments/$appEnvironmentId", component: AppEnvironmentDetailPage });
 const appBuildsRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/$workspaceId/projects/$projectId/apps/$appId/builds", component: AppBuildsPage });
 const buildDetailRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/$workspaceId/projects/$projectId/apps/$appId/builds/$buildId", component: BuildDetailPage });
 const appReleasesRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/$workspaceId/projects/$projectId/apps/$appId/releases", component: AppReleasesPage });
@@ -70,7 +73,7 @@ const legacyAdminRoute = createRoute({ getParentRoute: () => protectedRoute, pat
 
 const routeTree = rootRoute.addChildren([
   loginRoute,
-  protectedRoute.addChildren([workspaceEntryRoute, overviewRoute, projectsRoute, projectOverviewRoute, projectAppsRoute, projectEnvironmentsRoute, appOverviewRoute, appSourceRoute, appBuildsRoute, buildDetailRoute, appReleasesRoute, retiredDeploymentsRoute, settingsRoute, githubSettingsRoute, newWorkspaceRoute, legacyDeploymentsRoute, legacyAdminRoute]),
+  protectedRoute.addChildren([workspaceEntryRoute, overviewRoute, projectsRoute, projectOverviewRoute, projectAppsRoute, projectEnvironmentsRoute, appOverviewRoute, appSourceRoute, appEnvironmentsRoute, appEnvironmentDetailRoute, appBuildsRoute, buildDetailRoute, appReleasesRoute, retiredDeploymentsRoute, settingsRoute, githubSettingsRoute, newWorkspaceRoute, legacyDeploymentsRoute, legacyAdminRoute]),
 ]);
 
 export function createAppRouter(queryClient: QueryClient, history: ReturnType<typeof createBrowserHistory> = createBrowserHistory()) {

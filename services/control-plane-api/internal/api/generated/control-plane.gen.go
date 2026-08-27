@@ -9,13 +9,39 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/oapi-codegen/runtime"
 )
+
+// Defines values for AppEnvironmentState.
+const (
+	AppEnvironmentStateDegraded    AppEnvironmentState = "Degraded"
+	AppEnvironmentStatePending     AppEnvironmentState = "Pending"
+	AppEnvironmentStateProgressing AppEnvironmentState = "Progressing"
+	AppEnvironmentStateReady       AppEnvironmentState = "Ready"
+	AppEnvironmentStateUnknown     AppEnvironmentState = "Unknown"
+)
+
+// Valid indicates whether the value is a known member of the AppEnvironmentState enum.
+func (e AppEnvironmentState) Valid() bool {
+	switch e {
+	case AppEnvironmentStateDegraded:
+		return true
+	case AppEnvironmentStatePending:
+		return true
+	case AppEnvironmentStateProgressing:
+		return true
+	case AppEnvironmentStateReady:
+		return true
+	case AppEnvironmentStateUnknown:
+		return true
+	default:
+		return false
+	}
+}
 
 // Defines values for BuildPlatform.
 const (
@@ -62,7 +88,6 @@ const (
 	DeploymentStatePending     DeploymentState = "Pending"
 	DeploymentStateProgressing DeploymentState = "Progressing"
 	DeploymentStateReady       DeploymentState = "Ready"
-	DeploymentStateUnknown     DeploymentState = "Unknown"
 )
 
 // Valid indicates whether the value is a known member of the DeploymentState enum.
@@ -75,56 +100,6 @@ func (e DeploymentState) Valid() bool {
 	case DeploymentStateProgressing:
 		return true
 	case DeploymentStateReady:
-		return true
-	case DeploymentStateUnknown:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for DeploymentIntentExposure.
-const (
-	DeploymentIntentExposurePrivate DeploymentIntentExposure = "Private"
-	DeploymentIntentExposurePublic  DeploymentIntentExposure = "Public"
-)
-
-// Valid indicates whether the value is a known member of the DeploymentIntentExposure enum.
-func (e DeploymentIntentExposure) Valid() bool {
-	switch e {
-	case DeploymentIntentExposurePrivate:
-		return true
-	case DeploymentIntentExposurePublic:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for DeploymentIntent0Exposure.
-const (
-	DeploymentIntent0ExposurePublic DeploymentIntent0Exposure = "Public"
-)
-
-// Valid indicates whether the value is a known member of the DeploymentIntent0Exposure enum.
-func (e DeploymentIntent0Exposure) Valid() bool {
-	switch e {
-	case DeploymentIntent0ExposurePublic:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for DeploymentIntent1Exposure.
-const (
-	DeploymentIntent1ExposurePrivate DeploymentIntent1Exposure = "Private"
-)
-
-// Valid indicates whether the value is a known member of the DeploymentIntent1Exposure enum.
-func (e DeploymentIntent1Exposure) Valid() bool {
-	switch e {
-	case DeploymentIntent1ExposurePrivate:
 		return true
 	default:
 		return false
@@ -193,22 +168,19 @@ func (e LoginRequestActor) Valid() bool {
 
 // Defines values for OperationKind.
 const (
-	CreateDeployment OperationKind = "CreateDeployment"
-	DeleteDeployment OperationKind = "DeleteDeployment"
-	EnsureWorkspace  OperationKind = "EnsureWorkspace"
-	UpdateDeployment OperationKind = "UpdateDeployment"
+	ApplyDeployment      OperationKind = "ApplyDeployment"
+	DeleteAppEnvironment OperationKind = "DeleteAppEnvironment"
+	EnsureWorkspace      OperationKind = "EnsureWorkspace"
 )
 
 // Valid indicates whether the value is a known member of the OperationKind enum.
 func (e OperationKind) Valid() bool {
 	switch e {
-	case CreateDeployment:
+	case ApplyDeployment:
 		return true
-	case DeleteDeployment:
+	case DeleteAppEnvironment:
 		return true
 	case EnsureWorkspace:
-		return true
-	case UpdateDeployment:
 		return true
 	default:
 		return false
@@ -217,11 +189,10 @@ func (e OperationKind) Valid() bool {
 
 // Defines values for OperationStatus.
 const (
-	OperationStatusFailed     OperationStatus = "Failed"
-	OperationStatusPending    OperationStatus = "Pending"
-	OperationStatusRunning    OperationStatus = "Running"
-	OperationStatusSucceeded  OperationStatus = "Succeeded"
-	OperationStatusSuperseded OperationStatus = "Superseded"
+	OperationStatusFailed    OperationStatus = "Failed"
+	OperationStatusPending   OperationStatus = "Pending"
+	OperationStatusRunning   OperationStatus = "Running"
+	OperationStatusSucceeded OperationStatus = "Succeeded"
 )
 
 // Valid indicates whether the value is a known member of the OperationStatus enum.
@@ -234,8 +205,6 @@ func (e OperationStatus) Valid() bool {
 	case OperationStatusRunning:
 		return true
 	case OperationStatusSucceeded:
-		return true
-	case OperationStatusSuperseded:
 		return true
 	default:
 		return false
@@ -257,78 +226,18 @@ func (e ReleasePlatform) Valid() bool {
 	}
 }
 
-// Defines values for ReleaseDeploymentIntentExposure.
+// Defines values for RuntimeConfigurationExposure.
 const (
-	ReleaseDeploymentIntentExposurePrivate ReleaseDeploymentIntentExposure = "Private"
-	ReleaseDeploymentIntentExposurePublic  ReleaseDeploymentIntentExposure = "Public"
+	Private RuntimeConfigurationExposure = "Private"
+	Public  RuntimeConfigurationExposure = "Public"
 )
 
-// Valid indicates whether the value is a known member of the ReleaseDeploymentIntentExposure enum.
-func (e ReleaseDeploymentIntentExposure) Valid() bool {
+// Valid indicates whether the value is a known member of the RuntimeConfigurationExposure enum.
+func (e RuntimeConfigurationExposure) Valid() bool {
 	switch e {
-	case ReleaseDeploymentIntentExposurePrivate:
+	case Private:
 		return true
-	case ReleaseDeploymentIntentExposurePublic:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for ReleaseDeploymentIntent0Exposure.
-const (
-	ReleaseDeploymentIntent0ExposurePublic ReleaseDeploymentIntent0Exposure = "Public"
-)
-
-// Valid indicates whether the value is a known member of the ReleaseDeploymentIntent0Exposure enum.
-func (e ReleaseDeploymentIntent0Exposure) Valid() bool {
-	switch e {
-	case ReleaseDeploymentIntent0ExposurePublic:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for ReleaseDeploymentIntent1Exposure.
-const (
-	ReleaseDeploymentIntent1ExposurePrivate ReleaseDeploymentIntent1Exposure = "Private"
-)
-
-// Valid indicates whether the value is a known member of the ReleaseDeploymentIntent1Exposure enum.
-func (e ReleaseDeploymentIntent1Exposure) Valid() bool {
-	switch e {
-	case ReleaseDeploymentIntent1ExposurePrivate:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for ScopedDeploymentIntent0Exposure.
-const (
-	ScopedDeploymentIntent0ExposurePublic ScopedDeploymentIntent0Exposure = "Public"
-)
-
-// Valid indicates whether the value is a known member of the ScopedDeploymentIntent0Exposure enum.
-func (e ScopedDeploymentIntent0Exposure) Valid() bool {
-	switch e {
-	case ScopedDeploymentIntent0ExposurePublic:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for ScopedDeploymentIntent1Exposure.
-const (
-	ScopedDeploymentIntent1ExposurePrivate ScopedDeploymentIntent1Exposure = "Private"
-)
-
-// Valid indicates whether the value is a known member of the ScopedDeploymentIntent1Exposure enum.
-func (e ScopedDeploymentIntent1Exposure) Valid() bool {
-	switch e {
-	case ScopedDeploymentIntent1ExposurePrivate:
+	case Public:
 		return true
 	default:
 		return false
@@ -387,21 +296,58 @@ type App struct {
 	Version    int        `json:"version"`
 }
 
+// AppEnvironment defines model for AppEnvironment.
+type AppEnvironment struct {
+	AppId                string               `json:"appId"`
+	Branch               string               `json:"branch"`
+	Configuration        RuntimeConfiguration `json:"configuration"`
+	ConfigurationVersion int                  `json:"configurationVersion"`
+	CreatedAt            time.Time            `json:"createdAt"`
+	CurrentDeploymentId  *string              `json:"currentDeploymentId,omitempty"`
+	CurrentReleaseId     *string              `json:"currentReleaseId,omitempty"`
+	DesiredDeploymentId  *string              `json:"desiredDeploymentId,omitempty"`
+	EnvironmentId        string               `json:"environmentId"`
+	EnvironmentName      string               `json:"environmentName"`
+	Id                   string               `json:"id"`
+	Message              *string              `json:"message,omitempty"`
+	ProjectId            string               `json:"projectId"`
+	State                AppEnvironmentState  `json:"state"`
+	UpdatedAt            time.Time            `json:"updatedAt"`
+	Version              int                  `json:"version"`
+}
+
+// AppEnvironmentState defines model for AppEnvironment.State.
+type AppEnvironmentState string
+
+// AppEnvironmentCreateInput defines model for AppEnvironmentCreateInput.
+type AppEnvironmentCreateInput struct {
+	Branch        string               `json:"branch"`
+	Configuration RuntimeConfiguration `json:"configuration"`
+	EnvironmentId string               `json:"environmentId"`
+}
+
+// AppEnvironmentInput defines model for AppEnvironmentInput.
+type AppEnvironmentInput struct {
+	Branch        string               `json:"branch"`
+	Configuration RuntimeConfiguration `json:"configuration"`
+}
+
 // Build defines model for Build.
 type Build struct {
-	AppId        string        `json:"appId"`
-	Attempts     int           `json:"attempts"`
-	Branch       string        `json:"branch"`
-	CommitSha    string        `json:"commitSha"`
-	CreatedAt    time.Time     `json:"createdAt"`
-	ErrorCode    *string       `json:"errorCode,omitempty"`
-	ErrorMessage *string       `json:"errorMessage,omitempty"`
-	Id           string        `json:"id"`
-	Platform     BuildPlatform `json:"platform"`
-	ProjectId    string        `json:"projectId"`
-	Repository   string        `json:"repository"`
-	Status       BuildStatus   `json:"status"`
-	UpdatedAt    time.Time     `json:"updatedAt"`
+	AppEnvironmentId string        `json:"appEnvironmentId"`
+	AppId            string        `json:"appId"`
+	Attempts         int           `json:"attempts"`
+	Branch           string        `json:"branch"`
+	CommitSha        string        `json:"commitSha"`
+	CreatedAt        time.Time     `json:"createdAt"`
+	ErrorCode        *string       `json:"errorCode,omitempty"`
+	ErrorMessage     *string       `json:"errorMessage,omitempty"`
+	Id               string        `json:"id"`
+	Platform         BuildPlatform `json:"platform"`
+	ProjectId        string        `json:"projectId"`
+	Repository       string        `json:"repository"`
+	Status           BuildStatus   `json:"status"`
+	UpdatedAt        time.Time     `json:"updatedAt"`
 }
 
 // BuildPlatform defines model for Build.Platform.
@@ -412,7 +358,7 @@ type BuildStatus string
 
 // BuildInput defines model for BuildInput.
 type BuildInput struct {
-	Branch *string `json:"branch,omitempty"`
+	AppEnvironmentId string `json:"appEnvironmentId"`
 }
 
 // BuildLog defines model for BuildLog.
@@ -424,62 +370,24 @@ type BuildLog struct {
 
 // Deployment defines model for Deployment.
 type Deployment struct {
-	AppId           *string          `json:"appId,omitempty"`
-	CreatedAt       time.Time        `json:"createdAt"`
-	EnvironmentId   *string          `json:"environmentId,omitempty"`
-	Id              string           `json:"id"`
-	Intent          DeploymentIntent `json:"intent"`
-	Message         *string          `json:"message,omitempty"`
-	ObservedVersion *int             `json:"observedVersion,omitempty"`
-	ProjectId       *string          `json:"projectId,omitempty"`
-	ReleaseId       *string          `json:"releaseId,omitempty"`
-	State           DeploymentState  `json:"state"`
-	UpdatedAt       time.Time        `json:"updatedAt"`
-	Version         int              `json:"version"`
+	AppEnvironmentId     string               `json:"appEnvironmentId"`
+	Configuration        RuntimeConfiguration `json:"configuration"`
+	ConfigurationVersion int                  `json:"configurationVersion"`
+	CreatedAt            time.Time            `json:"createdAt"`
+	Id                   string               `json:"id"`
+	Message              *string              `json:"message,omitempty"`
+	ReleaseId            string               `json:"releaseId"`
+	State                DeploymentState      `json:"state"`
+	UpdatedAt            time.Time            `json:"updatedAt"`
 }
 
 // DeploymentState defines model for Deployment.State.
 type DeploymentState string
 
-// DeploymentIntent defines model for DeploymentIntent.
-type DeploymentIntent struct {
-	AppId         *string                   `json:"appId,omitempty"`
-	EnvironmentId *string                   `json:"environmentId,omitempty"`
-	Exposure      *DeploymentIntentExposure `json:"exposure,omitempty"`
-	Image         string                    `json:"image"`
-	Name          string                    `json:"name"`
-	Port          int                       `json:"port"`
-	Probes        struct {
-		Liveness  Probe `json:"liveness"`
-		Readiness Probe `json:"readiness"`
-	} `json:"probes"`
-	Replicas  *int `json:"replicas,omitempty"`
-	Resources struct {
-		Limits   ResourceValues `json:"limits"`
-		Requests ResourceValues `json:"requests"`
-	} `json:"resources"`
-	Slug  *string `json:"slug,omitempty"`
-	union json.RawMessage
+// DeploymentInput defines model for DeploymentInput.
+type DeploymentInput struct {
+	ReleaseId string `json:"releaseId"`
 }
-
-// DeploymentIntentExposure defines model for DeploymentIntent.Exposure.
-type DeploymentIntentExposure string
-
-// DeploymentIntent0 defines model for DeploymentIntent.0.
-type DeploymentIntent0 struct {
-	Exposure DeploymentIntent0Exposure `json:"exposure"`
-}
-
-// DeploymentIntent0Exposure defines model for DeploymentIntent.0.Exposure.
-type DeploymentIntent0Exposure string
-
-// DeploymentIntent1 defines model for DeploymentIntent.1.
-type DeploymentIntent1 struct {
-	Exposure *DeploymentIntent1Exposure `json:"exposure,omitempty"`
-}
-
-// DeploymentIntent1Exposure defines model for DeploymentIntent.1.Exposure.
-type DeploymentIntent1Exposure string
 
 // Environment defines model for Environment.
 type Environment struct {
@@ -526,14 +434,12 @@ type GitHubRepository struct {
 type GitHubSource struct {
 	ConnectedAt    time.Time        `json:"connectedAt"`
 	InstallationId string           `json:"installationId"`
-	PrimaryBranch  string           `json:"primaryBranch"`
 	Repository     GitHubRepository `json:"repository"`
 }
 
 // GitHubSourceInput defines model for GitHubSourceInput.
 type GitHubSourceInput struct {
 	InstallationId string `json:"installationId"`
-	PrimaryBranch  string `json:"primaryBranch"`
 	RepositoryId   string `json:"repositoryId"`
 }
 
@@ -553,16 +459,17 @@ type LoginRequestActor string
 
 // Operation defines model for Operation.
 type Operation struct {
-	Attempts       int             `json:"attempts"`
-	CreatedAt      *time.Time      `json:"createdAt,omitempty"`
-	DeploymentId   *string         `json:"deploymentId,omitempty"`
-	DesiredVersion int             `json:"desiredVersion"`
-	ErrorCode      *string         `json:"errorCode,omitempty"`
-	ErrorMessage   *string         `json:"errorMessage,omitempty"`
-	Id             string          `json:"id"`
-	Kind           OperationKind   `json:"kind"`
-	Status         OperationStatus `json:"status"`
-	UpdatedAt      *time.Time      `json:"updatedAt,omitempty"`
+	AppEnvironmentId *string         `json:"appEnvironmentId,omitempty"`
+	Attempts         int             `json:"attempts"`
+	CreatedAt        *time.Time      `json:"createdAt,omitempty"`
+	DeploymentId     *string         `json:"deploymentId,omitempty"`
+	DesiredVersion   int             `json:"desiredVersion"`
+	ErrorCode        *string         `json:"errorCode,omitempty"`
+	ErrorMessage     *string         `json:"errorMessage,omitempty"`
+	Id               string          `json:"id"`
+	Kind             OperationKind   `json:"kind"`
+	Status           OperationStatus `json:"status"`
+	UpdatedAt        *time.Time      `json:"updatedAt,omitempty"`
 }
 
 // OperationKind defines model for Operation.Kind.
@@ -602,70 +509,31 @@ type Release struct {
 // ReleasePlatform defines model for Release.Platform.
 type ReleasePlatform string
 
-// ReleaseDeploymentIntent defines model for ReleaseDeploymentIntent.
-type ReleaseDeploymentIntent struct {
-	EnvironmentId string                           `json:"environmentId"`
-	Exposure      *ReleaseDeploymentIntentExposure `json:"exposure,omitempty"`
-	Name          string                           `json:"name"`
-	Port          int                              `json:"port"`
-	Probes        struct {
-		Liveness  Probe `json:"liveness"`
-		Readiness Probe `json:"readiness"`
-	} `json:"probes"`
-	Replicas  *int `json:"replicas,omitempty"`
-	Resources struct {
-		Limits   ResourceValues `json:"limits"`
-		Requests ResourceValues `json:"requests"`
-	} `json:"resources"`
-	Slug  *string `json:"slug,omitempty"`
-	union json.RawMessage
-}
-
-// ReleaseDeploymentIntentExposure defines model for ReleaseDeploymentIntent.Exposure.
-type ReleaseDeploymentIntentExposure string
-
-// ReleaseDeploymentIntent0 defines model for ReleaseDeploymentIntent.0.
-type ReleaseDeploymentIntent0 struct {
-	Exposure ReleaseDeploymentIntent0Exposure `json:"exposure"`
-}
-
-// ReleaseDeploymentIntent0Exposure defines model for ReleaseDeploymentIntent.0.Exposure.
-type ReleaseDeploymentIntent0Exposure string
-
-// ReleaseDeploymentIntent1 defines model for ReleaseDeploymentIntent.1.
-type ReleaseDeploymentIntent1 struct {
-	Exposure *ReleaseDeploymentIntent1Exposure `json:"exposure,omitempty"`
-}
-
-// ReleaseDeploymentIntent1Exposure defines model for ReleaseDeploymentIntent.1.Exposure.
-type ReleaseDeploymentIntent1Exposure string
-
 // ResourceValues defines model for ResourceValues.
 type ResourceValues struct {
 	CpuMillis int `json:"cpuMillis"`
 	MemoryMiB int `json:"memoryMiB"`
 }
 
-// ScopedDeploymentIntent defines model for ScopedDeploymentIntent.
-type ScopedDeploymentIntent struct {
-	union json.RawMessage
+// RuntimeConfiguration defines model for RuntimeConfiguration.
+type RuntimeConfiguration struct {
+	Exposure RuntimeConfigurationExposure `json:"exposure"`
+	Port     int                          `json:"port"`
+	Probes   struct {
+		Liveness  Probe `json:"liveness"`
+		Readiness Probe `json:"readiness"`
+	} `json:"probes"`
+	Replicas  int `json:"replicas"`
+	Resources struct {
+		Limits   ResourceValues `json:"limits"`
+		Requests ResourceValues `json:"requests"`
+	} `json:"resources"`
+	Slug      *string    `json:"slug,omitempty"`
+	Variables []Variable `json:"variables"`
 }
 
-// ScopedDeploymentIntent0 defines model for ScopedDeploymentIntent.0.
-type ScopedDeploymentIntent0 struct {
-	Exposure ScopedDeploymentIntent0Exposure `json:"exposure"`
-}
-
-// ScopedDeploymentIntent0Exposure defines model for ScopedDeploymentIntent.0.Exposure.
-type ScopedDeploymentIntent0Exposure string
-
-// ScopedDeploymentIntent1 defines model for ScopedDeploymentIntent.1.
-type ScopedDeploymentIntent1 struct {
-	Exposure *ScopedDeploymentIntent1Exposure `json:"exposure,omitempty"`
-}
-
-// ScopedDeploymentIntent1Exposure defines model for ScopedDeploymentIntent.1.Exposure.
-type ScopedDeploymentIntent1Exposure string
+// RuntimeConfigurationExposure defines model for RuntimeConfiguration.Exposure.
+type RuntimeConfigurationExposure string
 
 // Session defines model for Session.
 type Session struct {
@@ -678,6 +546,12 @@ type Session struct {
 
 // SessionActorRole defines model for Session.Actor.Role.
 type SessionActorRole string
+
+// Variable defines model for Variable.
+type Variable struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
 
 // Workspace defines model for Workspace.
 type Workspace struct {
@@ -692,6 +566,9 @@ type Workspace struct {
 // WorkspaceState defines model for Workspace.State.
 type WorkspaceState string
 
+// AppEnvironmentId defines model for AppEnvironmentId.
+type AppEnvironmentId = string
+
 // AppId defines model for AppId.
 type AppId = string
 
@@ -700,6 +577,9 @@ type BuildId = string
 
 // Cursor defines model for Cursor.
 type Cursor = string
+
+// DeploymentId defines model for DeploymentId.
+type DeploymentId = string
 
 // EnvironmentId defines model for EnvironmentId.
 type EnvironmentId = string
@@ -752,29 +632,6 @@ type Unauthorized = Error
 // Unavailable defines model for Unavailable.
 type Unavailable = Error
 
-// ListDeploymentsParams defines parameters for ListDeployments.
-type ListDeploymentsParams struct {
-	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
-	Limit  *int    `form:"limit,omitempty" json:"limit,omitempty"`
-}
-
-// CreateDeploymentParams defines parameters for CreateDeployment.
-type CreateDeploymentParams struct {
-	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
-}
-
-// DeleteDeploymentParams defines parameters for DeleteDeployment.
-type DeleteDeploymentParams struct {
-	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
-	IfMatch        IfMatch        `json:"If-Match"`
-}
-
-// UpdateDeploymentParams defines parameters for UpdateDeployment.
-type UpdateDeploymentParams struct {
-	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
-	IfMatch        IfMatch        `json:"If-Match"`
-}
-
 // CompleteGitHubAuthorizationParams defines parameters for CompleteGitHubAuthorization.
 type CompleteGitHubAuthorizationParams struct {
 	Code  string `form:"code" json:"code"`
@@ -801,29 +658,6 @@ type CreateWorkspaceParams struct {
 // UpdateWorkspaceParams defines parameters for UpdateWorkspace.
 type UpdateWorkspaceParams struct {
 	IfMatch IfMatch `json:"If-Match"`
-}
-
-// ListWorkspaceDeploymentsParams defines parameters for ListWorkspaceDeployments.
-type ListWorkspaceDeploymentsParams struct {
-	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
-	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
-}
-
-// CreateWorkspaceDeploymentParams defines parameters for CreateWorkspaceDeployment.
-type CreateWorkspaceDeploymentParams struct {
-	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
-}
-
-// DeleteWorkspaceDeploymentParams defines parameters for DeleteWorkspaceDeployment.
-type DeleteWorkspaceDeploymentParams struct {
-	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
-	IfMatch        IfMatch        `json:"If-Match"`
-}
-
-// UpdateWorkspaceDeploymentParams defines parameters for UpdateWorkspaceDeployment.
-type UpdateWorkspaceDeploymentParams struct {
-	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
-	IfMatch        IfMatch        `json:"If-Match"`
 }
 
 // ListProjectsParams defines parameters for ListProjects.
@@ -871,15 +705,38 @@ type CreateAppBuildParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
-// ListAppReleasesParams defines parameters for ListAppReleases.
-type ListAppReleasesParams struct {
+// ListAppEnvironmentsParams defines parameters for ListAppEnvironments.
+type ListAppEnvironmentsParams struct {
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
-// CreateReleaseDeploymentParams defines parameters for CreateReleaseDeployment.
-type CreateReleaseDeploymentParams struct {
+// DeleteAppEnvironmentParams defines parameters for DeleteAppEnvironment.
+type DeleteAppEnvironmentParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+	IfMatch        IfMatch        `json:"If-Match"`
+}
+
+// UpdateAppEnvironmentParams defines parameters for UpdateAppEnvironment.
+type UpdateAppEnvironmentParams struct {
+	IfMatch IfMatch `json:"If-Match"`
+}
+
+// ListAppEnvironmentDeploymentsParams defines parameters for ListAppEnvironmentDeployments.
+type ListAppEnvironmentDeploymentsParams struct {
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// CreateAppEnvironmentDeploymentParams defines parameters for CreateAppEnvironmentDeployment.
+type CreateAppEnvironmentDeploymentParams struct {
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// ListAppReleasesParams defines parameters for ListAppReleases.
+type ListAppReleasesParams struct {
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
 // ListEnvironmentsParams defines parameters for ListEnvironments.
@@ -899,12 +756,6 @@ type UpdateEnvironmentParams struct {
 	IfMatch IfMatch `json:"If-Match"`
 }
 
-// CreateDeploymentJSONRequestBody defines body for CreateDeployment for application/json ContentType.
-type CreateDeploymentJSONRequestBody = DeploymentIntent
-
-// UpdateDeploymentJSONRequestBody defines body for UpdateDeployment for application/json ContentType.
-type UpdateDeploymentJSONRequestBody = DeploymentIntent
-
 // LoginJSONRequestBody defines body for Login for application/json ContentType.
 type LoginJSONRequestBody = LoginRequest
 
@@ -913,12 +764,6 @@ type CreateWorkspaceJSONRequestBody = HierarchyInput
 
 // UpdateWorkspaceJSONRequestBody defines body for UpdateWorkspace for application/json ContentType.
 type UpdateWorkspaceJSONRequestBody = HierarchyInput
-
-// CreateWorkspaceDeploymentJSONRequestBody defines body for CreateWorkspaceDeployment for application/json ContentType.
-type CreateWorkspaceDeploymentJSONRequestBody = ScopedDeploymentIntent
-
-// UpdateWorkspaceDeploymentJSONRequestBody defines body for UpdateWorkspaceDeployment for application/json ContentType.
-type UpdateWorkspaceDeploymentJSONRequestBody = ScopedDeploymentIntent
 
 // CreateProjectJSONRequestBody defines body for CreateProject for application/json ContentType.
 type CreateProjectJSONRequestBody = HierarchyInput
@@ -935,8 +780,14 @@ type UpdateAppJSONRequestBody = HierarchyInput
 // CreateAppBuildJSONRequestBody defines body for CreateAppBuild for application/json ContentType.
 type CreateAppBuildJSONRequestBody = BuildInput
 
-// CreateReleaseDeploymentJSONRequestBody defines body for CreateReleaseDeployment for application/json ContentType.
-type CreateReleaseDeploymentJSONRequestBody = ReleaseDeploymentIntent
+// CreateAppEnvironmentJSONRequestBody defines body for CreateAppEnvironment for application/json ContentType.
+type CreateAppEnvironmentJSONRequestBody = AppEnvironmentCreateInput
+
+// UpdateAppEnvironmentJSONRequestBody defines body for UpdateAppEnvironment for application/json ContentType.
+type UpdateAppEnvironmentJSONRequestBody = AppEnvironmentInput
+
+// CreateAppEnvironmentDeploymentJSONRequestBody defines body for CreateAppEnvironmentDeployment for application/json ContentType.
+type CreateAppEnvironmentDeploymentJSONRequestBody = DeploymentInput
 
 // SetAppSourceJSONRequestBody defines body for SetAppSource for application/json ContentType.
 type SetAppSourceJSONRequestBody = GitHubSourceInput
@@ -947,484 +798,8 @@ type CreateEnvironmentJSONRequestBody = HierarchyInput
 // UpdateEnvironmentJSONRequestBody defines body for UpdateEnvironment for application/json ContentType.
 type UpdateEnvironmentJSONRequestBody = HierarchyInput
 
-// AsDeploymentIntent0 returns the union data inside the DeploymentIntent as a DeploymentIntent0
-func (t DeploymentIntent) AsDeploymentIntent0() (DeploymentIntent0, error) {
-	var body DeploymentIntent0
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromDeploymentIntent0 overwrites any union data inside the DeploymentIntent as the provided DeploymentIntent0
-func (t *DeploymentIntent) FromDeploymentIntent0(v DeploymentIntent0) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeDeploymentIntent0 performs a merge with any union data inside the DeploymentIntent, using the provided DeploymentIntent0
-func (t *DeploymentIntent) MergeDeploymentIntent0(v DeploymentIntent0) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-// AsDeploymentIntent1 returns the union data inside the DeploymentIntent as a DeploymentIntent1
-func (t DeploymentIntent) AsDeploymentIntent1() (DeploymentIntent1, error) {
-	var body DeploymentIntent1
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromDeploymentIntent1 overwrites any union data inside the DeploymentIntent as the provided DeploymentIntent1
-func (t *DeploymentIntent) FromDeploymentIntent1(v DeploymentIntent1) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeDeploymentIntent1 performs a merge with any union data inside the DeploymentIntent, using the provided DeploymentIntent1
-func (t *DeploymentIntent) MergeDeploymentIntent1(v DeploymentIntent1) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-func (t DeploymentIntent) MarshalJSON() ([]byte, error) {
-	b, err := t.union.MarshalJSON()
-	if err != nil {
-		return nil, err
-	}
-	object := make(map[string]json.RawMessage)
-	if t.union != nil {
-		err = json.Unmarshal(b, &object)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	if t.AppId != nil {
-		object["appId"], err = json.Marshal(t.AppId)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'appId': %w", err)
-		}
-	}
-
-	if t.EnvironmentId != nil {
-		object["environmentId"], err = json.Marshal(t.EnvironmentId)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'environmentId': %w", err)
-		}
-	}
-
-	if t.Exposure != nil {
-		object["exposure"], err = json.Marshal(t.Exposure)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'exposure': %w", err)
-		}
-	}
-
-	object["image"], err = json.Marshal(t.Image)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling 'image': %w", err)
-	}
-
-	object["name"], err = json.Marshal(t.Name)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling 'name': %w", err)
-	}
-
-	object["port"], err = json.Marshal(t.Port)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling 'port': %w", err)
-	}
-
-	object["probes"], err = json.Marshal(t.Probes)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling 'probes': %w", err)
-	}
-
-	if t.Replicas != nil {
-		object["replicas"], err = json.Marshal(t.Replicas)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'replicas': %w", err)
-		}
-	}
-
-	object["resources"], err = json.Marshal(t.Resources)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling 'resources': %w", err)
-	}
-
-	if t.Slug != nil {
-		object["slug"], err = json.Marshal(t.Slug)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'slug': %w", err)
-		}
-	}
-	b, err = json.Marshal(object)
-	return b, err
-}
-
-func (t *DeploymentIntent) UnmarshalJSON(b []byte) error {
-	err := t.union.UnmarshalJSON(b)
-	if err != nil {
-		return err
-	}
-	object := make(map[string]json.RawMessage)
-	err = json.Unmarshal(b, &object)
-	if err != nil {
-		return err
-	}
-
-	if raw, found := object["appId"]; found {
-		err = json.Unmarshal(raw, &t.AppId)
-		if err != nil {
-			return fmt.Errorf("error reading 'appId': %w", err)
-		}
-	}
-
-	if raw, found := object["environmentId"]; found {
-		err = json.Unmarshal(raw, &t.EnvironmentId)
-		if err != nil {
-			return fmt.Errorf("error reading 'environmentId': %w", err)
-		}
-	}
-
-	if raw, found := object["exposure"]; found {
-		err = json.Unmarshal(raw, &t.Exposure)
-		if err != nil {
-			return fmt.Errorf("error reading 'exposure': %w", err)
-		}
-	}
-
-	if raw, found := object["image"]; found {
-		err = json.Unmarshal(raw, &t.Image)
-		if err != nil {
-			return fmt.Errorf("error reading 'image': %w", err)
-		}
-	}
-
-	if raw, found := object["name"]; found {
-		err = json.Unmarshal(raw, &t.Name)
-		if err != nil {
-			return fmt.Errorf("error reading 'name': %w", err)
-		}
-	}
-
-	if raw, found := object["port"]; found {
-		err = json.Unmarshal(raw, &t.Port)
-		if err != nil {
-			return fmt.Errorf("error reading 'port': %w", err)
-		}
-	}
-
-	if raw, found := object["probes"]; found {
-		err = json.Unmarshal(raw, &t.Probes)
-		if err != nil {
-			return fmt.Errorf("error reading 'probes': %w", err)
-		}
-	}
-
-	if raw, found := object["replicas"]; found {
-		err = json.Unmarshal(raw, &t.Replicas)
-		if err != nil {
-			return fmt.Errorf("error reading 'replicas': %w", err)
-		}
-	}
-
-	if raw, found := object["resources"]; found {
-		err = json.Unmarshal(raw, &t.Resources)
-		if err != nil {
-			return fmt.Errorf("error reading 'resources': %w", err)
-		}
-	}
-
-	if raw, found := object["slug"]; found {
-		err = json.Unmarshal(raw, &t.Slug)
-		if err != nil {
-			return fmt.Errorf("error reading 'slug': %w", err)
-		}
-	}
-
-	return err
-}
-
-// AsReleaseDeploymentIntent0 returns the union data inside the ReleaseDeploymentIntent as a ReleaseDeploymentIntent0
-func (t ReleaseDeploymentIntent) AsReleaseDeploymentIntent0() (ReleaseDeploymentIntent0, error) {
-	var body ReleaseDeploymentIntent0
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromReleaseDeploymentIntent0 overwrites any union data inside the ReleaseDeploymentIntent as the provided ReleaseDeploymentIntent0
-func (t *ReleaseDeploymentIntent) FromReleaseDeploymentIntent0(v ReleaseDeploymentIntent0) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeReleaseDeploymentIntent0 performs a merge with any union data inside the ReleaseDeploymentIntent, using the provided ReleaseDeploymentIntent0
-func (t *ReleaseDeploymentIntent) MergeReleaseDeploymentIntent0(v ReleaseDeploymentIntent0) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-// AsReleaseDeploymentIntent1 returns the union data inside the ReleaseDeploymentIntent as a ReleaseDeploymentIntent1
-func (t ReleaseDeploymentIntent) AsReleaseDeploymentIntent1() (ReleaseDeploymentIntent1, error) {
-	var body ReleaseDeploymentIntent1
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromReleaseDeploymentIntent1 overwrites any union data inside the ReleaseDeploymentIntent as the provided ReleaseDeploymentIntent1
-func (t *ReleaseDeploymentIntent) FromReleaseDeploymentIntent1(v ReleaseDeploymentIntent1) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeReleaseDeploymentIntent1 performs a merge with any union data inside the ReleaseDeploymentIntent, using the provided ReleaseDeploymentIntent1
-func (t *ReleaseDeploymentIntent) MergeReleaseDeploymentIntent1(v ReleaseDeploymentIntent1) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-func (t ReleaseDeploymentIntent) MarshalJSON() ([]byte, error) {
-	b, err := t.union.MarshalJSON()
-	if err != nil {
-		return nil, err
-	}
-	object := make(map[string]json.RawMessage)
-	if t.union != nil {
-		err = json.Unmarshal(b, &object)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	object["environmentId"], err = json.Marshal(t.EnvironmentId)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling 'environmentId': %w", err)
-	}
-
-	if t.Exposure != nil {
-		object["exposure"], err = json.Marshal(t.Exposure)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'exposure': %w", err)
-		}
-	}
-
-	object["name"], err = json.Marshal(t.Name)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling 'name': %w", err)
-	}
-
-	object["port"], err = json.Marshal(t.Port)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling 'port': %w", err)
-	}
-
-	object["probes"], err = json.Marshal(t.Probes)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling 'probes': %w", err)
-	}
-
-	if t.Replicas != nil {
-		object["replicas"], err = json.Marshal(t.Replicas)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'replicas': %w", err)
-		}
-	}
-
-	object["resources"], err = json.Marshal(t.Resources)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling 'resources': %w", err)
-	}
-
-	if t.Slug != nil {
-		object["slug"], err = json.Marshal(t.Slug)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'slug': %w", err)
-		}
-	}
-	b, err = json.Marshal(object)
-	return b, err
-}
-
-func (t *ReleaseDeploymentIntent) UnmarshalJSON(b []byte) error {
-	err := t.union.UnmarshalJSON(b)
-	if err != nil {
-		return err
-	}
-	object := make(map[string]json.RawMessage)
-	err = json.Unmarshal(b, &object)
-	if err != nil {
-		return err
-	}
-
-	if raw, found := object["environmentId"]; found {
-		err = json.Unmarshal(raw, &t.EnvironmentId)
-		if err != nil {
-			return fmt.Errorf("error reading 'environmentId': %w", err)
-		}
-	}
-
-	if raw, found := object["exposure"]; found {
-		err = json.Unmarshal(raw, &t.Exposure)
-		if err != nil {
-			return fmt.Errorf("error reading 'exposure': %w", err)
-		}
-	}
-
-	if raw, found := object["name"]; found {
-		err = json.Unmarshal(raw, &t.Name)
-		if err != nil {
-			return fmt.Errorf("error reading 'name': %w", err)
-		}
-	}
-
-	if raw, found := object["port"]; found {
-		err = json.Unmarshal(raw, &t.Port)
-		if err != nil {
-			return fmt.Errorf("error reading 'port': %w", err)
-		}
-	}
-
-	if raw, found := object["probes"]; found {
-		err = json.Unmarshal(raw, &t.Probes)
-		if err != nil {
-			return fmt.Errorf("error reading 'probes': %w", err)
-		}
-	}
-
-	if raw, found := object["replicas"]; found {
-		err = json.Unmarshal(raw, &t.Replicas)
-		if err != nil {
-			return fmt.Errorf("error reading 'replicas': %w", err)
-		}
-	}
-
-	if raw, found := object["resources"]; found {
-		err = json.Unmarshal(raw, &t.Resources)
-		if err != nil {
-			return fmt.Errorf("error reading 'resources': %w", err)
-		}
-	}
-
-	if raw, found := object["slug"]; found {
-		err = json.Unmarshal(raw, &t.Slug)
-		if err != nil {
-			return fmt.Errorf("error reading 'slug': %w", err)
-		}
-	}
-
-	return err
-}
-
-// AsScopedDeploymentIntent0 returns the union data inside the ScopedDeploymentIntent as a ScopedDeploymentIntent0
-func (t ScopedDeploymentIntent) AsScopedDeploymentIntent0() (ScopedDeploymentIntent0, error) {
-	var body ScopedDeploymentIntent0
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromScopedDeploymentIntent0 overwrites any union data inside the ScopedDeploymentIntent as the provided ScopedDeploymentIntent0
-func (t *ScopedDeploymentIntent) FromScopedDeploymentIntent0(v ScopedDeploymentIntent0) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeScopedDeploymentIntent0 performs a merge with any union data inside the ScopedDeploymentIntent, using the provided ScopedDeploymentIntent0
-func (t *ScopedDeploymentIntent) MergeScopedDeploymentIntent0(v ScopedDeploymentIntent0) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-// AsScopedDeploymentIntent1 returns the union data inside the ScopedDeploymentIntent as a ScopedDeploymentIntent1
-func (t ScopedDeploymentIntent) AsScopedDeploymentIntent1() (ScopedDeploymentIntent1, error) {
-	var body ScopedDeploymentIntent1
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromScopedDeploymentIntent1 overwrites any union data inside the ScopedDeploymentIntent as the provided ScopedDeploymentIntent1
-func (t *ScopedDeploymentIntent) FromScopedDeploymentIntent1(v ScopedDeploymentIntent1) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeScopedDeploymentIntent1 performs a merge with any union data inside the ScopedDeploymentIntent, using the provided ScopedDeploymentIntent1
-func (t *ScopedDeploymentIntent) MergeScopedDeploymentIntent1(v ScopedDeploymentIntent1) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-func (t ScopedDeploymentIntent) MarshalJSON() ([]byte, error) {
-	b, err := t.union.MarshalJSON()
-	return b, err
-}
-
-func (t *ScopedDeploymentIntent) UnmarshalJSON(b []byte) error {
-	err := t.union.UnmarshalJSON(b)
-	return err
-}
-
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
-
-	// (GET /api/v1/deployments)
-	ListDeployments(w http.ResponseWriter, r *http.Request, params ListDeploymentsParams)
-
-	// (POST /api/v1/deployments)
-	CreateDeployment(w http.ResponseWriter, r *http.Request, params CreateDeploymentParams)
-
-	// (DELETE /api/v1/deployments/{deploymentId})
-	DeleteDeployment(w http.ResponseWriter, r *http.Request, deploymentId string, params DeleteDeploymentParams)
-
-	// (GET /api/v1/deployments/{deploymentId})
-	GetDeployment(w http.ResponseWriter, r *http.Request, deploymentId string)
-
-	// (PUT /api/v1/deployments/{deploymentId})
-	UpdateDeployment(w http.ResponseWriter, r *http.Request, deploymentId string, params UpdateDeploymentParams)
-
-	// (GET /api/v1/deployments/{deploymentId}/operations)
-	ListDeploymentOperations(w http.ResponseWriter, r *http.Request, deploymentId string)
 
 	// (GET /api/v1/github/callback)
 	CompleteGitHubAuthorization(w http.ResponseWriter, r *http.Request, params CompleteGitHubAuthorizationParams)
@@ -1458,24 +833,6 @@ type ServerInterface interface {
 
 	// (PUT /api/v1/workspaces/{workspaceId})
 	UpdateWorkspace(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, params UpdateWorkspaceParams)
-
-	// (GET /api/v1/workspaces/{workspaceId}/deployments)
-	ListWorkspaceDeployments(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, params ListWorkspaceDeploymentsParams)
-
-	// (POST /api/v1/workspaces/{workspaceId}/deployments)
-	CreateWorkspaceDeployment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, params CreateWorkspaceDeploymentParams)
-
-	// (DELETE /api/v1/workspaces/{workspaceId}/deployments/{deploymentId})
-	DeleteWorkspaceDeployment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, deploymentId string, params DeleteWorkspaceDeploymentParams)
-
-	// (GET /api/v1/workspaces/{workspaceId}/deployments/{deploymentId})
-	GetWorkspaceDeployment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, deploymentId string)
-
-	// (PUT /api/v1/workspaces/{workspaceId}/deployments/{deploymentId})
-	UpdateWorkspaceDeployment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, deploymentId string, params UpdateWorkspaceDeploymentParams)
-
-	// (GET /api/v1/workspaces/{workspaceId}/deployments/{deploymentId}/operations)
-	ListWorkspaceDeploymentOperations(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, deploymentId string)
 
 	// (GET /api/v1/workspaces/{workspaceId}/github/installations)
 	ListGitHubInstallations(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId)
@@ -1531,11 +888,32 @@ type ServerInterface interface {
 	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/builds/{buildId}/logs)
 	ListAppBuildLogs(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, buildId BuildId)
 
+	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments)
+	ListAppEnvironments(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, params ListAppEnvironmentsParams)
+
+	// (POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments)
+	CreateAppEnvironment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId)
+
+	// (DELETE /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId})
+	DeleteAppEnvironment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId, params DeleteAppEnvironmentParams)
+
+	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId})
+	GetAppEnvironment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId)
+
+	// (PUT /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId})
+	UpdateAppEnvironment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId, params UpdateAppEnvironmentParams)
+
+	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/deployments)
+	ListAppEnvironmentDeployments(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId, params ListAppEnvironmentDeploymentsParams)
+
+	// (POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/deployments)
+	CreateAppEnvironmentDeployment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId, params CreateAppEnvironmentDeploymentParams)
+
+	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/deployments/{deploymentId})
+	GetAppEnvironmentDeployment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId, deploymentId DeploymentId)
+
 	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/releases)
 	ListAppReleases(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, params ListAppReleasesParams)
-
-	// (POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/releases/{releaseId}/deployments)
-	CreateReleaseDeployment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, releaseId ReleaseId, params CreateReleaseDeploymentParams)
 
 	// (DELETE /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/source)
 	ClearAppSource(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId)
@@ -1565,36 +943,6 @@ type ServerInterface interface {
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
 
 type Unimplemented struct{}
-
-// (GET /api/v1/deployments)
-func (_ Unimplemented) ListDeployments(w http.ResponseWriter, r *http.Request, params ListDeploymentsParams) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (POST /api/v1/deployments)
-func (_ Unimplemented) CreateDeployment(w http.ResponseWriter, r *http.Request, params CreateDeploymentParams) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (DELETE /api/v1/deployments/{deploymentId})
-func (_ Unimplemented) DeleteDeployment(w http.ResponseWriter, r *http.Request, deploymentId string, params DeleteDeploymentParams) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (GET /api/v1/deployments/{deploymentId})
-func (_ Unimplemented) GetDeployment(w http.ResponseWriter, r *http.Request, deploymentId string) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (PUT /api/v1/deployments/{deploymentId})
-func (_ Unimplemented) UpdateDeployment(w http.ResponseWriter, r *http.Request, deploymentId string, params UpdateDeploymentParams) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (GET /api/v1/deployments/{deploymentId}/operations)
-func (_ Unimplemented) ListDeploymentOperations(w http.ResponseWriter, r *http.Request, deploymentId string) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
 
 // (GET /api/v1/github/callback)
 func (_ Unimplemented) CompleteGitHubAuthorization(w http.ResponseWriter, r *http.Request, params CompleteGitHubAuthorizationParams) {
@@ -1648,36 +996,6 @@ func (_ Unimplemented) GetWorkspace(w http.ResponseWriter, r *http.Request, work
 
 // (PUT /api/v1/workspaces/{workspaceId})
 func (_ Unimplemented) UpdateWorkspace(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, params UpdateWorkspaceParams) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (GET /api/v1/workspaces/{workspaceId}/deployments)
-func (_ Unimplemented) ListWorkspaceDeployments(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, params ListWorkspaceDeploymentsParams) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (POST /api/v1/workspaces/{workspaceId}/deployments)
-func (_ Unimplemented) CreateWorkspaceDeployment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, params CreateWorkspaceDeploymentParams) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (DELETE /api/v1/workspaces/{workspaceId}/deployments/{deploymentId})
-func (_ Unimplemented) DeleteWorkspaceDeployment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, deploymentId string, params DeleteWorkspaceDeploymentParams) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (GET /api/v1/workspaces/{workspaceId}/deployments/{deploymentId})
-func (_ Unimplemented) GetWorkspaceDeployment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, deploymentId string) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (PUT /api/v1/workspaces/{workspaceId}/deployments/{deploymentId})
-func (_ Unimplemented) UpdateWorkspaceDeployment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, deploymentId string, params UpdateWorkspaceDeploymentParams) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (GET /api/v1/workspaces/{workspaceId}/deployments/{deploymentId}/operations)
-func (_ Unimplemented) ListWorkspaceDeploymentOperations(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, deploymentId string) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1771,13 +1089,48 @@ func (_ Unimplemented) ListAppBuildLogs(w http.ResponseWriter, r *http.Request, 
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/releases)
-func (_ Unimplemented) ListAppReleases(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, params ListAppReleasesParams) {
+// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments)
+func (_ Unimplemented) ListAppEnvironments(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, params ListAppEnvironmentsParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// (POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/releases/{releaseId}/deployments)
-func (_ Unimplemented) CreateReleaseDeployment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, releaseId ReleaseId, params CreateReleaseDeploymentParams) {
+// (POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments)
+func (_ Unimplemented) CreateAppEnvironment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (DELETE /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId})
+func (_ Unimplemented) DeleteAppEnvironment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId, params DeleteAppEnvironmentParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId})
+func (_ Unimplemented) GetAppEnvironment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (PUT /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId})
+func (_ Unimplemented) UpdateAppEnvironment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId, params UpdateAppEnvironmentParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/deployments)
+func (_ Unimplemented) ListAppEnvironmentDeployments(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId, params ListAppEnvironmentDeploymentsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/deployments)
+func (_ Unimplemented) CreateAppEnvironmentDeployment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId, params CreateAppEnvironmentDeploymentParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/deployments/{deploymentId})
+func (_ Unimplemented) GetAppEnvironmentDeployment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId, deploymentId DeploymentId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/releases)
+func (_ Unimplemented) ListAppReleases(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, params ListAppReleasesParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1829,303 +1182,6 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
-
-// ListDeployments operation middleware
-func (siw *ServerInterfaceWrapper) ListDeployments(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params ListDeploymentsParams
-
-	// ------------- Optional query parameter "cursor" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "limit" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
-		}
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListDeployments(w, r, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// CreateDeployment operation middleware
-func (siw *ServerInterfaceWrapper) CreateDeployment(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params CreateDeploymentParams
-
-	headers := r.Header
-
-	// ------------- Required header parameter "Idempotency-Key" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
-		var IdempotencyKey IdempotencyKey
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
-			return
-		}
-
-		params.IdempotencyKey = IdempotencyKey
-
-	} else {
-		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
-		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreateDeployment(w, r, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// DeleteDeployment operation middleware
-func (siw *ServerInterfaceWrapper) DeleteDeployment(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "deploymentId" -------------
-	var deploymentId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "deploymentId", chi.URLParam(r, "deploymentId"), &deploymentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "deploymentId", Err: err})
-		return
-	}
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params DeleteDeploymentParams
-
-	headers := r.Header
-
-	// ------------- Required header parameter "Idempotency-Key" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
-		var IdempotencyKey IdempotencyKey
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
-			return
-		}
-
-		params.IdempotencyKey = IdempotencyKey
-
-	} else {
-		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
-		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
-		return
-	}
-
-	// ------------- Required header parameter "If-Match" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
-		var IfMatch IfMatch
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "integer", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
-			return
-		}
-
-		params.IfMatch = IfMatch
-
-	} else {
-		err := fmt.Errorf("Header parameter If-Match is required, but not found")
-		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DeleteDeployment(w, r, deploymentId, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetDeployment operation middleware
-func (siw *ServerInterfaceWrapper) GetDeployment(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "deploymentId" -------------
-	var deploymentId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "deploymentId", chi.URLParam(r, "deploymentId"), &deploymentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "deploymentId", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetDeployment(w, r, deploymentId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// UpdateDeployment operation middleware
-func (siw *ServerInterfaceWrapper) UpdateDeployment(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "deploymentId" -------------
-	var deploymentId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "deploymentId", chi.URLParam(r, "deploymentId"), &deploymentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "deploymentId", Err: err})
-		return
-	}
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params UpdateDeploymentParams
-
-	headers := r.Header
-
-	// ------------- Required header parameter "Idempotency-Key" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
-		var IdempotencyKey IdempotencyKey
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
-			return
-		}
-
-		params.IdempotencyKey = IdempotencyKey
-
-	} else {
-		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
-		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
-		return
-	}
-
-	// ------------- Required header parameter "If-Match" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
-		var IfMatch IfMatch
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "integer", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
-			return
-		}
-
-		params.IfMatch = IfMatch
-
-	} else {
-		err := fmt.Errorf("Header parameter If-Match is required, but not found")
-		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.UpdateDeployment(w, r, deploymentId, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ListDeploymentOperations operation middleware
-func (siw *ServerInterfaceWrapper) ListDeploymentOperations(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "deploymentId" -------------
-	var deploymentId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "deploymentId", chi.URLParam(r, "deploymentId"), &deploymentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "deploymentId", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListDeploymentOperations(w, r, deploymentId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
 
 // CompleteGitHubAuthorization operation middleware
 func (siw *ServerInterfaceWrapper) CompleteGitHubAuthorization(w http.ResponseWriter, r *http.Request) {
@@ -2463,357 +1519,6 @@ func (siw *ServerInterfaceWrapper) UpdateWorkspace(w http.ResponseWriter, r *htt
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateWorkspace(w, r, workspaceId, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ListWorkspaceDeployments operation middleware
-func (siw *ServerInterfaceWrapper) ListWorkspaceDeployments(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "workspaceId" -------------
-	var workspaceId WorkspaceId
-
-	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
-		return
-	}
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params ListWorkspaceDeploymentsParams
-
-	// ------------- Optional query parameter "cursor" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "limit" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
-		}
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListWorkspaceDeployments(w, r, workspaceId, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// CreateWorkspaceDeployment operation middleware
-func (siw *ServerInterfaceWrapper) CreateWorkspaceDeployment(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "workspaceId" -------------
-	var workspaceId WorkspaceId
-
-	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
-		return
-	}
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params CreateWorkspaceDeploymentParams
-
-	headers := r.Header
-
-	// ------------- Required header parameter "Idempotency-Key" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
-		var IdempotencyKey IdempotencyKey
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
-			return
-		}
-
-		params.IdempotencyKey = IdempotencyKey
-
-	} else {
-		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
-		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreateWorkspaceDeployment(w, r, workspaceId, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// DeleteWorkspaceDeployment operation middleware
-func (siw *ServerInterfaceWrapper) DeleteWorkspaceDeployment(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "workspaceId" -------------
-	var workspaceId WorkspaceId
-
-	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "deploymentId" -------------
-	var deploymentId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "deploymentId", chi.URLParam(r, "deploymentId"), &deploymentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "deploymentId", Err: err})
-		return
-	}
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params DeleteWorkspaceDeploymentParams
-
-	headers := r.Header
-
-	// ------------- Required header parameter "Idempotency-Key" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
-		var IdempotencyKey IdempotencyKey
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
-			return
-		}
-
-		params.IdempotencyKey = IdempotencyKey
-
-	} else {
-		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
-		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
-		return
-	}
-
-	// ------------- Required header parameter "If-Match" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
-		var IfMatch IfMatch
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "integer", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
-			return
-		}
-
-		params.IfMatch = IfMatch
-
-	} else {
-		err := fmt.Errorf("Header parameter If-Match is required, but not found")
-		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DeleteWorkspaceDeployment(w, r, workspaceId, deploymentId, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetWorkspaceDeployment operation middleware
-func (siw *ServerInterfaceWrapper) GetWorkspaceDeployment(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "workspaceId" -------------
-	var workspaceId WorkspaceId
-
-	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "deploymentId" -------------
-	var deploymentId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "deploymentId", chi.URLParam(r, "deploymentId"), &deploymentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "deploymentId", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetWorkspaceDeployment(w, r, workspaceId, deploymentId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// UpdateWorkspaceDeployment operation middleware
-func (siw *ServerInterfaceWrapper) UpdateWorkspaceDeployment(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "workspaceId" -------------
-	var workspaceId WorkspaceId
-
-	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "deploymentId" -------------
-	var deploymentId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "deploymentId", chi.URLParam(r, "deploymentId"), &deploymentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "deploymentId", Err: err})
-		return
-	}
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params UpdateWorkspaceDeploymentParams
-
-	headers := r.Header
-
-	// ------------- Required header parameter "Idempotency-Key" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
-		var IdempotencyKey IdempotencyKey
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
-			return
-		}
-
-		params.IdempotencyKey = IdempotencyKey
-
-	} else {
-		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
-		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
-		return
-	}
-
-	// ------------- Required header parameter "If-Match" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
-		var IfMatch IfMatch
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "integer", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
-			return
-		}
-
-		params.IfMatch = IfMatch
-
-	} else {
-		err := fmt.Errorf("Header parameter If-Match is required, but not found")
-		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.UpdateWorkspaceDeployment(w, r, workspaceId, deploymentId, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ListWorkspaceDeploymentOperations operation middleware
-func (siw *ServerInterfaceWrapper) ListWorkspaceDeploymentOperations(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "workspaceId" -------------
-	var workspaceId WorkspaceId
-
-	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "deploymentId" -------------
-	var deploymentId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "deploymentId", chi.URLParam(r, "deploymentId"), &deploymentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "deploymentId", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListWorkspaceDeploymentOperations(w, r, workspaceId, deploymentId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3751,6 +2456,586 @@ func (siw *ServerInterfaceWrapper) ListAppBuildLogs(w http.ResponseWriter, r *ht
 	handler.ServeHTTP(w, r)
 }
 
+// ListAppEnvironments operation middleware
+func (siw *ServerInterfaceWrapper) ListAppEnvironments(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appId" -------------
+	var appId AppId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appId", chi.URLParam(r, "appId"), &appId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAppEnvironmentsParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAppEnvironments(w, r, workspaceId, projectId, appId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateAppEnvironment operation middleware
+func (siw *ServerInterfaceWrapper) CreateAppEnvironment(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appId" -------------
+	var appId AppId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appId", chi.URLParam(r, "appId"), &appId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateAppEnvironment(w, r, workspaceId, projectId, appId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteAppEnvironment operation middleware
+func (siw *ServerInterfaceWrapper) DeleteAppEnvironment(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appId" -------------
+	var appId AppId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appId", chi.URLParam(r, "appId"), &appId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appEnvironmentId" -------------
+	var appEnvironmentId AppEnvironmentId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appEnvironmentId", chi.URLParam(r, "appEnvironmentId"), &appEnvironmentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appEnvironmentId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeleteAppEnvironmentParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch IfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "integer", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteAppEnvironment(w, r, workspaceId, projectId, appId, appEnvironmentId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAppEnvironment operation middleware
+func (siw *ServerInterfaceWrapper) GetAppEnvironment(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appId" -------------
+	var appId AppId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appId", chi.URLParam(r, "appId"), &appId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appEnvironmentId" -------------
+	var appEnvironmentId AppEnvironmentId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appEnvironmentId", chi.URLParam(r, "appEnvironmentId"), &appEnvironmentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appEnvironmentId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAppEnvironment(w, r, workspaceId, projectId, appId, appEnvironmentId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateAppEnvironment operation middleware
+func (siw *ServerInterfaceWrapper) UpdateAppEnvironment(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appId" -------------
+	var appId AppId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appId", chi.URLParam(r, "appId"), &appId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appEnvironmentId" -------------
+	var appEnvironmentId AppEnvironmentId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appEnvironmentId", chi.URLParam(r, "appEnvironmentId"), &appEnvironmentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appEnvironmentId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdateAppEnvironmentParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch IfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "integer", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateAppEnvironment(w, r, workspaceId, projectId, appId, appEnvironmentId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListAppEnvironmentDeployments operation middleware
+func (siw *ServerInterfaceWrapper) ListAppEnvironmentDeployments(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appId" -------------
+	var appId AppId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appId", chi.URLParam(r, "appId"), &appId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appEnvironmentId" -------------
+	var appEnvironmentId AppEnvironmentId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appEnvironmentId", chi.URLParam(r, "appEnvironmentId"), &appEnvironmentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appEnvironmentId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAppEnvironmentDeploymentsParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAppEnvironmentDeployments(w, r, workspaceId, projectId, appId, appEnvironmentId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateAppEnvironmentDeployment operation middleware
+func (siw *ServerInterfaceWrapper) CreateAppEnvironmentDeployment(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appId" -------------
+	var appId AppId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appId", chi.URLParam(r, "appId"), &appId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appEnvironmentId" -------------
+	var appEnvironmentId AppEnvironmentId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appEnvironmentId", chi.URLParam(r, "appEnvironmentId"), &appEnvironmentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appEnvironmentId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateAppEnvironmentDeploymentParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateAppEnvironmentDeployment(w, r, workspaceId, projectId, appId, appEnvironmentId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAppEnvironmentDeployment operation middleware
+func (siw *ServerInterfaceWrapper) GetAppEnvironmentDeployment(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appId" -------------
+	var appId AppId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appId", chi.URLParam(r, "appId"), &appId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appEnvironmentId" -------------
+	var appEnvironmentId AppEnvironmentId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appEnvironmentId", chi.URLParam(r, "appEnvironmentId"), &appEnvironmentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appEnvironmentId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "deploymentId" -------------
+	var deploymentId DeploymentId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "deploymentId", chi.URLParam(r, "deploymentId"), &deploymentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "deploymentId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAppEnvironmentDeployment(w, r, workspaceId, projectId, appId, appEnvironmentId, deploymentId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListAppReleases operation middleware
 func (siw *ServerInterfaceWrapper) ListAppReleases(w http.ResponseWriter, r *http.Request) {
 
@@ -3815,87 +3100,6 @@ func (siw *ServerInterfaceWrapper) ListAppReleases(w http.ResponseWriter, r *htt
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListAppReleases(w, r, workspaceId, projectId, appId, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// CreateReleaseDeployment operation middleware
-func (siw *ServerInterfaceWrapper) CreateReleaseDeployment(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "workspaceId" -------------
-	var workspaceId WorkspaceId
-
-	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "projectId" -------------
-	var projectId ProjectId
-
-	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "appId" -------------
-	var appId AppId
-
-	err = runtime.BindStyledParameterWithOptions("simple", "appId", chi.URLParam(r, "appId"), &appId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appId", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "releaseId" -------------
-	var releaseId ReleaseId
-
-	err = runtime.BindStyledParameterWithOptions("simple", "releaseId", chi.URLParam(r, "releaseId"), &releaseId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "releaseId", Err: err})
-		return
-	}
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params CreateReleaseDeploymentParams
-
-	headers := r.Header
-
-	// ------------- Required header parameter "Idempotency-Key" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
-		var IdempotencyKey IdempotencyKey
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
-			return
-		}
-
-		params.IdempotencyKey = IdempotencyKey
-
-	} else {
-		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
-		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreateReleaseDeployment(w, r, workspaceId, projectId, appId, releaseId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -4562,43 +3766,28 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/releases", wrapper.ListAppReleases)
 	})
 	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/releases/{releaseId}/deployments", wrapper.CreateReleaseDeployment)
+		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments", wrapper.ListAppEnvironments)
 	})
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/deployments", wrapper.ListWorkspaceDeployments)
+		r.Post(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments", wrapper.CreateAppEnvironment)
 	})
 	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/api/v1/workspaces/{workspaceId}/deployments", wrapper.CreateWorkspaceDeployment)
+		r.Delete(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}", wrapper.DeleteAppEnvironment)
 	})
 	r.Group(func(r chi.Router) {
-		r.Delete(options.BaseURL+"/api/v1/workspaces/{workspaceId}/deployments/{deploymentId}", wrapper.DeleteWorkspaceDeployment)
+		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}", wrapper.GetAppEnvironment)
 	})
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/deployments/{deploymentId}", wrapper.GetWorkspaceDeployment)
+		r.Put(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}", wrapper.UpdateAppEnvironment)
 	})
 	r.Group(func(r chi.Router) {
-		r.Put(options.BaseURL+"/api/v1/workspaces/{workspaceId}/deployments/{deploymentId}", wrapper.UpdateWorkspaceDeployment)
+		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/deployments", wrapper.ListAppEnvironmentDeployments)
 	})
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/deployments/{deploymentId}/operations", wrapper.ListWorkspaceDeploymentOperations)
+		r.Post(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/deployments", wrapper.CreateAppEnvironmentDeployment)
 	})
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/api/v1/deployments", wrapper.ListDeployments)
-	})
-	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/api/v1/deployments", wrapper.CreateDeployment)
-	})
-	r.Group(func(r chi.Router) {
-		r.Delete(options.BaseURL+"/api/v1/deployments/{deploymentId}", wrapper.DeleteDeployment)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/api/v1/deployments/{deploymentId}", wrapper.GetDeployment)
-	})
-	r.Group(func(r chi.Router) {
-		r.Put(options.BaseURL+"/api/v1/deployments/{deploymentId}", wrapper.UpdateDeployment)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/api/v1/deployments/{deploymentId}/operations", wrapper.ListDeploymentOperations)
+		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/deployments/{deploymentId}", wrapper.GetAppEnvironmentDeployment)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/operations/{operationId}", wrapper.GetOperation)
@@ -4623,203 +3812,6 @@ type NotFoundJSONResponse Error
 type UnauthorizedJSONResponse Error
 
 type UnavailableJSONResponse Error
-
-type ListDeploymentsRequestObject struct {
-	Params ListDeploymentsParams
-}
-
-type ListDeploymentsResponseObject interface {
-	VisitListDeploymentsResponse(w http.ResponseWriter) error
-}
-
-type ListDeployments200JSONResponse struct {
-	Items      []Deployment `json:"items"`
-	NextCursor *string      `json:"nextCursor,omitempty"`
-}
-
-func (response ListDeployments200JSONResponse) VisitListDeploymentsResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type CreateDeploymentRequestObject struct {
-	Params CreateDeploymentParams
-	Body   *CreateDeploymentJSONRequestBody
-}
-
-type CreateDeploymentResponseObject interface {
-	VisitCreateDeploymentResponse(w http.ResponseWriter) error
-}
-
-type CreateDeployment202JSONResponse struct{ MutationAcceptedJSONResponse }
-
-func (response CreateDeployment202JSONResponse) VisitCreateDeploymentResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(202)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type CreateDeployment400JSONResponse struct{ BadRequestJSONResponse }
-
-func (response CreateDeployment400JSONResponse) VisitCreateDeploymentResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(400)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type CreateDeployment409JSONResponse struct{ ConflictJSONResponse }
-
-func (response CreateDeployment409JSONResponse) VisitCreateDeploymentResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(409)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type DeleteDeploymentRequestObject struct {
-	DeploymentId string `json:"deploymentId"`
-	Params       DeleteDeploymentParams
-}
-
-type DeleteDeploymentResponseObject interface {
-	VisitDeleteDeploymentResponse(w http.ResponseWriter) error
-}
-
-type DeleteDeployment202JSONResponse struct{ MutationAcceptedJSONResponse }
-
-func (response DeleteDeployment202JSONResponse) VisitDeleteDeploymentResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(202)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type GetDeploymentRequestObject struct {
-	DeploymentId string `json:"deploymentId"`
-}
-
-type GetDeploymentResponseObject interface {
-	VisitGetDeploymentResponse(w http.ResponseWriter) error
-}
-
-type GetDeployment200JSONResponse Deployment
-
-func (response GetDeployment200JSONResponse) VisitGetDeploymentResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type GetDeployment404JSONResponse struct{ NotFoundJSONResponse }
-
-func (response GetDeployment404JSONResponse) VisitGetDeploymentResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(404)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type UpdateDeploymentRequestObject struct {
-	DeploymentId string `json:"deploymentId"`
-	Params       UpdateDeploymentParams
-	Body         *UpdateDeploymentJSONRequestBody
-}
-
-type UpdateDeploymentResponseObject interface {
-	VisitUpdateDeploymentResponse(w http.ResponseWriter) error
-}
-
-type UpdateDeployment202JSONResponse struct{ MutationAcceptedJSONResponse }
-
-func (response UpdateDeployment202JSONResponse) VisitUpdateDeploymentResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(202)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type UpdateDeployment409JSONResponse struct{ ConflictJSONResponse }
-
-func (response UpdateDeployment409JSONResponse) VisitUpdateDeploymentResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(409)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type ListDeploymentOperationsRequestObject struct {
-	DeploymentId string `json:"deploymentId"`
-}
-
-type ListDeploymentOperationsResponseObject interface {
-	VisitListDeploymentOperationsResponse(w http.ResponseWriter) error
-}
-
-type ListDeploymentOperations200JSONResponse struct {
-	Items *[]Operation `json:"items,omitempty"`
-}
-
-func (response ListDeploymentOperations200JSONResponse) VisitListDeploymentOperationsResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
-}
 
 type CompleteGitHubAuthorizationRequestObject struct {
 	Params CompleteGitHubAuthorizationParams
@@ -5299,349 +4291,6 @@ func (response UpdateWorkspace409JSONResponse) VisitUpdateWorkspaceResponse(w ht
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(409)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type ListWorkspaceDeploymentsRequestObject struct {
-	WorkspaceId WorkspaceId `json:"workspaceId"`
-	Params      ListWorkspaceDeploymentsParams
-}
-
-type ListWorkspaceDeploymentsResponseObject interface {
-	VisitListWorkspaceDeploymentsResponse(w http.ResponseWriter) error
-}
-
-type ListWorkspaceDeployments200JSONResponse struct {
-	Items      []Deployment `json:"items"`
-	NextCursor *string      `json:"nextCursor,omitempty"`
-}
-
-func (response ListWorkspaceDeployments200JSONResponse) VisitListWorkspaceDeploymentsResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type ListWorkspaceDeployments404JSONResponse struct{ NotFoundJSONResponse }
-
-func (response ListWorkspaceDeployments404JSONResponse) VisitListWorkspaceDeploymentsResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(404)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type CreateWorkspaceDeploymentRequestObject struct {
-	WorkspaceId WorkspaceId `json:"workspaceId"`
-	Params      CreateWorkspaceDeploymentParams
-	Body        *CreateWorkspaceDeploymentJSONRequestBody
-}
-
-type CreateWorkspaceDeploymentResponseObject interface {
-	VisitCreateWorkspaceDeploymentResponse(w http.ResponseWriter) error
-}
-
-type CreateWorkspaceDeployment202JSONResponse struct{ MutationAcceptedJSONResponse }
-
-func (response CreateWorkspaceDeployment202JSONResponse) VisitCreateWorkspaceDeploymentResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(202)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type CreateWorkspaceDeployment400JSONResponse struct{ BadRequestJSONResponse }
-
-func (response CreateWorkspaceDeployment400JSONResponse) VisitCreateWorkspaceDeploymentResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(400)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type CreateWorkspaceDeployment403JSONResponse struct{ ForbiddenJSONResponse }
-
-func (response CreateWorkspaceDeployment403JSONResponse) VisitCreateWorkspaceDeploymentResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(403)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type CreateWorkspaceDeployment404JSONResponse struct{ NotFoundJSONResponse }
-
-func (response CreateWorkspaceDeployment404JSONResponse) VisitCreateWorkspaceDeploymentResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(404)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type CreateWorkspaceDeployment409JSONResponse struct{ ConflictJSONResponse }
-
-func (response CreateWorkspaceDeployment409JSONResponse) VisitCreateWorkspaceDeploymentResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(409)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type DeleteWorkspaceDeploymentRequestObject struct {
-	WorkspaceId  WorkspaceId `json:"workspaceId"`
-	DeploymentId string      `json:"deploymentId"`
-	Params       DeleteWorkspaceDeploymentParams
-}
-
-type DeleteWorkspaceDeploymentResponseObject interface {
-	VisitDeleteWorkspaceDeploymentResponse(w http.ResponseWriter) error
-}
-
-type DeleteWorkspaceDeployment202JSONResponse struct{ MutationAcceptedJSONResponse }
-
-func (response DeleteWorkspaceDeployment202JSONResponse) VisitDeleteWorkspaceDeploymentResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(202)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type DeleteWorkspaceDeployment403JSONResponse struct{ ForbiddenJSONResponse }
-
-func (response DeleteWorkspaceDeployment403JSONResponse) VisitDeleteWorkspaceDeploymentResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(403)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type DeleteWorkspaceDeployment404JSONResponse struct{ NotFoundJSONResponse }
-
-func (response DeleteWorkspaceDeployment404JSONResponse) VisitDeleteWorkspaceDeploymentResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(404)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type DeleteWorkspaceDeployment409JSONResponse struct{ ConflictJSONResponse }
-
-func (response DeleteWorkspaceDeployment409JSONResponse) VisitDeleteWorkspaceDeploymentResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(409)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type GetWorkspaceDeploymentRequestObject struct {
-	WorkspaceId  WorkspaceId `json:"workspaceId"`
-	DeploymentId string      `json:"deploymentId"`
-}
-
-type GetWorkspaceDeploymentResponseObject interface {
-	VisitGetWorkspaceDeploymentResponse(w http.ResponseWriter) error
-}
-
-type GetWorkspaceDeployment200JSONResponse Deployment
-
-func (response GetWorkspaceDeployment200JSONResponse) VisitGetWorkspaceDeploymentResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type GetWorkspaceDeployment404JSONResponse struct{ NotFoundJSONResponse }
-
-func (response GetWorkspaceDeployment404JSONResponse) VisitGetWorkspaceDeploymentResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(404)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type UpdateWorkspaceDeploymentRequestObject struct {
-	WorkspaceId  WorkspaceId `json:"workspaceId"`
-	DeploymentId string      `json:"deploymentId"`
-	Params       UpdateWorkspaceDeploymentParams
-	Body         *UpdateWorkspaceDeploymentJSONRequestBody
-}
-
-type UpdateWorkspaceDeploymentResponseObject interface {
-	VisitUpdateWorkspaceDeploymentResponse(w http.ResponseWriter) error
-}
-
-type UpdateWorkspaceDeployment202JSONResponse struct{ MutationAcceptedJSONResponse }
-
-func (response UpdateWorkspaceDeployment202JSONResponse) VisitUpdateWorkspaceDeploymentResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(202)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type UpdateWorkspaceDeployment400JSONResponse struct{ BadRequestJSONResponse }
-
-func (response UpdateWorkspaceDeployment400JSONResponse) VisitUpdateWorkspaceDeploymentResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(400)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type UpdateWorkspaceDeployment403JSONResponse struct{ ForbiddenJSONResponse }
-
-func (response UpdateWorkspaceDeployment403JSONResponse) VisitUpdateWorkspaceDeploymentResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(403)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type UpdateWorkspaceDeployment404JSONResponse struct{ NotFoundJSONResponse }
-
-func (response UpdateWorkspaceDeployment404JSONResponse) VisitUpdateWorkspaceDeploymentResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(404)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type UpdateWorkspaceDeployment409JSONResponse struct{ ConflictJSONResponse }
-
-func (response UpdateWorkspaceDeployment409JSONResponse) VisitUpdateWorkspaceDeploymentResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(409)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type ListWorkspaceDeploymentOperationsRequestObject struct {
-	WorkspaceId  WorkspaceId `json:"workspaceId"`
-	DeploymentId string      `json:"deploymentId"`
-}
-
-type ListWorkspaceDeploymentOperationsResponseObject interface {
-	VisitListWorkspaceDeploymentOperationsResponse(w http.ResponseWriter) error
-}
-
-type ListWorkspaceDeploymentOperations200JSONResponse struct {
-	Items []Operation `json:"items"`
-}
-
-func (response ListWorkspaceDeploymentOperations200JSONResponse) VisitListWorkspaceDeploymentOperationsResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type ListWorkspaceDeploymentOperations404JSONResponse struct{ NotFoundJSONResponse }
-
-func (response ListWorkspaceDeploymentOperations404JSONResponse) VisitListWorkspaceDeploymentOperationsResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(404)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -6679,6 +5328,485 @@ func (response ListAppBuildLogs404JSONResponse) VisitListAppBuildLogsResponse(w 
 	return err
 }
 
+type ListAppEnvironmentsRequestObject struct {
+	WorkspaceId WorkspaceId `json:"workspaceId"`
+	ProjectId   ProjectId   `json:"projectId"`
+	AppId       AppId       `json:"appId"`
+	Params      ListAppEnvironmentsParams
+}
+
+type ListAppEnvironmentsResponseObject interface {
+	VisitListAppEnvironmentsResponse(w http.ResponseWriter) error
+}
+
+type ListAppEnvironments200JSONResponse struct {
+	Items      []AppEnvironment `json:"items"`
+	NextCursor *string          `json:"nextCursor,omitempty"`
+}
+
+func (response ListAppEnvironments200JSONResponse) VisitListAppEnvironmentsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAppEnvironments404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ListAppEnvironments404JSONResponse) VisitListAppEnvironmentsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateAppEnvironmentRequestObject struct {
+	WorkspaceId WorkspaceId `json:"workspaceId"`
+	ProjectId   ProjectId   `json:"projectId"`
+	AppId       AppId       `json:"appId"`
+	Body        *CreateAppEnvironmentJSONRequestBody
+}
+
+type CreateAppEnvironmentResponseObject interface {
+	VisitCreateAppEnvironmentResponse(w http.ResponseWriter) error
+}
+
+type CreateAppEnvironment201JSONResponse AppEnvironment
+
+func (response CreateAppEnvironment201JSONResponse) VisitCreateAppEnvironmentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateAppEnvironment400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response CreateAppEnvironment400JSONResponse) VisitCreateAppEnvironmentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateAppEnvironment403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response CreateAppEnvironment403JSONResponse) VisitCreateAppEnvironmentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateAppEnvironment404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response CreateAppEnvironment404JSONResponse) VisitCreateAppEnvironmentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateAppEnvironment409JSONResponse struct{ ConflictJSONResponse }
+
+func (response CreateAppEnvironment409JSONResponse) VisitCreateAppEnvironmentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteAppEnvironmentRequestObject struct {
+	WorkspaceId      WorkspaceId      `json:"workspaceId"`
+	ProjectId        ProjectId        `json:"projectId"`
+	AppId            AppId            `json:"appId"`
+	AppEnvironmentId AppEnvironmentId `json:"appEnvironmentId"`
+	Params           DeleteAppEnvironmentParams
+}
+
+type DeleteAppEnvironmentResponseObject interface {
+	VisitDeleteAppEnvironmentResponse(w http.ResponseWriter) error
+}
+
+type DeleteAppEnvironment202JSONResponse Operation
+
+func (response DeleteAppEnvironment202JSONResponse) VisitDeleteAppEnvironmentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(202)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteAppEnvironment403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response DeleteAppEnvironment403JSONResponse) VisitDeleteAppEnvironmentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteAppEnvironment404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response DeleteAppEnvironment404JSONResponse) VisitDeleteAppEnvironmentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteAppEnvironment409JSONResponse struct{ ConflictJSONResponse }
+
+func (response DeleteAppEnvironment409JSONResponse) VisitDeleteAppEnvironmentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAppEnvironmentRequestObject struct {
+	WorkspaceId      WorkspaceId      `json:"workspaceId"`
+	ProjectId        ProjectId        `json:"projectId"`
+	AppId            AppId            `json:"appId"`
+	AppEnvironmentId AppEnvironmentId `json:"appEnvironmentId"`
+}
+
+type GetAppEnvironmentResponseObject interface {
+	VisitGetAppEnvironmentResponse(w http.ResponseWriter) error
+}
+
+type GetAppEnvironment200JSONResponse AppEnvironment
+
+func (response GetAppEnvironment200JSONResponse) VisitGetAppEnvironmentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAppEnvironment404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response GetAppEnvironment404JSONResponse) VisitGetAppEnvironmentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateAppEnvironmentRequestObject struct {
+	WorkspaceId      WorkspaceId      `json:"workspaceId"`
+	ProjectId        ProjectId        `json:"projectId"`
+	AppId            AppId            `json:"appId"`
+	AppEnvironmentId AppEnvironmentId `json:"appEnvironmentId"`
+	Params           UpdateAppEnvironmentParams
+	Body             *UpdateAppEnvironmentJSONRequestBody
+}
+
+type UpdateAppEnvironmentResponseObject interface {
+	VisitUpdateAppEnvironmentResponse(w http.ResponseWriter) error
+}
+
+type UpdateAppEnvironment200JSONResponse AppEnvironment
+
+func (response UpdateAppEnvironment200JSONResponse) VisitUpdateAppEnvironmentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateAppEnvironment400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response UpdateAppEnvironment400JSONResponse) VisitUpdateAppEnvironmentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateAppEnvironment403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response UpdateAppEnvironment403JSONResponse) VisitUpdateAppEnvironmentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateAppEnvironment404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response UpdateAppEnvironment404JSONResponse) VisitUpdateAppEnvironmentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateAppEnvironment409JSONResponse struct{ ConflictJSONResponse }
+
+func (response UpdateAppEnvironment409JSONResponse) VisitUpdateAppEnvironmentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAppEnvironmentDeploymentsRequestObject struct {
+	WorkspaceId      WorkspaceId      `json:"workspaceId"`
+	ProjectId        ProjectId        `json:"projectId"`
+	AppId            AppId            `json:"appId"`
+	AppEnvironmentId AppEnvironmentId `json:"appEnvironmentId"`
+	Params           ListAppEnvironmentDeploymentsParams
+}
+
+type ListAppEnvironmentDeploymentsResponseObject interface {
+	VisitListAppEnvironmentDeploymentsResponse(w http.ResponseWriter) error
+}
+
+type ListAppEnvironmentDeployments200JSONResponse struct {
+	Items      []Deployment `json:"items"`
+	NextCursor *string      `json:"nextCursor,omitempty"`
+}
+
+func (response ListAppEnvironmentDeployments200JSONResponse) VisitListAppEnvironmentDeploymentsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAppEnvironmentDeployments404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ListAppEnvironmentDeployments404JSONResponse) VisitListAppEnvironmentDeploymentsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateAppEnvironmentDeploymentRequestObject struct {
+	WorkspaceId      WorkspaceId      `json:"workspaceId"`
+	ProjectId        ProjectId        `json:"projectId"`
+	AppId            AppId            `json:"appId"`
+	AppEnvironmentId AppEnvironmentId `json:"appEnvironmentId"`
+	Params           CreateAppEnvironmentDeploymentParams
+	Body             *CreateAppEnvironmentDeploymentJSONRequestBody
+}
+
+type CreateAppEnvironmentDeploymentResponseObject interface {
+	VisitCreateAppEnvironmentDeploymentResponse(w http.ResponseWriter) error
+}
+
+type CreateAppEnvironmentDeployment202JSONResponse struct{ MutationAcceptedJSONResponse }
+
+func (response CreateAppEnvironmentDeployment202JSONResponse) VisitCreateAppEnvironmentDeploymentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(202)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateAppEnvironmentDeployment400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response CreateAppEnvironmentDeployment400JSONResponse) VisitCreateAppEnvironmentDeploymentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateAppEnvironmentDeployment403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response CreateAppEnvironmentDeployment403JSONResponse) VisitCreateAppEnvironmentDeploymentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateAppEnvironmentDeployment404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response CreateAppEnvironmentDeployment404JSONResponse) VisitCreateAppEnvironmentDeploymentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateAppEnvironmentDeployment409JSONResponse struct{ ConflictJSONResponse }
+
+func (response CreateAppEnvironmentDeployment409JSONResponse) VisitCreateAppEnvironmentDeploymentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAppEnvironmentDeploymentRequestObject struct {
+	WorkspaceId      WorkspaceId      `json:"workspaceId"`
+	ProjectId        ProjectId        `json:"projectId"`
+	AppId            AppId            `json:"appId"`
+	AppEnvironmentId AppEnvironmentId `json:"appEnvironmentId"`
+	DeploymentId     DeploymentId     `json:"deploymentId"`
+}
+
+type GetAppEnvironmentDeploymentResponseObject interface {
+	VisitGetAppEnvironmentDeploymentResponse(w http.ResponseWriter) error
+}
+
+type GetAppEnvironmentDeployment200JSONResponse Deployment
+
+func (response GetAppEnvironmentDeployment200JSONResponse) VisitGetAppEnvironmentDeploymentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAppEnvironmentDeployment404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response GetAppEnvironmentDeployment404JSONResponse) VisitGetAppEnvironmentDeploymentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListAppReleasesRequestObject struct {
 	WorkspaceId WorkspaceId `json:"workspaceId"`
 	ProjectId   ProjectId   `json:"projectId"`
@@ -6717,89 +5845,6 @@ func (response ListAppReleases404JSONResponse) VisitListAppReleasesResponse(w ht
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(404)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type CreateReleaseDeploymentRequestObject struct {
-	WorkspaceId WorkspaceId `json:"workspaceId"`
-	ProjectId   ProjectId   `json:"projectId"`
-	AppId       AppId       `json:"appId"`
-	ReleaseId   ReleaseId   `json:"releaseId"`
-	Params      CreateReleaseDeploymentParams
-	Body        *CreateReleaseDeploymentJSONRequestBody
-}
-
-type CreateReleaseDeploymentResponseObject interface {
-	VisitCreateReleaseDeploymentResponse(w http.ResponseWriter) error
-}
-
-type CreateReleaseDeployment202JSONResponse struct{ MutationAcceptedJSONResponse }
-
-func (response CreateReleaseDeployment202JSONResponse) VisitCreateReleaseDeploymentResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(202)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type CreateReleaseDeployment400JSONResponse struct{ BadRequestJSONResponse }
-
-func (response CreateReleaseDeployment400JSONResponse) VisitCreateReleaseDeploymentResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(400)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type CreateReleaseDeployment403JSONResponse struct{ ForbiddenJSONResponse }
-
-func (response CreateReleaseDeployment403JSONResponse) VisitCreateReleaseDeploymentResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(403)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type CreateReleaseDeployment404JSONResponse struct{ NotFoundJSONResponse }
-
-func (response CreateReleaseDeployment404JSONResponse) VisitCreateReleaseDeploymentResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(404)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type CreateReleaseDeployment409JSONResponse struct{ ConflictJSONResponse }
-
-func (response CreateReleaseDeployment409JSONResponse) VisitCreateReleaseDeploymentResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(409)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -7276,24 +6321,6 @@ func (response UpdateEnvironment409JSONResponse) VisitUpdateEnvironmentResponse(
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 
-	// (GET /api/v1/deployments)
-	ListDeployments(ctx context.Context, request ListDeploymentsRequestObject) (ListDeploymentsResponseObject, error)
-
-	// (POST /api/v1/deployments)
-	CreateDeployment(ctx context.Context, request CreateDeploymentRequestObject) (CreateDeploymentResponseObject, error)
-
-	// (DELETE /api/v1/deployments/{deploymentId})
-	DeleteDeployment(ctx context.Context, request DeleteDeploymentRequestObject) (DeleteDeploymentResponseObject, error)
-
-	// (GET /api/v1/deployments/{deploymentId})
-	GetDeployment(ctx context.Context, request GetDeploymentRequestObject) (GetDeploymentResponseObject, error)
-
-	// (PUT /api/v1/deployments/{deploymentId})
-	UpdateDeployment(ctx context.Context, request UpdateDeploymentRequestObject) (UpdateDeploymentResponseObject, error)
-
-	// (GET /api/v1/deployments/{deploymentId}/operations)
-	ListDeploymentOperations(ctx context.Context, request ListDeploymentOperationsRequestObject) (ListDeploymentOperationsResponseObject, error)
-
 	// (GET /api/v1/github/callback)
 	CompleteGitHubAuthorization(ctx context.Context, request CompleteGitHubAuthorizationRequestObject) (CompleteGitHubAuthorizationResponseObject, error)
 
@@ -7326,24 +6353,6 @@ type StrictServerInterface interface {
 
 	// (PUT /api/v1/workspaces/{workspaceId})
 	UpdateWorkspace(ctx context.Context, request UpdateWorkspaceRequestObject) (UpdateWorkspaceResponseObject, error)
-
-	// (GET /api/v1/workspaces/{workspaceId}/deployments)
-	ListWorkspaceDeployments(ctx context.Context, request ListWorkspaceDeploymentsRequestObject) (ListWorkspaceDeploymentsResponseObject, error)
-
-	// (POST /api/v1/workspaces/{workspaceId}/deployments)
-	CreateWorkspaceDeployment(ctx context.Context, request CreateWorkspaceDeploymentRequestObject) (CreateWorkspaceDeploymentResponseObject, error)
-
-	// (DELETE /api/v1/workspaces/{workspaceId}/deployments/{deploymentId})
-	DeleteWorkspaceDeployment(ctx context.Context, request DeleteWorkspaceDeploymentRequestObject) (DeleteWorkspaceDeploymentResponseObject, error)
-
-	// (GET /api/v1/workspaces/{workspaceId}/deployments/{deploymentId})
-	GetWorkspaceDeployment(ctx context.Context, request GetWorkspaceDeploymentRequestObject) (GetWorkspaceDeploymentResponseObject, error)
-
-	// (PUT /api/v1/workspaces/{workspaceId}/deployments/{deploymentId})
-	UpdateWorkspaceDeployment(ctx context.Context, request UpdateWorkspaceDeploymentRequestObject) (UpdateWorkspaceDeploymentResponseObject, error)
-
-	// (GET /api/v1/workspaces/{workspaceId}/deployments/{deploymentId}/operations)
-	ListWorkspaceDeploymentOperations(ctx context.Context, request ListWorkspaceDeploymentOperationsRequestObject) (ListWorkspaceDeploymentOperationsResponseObject, error)
 
 	// (GET /api/v1/workspaces/{workspaceId}/github/installations)
 	ListGitHubInstallations(ctx context.Context, request ListGitHubInstallationsRequestObject) (ListGitHubInstallationsResponseObject, error)
@@ -7399,11 +6408,32 @@ type StrictServerInterface interface {
 	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/builds/{buildId}/logs)
 	ListAppBuildLogs(ctx context.Context, request ListAppBuildLogsRequestObject) (ListAppBuildLogsResponseObject, error)
 
+	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments)
+	ListAppEnvironments(ctx context.Context, request ListAppEnvironmentsRequestObject) (ListAppEnvironmentsResponseObject, error)
+
+	// (POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments)
+	CreateAppEnvironment(ctx context.Context, request CreateAppEnvironmentRequestObject) (CreateAppEnvironmentResponseObject, error)
+
+	// (DELETE /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId})
+	DeleteAppEnvironment(ctx context.Context, request DeleteAppEnvironmentRequestObject) (DeleteAppEnvironmentResponseObject, error)
+
+	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId})
+	GetAppEnvironment(ctx context.Context, request GetAppEnvironmentRequestObject) (GetAppEnvironmentResponseObject, error)
+
+	// (PUT /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId})
+	UpdateAppEnvironment(ctx context.Context, request UpdateAppEnvironmentRequestObject) (UpdateAppEnvironmentResponseObject, error)
+
+	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/deployments)
+	ListAppEnvironmentDeployments(ctx context.Context, request ListAppEnvironmentDeploymentsRequestObject) (ListAppEnvironmentDeploymentsResponseObject, error)
+
+	// (POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/deployments)
+	CreateAppEnvironmentDeployment(ctx context.Context, request CreateAppEnvironmentDeploymentRequestObject) (CreateAppEnvironmentDeploymentResponseObject, error)
+
+	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/deployments/{deploymentId})
+	GetAppEnvironmentDeployment(ctx context.Context, request GetAppEnvironmentDeploymentRequestObject) (GetAppEnvironmentDeploymentResponseObject, error)
+
 	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/releases)
 	ListAppReleases(ctx context.Context, request ListAppReleasesRequestObject) (ListAppReleasesResponseObject, error)
-
-	// (POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/releases/{releaseId}/deployments)
-	CreateReleaseDeployment(ctx context.Context, request CreateReleaseDeploymentRequestObject) (CreateReleaseDeploymentResponseObject, error)
 
 	// (DELETE /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/source)
 	ClearAppSource(ctx context.Context, request ClearAppSourceRequestObject) (ClearAppSourceResponseObject, error)
@@ -7467,178 +6497,6 @@ type strictHandler struct {
 	ssi         StrictServerInterface
 	middlewares []StrictMiddlewareFunc
 	options     StrictHTTPServerOptions
-}
-
-// ListDeployments operation middleware
-func (sh *strictHandler) ListDeployments(w http.ResponseWriter, r *http.Request, params ListDeploymentsParams) {
-	var request ListDeploymentsRequestObject
-
-	request.Params = params
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.ListDeployments(ctx, request.(ListDeploymentsRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "ListDeployments")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(ListDeploymentsResponseObject); ok {
-		if err := validResponse.VisitListDeploymentsResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// CreateDeployment operation middleware
-func (sh *strictHandler) CreateDeployment(w http.ResponseWriter, r *http.Request, params CreateDeploymentParams) {
-	var request CreateDeploymentRequestObject
-
-	request.Params = params
-
-	var body CreateDeploymentJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
-		return
-	}
-	request.Body = &body
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.CreateDeployment(ctx, request.(CreateDeploymentRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "CreateDeployment")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(CreateDeploymentResponseObject); ok {
-		if err := validResponse.VisitCreateDeploymentResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// DeleteDeployment operation middleware
-func (sh *strictHandler) DeleteDeployment(w http.ResponseWriter, r *http.Request, deploymentId string, params DeleteDeploymentParams) {
-	var request DeleteDeploymentRequestObject
-
-	request.DeploymentId = deploymentId
-	request.Params = params
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.DeleteDeployment(ctx, request.(DeleteDeploymentRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "DeleteDeployment")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(DeleteDeploymentResponseObject); ok {
-		if err := validResponse.VisitDeleteDeploymentResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// GetDeployment operation middleware
-func (sh *strictHandler) GetDeployment(w http.ResponseWriter, r *http.Request, deploymentId string) {
-	var request GetDeploymentRequestObject
-
-	request.DeploymentId = deploymentId
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetDeployment(ctx, request.(GetDeploymentRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetDeployment")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetDeploymentResponseObject); ok {
-		if err := validResponse.VisitGetDeploymentResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// UpdateDeployment operation middleware
-func (sh *strictHandler) UpdateDeployment(w http.ResponseWriter, r *http.Request, deploymentId string, params UpdateDeploymentParams) {
-	var request UpdateDeploymentRequestObject
-
-	request.DeploymentId = deploymentId
-	request.Params = params
-
-	var body UpdateDeploymentJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
-		return
-	}
-	request.Body = &body
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.UpdateDeployment(ctx, request.(UpdateDeploymentRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "UpdateDeployment")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(UpdateDeploymentResponseObject); ok {
-		if err := validResponse.VisitUpdateDeploymentResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// ListDeploymentOperations operation middleware
-func (sh *strictHandler) ListDeploymentOperations(w http.ResponseWriter, r *http.Request, deploymentId string) {
-	var request ListDeploymentOperationsRequestObject
-
-	request.DeploymentId = deploymentId
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.ListDeploymentOperations(ctx, request.(ListDeploymentOperationsRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "ListDeploymentOperations")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(ListDeploymentOperationsResponseObject); ok {
-		if err := validResponse.VisitListDeploymentOperationsResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
 }
 
 // CompleteGitHubAuthorization operation middleware
@@ -7934,184 +6792,6 @@ func (sh *strictHandler) UpdateWorkspace(w http.ResponseWriter, r *http.Request,
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateWorkspaceResponseObject); ok {
 		if err := validResponse.VisitUpdateWorkspaceResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// ListWorkspaceDeployments operation middleware
-func (sh *strictHandler) ListWorkspaceDeployments(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, params ListWorkspaceDeploymentsParams) {
-	var request ListWorkspaceDeploymentsRequestObject
-
-	request.WorkspaceId = workspaceId
-	request.Params = params
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.ListWorkspaceDeployments(ctx, request.(ListWorkspaceDeploymentsRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "ListWorkspaceDeployments")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(ListWorkspaceDeploymentsResponseObject); ok {
-		if err := validResponse.VisitListWorkspaceDeploymentsResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// CreateWorkspaceDeployment operation middleware
-func (sh *strictHandler) CreateWorkspaceDeployment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, params CreateWorkspaceDeploymentParams) {
-	var request CreateWorkspaceDeploymentRequestObject
-
-	request.WorkspaceId = workspaceId
-	request.Params = params
-
-	var body CreateWorkspaceDeploymentJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
-		return
-	}
-	request.Body = &body
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.CreateWorkspaceDeployment(ctx, request.(CreateWorkspaceDeploymentRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "CreateWorkspaceDeployment")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(CreateWorkspaceDeploymentResponseObject); ok {
-		if err := validResponse.VisitCreateWorkspaceDeploymentResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// DeleteWorkspaceDeployment operation middleware
-func (sh *strictHandler) DeleteWorkspaceDeployment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, deploymentId string, params DeleteWorkspaceDeploymentParams) {
-	var request DeleteWorkspaceDeploymentRequestObject
-
-	request.WorkspaceId = workspaceId
-	request.DeploymentId = deploymentId
-	request.Params = params
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.DeleteWorkspaceDeployment(ctx, request.(DeleteWorkspaceDeploymentRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "DeleteWorkspaceDeployment")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(DeleteWorkspaceDeploymentResponseObject); ok {
-		if err := validResponse.VisitDeleteWorkspaceDeploymentResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// GetWorkspaceDeployment operation middleware
-func (sh *strictHandler) GetWorkspaceDeployment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, deploymentId string) {
-	var request GetWorkspaceDeploymentRequestObject
-
-	request.WorkspaceId = workspaceId
-	request.DeploymentId = deploymentId
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetWorkspaceDeployment(ctx, request.(GetWorkspaceDeploymentRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetWorkspaceDeployment")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetWorkspaceDeploymentResponseObject); ok {
-		if err := validResponse.VisitGetWorkspaceDeploymentResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// UpdateWorkspaceDeployment operation middleware
-func (sh *strictHandler) UpdateWorkspaceDeployment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, deploymentId string, params UpdateWorkspaceDeploymentParams) {
-	var request UpdateWorkspaceDeploymentRequestObject
-
-	request.WorkspaceId = workspaceId
-	request.DeploymentId = deploymentId
-	request.Params = params
-
-	var body UpdateWorkspaceDeploymentJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
-		return
-	}
-	request.Body = &body
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.UpdateWorkspaceDeployment(ctx, request.(UpdateWorkspaceDeploymentRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "UpdateWorkspaceDeployment")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(UpdateWorkspaceDeploymentResponseObject); ok {
-		if err := validResponse.VisitUpdateWorkspaceDeploymentResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// ListWorkspaceDeploymentOperations operation middleware
-func (sh *strictHandler) ListWorkspaceDeploymentOperations(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, deploymentId string) {
-	var request ListWorkspaceDeploymentOperationsRequestObject
-
-	request.WorkspaceId = workspaceId
-	request.DeploymentId = deploymentId
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.ListWorkspaceDeploymentOperations(ctx, request.(ListWorkspaceDeploymentOperationsRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "ListWorkspaceDeploymentOperations")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(ListWorkspaceDeploymentOperationsResponseObject); ok {
-		if err := validResponse.VisitListWorkspaceDeploymentOperationsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -8570,13 +7250,10 @@ func (sh *strictHandler) CreateAppBuild(w http.ResponseWriter, r *http.Request, 
 
 	var body CreateAppBuildJSONRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		if !errors.Is(err, io.EOF) {
-			sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
-			return
-		}
-	} else {
-		request.Body = &body
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
 	}
+	request.Body = &body
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.CreateAppBuild(ctx, request.(CreateAppBuildRequestObject))
@@ -8656,6 +7333,263 @@ func (sh *strictHandler) ListAppBuildLogs(w http.ResponseWriter, r *http.Request
 	}
 }
 
+// ListAppEnvironments operation middleware
+func (sh *strictHandler) ListAppEnvironments(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, params ListAppEnvironmentsParams) {
+	var request ListAppEnvironmentsRequestObject
+
+	request.WorkspaceId = workspaceId
+	request.ProjectId = projectId
+	request.AppId = appId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListAppEnvironments(ctx, request.(ListAppEnvironmentsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListAppEnvironments")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListAppEnvironmentsResponseObject); ok {
+		if err := validResponse.VisitListAppEnvironmentsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateAppEnvironment operation middleware
+func (sh *strictHandler) CreateAppEnvironment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId) {
+	var request CreateAppEnvironmentRequestObject
+
+	request.WorkspaceId = workspaceId
+	request.ProjectId = projectId
+	request.AppId = appId
+
+	var body CreateAppEnvironmentJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateAppEnvironment(ctx, request.(CreateAppEnvironmentRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateAppEnvironment")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateAppEnvironmentResponseObject); ok {
+		if err := validResponse.VisitCreateAppEnvironmentResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteAppEnvironment operation middleware
+func (sh *strictHandler) DeleteAppEnvironment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId, params DeleteAppEnvironmentParams) {
+	var request DeleteAppEnvironmentRequestObject
+
+	request.WorkspaceId = workspaceId
+	request.ProjectId = projectId
+	request.AppId = appId
+	request.AppEnvironmentId = appEnvironmentId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteAppEnvironment(ctx, request.(DeleteAppEnvironmentRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteAppEnvironment")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteAppEnvironmentResponseObject); ok {
+		if err := validResponse.VisitDeleteAppEnvironmentResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAppEnvironment operation middleware
+func (sh *strictHandler) GetAppEnvironment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId) {
+	var request GetAppEnvironmentRequestObject
+
+	request.WorkspaceId = workspaceId
+	request.ProjectId = projectId
+	request.AppId = appId
+	request.AppEnvironmentId = appEnvironmentId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAppEnvironment(ctx, request.(GetAppEnvironmentRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAppEnvironment")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAppEnvironmentResponseObject); ok {
+		if err := validResponse.VisitGetAppEnvironmentResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateAppEnvironment operation middleware
+func (sh *strictHandler) UpdateAppEnvironment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId, params UpdateAppEnvironmentParams) {
+	var request UpdateAppEnvironmentRequestObject
+
+	request.WorkspaceId = workspaceId
+	request.ProjectId = projectId
+	request.AppId = appId
+	request.AppEnvironmentId = appEnvironmentId
+	request.Params = params
+
+	var body UpdateAppEnvironmentJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateAppEnvironment(ctx, request.(UpdateAppEnvironmentRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateAppEnvironment")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateAppEnvironmentResponseObject); ok {
+		if err := validResponse.VisitUpdateAppEnvironmentResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListAppEnvironmentDeployments operation middleware
+func (sh *strictHandler) ListAppEnvironmentDeployments(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId, params ListAppEnvironmentDeploymentsParams) {
+	var request ListAppEnvironmentDeploymentsRequestObject
+
+	request.WorkspaceId = workspaceId
+	request.ProjectId = projectId
+	request.AppId = appId
+	request.AppEnvironmentId = appEnvironmentId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListAppEnvironmentDeployments(ctx, request.(ListAppEnvironmentDeploymentsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListAppEnvironmentDeployments")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListAppEnvironmentDeploymentsResponseObject); ok {
+		if err := validResponse.VisitListAppEnvironmentDeploymentsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateAppEnvironmentDeployment operation middleware
+func (sh *strictHandler) CreateAppEnvironmentDeployment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId, params CreateAppEnvironmentDeploymentParams) {
+	var request CreateAppEnvironmentDeploymentRequestObject
+
+	request.WorkspaceId = workspaceId
+	request.ProjectId = projectId
+	request.AppId = appId
+	request.AppEnvironmentId = appEnvironmentId
+	request.Params = params
+
+	var body CreateAppEnvironmentDeploymentJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateAppEnvironmentDeployment(ctx, request.(CreateAppEnvironmentDeploymentRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateAppEnvironmentDeployment")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateAppEnvironmentDeploymentResponseObject); ok {
+		if err := validResponse.VisitCreateAppEnvironmentDeploymentResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAppEnvironmentDeployment operation middleware
+func (sh *strictHandler) GetAppEnvironmentDeployment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId, deploymentId DeploymentId) {
+	var request GetAppEnvironmentDeploymentRequestObject
+
+	request.WorkspaceId = workspaceId
+	request.ProjectId = projectId
+	request.AppId = appId
+	request.AppEnvironmentId = appEnvironmentId
+	request.DeploymentId = deploymentId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAppEnvironmentDeployment(ctx, request.(GetAppEnvironmentDeploymentRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAppEnvironmentDeployment")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAppEnvironmentDeploymentResponseObject); ok {
+		if err := validResponse.VisitGetAppEnvironmentDeploymentResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // ListAppReleases operation middleware
 func (sh *strictHandler) ListAppReleases(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, params ListAppReleasesParams) {
 	var request ListAppReleasesRequestObject
@@ -8678,43 +7612,6 @@ func (sh *strictHandler) ListAppReleases(w http.ResponseWriter, r *http.Request,
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ListAppReleasesResponseObject); ok {
 		if err := validResponse.VisitListAppReleasesResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// CreateReleaseDeployment operation middleware
-func (sh *strictHandler) CreateReleaseDeployment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, releaseId ReleaseId, params CreateReleaseDeploymentParams) {
-	var request CreateReleaseDeploymentRequestObject
-
-	request.WorkspaceId = workspaceId
-	request.ProjectId = projectId
-	request.AppId = appId
-	request.ReleaseId = releaseId
-	request.Params = params
-
-	var body CreateReleaseDeploymentJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
-		return
-	}
-	request.Body = &body
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.CreateReleaseDeployment(ctx, request.(CreateReleaseDeploymentRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "CreateReleaseDeployment")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(CreateReleaseDeploymentResponseObject); ok {
-		if err := validResponse.VisitCreateReleaseDeploymentResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

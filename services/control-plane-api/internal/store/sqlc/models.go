@@ -28,6 +28,29 @@ type App struct {
 	ArchivedAt pgtype.Timestamptz `json:"archived_at"`
 }
 
+type AppEnvironment struct {
+	ID                   int64              `json:"id"`
+	PublicID             string             `json:"public_id"`
+	WorkspaceID          int64              `json:"workspace_id"`
+	ProjectID            int64              `json:"project_id"`
+	AppID                int64              `json:"app_id"`
+	EnvironmentID        int64              `json:"environment_id"`
+	SourceBranch         string             `json:"source_branch"`
+	RuntimeName          string             `json:"runtime_name"`
+	ConfigurationJson    []byte             `json:"configuration_json"`
+	ConfigurationVersion int64              `json:"configuration_version"`
+	Version              int64              `json:"version"`
+	DesiredDeploymentID  pgtype.Int8        `json:"desired_deployment_id"`
+	CurrentDeploymentID  pgtype.Int8        `json:"current_deployment_id"`
+	CurrentReleaseID     pgtype.Int8        `json:"current_release_id"`
+	LastState            string             `json:"last_state"`
+	LastMessage          string             `json:"last_message"`
+	DeletionRequestedAt  pgtype.Timestamptz `json:"deletion_requested_at"`
+	ArchivedAt           pgtype.Timestamptz `json:"archived_at"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+}
+
 type AppGithubSource struct {
 	AppID                int64              `json:"app_id"`
 	GithubInstallationID int64              `json:"github_installation_id"`
@@ -38,7 +61,6 @@ type AppGithubSource struct {
 	DefaultBranch        string             `json:"default_branch"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
-	PrimaryBranch        string             `json:"primary_branch"`
 }
 
 type Build struct {
@@ -68,6 +90,7 @@ type Build struct {
 	CreatedAt                    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt                    pgtype.Timestamptz `json:"updated_at"`
 	SourceBranch                 string             `json:"source_branch"`
+	AppEnvironmentID             int64              `json:"app_environment_id"`
 }
 
 type BuildLog struct {
@@ -78,26 +101,22 @@ type BuildLog struct {
 }
 
 type Deployment struct {
-	ID                  int64              `json:"id"`
-	PublicID            string             `json:"public_id"`
-	WorkspaceID         int64              `json:"workspace_id"`
-	Name                string             `json:"name"`
-	Slug                pgtype.Text        `json:"slug"`
-	IntentJson          []byte             `json:"intent_json"`
-	DesiredVersion      int64              `json:"desired_version"`
-	ObservedVersion     int64              `json:"observed_version"`
-	ObservedRelease     string             `json:"observed_release"`
-	LastState           string             `json:"last_state"`
-	LastMessage         string             `json:"last_message"`
-	CreatedAt           pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
-	DeletedAt           pgtype.Timestamptz `json:"deleted_at"`
-	RuntimeName         string             `json:"runtime_name"`
-	DeletionRequestedAt pgtype.Timestamptz `json:"deletion_requested_at"`
-	ProjectID           int64              `json:"project_id"`
-	AppID               int64              `json:"app_id"`
-	EnvironmentID       int64              `json:"environment_id"`
-	ReleaseID           pgtype.Int8        `json:"release_id"`
+	ID                   int64              `json:"id"`
+	PublicID             string             `json:"public_id"`
+	WorkspaceID          int64              `json:"workspace_id"`
+	AppEnvironmentID     int64              `json:"app_environment_id"`
+	AppID                int64              `json:"app_id"`
+	ReleaseID            int64              `json:"release_id"`
+	RequestedByActorID   int64              `json:"requested_by_actor_id"`
+	ConfigurationVersion int64              `json:"configuration_version"`
+	ConfigurationJson    []byte             `json:"configuration_json"`
+	Status               string             `json:"status"`
+	Message              string             `json:"message"`
+	ObservedRelease      string             `json:"observed_release"`
+	StartedAt            pgtype.Timestamptz `json:"started_at"`
+	CompletedAt          pgtype.Timestamptz `json:"completed_at"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Environment struct {
@@ -140,29 +159,28 @@ type GithubInstallation struct {
 }
 
 type Operation struct {
-	ID              int64              `json:"id"`
-	PublicID        string             `json:"public_id"`
-	WorkspaceID     int64              `json:"workspace_id"`
-	DeploymentID    pgtype.Int8        `json:"deployment_id"`
-	ActorID         int64              `json:"actor_id"`
-	Kind            string             `json:"kind"`
-	Status          string             `json:"status"`
-	IdempotencyHash []byte             `json:"idempotency_hash"`
-	PayloadHash     []byte             `json:"payload_hash"`
-	IntentJson      []byte             `json:"intent_json"`
-	DesiredVersion  int64              `json:"desired_version"`
-	Sequence        int64              `json:"sequence"`
-	Attempts        int32              `json:"attempts"`
-	NextAttemptAt   pgtype.Timestamptz `json:"next_attempt_at"`
-	LeaseUntil      pgtype.Timestamptz `json:"lease_until"`
-	WorkerID        pgtype.Text        `json:"worker_id"`
-	FencingToken    int64              `json:"fencing_token"`
-	ErrorCode       string             `json:"error_code"`
-	ErrorMessage    string             `json:"error_message"`
-	CreatedAt       pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
-	StartedAt       pgtype.Timestamptz `json:"started_at"`
-	CompletedAt     pgtype.Timestamptz `json:"completed_at"`
+	ID               int64              `json:"id"`
+	PublicID         string             `json:"public_id"`
+	WorkspaceID      int64              `json:"workspace_id"`
+	AppEnvironmentID pgtype.Int8        `json:"app_environment_id"`
+	DeploymentID     pgtype.Int8        `json:"deployment_id"`
+	ActorID          int64              `json:"actor_id"`
+	Kind             string             `json:"kind"`
+	Status           string             `json:"status"`
+	IdempotencyHash  []byte             `json:"idempotency_hash"`
+	PayloadHash      []byte             `json:"payload_hash"`
+	DesiredVersion   int64              `json:"desired_version"`
+	Attempts         int32              `json:"attempts"`
+	NextAttemptAt    pgtype.Timestamptz `json:"next_attempt_at"`
+	LeaseUntil       pgtype.Timestamptz `json:"lease_until"`
+	WorkerID         pgtype.Text        `json:"worker_id"`
+	FencingToken     int64              `json:"fencing_token"`
+	ErrorCode        string             `json:"error_code"`
+	ErrorMessage     string             `json:"error_message"`
+	StartedAt        pgtype.Timestamptz `json:"started_at"`
+	CompletedAt      pgtype.Timestamptz `json:"completed_at"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Project struct {

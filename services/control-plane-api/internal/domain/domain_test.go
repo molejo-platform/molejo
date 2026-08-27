@@ -10,7 +10,7 @@ import (
 )
 
 func validIntent() Intent {
-	return Intent{Name: "demo", Image: "ghcr.io/example/demo@sha256:" + strings.Repeat("a", 64), Replicas: 1, Port: 8080, Resources: Resources{Requests: ResourceValues{CPUMillis: 50, MemoryMiB: 64}, Limits: ResourceValues{CPUMillis: 100, MemoryMiB: 128}}, Probes: Probes{Liveness: Probe{Path: "/healthz"}, Readiness: Probe{Path: "/readyz"}}, Exposure: ExposurePrivate}
+	return Intent{Image: "ghcr.io/example/demo@sha256:" + strings.Repeat("a", 64), Replicas: 1, Port: 8080, Resources: Resources{Requests: ResourceValues{CPUMillis: 50, MemoryMiB: 64}, Limits: ResourceValues{CPUMillis: 100, MemoryMiB: 128}}, Probes: Probes{Liveness: Probe{Path: "/healthz"}, Readiness: Probe{Path: "/readyz"}}, Exposure: ExposurePrivate, Variables: []Variable{}}
 }
 
 func TestValidateIntent(t *testing.T) {
@@ -59,7 +59,7 @@ func TestValidateIntentDoesNotSilentlyApplyDefaults(t *testing.T) {
 	}
 }
 
-func TestOpenAPIIntentConstraintsMatchDomainBoundaries(t *testing.T) {
+func TestOpenAPIRuntimeConfigurationConstraintsMatchDomainBoundaries(t *testing.T) {
 	type property struct {
 		Pattern              string              `yaml:"pattern"`
 		Minimum              *int64              `yaml:"minimum"`
@@ -71,20 +71,10 @@ func TestOpenAPIIntentConstraintsMatchDomainBoundaries(t *testing.T) {
 		AdditionalProperties *bool               `yaml:"additionalProperties"`
 		Properties           map[string]property `yaml:"properties"`
 	}
-	type alternative struct {
-		Required   []string            `yaml:"required"`
-		Properties map[string]property `yaml:"properties"`
-		Not        struct {
-			Required []string `yaml:"required"`
-		} `yaml:"not"`
-	}
 	type schema struct {
 		AdditionalProperties *bool               `yaml:"additionalProperties"`
 		Required             []string            `yaml:"required"`
 		Properties           map[string]property `yaml:"properties"`
-		AllOf                []struct {
-			OneOf []alternative `yaml:"oneOf"`
-		} `yaml:"allOf"`
 	}
 	var contract struct {
 		Components struct {
@@ -101,13 +91,13 @@ func TestOpenAPIIntentConstraintsMatchDomainBoundaries(t *testing.T) {
 	}
 
 	tests := []struct {
-		schema    string
-		property  string
-		wantLimit int
+		schema, property string
+		wantLimit        int
 	}{
-		{schema: "DeploymentIntent", property: "name", wantLimit: 63},
-		{schema: "DeploymentIntent", property: "slug", wantLimit: 63},
+		{schema: "RuntimeConfiguration", property: "slug", wantLimit: 63},
 		{schema: "Probe", property: "path", wantLimit: 2048},
+		{schema: "Variable", property: "name", wantLimit: 253},
+		{schema: "Variable", property: "value", wantLimit: 4096},
 	}
 	for _, tt := range tests {
 		t.Run(tt.schema+"."+tt.property, func(t *testing.T) {
@@ -118,12 +108,12 @@ func TestOpenAPIIntentConstraintsMatchDomainBoundaries(t *testing.T) {
 		})
 	}
 
-	intent := contract.Components.Schemas["DeploymentIntent"]
-	if intent.AdditionalProperties == nil || *intent.AdditionalProperties {
-		t.Fatal("OpenAPI DeploymentIntent must reject unknown fields")
+	configuration := contract.Components.Schemas["RuntimeConfiguration"]
+	if configuration.AdditionalProperties == nil || *configuration.AdditionalProperties {
+		t.Fatal("OpenAPI RuntimeConfiguration must reject unknown fields")
 	}
-	if !reflect.DeepEqual(intent.Required, []string{"name", "image", "port", "resources", "probes"}) {
-		t.Fatalf("OpenAPI DeploymentIntent required fields drifted: %v", intent.Required)
+	if !reflect.DeepEqual(configuration.Required, []string{"replicas", "port", "resources", "probes", "exposure", "variables"}) {
+		t.Fatalf("OpenAPI RuntimeConfiguration required fields drifted: %v", configuration.Required)
 	}
 	assertProperty := func(name string, got property, pattern string, minimum, maximum *int64, defaultValue any, enum []string) {
 		t.Helper()
@@ -132,17 +122,15 @@ func TestOpenAPIIntentConstraintsMatchDomainBoundaries(t *testing.T) {
 		}
 	}
 	one, five, portMax, cpuMax, memoryMax := int64(1), int64(5), int64(65535), int64(2000), int64(2048)
-	assertProperty("DeploymentIntent.name", intent.Properties["name"], namePattern.String(), nil, nil, nil, nil)
-	assertProperty("DeploymentIntent.image", intent.Properties["image"], imagePattern.String(), nil, nil, nil, nil)
-	assertProperty("DeploymentIntent.replicas", intent.Properties["replicas"], "", &one, &five, 1, nil)
-	assertProperty("DeploymentIntent.port", intent.Properties["port"], "", &one, &portMax, nil, nil)
-	assertProperty("DeploymentIntent.exposure", intent.Properties["exposure"], "", nil, nil, ExposurePrivate, []string{ExposurePrivate, ExposurePublic})
-	assertProperty("DeploymentIntent.slug", intent.Properties["slug"], namePattern.String(), nil, nil, nil, nil)
+	assertProperty("RuntimeConfiguration.replicas", configuration.Properties["replicas"], "", &one, &five, 1, nil)
+	assertProperty("RuntimeConfiguration.port", configuration.Properties["port"], "", &one, &portMax, nil, nil)
+	assertProperty("RuntimeConfiguration.exposure", configuration.Properties["exposure"], "", nil, nil, ExposurePrivate, []string{ExposurePrivate, ExposurePublic})
+	assertProperty("RuntimeConfiguration.slug", configuration.Properties["slug"], slugPattern.String(), nil, nil, nil, nil)
 	resources := contract.Components.Schemas["ResourceValues"]
 	assertProperty("ResourceValues.cpuMillis", resources.Properties["cpuMillis"], "", &one, &cpuMax, nil, nil)
 	assertProperty("ResourceValues.memoryMiB", resources.Properties["memoryMiB"], "", &one, &memoryMax, nil, nil)
 	assertProperty("Probe.path", contract.Components.Schemas["Probe"].Properties["path"], "^/", nil, nil, nil, nil)
-	for name, value := range map[string]property{"DeploymentIntent.resources": intent.Properties["resources"], "DeploymentIntent.probes": intent.Properties["probes"]} {
+	for name, value := range map[string]property{"RuntimeConfiguration.resources": configuration.Properties["resources"], "RuntimeConfiguration.probes": configuration.Properties["probes"]} {
 		if value.AdditionalProperties == nil || *value.AdditionalProperties {
 			t.Errorf("OpenAPI %s must reject unknown fields", name)
 		}
@@ -152,9 +140,6 @@ func TestOpenAPIIntentConstraintsMatchDomainBoundaries(t *testing.T) {
 		if value.AdditionalProperties == nil || *value.AdditionalProperties {
 			t.Errorf("OpenAPI %s must reject unknown fields", name)
 		}
-	}
-	if len(intent.AllOf) != 1 || len(intent.AllOf[0].OneOf) != 2 || !reflect.DeepEqual(intent.AllOf[0].OneOf[0].Required, []string{"exposure", "slug"}) || !reflect.DeepEqual(intent.AllOf[0].OneOf[0].Properties["exposure"].Enum, []string{ExposurePublic}) || !reflect.DeepEqual(intent.AllOf[0].OneOf[1].Properties["exposure"].Enum, []string{ExposurePrivate}) || !reflect.DeepEqual(intent.AllOf[0].OneOf[1].Not.Required, []string{"slug"}) {
-		t.Fatalf("OpenAPI public/private slug relation drifted: %+v", intent.AllOf)
 	}
 }
 

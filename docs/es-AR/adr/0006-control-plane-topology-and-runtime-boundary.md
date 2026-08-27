@@ -2,28 +2,31 @@
 
 Status: Draft
 
-## Contexto
+## Context
 
 El primer beta de Molejo necesita una API de producto y una consola pequeña sin
 convertir Kubernetes en la API pública. PostgreSQL guarda intención e historial
 mientras el operator existente controla los hijos de runtime.
 
-## Decisión
+## Decision
 
 El control plane es un servicio Go de una réplica, con consola React/Vite y
 PostgreSQL. Solo aplica recursos `AppDeployment` mediante una interfaz de runtime
 declarada por el consumidor. El operator sigue siendo el único dueño de
 Deployments, Services y HTTPRoutes. Los Actors pueden pertenecer a varios
 Workspaces; cada Workspace contiene Projects, mientras Apps y Environments son
-hermanos bajo un Project. Un AppDeployment vincula exactamente un App con un
-Environment de ese mismo Project. Cada Workspace se materializa como Namespace
+hermanos bajo un Project. Un `AppEnvironment` durable vincula exactamente un App
+con un Environment de ese Project y controla branch y configuración de runtime.
+Un `Deployment` inmutable registra una Release y el snapshot de configuración
+enviado al runtime. El `AppDeployment` interno de Kubernetes sigue siendo el
+recurso estable de runtime de un AppEnvironment. Cada Workspace se materializa como Namespace
 administrado mediante una operación durable, con kubeconfig explícito o
 credenciales in-cluster.
 
 Es una topología pre-alpha sin HA. La API expone recursos de producto
 sanitizados y nunca devuelve metadatos ni objetos Kubernetes crudos.
 
-## Consecuencias
+## Consequences
 
 La frontera puede migrar a un management cluster futuro, pero este incremento no
 ofrece descubrimiento de clusters remotos, HA ni recuperación ante desastres de

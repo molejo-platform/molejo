@@ -24,23 +24,18 @@ loopback ou `*.localhost`. Para TLS local confiável pelo navegador, execute
 `.local/certs`, ignorado pelo Git, e o `mkcert` instala a CA local no trust store.
 Os equivalentes HTTP são `just dev-api-http` e `just dev-frontend-http`.
 
-A página de administração do Console cria Workspaces, Projects, Environments e
-Apps exclusivamente pela API REST autenticada. A criação de AppDeployment é
-escopada pelo Workspace selecionado e exige App e Environment do mesmo Project.
+A Console cria Workspaces, Projects, Environments e Apps exclusivamente pela API
+REST autenticada. Um AppEnvironment exige App e Environment do mesmo Project e
+controla branch e configuração de runtime. Cada Deployment é um snapshot
+imutável de Release e configuração.
 A API retorna `404` para recursos fora da membership do Actor e `403` quando um
 tester tenta realizar uma mutação.
 
-As migrations da hierarquia usam as versões 005 a 007: expansão, backfill
-determinístico e constraints de fechamento. Execute
-`just hierarchy-backfill-expand` para aplicar somente a versão 005 e depois
-`just hierarchy-backfill-dry-run` para relatar exatamente os vínculos e recursos
-de compatibilidade que serão criados. Use `just hierarchy-backfill-apply` somente
-depois do export aprovado para aplicar as migrations forward restantes e
-confirmar que nenhuma relação nula permaneceu. O Job de migration integrado usa
-esse mesmo fluxo protegido: relata o plano antes da mutação, executa o backfill e
-só aplica as constraints depois da verificação, seguido das migrations posteriores
-em ordem de versão. Os comandos são idempotentes e
-nunca imprimem credenciais de conexão.
+A migration 011 substitui o modelo experimental de deployment mutável por
+AppEnvironments e Deployments imutáveis. Ela limpa intencionalmente o histórico
+existente de Builds, Releases, Deployments e operações, preservando Actors,
+Workspaces, Projects, Apps, Environments e conexões GitHub. O Job aplica as
+migrations forward em ordem e nunca imprime credenciais de conexão.
 
 A origem pública do Console é `https://cloud.molejo.dev`. O acesso aos
 repositórios usa um GitHub App, seguindo um modelo de instalação em vez de um
@@ -146,10 +141,11 @@ senha do owner localmente para o aceite no navegador e rotacione-a depois do
 teste. Não cole senhas, hashes, URLs de banco, dados de Secret ou kubeconfigs em
 issues, logs, commits ou chat.
 
-Depois do aceite automatizado, use o Console para criar como `Public` o digest
-registrado do Testkit, aguarde `Ready`, atualize, inspecione o histórico,
-reinicie `deployment/control-plane-api`, recarregue a mesma sessão do navegador
-e remova o deployment. Registre somente IDs públicos, digests, estados das
+Depois do aceite automatizado, use o Console para conectar o App Testkit a um
+Environment, configurá-lo como `Public`, construir sua branch e implantar a
+Release resultante. Aguarde `Ready`, atualize o AppEnvironment, inspecione o
+histórico de Deployments, reinicie `deployment/control-plane-api`, recarregue a
+mesma sessão do navegador e remova o AppEnvironment. Registre somente IDs públicos, digests, estados das
 operações, condições das rotas e contagens. Uma segunda aplicação do mesmo
 bundle é a prova de rollback da primeira release; outro digest anterior só pode
 ser reaplicado quando seu binário compreender todas as migrations forward já
@@ -172,8 +168,9 @@ o destino do banco e o CNI e depois valide a política resultante.
 
 ## Build plane da Fase 8
 
-Um owner inicia um Build para um App com fonte GitHub conectada. A API registra o
-commit exato da branch padrão antes do enfileiramento. O worker aceita somente um
+Um owner inicia um Build para um AppEnvironment cujo App possui fonte GitHub. A
+API registra o commit exato da branch do AppEnvironment antes do enfileiramento.
+O worker aceita somente um
 `Dockerfile` na raiz, constrói `linux/amd64`, publica uma tag com o SHA do commit e
 promove uma Release somente após registrar o digest OCI. Logs são limitados e
 sanitizados. Um Build com falha nunca cria Release.

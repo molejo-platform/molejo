@@ -40,7 +40,7 @@ func TestControlPlaneWorkloadsKeepLeastPrivilegeAndImmutableImages(t *testing.T)
 	migration := findContainer(t, workloadPodSpec(t, findObject(t, "deploy/control-plane/migration-job.yaml", "Job", "control-plane-migrate")), "migrate")
 	command, _, _ := unstructured.NestedStringSlice(migration, "command")
 	args, _, _ := unstructured.NestedStringSlice(migration, "args")
-	if !reflect.DeepEqual(command, []string{"/hierarchy-backfill"}) || !reflect.DeepEqual(args, []string{"--apply"}) {
+	if !reflect.DeepEqual(command, []string{"/control-plane-api"}) || !reflect.DeepEqual(args, []string{"migrate"}) {
 		t.Fatalf("migration command=%v args=%v", command, args)
 	}
 }

@@ -11,8 +11,9 @@ digest registrado no constituye una release reproducible del producto.
 
 ## Decision
 
-La API resuelve la branch por defecto del repositorio seleccionado a un SHA
-exacto de 40 caracteres antes de crear un Build idempotente. Un worker separado
+El App selecciona un repositorio, mientras cada AppEnvironment controla la branch
+usada por el App en ese Environment. La API resuelve esa branch a un SHA exacto
+de 40 caracteres antes de crear un Build idempotente vinculado al AppEnvironment. Un worker separado
 reclama Builds con lease y fencing token, obtiene un token efímero de la
 instalación GitHub, descarga el archive de ese SHA exacto y lo extrae de forma
 segura en un directorio descartable. El primer contrato acepta solamente un
@@ -28,8 +29,9 @@ aislamiento multi-tenant fuerte.
 El tag publicado es el SHA exacto del commit. Una Release se promueve de forma
 transaccional solamente después de que BuildKit devuelve un digest OCI válido y
 persiste imagen fijada por digest, commit, App, Build y plataforma. Los
-Deployments creados desde una Release reciben la imagen de la Release en el
-servidor; los clientes no pueden reemplazarla en una actualización posterior.
+Desplegar una Release crea un Deployment inmutable con la revisión de configuración
+del AppEnvironment capturada en la solicitud; los clientes no pueden reemplazar
+su imagen ni configuración posteriormente.
 
 Buildpacks, selección de ruta en monorepos, variables y secrets de build,
 webhooks, orquestación de CI, contratos de caché, SBOM, firma y scanning quedan

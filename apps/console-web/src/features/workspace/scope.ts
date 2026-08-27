@@ -11,4 +11,7 @@ export const workspaceScopeKeys = {
   appBuild: (workspaceId: string, projectId: string, appId: string, buildId: string) => ["workspaces", workspaceId, "projects", projectId, "apps", appId, "builds", "detail", buildId] as const,
   appBuildLogs: (workspaceId: string, projectId: string, appId: string, buildId: string) => ["workspaces", workspaceId, "projects", projectId, "apps", appId, "builds", buildId, "logs"] as const,
   appReleases: (workspaceId: string, projectId: string, appId: string) => ["workspaces", workspaceId, "projects", projectId, "apps", appId, "releases"] as const,
+  appEnvironments: (workspaceId: string, projectId: string, appId: string) => ["workspaces", workspaceId, "projects", projectId, "apps", appId, "environments", "list"] as const,
+  appEnvironment: (workspaceId: string, projectId: string, appId: string, appEnvironmentId: string) => ["workspaces", workspaceId, "projects", projectId, "apps", appId, "environments", "detail", appEnvironmentId] as const,
+  appEnvironmentDeployments: (workspaceId: string, projectId: string, appId: string, appEnvironmentId: string) => ["workspaces", workspaceId, "projects", projectId, "apps", appId, "environments", appEnvironmentId, "deployments"] as const,
 };

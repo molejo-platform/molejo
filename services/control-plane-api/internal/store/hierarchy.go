@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"math"
 	"time"
@@ -15,20 +14,6 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 )
-
-type HierarchyBackfillStatus struct {
-	Deployments          int64
-	PendingDeployments   int64
-	AffectedWorkspaces   int64
-	ProjectsToCreate     int64
-	EnvironmentsToCreate int64
-	AppsToCreate         int64
-}
-
-func (s *Store) HierarchyBackfillStatus(ctx context.Context) (HierarchyBackfillStatus, error) {
-	row, err := s.queries.GetHierarchyBackfillStatus(ctx)
-	return HierarchyBackfillStatus{Deployments: row.Deployments, PendingDeployments: row.PendingDeployments, AffectedWorkspaces: row.AffectedWorkspaces, ProjectsToCreate: row.ProjectsToCreate, EnvironmentsToCreate: row.EnvironmentsToCreate, AppsToCreate: row.AppsToCreate}, err
-}
 
 func (s *Store) ListWorkspaces(ctx context.Context, actorID, beforeID int64, limit int) ([]domain.Workspace, string, error) {
 	if beforeID == 0 {
@@ -87,13 +72,9 @@ func (s *Store) CreateWorkspace(ctx context.Context, actorID int64, publicID, op
 	if err = queries.AddWorkspaceActor(ctx, storesqlc.AddWorkspaceActorParams{WorkspaceID: workspace.ID, ActorID: actorID}); err != nil {
 		return domain.Workspace{}, domain.Operation{}, false, err
 	}
-	intentJSON, err := json.Marshal(map[string]string{"name": name})
-	if err != nil {
-		return domain.Workspace{}, domain.Operation{}, false, err
-	}
 	operation, err := queries.InsertWorkspaceOperation(ctx, storesqlc.InsertWorkspaceOperationParams{
 		PublicID: operationID, WorkspaceID: workspace.ID, ActorID: actorID,
-		IdempotencyHash: idempotencyHash, PayloadHash: payloadHash, IntentJson: intentJSON,
+		IdempotencyHash: idempotencyHash, PayloadHash: payloadHash,
 	})
 	if err != nil {
 		return domain.Workspace{}, domain.Operation{}, false, hierarchyWriteError(err)

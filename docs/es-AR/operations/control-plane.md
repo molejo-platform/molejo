@@ -25,23 +25,17 @@ en `.local/certs`, ignorado por Git, y `mkcert` instala la CA local en el trust
 store. Los equivalentes HTTP son `just dev-api-http` y
 `just dev-frontend-http`.
 
-La página de administración de la Consola crea Workspaces, Projects,
-Environments y Apps exclusivamente mediante la API REST autenticada. La creación
-de AppDeployment queda bajo el Workspace seleccionado y exige un App y un
-Environment del mismo Project. La API devuelve `404` para recursos fuera de la
+La Consola crea Workspaces, Projects, Environments y Apps exclusivamente mediante
+la API REST autenticada. Un AppEnvironment exige App y Environment del mismo
+Project y controla branch y configuración de runtime. Cada Deployment es un
+snapshot inmutable de Release y configuración. La API devuelve `404` para recursos fuera de la
 membership del Actor y `403` cuando un tester intenta una mutación.
 
-Las migrations de la jerarquía usan las versiones 005 a 007: expansión, backfill
-determinístico y constraints de cierre. Ejecutá
-`just hierarchy-backfill-expand` para aplicar solamente la versión 005 y después
-`just hierarchy-backfill-dry-run` para informar exactamente los vínculos y
-recursos de compatibilidad que se crearán. Usá `just hierarchy-backfill-apply`
-solamente después de la exportación aprobada para aplicar las migrations forward
-restantes y confirmar que no quedan relaciones nulas. El Job de migration
-integrado usa este mismo flujo protegido: informa el plan antes de la mutación,
-ejecuta el backfill y solamente aplica las constraints después de verificarlo,
-seguido por las migrations posteriores en orden de versión. Los comandos son
-idempotentes y nunca imprimen credenciales de conexión.
+La migration 011 reemplaza el modelo experimental de deployment mutable por
+AppEnvironments y Deployments inmutables. Limpia intencionalmente el historial
+existente de Builds, Releases, Deployments y operaciones, preservando Actors,
+Workspaces, Projects, Apps, Environments y conexiones GitHub. El Job aplica las
+migrations forward en orden y nunca imprime credenciales de conexión.
 
 El origen público de la Consola es `https://cloud.molejo.dev`. El acceso a los
 repositorios usa una GitHub App, siguiendo un modelo de instalación en lugar de
@@ -150,10 +144,11 @@ la terminal. Recuperá la contraseña del owner localmente para la aceptación e
 el navegador y rotala después de la prueba. No pegues contraseñas, hashes, URLs
 de base, datos de Secret ni kubeconfigs en issues, logs, commits o chat.
 
-Después de la aceptación automatizada, usá la Consola para crear como `Public`
-el digest registrado de Testkit, esperá `Ready`, actualizalo, inspeccioná el
-historial, reiniciá `deployment/control-plane-api`, recargá la misma sesión del
-navegador y eliminá el deployment. Registrá solamente IDs públicos, digests,
+Después de la aceptación automatizada, usá la Consola para conectar el App
+Testkit a un Environment, configurarlo como `Public`, construir su branch y
+desplegar la Release resultante. Esperá `Ready`, actualizá el AppEnvironment,
+inspeccioná el historial de Deployments, reiniciá `deployment/control-plane-api`,
+recargá la misma sesión del navegador y eliminá el AppEnvironment. Registrá solamente IDs públicos, digests,
 estados de operación, condiciones de rutas y conteos. Una segunda aplicación del
 mismo bundle es la prueba de rollback de la primera release; otro digest anterior
 solo puede reaplicarse si su binario comprende todas las migrations forward ya
@@ -177,8 +172,9 @@ primero definí el destino de la base y el CNI y después validá la política.
 
 ## Build plane de la Fase 8
 
-Un owner inicia un Build para una App con fuente GitHub conectada. La API registra
-el commit exacto de la branch por defecto antes de encolarlo. El worker acepta
+Un owner inicia un Build para un AppEnvironment cuyo App tiene fuente GitHub. La
+API registra el commit exacto de la branch del AppEnvironment antes de encolarlo.
+El worker acepta
 solamente un `Dockerfile` en la raíz, construye `linux/amd64`, publica un tag con
 el SHA del commit y promueve una Release solamente después de registrar el digest
 OCI. Los logs son limitados y sanitizados. Un Build fallido nunca crea una

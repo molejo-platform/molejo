@@ -116,25 +116,23 @@ func TestHierarchyAPIEnforcesMembershipRoleAndDeploymentAncestry(t *testing.T) {
 		t.Fatalf("cross-project mutation status=%d body=%s", response.Code, response.Body.String())
 	}
 
-	intent := fmt.Sprintf(`{"name":"web","appId":%q,"environmentId":%q,"image":"ghcr.io/fruto-platform/testkit@sha256:%s","replicas":1,"port":8080,"resources":{"requests":{"cpuMillis":50,"memoryMiB":64},"limits":{"cpuMillis":250,"memoryMiB":128}},"probes":{"liveness":{"path":"/healthz"},"readiness":{"path":"/readyz"}},"exposure":"Private"}`, app.PublicID, environment.PublicID, strings.Repeat("a", 64))
-	response = hierarchyRequest(t, server, owner, http.MethodPost, "/api/v1/workspaces/"+workspace.PublicID+"/deployments", intent, map[string]string{"Idempotency-Key": "hierarchy-api-deployment"})
-	if response.Code != http.StatusAccepted {
-		t.Fatalf("create deployment status=%d body=%s", response.Code, response.Body.String())
+	configuration := fmt.Sprintf(`{"environmentId":%q,"branch":"main","configuration":{"replicas":1,"port":8080,"resources":{"requests":{"cpuMillis":50,"memoryMiB":64},"limits":{"cpuMillis":250,"memoryMiB":128}},"probes":{"liveness":{"path":"/healthz"},"readiness":{"path":"/readyz"}},"exposure":"Private"}}`, environment.PublicID)
+	response = hierarchyRequest(t, server, owner, http.MethodPost, "/api/v1/workspaces/"+workspace.PublicID+"/projects/"+project.PublicID+"/apps/"+app.PublicID+"/environments", configuration, nil)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("create App Environment status=%d body=%s", response.Code, response.Body.String())
 	}
-	var accepted struct {
-		Deployment domain.Deployment `json:"deployment"`
-	}
-	decodeResponse(t, response, &accepted)
-	if accepted.Deployment.AppPublicID != app.PublicID || accepted.Deployment.EnvironmentPublicID != environment.PublicID || accepted.Deployment.ProjectPublicID != project.PublicID {
-		t.Fatalf("deployment hierarchy=%+v", accepted.Deployment)
+	var target domain.AppEnvironment
+	decodeResponse(t, response, &target)
+	if target.AppPublicID != app.PublicID || target.EnvironmentPublicID != environment.PublicID || target.ProjectPublicID != project.PublicID {
+		t.Fatalf("App Environment hierarchy=%+v", target)
 	}
 	response = hierarchyRequest(t, server, owner, http.MethodDelete, "/api/v1/workspaces/"+workspace.PublicID+"/projects/"+project.PublicID+"/apps/"+app.PublicID, "", map[string]string{"If-Match": "1"})
 	if response.Code != http.StatusConflict {
-		t.Fatalf("archive app with deployment status=%d body=%s", response.Code, response.Body.String())
+		t.Fatalf("archive app with App Environment status=%d body=%s", response.Code, response.Body.String())
 	}
 	response = hierarchyRequest(t, server, owner, http.MethodDelete, "/api/v1/workspaces/"+workspace.PublicID+"/projects/"+project.PublicID+"/environments/"+environment.PublicID, "", map[string]string{"If-Match": "1"})
 	if response.Code != http.StatusConflict {
-		t.Fatalf("archive environment with deployment status=%d body=%s", response.Code, response.Body.String())
+		t.Fatalf("archive environment with App Environment status=%d body=%s", response.Code, response.Body.String())
 	}
 
 	testerID := insertTester(t, storage, workspaceID)

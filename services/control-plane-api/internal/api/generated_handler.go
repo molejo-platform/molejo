@@ -1,12 +1,10 @@
 package api
 
 import (
-	"errors"
 	"net/http"
 
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/api/generated"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/domain"
-	"github.com/fruto-platform/fruto/services/control-plane-api/internal/store"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -70,70 +68,6 @@ func (h *generatedHandler) GetCurrentWorkspace(w http.ResponseWriter, r *http.Re
 	}
 }
 
-func (h *generatedHandler) ListDeployments(w http.ResponseWriter, r *http.Request, _ generated.ListDeploymentsParams) {
-	_, workspace, ok := h.authorize(w, r, false)
-	if ok {
-		h.server.listDeployments(w, r, workspace)
-	}
-}
-
-func (h *generatedHandler) CreateDeployment(w http.ResponseWriter, r *http.Request, _ generated.CreateDeploymentParams) {
-	actorID, workspace, ok := h.authorize(w, r, true)
-	if ok {
-		h.server.createDeployment(w, r, workspace, actorID)
-	}
-}
-
-func (h *generatedHandler) GetDeployment(w http.ResponseWriter, r *http.Request, deploymentID string) {
-	_, workspace, ok := h.authorize(w, r, false)
-	if !ok {
-		return
-	}
-	deployment, ok := h.deployment(w, r, workspace.ID, deploymentID)
-	if ok {
-		h.server.detailDeployment(w, r, workspace, deployment)
-	}
-}
-
-func (h *generatedHandler) UpdateDeployment(w http.ResponseWriter, r *http.Request, deploymentID string, _ generated.UpdateDeploymentParams) {
-	actorID, workspace, ok := h.authorize(w, r, true)
-	if !ok {
-		return
-	}
-	deployment, ok := h.deployment(w, r, workspace.ID, deploymentID)
-	if ok {
-		h.server.updateDeployment(w, r, workspace, actorID, deployment)
-	}
-}
-
-func (h *generatedHandler) DeleteDeployment(w http.ResponseWriter, r *http.Request, deploymentID string, _ generated.DeleteDeploymentParams) {
-	actorID, workspace, ok := h.authorize(w, r, true)
-	if !ok {
-		return
-	}
-	deployment, ok := h.deployment(w, r, workspace.ID, deploymentID)
-	if ok {
-		h.server.deleteDeployment(w, r, workspace, actorID, deployment)
-	}
-}
-
-func (h *generatedHandler) ListDeploymentOperations(w http.ResponseWriter, r *http.Request, deploymentID string) {
-	_, workspace, ok := h.authorize(w, r, false)
-	if !ok {
-		return
-	}
-	deployment, ok := h.deployment(w, r, workspace.ID, deploymentID)
-	if !ok {
-		return
-	}
-	operations, err := h.server.Store.ListOperations(r.Context(), workspace.ID, deployment.ID)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "storage_failed", "could not read operations", r)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": operations})
-}
-
 func (h *generatedHandler) GetOperation(w http.ResponseWriter, r *http.Request, operationID string) {
 	actorID, _, ok := h.server.session(r)
 	if !ok {
@@ -171,17 +105,4 @@ func (h *generatedHandler) authorize(w http.ResponseWriter, r *http.Request, mut
 		return 0, domain.Workspace{}, false
 	}
 	return actorID, workspace, true
-}
-
-func (h *generatedHandler) deployment(w http.ResponseWriter, r *http.Request, workspaceID int64, publicID string) (domain.Deployment, bool) {
-	deployment, err := h.server.Store.FindDeployment(r.Context(), workspaceID, publicID)
-	if errors.Is(err, store.ErrNotFound) || errors.Is(err, store.ErrNoRows) {
-		writeError(w, http.StatusNotFound, "deployment_not_found", "deployment was not found", r)
-		return domain.Deployment{}, false
-	}
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "storage_failed", "could not read deployment", r)
-		return domain.Deployment{}, false
-	}
-	return deployment, true
 }

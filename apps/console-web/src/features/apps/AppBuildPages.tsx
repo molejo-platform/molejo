@@ -6,11 +6,11 @@ import { userFacingError } from "../../shared/api/errors";
 import { formatDateTime, shortSha } from "../../shared/format";
 import { Alert } from "../../shared/ui/Alert";
 import { Button } from "../../shared/ui/Button";
-import { Field } from "../../shared/ui/Field";
+import { SelectField } from "../../shared/ui/Field";
 import { Icon } from "../../shared/ui/Icon";
 import { EmptyState, PageHeader } from "../../shared/ui/Page";
 import { StatusBadge } from "../../shared/ui/StatusBadge";
-import { createAppBuild, getAppBuild, getAppSource, listAppBuildLogs, listAppBuilds } from "./api";
+import { createAppBuild, getAppBuild, getAppSource, listAppBuildLogs, listAppBuilds, listAppEnvironments } from "./api";
 import { useSessionQuery } from "../auth/model";
 import { workspaceScopeKeys } from "../workspace/scope";
 import { AppLayout } from "./AppLayout";
@@ -21,14 +21,15 @@ export function AppBuildsPage() {
   const queryClient = useQueryClient();
   const builds = useQuery({ queryKey: workspaceScopeKeys.appBuilds(workspaceId, projectId, appId), queryFn: () => listAppBuilds(workspaceId, projectId, appId), refetchInterval: (query) => query.state.data?.items.some((build) => build.status === "Pending" || build.status === "Running") ? 2_000 : false });
   const source = useQuery({ queryKey: workspaceScopeKeys.appSource(workspaceId, projectId, appId), queryFn: () => getAppSource(workspaceId, projectId, appId) });
-  const [branch, setBranch] = useState("");
-  useEffect(() => { if (source.data?.source?.primaryBranch) setBranch(source.data.source.primaryBranch); }, [source.data?.source?.primaryBranch]);
+  const targets = useQuery({ queryKey: workspaceScopeKeys.appEnvironments(workspaceId, projectId, appId), queryFn: () => listAppEnvironments(workspaceId, projectId, appId) });
+  const [appEnvironmentId, setAppEnvironmentId] = useState("");
+  useEffect(() => { if (!targets.data?.items.some((target) => target.id === appEnvironmentId)) setAppEnvironmentId(targets.data?.items[0]?.id ?? ""); }, [appEnvironmentId, targets.data?.items]);
   const active = builds.data?.items.some((build) => build.status === "Pending" || build.status === "Running");
-  const create = useMutation({ mutationFn: () => createAppBuild(workspaceId, projectId, appId, { branch: branch.trim() }), onSuccess: () => queryClient.invalidateQueries({ queryKey: workspaceScopeKeys.appBuilds(workspaceId, projectId, appId) }) });
-  const error = builds.error ?? source.error ?? create.error;
-  const canBuild = session.data?.actor.role === "owner" && Boolean(source.data?.source) && Boolean(branch.trim()) && !active;
+  const create = useMutation({ mutationFn: () => createAppBuild(workspaceId, projectId, appId, { appEnvironmentId }), onSuccess: () => queryClient.invalidateQueries({ queryKey: workspaceScopeKeys.appBuilds(workspaceId, projectId, appId) }) });
+  const error = builds.error ?? source.error ?? targets.error ?? create.error;
+  const canBuild = session.data?.actor.role === "owner" && Boolean(source.data?.source) && Boolean(appEnvironmentId) && !active;
   function submit(event: FormEvent) { event.preventDefault(); if (canBuild) create.mutate(); }
-  return <AppLayout workspaceId={workspaceId} projectId={projectId} appId={appId}>{() => <section className="stack"><div className="section-heading"><div><p className="eyebrow">Pipeline</p><h2>Builds</h2><p className="muted">Cada build resolve uma branch para um SHA exato e produz uma release imutável.</p></div>{session.data?.actor.role === "owner" && <form className="inline-create" onSubmit={submit}><Field label="Branch" helper={`Principal: ${source.data?.source?.primaryBranch ?? "—"}.`} value={branch} onChange={(event) => setBranch(event.target.value)} maxLength={255} required/><Button type="submit" loading={create.isPending} disabled={!canBuild}>{active ? "Build em andamento" : "Construir branch"}</Button></form>}</div>{error && <Alert>{userFacingError(error)}</Alert>}{!source.isPending && !source.data?.source && <Alert tone="warning">Configure uma fonte antes de iniciar um build. <Link to="/workspaces/$workspaceId/projects/$projectId/apps/$appId/source" params={{ workspaceId, projectId, appId }}>Configurar fonte</Link></Alert>}{builds.isPending ? <p className="muted" role="status">Carregando builds…</p> : builds.data?.items.length ? <div className="data-list">{builds.data.items.map((build) => <Link className="data-row" key={build.id} to="/workspaces/$workspaceId/projects/$projectId/apps/$appId/builds/$buildId" params={{ workspaceId, projectId, appId, buildId: build.id }}><span><strong>{build.branch}</strong> <span className="mono">{shortSha(build.commitSha)}</span><small>{build.repository} · {formatDateTime(build.createdAt)}</small></span><StatusBadge status={build.status}/></Link>)}</div> : <EmptyState title="Nenhum build" description="Inicie o primeiro build depois de configurar a fonte do App."/>}</section>}</AppLayout>;
+  return <AppLayout workspaceId={workspaceId} projectId={projectId} appId={appId}>{() => <section className="stack"><div className="section-heading"><div><p className="eyebrow">Pipeline</p><h2>Builds</h2><p className="muted">Cada build usa a branch configurada no App Environment e resolve um SHA exato.</p></div>{session.data?.actor.role === "owner" && <form className="inline-create" onSubmit={submit}><SelectField label="App Environment" value={appEnvironmentId} onChange={(event) => setAppEnvironmentId(event.target.value)} required><option value="">Selecione</option>{targets.data?.items.map((target) => <option key={target.id} value={target.id}>{target.environmentName} · {target.branch}</option>)}</SelectField><Button type="submit" loading={create.isPending} disabled={!canBuild}>{active ? "Build em andamento" : "Construir"}</Button></form>}</div>{error && <Alert>{userFacingError(error)}</Alert>}{!source.isPending && !source.data?.source && <Alert tone="warning">Configure uma fonte antes de iniciar um build. <Link to="/workspaces/$workspaceId/projects/$projectId/apps/$appId/source" params={{ workspaceId, projectId, appId }}>Configurar fonte</Link></Alert>}{!targets.isPending && !targets.data?.items.length && <Alert tone="warning">Crie um App Environment para definir a branch e o runtime. <Link to="/workspaces/$workspaceId/projects/$projectId/apps/$appId/environments" params={{ workspaceId, projectId, appId }}>Configurar Environments</Link></Alert>}{builds.isPending ? <p className="muted" role="status">Carregando builds…</p> : builds.data?.items.length ? <div className="data-list">{builds.data.items.map((build) => <Link className="data-row" key={build.id} to="/workspaces/$workspaceId/projects/$projectId/apps/$appId/builds/$buildId" params={{ workspaceId, projectId, appId, buildId: build.id }}><span><strong>{build.branch}</strong> <span className="mono">{shortSha(build.commitSha)}</span><small>{build.repository} · {formatDateTime(build.createdAt)}</small></span><StatusBadge status={build.status}/></Link>)}</div> : <EmptyState title="Nenhum build" description="Inicie o primeiro build depois de configurar a fonte e um App Environment."/>}</section>}</AppLayout>;
 }
 
 export function BuildDetailPage() {

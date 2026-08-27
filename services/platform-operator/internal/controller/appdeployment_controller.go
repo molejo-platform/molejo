@@ -615,10 +615,15 @@ func (r *AppDeploymentReconciler) applyDeployment(
 		deployment.Spec.Template.Spec.AutomountServiceAccountToken = &automountServiceAccountToken
 		deployment.Spec.Template.Spec.InitContainers = nil
 		deployment.Spec.Template.Spec.Volumes = nil
+		environment := make([]corev1.EnvVar, 0, len(appDeployment.Spec.Variables))
+		for _, variable := range appDeployment.Spec.Variables {
+			environment = append(environment, corev1.EnvVar{Name: variable.Name, Value: variable.Value})
+		}
 		deployment.Spec.Template.Spec.Containers = []corev1.Container{{
 			Name:            containerName,
 			Image:           appDeployment.Spec.Image,
 			ImagePullPolicy: corev1.PullIfNotPresent,
+			Env:             environment,
 			Ports: []corev1.ContainerPort{{
 				Name:          httpPortName,
 				ContainerPort: appDeployment.Spec.Port,

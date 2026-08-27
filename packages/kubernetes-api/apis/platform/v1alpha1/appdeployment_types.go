@@ -79,6 +79,24 @@ type AppDeploymentSpec struct {
 	// +kubebuilder:validation:MaxLength=63
 	// +kubebuilder:validation:Pattern="^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$"
 	Slug string `json:"slug,omitempty"`
+
+	// Variables are non-secret environment variables projected into the workload.
+	// +listType=map
+	// +listMapKey=name
+	// +kubebuilder:validation:MaxItems=100
+	Variables []AppDeploymentVariable `json:"variables,omitempty"`
+}
+
+// AppDeploymentVariable declares one non-secret environment variable.
+type AppDeploymentVariable struct {
+	// Name follows the portable environment variable identifier format.
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern="^[A-Za-z_][A-Za-z0-9_]*$"
+	Name string `json:"name"`
+
+	// Value is stored in clear text and must not contain secret material.
+	// +kubebuilder:validation:MaxLength=4096
+	Value string `json:"value"`
 }
 
 // AppDeploymentResources declares resource requests and limits in platform units.

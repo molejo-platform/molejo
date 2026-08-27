@@ -28,7 +28,6 @@ type Querier interface {
 	GetActiveSession(ctx context.Context, tokenHash []byte) (GetActiveSessionRow, error)
 	GetActorByID(ctx context.Context, id int64) (GetActorByIDRow, error)
 	GetActorByKey(ctx context.Context, actorKey string) (GetActorByKeyRow, error)
-	GetHierarchyBackfillStatus(ctx context.Context) (GetHierarchyBackfillStatusRow, error)
 	GetWorkspaceByID(ctx context.Context, id int64) (GetWorkspaceByIDRow, error)
 	GetWorkspaceForActor(ctx context.Context, actorID int64) (GetWorkspaceForActorRow, error)
 	InsertWorkspace(ctx context.Context, arg InsertWorkspaceParams) (InsertWorkspaceRow, error)
@@ -37,7 +36,6 @@ type Querier interface {
 	ListEnvironments(ctx context.Context, arg ListEnvironmentsParams) ([]ListEnvironmentsRow, error)
 	ListProjects(ctx context.Context, arg ListProjectsParams) ([]ListProjectsRow, error)
 	ListWorkspacesForActor(ctx context.Context, arg ListWorkspacesForActorParams) ([]ListWorkspacesForActorRow, error)
-	ResolveDeploymentHierarchy(ctx context.Context, arg ResolveDeploymentHierarchyParams) (ResolveDeploymentHierarchyRow, error)
 	RevokeActiveSession(ctx context.Context, arg RevokeActiveSessionParams) (int64, error)
 	RevokeSession(ctx context.Context, tokenHash []byte) error
 	UpdateApp(ctx context.Context, arg UpdateAppParams) (UpdateAppRow, error)
@@ -45,9 +43,6 @@ type Querier interface {
 	UpdateProject(ctx context.Context, arg UpdateProjectParams) (UpdateProjectRow, error)
 	UpdateWorkspaceName(ctx context.Context, arg UpdateWorkspaceNameParams) (UpdateWorkspaceNameRow, error)
 	UpsertActor(ctx context.Context, arg UpsertActorParams) (int64, error)
-	UpsertCompatibilityApp(ctx context.Context, arg UpsertCompatibilityAppParams) (UpsertCompatibilityAppRow, error)
-	UpsertCompatibilityEnvironment(ctx context.Context, arg UpsertCompatibilityEnvironmentParams) (UpsertCompatibilityEnvironmentRow, error)
-	UpsertCompatibilityProject(ctx context.Context, arg UpsertCompatibilityProjectParams) (UpsertCompatibilityProjectRow, error)
 	UpsertWorkspace(ctx context.Context, arg UpsertWorkspaceParams) (int64, error)
 }
 

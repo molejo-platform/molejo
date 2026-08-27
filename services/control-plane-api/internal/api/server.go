@@ -8,10 +8,8 @@ import (
 	"errors"
 	"io"
 	"log/slog"
-	"math"
 	"net"
 	"net/http"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -64,7 +62,7 @@ func NewServer(s *store.Store, r runtime.Client, cfg Config, logger *slog.Logger
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Server{Store: s, Runtime: r, Config: cfg, Logger: logger, Tracer: noop.NewTracerProvider().Tracer("github.com/fruto-platform/fruto/services/control-plane-api"), limiter: &loginLimiter{entries: map[string]loginAttempt{}}, token: randomToken, deploymentID: func() (string, error) { return domain.NewPublicID("ap") }}
+	return &Server{Store: s, Runtime: r, Config: cfg, Logger: logger, Tracer: noop.NewTracerProvider().Tracer("github.com/fruto-platform/fruto/services/control-plane-api"), limiter: &loginLimiter{entries: map[string]loginAttempt{}}, token: randomToken, deploymentID: func() (string, error) { return domain.NewPublicID("dpl") }}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -156,209 +154,8 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) listDeployments(w http.ResponseWriter, r *http.Request, workspace domain.Workspace) {
-	beforeID := int64(math.MaxInt64)
-	if cursor := strings.TrimSpace(r.URL.Query().Get("cursor")); cursor != "" {
-		var err error
-		beforeID, err = domain.DecodeCursor(cursor)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_cursor", "cursor is invalid", r)
-			return
-		}
-	}
-	limit := 50
-	if rawLimit := strings.TrimSpace(r.URL.Query().Get("limit")); rawLimit != "" {
-		parsed, err := strconv.Atoi(rawLimit)
-		if err != nil || parsed < 1 || parsed > 100 {
-			writeError(w, http.StatusBadRequest, "invalid_limit", "limit must be between 1 and 100", r)
-			return
-		}
-		limit = parsed
-	}
-	items, nextCursor, err := s.Store.ListDeployments(r.Context(), workspace.ID, beforeID, limit)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "storage_failed", "could not list deployments", r)
-		return
-	}
-	var next any
-	if nextCursor != "" {
-		next = nextCursor
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items, "nextCursor": next})
-}
-
-func (s *Server) createDeployment(w http.ResponseWriter, r *http.Request, workspace domain.Workspace, actorID int64) {
-	s.createDeploymentForWorkspace(w, r, workspace, actorID, false)
-}
-
-func (s *Server) createDeploymentForWorkspace(w http.ResponseWriter, r *http.Request, workspace domain.Workspace, actorID int64, requireHierarchy bool) {
-	idem, payload, ok := idempotency(r)
-	if !ok {
-		writeError(w, http.StatusBadRequest, "idempotency_required", "Idempotency-Key is required", r)
-		return
-	}
-	var intent domain.Intent
-	if err := decodeJSON(r, &intent); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "request body is invalid", r)
-		return
-	}
-	intent = domain.NormalizeIntent(intent)
-	if err := domain.ValidateIntent(intent, s.Config.MaxReplicas, s.Config.MaxCPU, s.Config.MaxMemory); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_intent", err.Error(), r)
-		return
-	}
-	if requireHierarchy {
-		if err := domain.ValidateHierarchyReferences(intent.AppID, intent.EnvironmentID); err != nil {
-			writeError(w, http.StatusBadRequest, "hierarchy_required", "appId and environmentId are required", r)
-			return
-		}
-	}
-	if !s.Config.RegistryAllowed(intent.Image) {
-		writeError(w, http.StatusBadRequest, "registry_not_allowed", "image registry is not allowed", r)
-		return
-	}
-	var dep domain.Deployment
-	var op domain.Operation
-	var err error
-	for range 3 {
-		depID, idErr := s.deploymentID()
-		if idErr != nil {
-			err = idErr
-			break
-		}
-		if requireHierarchy {
-			dep, op, _, err = s.Store.CreateDeploymentForApp(r.Context(), workspace.ID, actorID, depID, intent.AppID, intent.EnvironmentID, intent, auth.HashToken(idem), payload)
-		} else {
-			dep, op, _, err = s.Store.CreateDeployment(r.Context(), workspace.ID, actorID, depID, intent, auth.HashToken(idem), payload)
-		}
-		if !errors.Is(err, store.ErrPublicIDCollision) {
-			break
-		}
-	}
-	if errors.Is(err, store.ErrConflict) {
-		writeError(w, http.StatusConflict, "idempotency_conflict", "request conflicts with an existing deployment", r)
-		return
-	}
-	if errors.Is(err, store.ErrNotFound) {
-		writeError(w, http.StatusNotFound, "hierarchy_not_found", "app or environment was not found", r)
-		return
-	}
-	if errors.Is(err, store.ErrPublicIDCollision) {
-		writeError(w, http.StatusServiceUnavailable, "id_generation_failed", "could not allocate a deployment identifier", r)
-		return
-	}
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "storage_failed", "could not create deployment", r)
-		return
-	}
-	s.logAcceptedOperation(r, op)
-	writeJSON(w, http.StatusAccepted, map[string]any{"deployment": dep, "operation": op})
-}
-
-func (s *Server) detailDeployment(w http.ResponseWriter, r *http.Request, workspace domain.Workspace, dep domain.Deployment) {
-	if s.Runtime != nil {
-		obs, err := s.Runtime.ObserveDeployment(r.Context(), workspace.Namespace, dep.RuntimeName)
-		if err == nil {
-			dep.State = obs.State
-			dep.Message = obs.Message
-			if dep.State == domain.Ready && dep.ObservedVersion != dep.DesiredVersion {
-				dep.State = domain.Progressing
-				dep.Message = "runtime is ready; operation finalization is pending"
-			}
-		} else {
-			dep.State = domain.Unknown
-			dep.Message = "runtime observation unavailable"
-		}
-	}
-	writeJSON(w, http.StatusOK, dep)
-}
-
-func (s *Server) updateDeployment(w http.ResponseWriter, r *http.Request, workspace domain.Workspace, actorID int64, dep domain.Deployment) {
-	s.updateDeploymentForWorkspace(w, r, workspace, actorID, dep, false)
-}
-
-func (s *Server) updateDeploymentForWorkspace(w http.ResponseWriter, r *http.Request, workspace domain.Workspace, actorID int64, dep domain.Deployment, requireHierarchy bool) {
-	idem, payload, ok := idempotency(r)
-	if !ok {
-		writeError(w, http.StatusBadRequest, "idempotency_required", "Idempotency-Key is required", r)
-		return
-	}
-	version, err := strconv.ParseInt(r.Header.Get("If-Match"), 10, 64)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "if_match_required", "If-Match must contain the current version", r)
-		return
-	}
-	var intent domain.Intent
-	if err = decodeJSON(r, &intent); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "request body is invalid", r)
-		return
-	}
-	intent = domain.NormalizeIntent(intent)
-	if err = domain.ValidateIntent(intent, s.Config.MaxReplicas, s.Config.MaxCPU, s.Config.MaxMemory); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_intent", err.Error(), r)
-		return
-	}
-	if requireHierarchy {
-		if err = domain.ValidateHierarchyReferences(intent.AppID, intent.EnvironmentID); err != nil {
-			writeError(w, http.StatusBadRequest, "hierarchy_required", "appId and environmentId are required", r)
-			return
-		}
-	}
-	if !s.Config.RegistryAllowed(intent.Image) {
-		writeError(w, http.StatusBadRequest, "registry_not_allowed", "image registry is not allowed", r)
-		return
-	}
-	updated, op, err := s.Store.UpdateDeployment(r.Context(), workspace.ID, actorID, dep.ID, intent, version, auth.HashToken(idem), payload)
-	if errors.Is(err, store.ErrImmutableName) {
-		writeError(w, http.StatusConflict, "deployment_name_immutable", "deployment name cannot be changed", r)
-		return
-	}
-	if errors.Is(err, store.ErrImmutableHierarchy) {
-		writeError(w, http.StatusConflict, "deployment_hierarchy_immutable", "deployment app and environment cannot be changed", r)
-		return
-	}
-	if errors.Is(err, store.ErrImmutableRelease) {
-		writeError(w, http.StatusConflict, "deployment_release_immutable", "deployment image is controlled by its release", r)
-		return
-	}
-	if errors.Is(err, store.ErrConflict) {
-		writeError(w, http.StatusConflict, "version_conflict", "deployment changed since it was read", r)
-		return
-	}
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "storage_failed", "could not update deployment", r)
-		return
-	}
-	s.logAcceptedOperation(r, op)
-	writeJSON(w, http.StatusAccepted, map[string]any{"deployment": updated, "operation": op})
-}
-
-func (s *Server) deleteDeployment(w http.ResponseWriter, r *http.Request, workspace domain.Workspace, actorID int64, dep domain.Deployment) {
-	idem, payload, ok := idempotency(r)
-	if !ok {
-		writeError(w, http.StatusBadRequest, "idempotency_required", "Idempotency-Key is required", r)
-		return
-	}
-	version, err := strconv.ParseInt(r.Header.Get("If-Match"), 10, 64)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "if_match_required", "If-Match must contain the current version", r)
-		return
-	}
-	op, err := s.Store.DeleteDeployment(r.Context(), workspace.ID, actorID, dep.ID, version, auth.HashToken(idem), payload)
-	if errors.Is(err, store.ErrConflict) {
-		writeError(w, http.StatusConflict, "version_conflict", "deployment changed since it was read", r)
-		return
-	}
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "storage_failed", "could not delete deployment", r)
-		return
-	}
-	s.logAcceptedOperation(r, op)
-	writeJSON(w, http.StatusAccepted, map[string]any{"operation": op})
-}
-
 func (s *Server) logAcceptedOperation(r *http.Request, op domain.Operation) {
-	s.logger().Info("operation accepted", "request_id", requestID(r), "operation_id", op.PublicID, "deployment_id", op.DeploymentPublicID, "operation_kind", op.Kind)
+	s.logger().Info("operation accepted", "request_id", requestID(r), "operation_id", op.PublicID, "app_environment_id", op.AppEnvironmentPublicID, "deployment_id", op.DeploymentPublicID, "operation_kind", op.Kind)
 }
 
 func (s *Server) session(r *http.Request) (int64, []byte, bool) {
@@ -572,15 +369,15 @@ func (l *loginLimiter) fail(ip string) {
 func (l *loginLimiter) success(ip string) { l.Lock(); defer l.Unlock(); delete(l.entries, ip) }
 
 func (s *Server) RunOnce(ctx context.Context, workerID string) (bool, error) {
-	op, dep, ok, err := s.Store.ClaimNext(ctx, workerID, s.Config.OperationLease)
+	op, appEnvironment, deployment, ok, err := s.Store.ClaimNext(ctx, workerID, s.Config.OperationLease)
 	if err != nil || !ok {
 		return ok, err
 	}
-	s.logger().Info("operation claimed", "operation_id", op.PublicID, "deployment_id", op.DeploymentPublicID, "operation_kind", op.Kind, "worker_id", workerID, "attempt", op.Attempts)
+	s.logger().Info("operation claimed", "operation_id", op.PublicID, "app_environment_id", op.AppEnvironmentPublicID, "deployment_id", op.DeploymentPublicID, "operation_kind", op.Kind, "worker_id", workerID, "attempt", op.Attempts)
 	if s.Runtime == nil {
 		return true, s.failOperation(ctx, op, "runtime_unconfigured", "runtime is not configured", false)
 	}
-	workspaceID := dep.WorkspaceID
+	workspaceID := appEnvironment.WorkspaceID
 	if op.Kind == domain.OperationEnsureWorkspace {
 		workspaceID = op.WorkspaceID
 	}
@@ -594,43 +391,36 @@ func (s *Server) RunOnce(ctx context.Context, workerID string) (bool, error) {
 	if op.Kind == domain.OperationEnsureWorkspace {
 		return true, s.Store.CompleteWorkspace(ctx, op)
 	}
-	if op.Kind == "DeleteDeployment" {
-		if err = s.Runtime.DeleteDeployment(ctx, workspace.Namespace, dep.RuntimeName); err != nil {
+	if op.Kind == domain.OperationDeleteAppEnv {
+		if err = s.Runtime.DeleteDeployment(ctx, workspace.Namespace, appEnvironment.RuntimeName); err != nil {
 			return true, s.failOperation(ctx, op, "runtime_error", "runtime operation failed", true)
 		}
-		obs, observeErr := s.Runtime.ObserveDeployment(ctx, workspace.Namespace, dep.RuntimeName)
+		obs, observeErr := s.Runtime.ObserveDeployment(ctx, workspace.Namespace, appEnvironment.RuntimeName)
 		if observeErr != nil {
 			return true, s.failOperation(ctx, op, "runtime_observation_failed", "runtime observation failed", true)
 		}
 		if obs.Exists {
 			return true, s.failOperation(ctx, op, "runtime_deletion_pending", "runtime removal is not yet observed", true)
 		}
-		return true, s.completeOperation(ctx, op, domain.Ready, obs.Message, 0, obs.ObservedRelease, true)
+		return true, s.Store.CompleteAppEnvironmentDeletion(ctx, op, obs.Message)
 	}
-	if err = s.Runtime.ApplyDeployment(ctx, workspace.Namespace, dep.RuntimeName, op.Intent); err != nil {
+	intent := domain.IntentFromConfiguration(deployment.Image, deployment.Configuration)
+	if err = s.Runtime.ApplyDeployment(ctx, workspace.Namespace, appEnvironment.RuntimeName, intent); err != nil {
 		return true, s.failOperation(ctx, op, "runtime_error", "runtime operation failed", true)
 	}
-	obs, err := s.Runtime.ObserveDeployment(ctx, workspace.Namespace, dep.RuntimeName)
+	obs, err := s.Runtime.ObserveDeployment(ctx, workspace.Namespace, appEnvironment.RuntimeName)
 	if err != nil {
 		return true, s.failOperation(ctx, op, "runtime_observation_failed", "runtime observation failed", true)
 	}
-	if obs.State != domain.Ready || !obs.Exists || obs.ObservedRelease != op.Intent.Image {
+	if obs.State != domain.Ready || !obs.Exists || obs.ObservedRelease != deployment.Image {
 		return true, s.failOperation(ctx, op, "runtime_not_ready", "runtime has not observed the requested release", true)
 	}
-	return true, s.completeOperation(ctx, op, domain.Ready, obs.Message, op.DesiredVersion, obs.ObservedRelease, false)
+	return true, s.Store.CompleteDeployment(ctx, op, obs.Message, obs.ObservedRelease)
 }
 
 func (s *Server) failOperation(ctx context.Context, op domain.Operation, code, message string, retryable bool) error {
-	s.logger().Warn("operation failed", "operation_id", op.PublicID, "deployment_id", op.DeploymentPublicID, "operation_kind", op.Kind, "worker_id", op.WorkerID, "error_code", code, "retryable", retryable)
+	s.logger().Warn("operation failed", "operation_id", op.PublicID, "app_environment_id", op.AppEnvironmentPublicID, "deployment_id", op.DeploymentPublicID, "operation_kind", op.Kind, "worker_id", op.WorkerID, "error_code", code, "retryable", retryable)
 	return s.Store.Fail(ctx, op, code, message, retryable)
-}
-
-func (s *Server) completeOperation(ctx context.Context, op domain.Operation, state, message string, observedVersion int64, release string, deleted bool) error {
-	err := s.Store.Complete(ctx, op, state, message, observedVersion, release, deleted)
-	if err == nil {
-		s.logger().Info("operation completed", "operation_id", op.PublicID, "deployment_id", op.DeploymentPublicID, "operation_kind", op.Kind, "worker_id", op.WorkerID)
-	}
-	return err
 }
 
 func (s *Server) RunWorker(ctx context.Context, workerID string) {

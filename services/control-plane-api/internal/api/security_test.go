@@ -33,12 +33,12 @@ func TestHandlerPropagatesARequestID(t *testing.T) {
 func TestAcceptedOperationLogCorrelatesRequestAndOperation(t *testing.T) {
 	var output bytes.Buffer
 	server := NewServer(nil, nil, DefaultConfig(), slog.New(slog.NewJSONHandler(&output, nil)))
-	request := httptest.NewRequest(http.MethodPost, "/api/v1/deployments", nil)
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/app-environments/aev-123/deployments", nil)
 	request = request.WithContext(context.WithValue(request.Context(), requestIDContextKey{}, "request-123"))
-	server.logAcceptedOperation(request, domain.Operation{PublicID: "op-123", DeploymentPublicID: "ap-123", Kind: "CreateDeployment"})
+	server.logAcceptedOperation(request, domain.Operation{PublicID: "op-123", AppEnvironmentPublicID: "aev-123", DeploymentPublicID: "dpl-123", Kind: domain.OperationApplyDeployment})
 
 	log := output.String()
-	for _, expected := range []string{`"request_id":"request-123"`, `"operation_id":"op-123"`, `"deployment_id":"ap-123"`, `"operation_kind":"CreateDeployment"`} {
+	for _, expected := range []string{`"request_id":"request-123"`, `"operation_id":"op-123"`, `"app_environment_id":"aev-123"`, `"deployment_id":"dpl-123"`, `"operation_kind":"ApplyDeployment"`} {
 		if !strings.Contains(log, expected) {
 			t.Errorf("operation acceptance log is missing %s: %s", expected, log)
 		}

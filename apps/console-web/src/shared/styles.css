@@ -41,8 +41,8 @@
 * { box-sizing: border-box; }
 html { min-width: 320px; }
 body { margin: 0; min-width: 320px; min-height: 100dvh; background: var(--color-paper); color: var(--color-text); font-size: 1rem; line-height: 1.55; }
-button, input, select { font: inherit; }
-button, a, input, select, summary { touch-action: manipulation; }
+button, input, select, textarea { font: inherit; }
+button, a, input, select, textarea, summary { touch-action: manipulation; }
 a { color: var(--color-accent-strong); }
 a:hover { color: var(--color-brand); }
 h1, h2, h3, p { margin-top: 0; }
@@ -110,7 +110,7 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .tabs a[aria-current="page"] { border-color: var(--color-accent); color: var(--color-brand); }
 
 .panel, .card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); padding: clamp(1rem, 2.5vw, 1.5rem); }
-.summary-grid { display: grid; gap: var(--space-4); grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.summary-grid { display: grid; gap: var(--space-4); grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
 .summary-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); color: var(--color-text); display: grid; gap: var(--space-1); min-height: 150px; padding: var(--space-6); text-decoration: none; transition: border-color .18s ease, box-shadow .18s ease; }
 .summary-card:hover { border-color: var(--color-accent); box-shadow: 0 6px 20px rgb(18 51 63 / 9%); color: var(--color-text); }
 .summary-card > span { color: var(--color-text-muted); font-size: .8rem; font-weight: 750; }
@@ -134,11 +134,12 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 
 .field { color: var(--color-brand); display: grid; font-size: .86rem; font-weight: 700; gap: var(--space-2); }
 .field > label { color: inherit; font: inherit; }
-input, select { background: var(--color-surface); border: 1px solid var(--color-border-strong); border-radius: var(--radius-sm); color: var(--color-text); min-height: 44px; min-width: 0; padding: .65rem .75rem; width: 100%; }
-input:disabled, select:disabled { background: var(--color-surface-subtle); color: var(--color-text-muted); cursor: not-allowed; }
+input, select, textarea { background: var(--color-surface); border: 1px solid var(--color-border-strong); border-radius: var(--radius-sm); color: var(--color-text); min-height: 44px; min-width: 0; padding: .65rem .75rem; width: 100%; }
+textarea { resize: vertical; }
+input:disabled, select:disabled, textarea:disabled { background: var(--color-surface-subtle); color: var(--color-text-muted); cursor: not-allowed; }
 .field-helper { color: var(--color-text-muted); font-weight: 500; }
 .field-error { color: var(--color-danger); font-weight: 650; }
-.invalid input, .invalid select { border-color: var(--color-danger); }
+.invalid input, .invalid select, .invalid textarea { border-color: var(--color-danger); }
 .is-required > label span:first-child::after { color: var(--color-danger); content: " *"; }
 .form-row { flex-wrap: wrap; }
 .form-section { border: 0; display: grid; gap: var(--space-4); margin: 0; padding: 0; }
@@ -192,7 +193,7 @@ dialog.dialog::backdrop { background: rgb(18 33 38 / 55%); }
 .narrow { margin: 0 auto; max-width: 520px; padding: 10vh var(--space-4); }
 .narrow .brand { color: var(--color-brand); margin-bottom: var(--space-6); }
 
-input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible, summary:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 3px; }
+input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visible, summary:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 3px; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 

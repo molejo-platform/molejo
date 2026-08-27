@@ -73,16 +73,16 @@ SELECT o.id, o.public_id, o.workspace_id, o.actor_id, o.kind, o.status,
 FROM operations o
 WHERE o.actor_id = $1
   AND o.kind = 'EnsureWorkspace'
+  AND o.app_environment_id IS NULL
   AND o.deployment_id IS NULL
-  AND o.intent_json <> '{}'::jsonb
   AND o.idempotency_hash = $2;
 
 -- name: InsertWorkspaceOperation :one
 INSERT INTO operations(
-    public_id, workspace_id, deployment_id, actor_id, kind, status,
-    idempotency_hash, payload_hash, intent_json, desired_version, sequence
+    public_id, workspace_id, app_environment_id, deployment_id, actor_id, kind, status,
+    idempotency_hash, payload_hash, desired_version
 )
-VALUES ($1, $2, NULL, $3, 'EnsureWorkspace', 'Pending', $4, $5, $6, 1, 1)
+VALUES ($1, $2, NULL, NULL, $3, 'EnsureWorkspace', 'Pending', $4, $5, 1)
 RETURNING id, public_id, workspace_id, actor_id, kind, status,
           desired_version, attempts, created_at, updated_at, error_code, error_message;
 
@@ -167,7 +167,7 @@ SET archived_at = now(), version = e.version + 1, updated_at = now()
 FROM projects p
 WHERE e.project_id = p.id AND p.workspace_id = $1 AND p.public_id = $2
   AND e.public_id = $3 AND e.version = $4 AND e.archived_at IS NULL
-  AND NOT EXISTS (SELECT 1 FROM deployments d WHERE d.environment_id = e.id AND d.deleted_at IS NULL)
+  AND NOT EXISTS (SELECT 1 FROM app_environments ae WHERE ae.environment_id = e.id AND ae.archived_at IS NULL)
 RETURNING e.id, e.public_id, e.project_id, e.name, e.version, e.created_at, e.updated_at, e.archived_at;
 
 -- name: CreateApp :one
@@ -212,57 +212,8 @@ SET archived_at = now(), version = a.version + 1, updated_at = now()
 FROM projects p
 WHERE a.project_id = p.id AND p.workspace_id = $1 AND p.public_id = $2
   AND a.public_id = $3 AND a.version = $4 AND a.archived_at IS NULL
-  AND NOT EXISTS (SELECT 1 FROM deployments d WHERE d.app_id = a.id AND d.deleted_at IS NULL)
+  AND NOT EXISTS (SELECT 1 FROM app_environments ae WHERE ae.app_id = a.id AND ae.archived_at IS NULL)
 RETURNING a.id, a.public_id, a.project_id, a.name, a.version, a.created_at, a.updated_at, a.archived_at;
-
--- name: UpsertCompatibilityProject :one
-INSERT INTO projects(public_id, workspace_id, name, name_key)
-VALUES ($1, $2, 'Imported', 'imported')
-ON CONFLICT (public_id) DO UPDATE SET public_id = EXCLUDED.public_id
-RETURNING id, public_id, workspace_id;
-
--- name: UpsertCompatibilityEnvironment :one
-INSERT INTO environments(public_id, project_id, name, name_key)
-VALUES ($1, $2, 'Imported', 'imported')
-ON CONFLICT (public_id) DO UPDATE SET public_id = EXCLUDED.public_id
-RETURNING id, public_id, project_id;
-
--- name: UpsertCompatibilityApp :one
-INSERT INTO apps(public_id, project_id, name, name_key)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (public_id) DO UPDATE SET public_id = EXCLUDED.public_id
-RETURNING id, public_id, project_id;
-
--- name: ResolveDeploymentHierarchy :one
-SELECT p.id AS project_id, p.public_id AS project_public_id,
-       a.id AS app_id, a.public_id AS app_public_id,
-       e.id AS environment_id, e.public_id AS environment_public_id
-FROM projects p
-JOIN apps a ON a.project_id = p.id
-JOIN environments e ON e.project_id = p.id
-WHERE p.workspace_id = $1
-  AND a.public_id = $2
-  AND e.public_id = $3
-  AND p.archived_at IS NULL
-  AND a.archived_at IS NULL
-  AND e.archived_at IS NULL
-FOR UPDATE OF p, a, e;
-
--- name: GetHierarchyBackfillStatus :one
-SELECT
-    count(*)::bigint AS deployments,
-    count(*) FILTER (WHERE project_id IS NULL OR app_id IS NULL OR environment_id IS NULL)::bigint AS pending_deployments,
-    count(DISTINCT workspace_id)::bigint AS affected_workspaces,
-    (SELECT count(*)::bigint FROM workspaces w
-      WHERE EXISTS (SELECT 1 FROM deployments d WHERE d.workspace_id = w.id AND (d.project_id IS NULL OR d.app_id IS NULL OR d.environment_id IS NULL))
-        AND NOT EXISTS (SELECT 1 FROM projects p WHERE p.public_id = 'prj-' || translate(substring(md5('project:' || w.public_id), 1, 20), '0189', 'abcd'))) AS projects_to_create,
-    (SELECT count(*)::bigint FROM workspaces w
-      WHERE EXISTS (SELECT 1 FROM deployments d WHERE d.workspace_id = w.id AND (d.project_id IS NULL OR d.app_id IS NULL OR d.environment_id IS NULL))
-        AND NOT EXISTS (SELECT 1 FROM environments e WHERE e.public_id = 'env-' || translate(substring(md5('environment:' || w.public_id), 1, 20), '0189', 'abcd'))) AS environments_to_create,
-    (SELECT count(*)::bigint FROM deployments d
-      WHERE (d.project_id IS NULL OR d.app_id IS NULL OR d.environment_id IS NULL)
-        AND NOT EXISTS (SELECT 1 FROM apps a WHERE a.public_id = 'app-' || translate(substring(md5('app:' || d.public_id), 1, 20), '0189', 'abcd'))) AS apps_to_create
-FROM deployments;
 
 -- name: CreateSession :exec
 INSERT INTO sessions (token_hash, actor_id, csrf_hash, expires_at)

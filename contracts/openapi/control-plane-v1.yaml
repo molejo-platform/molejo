@@ -507,7 +507,7 @@ paths:
       security: [{ sessionCookie: [] }]
       parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
       requestBody:
-        required: false
+        required: true
         content:
           application/json:
             schema: { $ref: '#/components/schemas/BuildInput' }
@@ -576,36 +576,100 @@ paths:
                   items: { type: array, items: { $ref: '#/components/schemas/Release' } }
                   nextCursor: { type: [string, 'null'] }
         '404': { $ref: '#/components/responses/NotFound' }
-  /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/releases/{releaseId}/deployments:
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments:
     parameters:
       - { $ref: '#/components/parameters/WorkspaceId' }
       - { $ref: '#/components/parameters/ProjectId' }
       - { $ref: '#/components/parameters/AppId' }
-      - { $ref: '#/components/parameters/ReleaseId' }
-    post:
-      operationId: createReleaseDeployment
-      security: [{ sessionCookie: [] }]
-      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
-      requestBody:
-        required: true
-        content: { application/json: { schema: { $ref: '#/components/schemas/ReleaseDeploymentIntent' } } }
-      responses:
-        '202': { $ref: '#/components/responses/MutationAccepted' }
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '409': { $ref: '#/components/responses/Conflict' }
-  /api/v1/workspaces/{workspaceId}/deployments:
-    parameters: [{ $ref: '#/components/parameters/WorkspaceId' }]
     get:
-      operationId: listWorkspaceDeployments
+      operationId: listAppEnvironments
       security: [{ sessionCookie: [] }]
       parameters:
         - { $ref: '#/components/parameters/Cursor' }
         - { $ref: '#/components/parameters/Limit' }
       responses:
         '200':
-          description: Deployments in the authorized workspace
+          description: Configured Environments for the App
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/AppEnvironment' } }
+                  nextCursor: { type: [string, 'null'] }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      operationId: createAppEnvironment
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AppEnvironmentCreateInput' } } }
+      responses:
+        '201':
+          description: App Environment created
+          content: { application/json: { schema: { $ref: '#/components/schemas/AppEnvironment' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/AppId' }
+      - { $ref: '#/components/parameters/AppEnvironmentId' }
+    get:
+      operationId: getAppEnvironment
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: App Environment
+          content: { application/json: { schema: { $ref: '#/components/schemas/AppEnvironment' } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      operationId: updateAppEnvironment
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: '#/components/parameters/IfMatch' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AppEnvironmentInput' } } }
+      responses:
+        '200':
+          description: App Environment updated
+          content: { application/json: { schema: { $ref: '#/components/schemas/AppEnvironment' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      operationId: deleteAppEnvironment
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+        - { $ref: '#/components/parameters/IfMatch' }
+      responses:
+        '202':
+          description: Runtime removal accepted
+          content: { application/json: { schema: { $ref: '#/components/schemas/Operation' } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/deployments:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/AppId' }
+      - { $ref: '#/components/parameters/AppEnvironmentId' }
+    get:
+      operationId: listAppEnvironmentDeployments
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Immutable Deployment history
           content:
             application/json:
               schema:
@@ -616,177 +680,34 @@ paths:
                   nextCursor: { type: [string, 'null'] }
         '404': { $ref: '#/components/responses/NotFound' }
     post:
-      operationId: createWorkspaceDeployment
+      operationId: createAppEnvironmentDeployment
       security: [{ sessionCookie: [] }]
-      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
       requestBody:
         required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/ScopedDeploymentIntent' }
+        content: { application/json: { schema: { $ref: '#/components/schemas/DeploymentInput' } } }
       responses:
         '202': { $ref: '#/components/responses/MutationAccepted' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
-  /api/v1/workspaces/{workspaceId}/deployments/{deploymentId}:
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/deployments/{deploymentId}:
     parameters:
       - { $ref: '#/components/parameters/WorkspaceId' }
-      - name: deploymentId
-        in: path
-        required: true
-        schema: { type: string, pattern: '^ap-[a-z2-7]{20}$' }
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/AppId' }
+      - { $ref: '#/components/parameters/AppEnvironmentId' }
+      - { $ref: '#/components/parameters/DeploymentId' }
     get:
-      operationId: getWorkspaceDeployment
+      operationId: getAppEnvironmentDeployment
       security: [{ sessionCookie: [] }]
       responses:
         '200':
-          description: Deployment with observed runtime state
+          description: Immutable Deployment
           content: { application/json: { schema: { $ref: '#/components/schemas/Deployment' } } }
         '404': { $ref: '#/components/responses/NotFound' }
-    put:
-      operationId: updateWorkspaceDeployment
-      security: [{ sessionCookie: [] }]
-      parameters:
-        - { $ref: '#/components/parameters/IdempotencyKey' }
-        - { $ref: '#/components/parameters/IfMatch' }
-      requestBody:
-        required: true
-        content: { application/json: { schema: { $ref: '#/components/schemas/ScopedDeploymentIntent' } } }
-      responses:
-        '202': { $ref: '#/components/responses/MutationAccepted' }
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '409': { $ref: '#/components/responses/Conflict' }
-    delete:
-      operationId: deleteWorkspaceDeployment
-      security: [{ sessionCookie: [] }]
-      parameters:
-        - { $ref: '#/components/parameters/IdempotencyKey' }
-        - { $ref: '#/components/parameters/IfMatch' }
-      responses:
-        '202': { $ref: '#/components/responses/MutationAccepted' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '409': { $ref: '#/components/responses/Conflict' }
-  /api/v1/workspaces/{workspaceId}/deployments/{deploymentId}/operations:
-    parameters:
-      - { $ref: '#/components/parameters/WorkspaceId' }
-      - name: deploymentId
-        in: path
-        required: true
-        schema: { type: string, pattern: '^ap-[a-z2-7]{20}$' }
-    get:
-      operationId: listWorkspaceDeploymentOperations
-      security: [{ sessionCookie: [] }]
-      responses:
-        '200':
-          description: Operation history
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [items]
-                properties:
-                  items: { type: array, items: { $ref: '#/components/schemas/Operation' } }
-        '404': { $ref: '#/components/responses/NotFound' }
-  /api/v1/deployments:
-    get:
-      operationId: listDeployments
-      security: [{ sessionCookie: [] }]
-      parameters:
-        - name: cursor
-          in: query
-          schema: { type: string, minLength: 1, maxLength: 64 }
-        - name: limit
-          in: query
-          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
-      responses:
-        '200':
-          description: Deployments
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [items]
-                properties:
-                  items:
-                    type: array
-                    items: { $ref: '#/components/schemas/Deployment' }
-                  nextCursor: { type: [string, 'null'] }
-    post:
-      operationId: createDeployment
-      security: [{ sessionCookie: [] }]
-      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/DeploymentIntent' }
-      responses:
-        '202': { $ref: '#/components/responses/MutationAccepted' }
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '409': { $ref: '#/components/responses/Conflict' }
-  /api/v1/deployments/{deploymentId}:
-    parameters:
-      - name: deploymentId
-        in: path
-        required: true
-        schema: { type: string, pattern: '^ap-[a-z2-7]{20}$' }
-    get:
-      operationId: getDeployment
-      security: [{ sessionCookie: [] }]
-      responses:
-        '200':
-          description: Deployment with observed runtime state
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Deployment' }
-        '404': { $ref: '#/components/responses/NotFound' }
-    put:
-      operationId: updateDeployment
-      security: [{ sessionCookie: [] }]
-      parameters:
-        - { $ref: '#/components/parameters/IdempotencyKey' }
-        - { $ref: '#/components/parameters/IfMatch' }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/DeploymentIntent' }
-      responses:
-        '202': { $ref: '#/components/responses/MutationAccepted' }
-        '409': { $ref: '#/components/responses/Conflict' }
-    delete:
-      operationId: deleteDeployment
-      security: [{ sessionCookie: [] }]
-      parameters:
-        - { $ref: '#/components/parameters/IdempotencyKey' }
-        - { $ref: '#/components/parameters/IfMatch' }
-      responses:
-        '202': { $ref: '#/components/responses/MutationAccepted' }
-  /api/v1/deployments/{deploymentId}/operations:
-    get:
-      operationId: listDeploymentOperations
-      security: [{ sessionCookie: [] }]
-      parameters:
-        - name: deploymentId
-          in: path
-          required: true
-          schema: { type: string }
-      responses:
-        '200':
-          description: Operation history
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  items:
-                    type: array
-                    items: { $ref: '#/components/schemas/Operation' }
   /api/v1/operations/{operationId}:
     get:
       operationId: getOperation
@@ -841,6 +762,16 @@ components:
       in: path
       required: true
       schema: { type: string, pattern: '^app-[a-z2-7]{20}$' }
+    AppEnvironmentId:
+      name: appEnvironmentId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^aev-[a-z2-7]{20}$' }
+    DeploymentId:
+      name: deploymentId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^dpl-[a-z2-7]{20}$' }
     GitHubInstallationId:
       name: githubInstallationId
       in: path
@@ -986,34 +917,34 @@ components:
         defaultBranch: { type: string, minLength: 1 }
     GitHubSourceInput:
       type: object
-      required: [installationId, repositoryId, primaryBranch]
+      required: [installationId, repositoryId]
       additionalProperties: false
       properties:
         installationId: { type: string, pattern: '^ghi-[a-z2-7]{20}$' }
         repositoryId: { type: string, pattern: '^[1-9][0-9]*$' }
-        primaryBranch: { type: string, minLength: 1, maxLength: 255 }
     GitHubSource:
       type: object
-      required: [installationId, repository, primaryBranch, connectedAt]
+      required: [installationId, repository, connectedAt]
       additionalProperties: false
       properties:
         installationId: { type: string, pattern: '^ghi-[a-z2-7]{20}$' }
         repository: { $ref: '#/components/schemas/GitHubRepository' }
-        primaryBranch: { type: string, minLength: 1, maxLength: 255 }
         connectedAt: { type: string, format: date-time }
     BuildInput:
       type: object
+      required: [appEnvironmentId]
       additionalProperties: false
       properties:
-        branch: { type: string, minLength: 1, maxLength: 255 }
+        appEnvironmentId: { type: string, pattern: '^aev-[a-z2-7]{20}$' }
     Build:
       type: object
-      required: [id, projectId, appId, repository, branch, commitSha, platform, status, attempts, createdAt, updatedAt]
+      required: [id, projectId, appId, appEnvironmentId, repository, branch, commitSha, platform, status, attempts, createdAt, updatedAt]
       additionalProperties: false
       properties:
         id: { type: string, pattern: '^bld-[a-z2-7]{20}$' }
         projectId: { type: string, pattern: '^prj-[a-z2-7]{20}$' }
         appId: { type: string, pattern: '^app-[a-z2-7]{20}$' }
+        appEnvironmentId: { type: string, pattern: '^aev-[a-z2-7]{20}$' }
         repository: { type: string, minLength: 3 }
         branch: { type: string, minLength: 1, maxLength: 255 }
         commitSha: { type: string, pattern: '^[a-f0-9]{40}$' }
@@ -1046,21 +977,18 @@ components:
         image: { type: string, pattern: '^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$' }
         platform: { type: string, enum: [linux/amd64] }
         createdAt: { type: string, format: date-time }
-    ReleaseDeploymentIntent:
+    Variable:
       type: object
-      required: [name, environmentId, port, resources, probes]
+      required: [name, value]
       additionalProperties: false
-      allOf:
-        - oneOf:
-            - required: [exposure, slug]
-              properties:
-                exposure: { type: string, enum: [Public] }
-            - properties:
-                exposure: { type: string, enum: [Private] }
-              not: { required: [slug] }
       properties:
-        name: { type: string, maxLength: 63, pattern: '^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$' }
-        environmentId: { type: string, pattern: '^env-[a-z2-7]{20}$' }
+        name: { type: string, maxLength: 253, pattern: '^[A-Za-z_][A-Za-z0-9_]*$' }
+        value: { type: string, maxLength: 4096 }
+    RuntimeConfiguration:
+      type: object
+      required: [replicas, port, resources, probes, exposure, variables]
+      additionalProperties: false
+      properties:
         replicas: { type: integer, minimum: 1, maximum: 5, default: 1 }
         port: { type: integer, minimum: 1, maximum: 65535 }
         resources:
@@ -1079,46 +1007,52 @@ components:
             readiness: { $ref: '#/components/schemas/Probe' }
         exposure: { type: string, enum: [Private, Public], default: Private }
         slug: { type: string, maxLength: 63, pattern: '^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$' }
-    DeploymentIntent:
+        variables:
+          type: array
+          maxItems: 100
+          items: { $ref: '#/components/schemas/Variable' }
+    AppEnvironmentInput:
       type: object
-      required: [name, image, port, resources, probes]
+      required: [branch, configuration]
       additionalProperties: false
-      allOf:
-        - oneOf:
-            - required: [exposure, slug]
-              properties:
-                exposure: { type: string, enum: [Public] }
-            - properties:
-                exposure: { type: string, enum: [Private] }
-              not: { required: [slug] }
       properties:
-        name: { type: string, maxLength: 63, pattern: '^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$' }
+        branch: { type: string, minLength: 1, maxLength: 255 }
+        configuration: { $ref: '#/components/schemas/RuntimeConfiguration' }
+    AppEnvironmentCreateInput:
+      type: object
+      required: [environmentId, branch, configuration]
+      additionalProperties: false
+      properties:
+        environmentId: { type: string, pattern: '^env-[a-z2-7]{20}$' }
+        branch: { type: string, minLength: 1, maxLength: 255 }
+        configuration: { $ref: '#/components/schemas/RuntimeConfiguration' }
+    AppEnvironment:
+      type: object
+      required: [id, projectId, appId, environmentId, environmentName, branch, configuration, configurationVersion, version, state, createdAt, updatedAt]
+      additionalProperties: false
+      properties:
+        id: { type: string, pattern: '^aev-[a-z2-7]{20}$' }
+        projectId: { type: string, pattern: '^prj-[a-z2-7]{20}$' }
         appId: { type: string, pattern: '^app-[a-z2-7]{20}$' }
         environmentId: { type: string, pattern: '^env-[a-z2-7]{20}$' }
-        image: { type: string, pattern: '^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$' }
-        replicas: { type: integer, minimum: 1, maximum: 5, default: 1 }
-        port: { type: integer, minimum: 1, maximum: 65535 }
-        resources:
-          type: object
-          required: [requests, limits]
-          additionalProperties: false
-          properties:
-            requests: { $ref: '#/components/schemas/ResourceValues' }
-            limits: { $ref: '#/components/schemas/ResourceValues' }
-        probes:
-          type: object
-          required: [liveness, readiness]
-          additionalProperties: false
-          properties:
-            liveness: { $ref: '#/components/schemas/Probe' }
-            readiness: { $ref: '#/components/schemas/Probe' }
-        exposure: { type: string, enum: [Private, Public], default: Private }
-        slug: { type: string, maxLength: 63, pattern: '^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$' }
-    ScopedDeploymentIntent:
-      allOf:
-        - { $ref: '#/components/schemas/DeploymentIntent' }
-        - type: object
-          required: [appId, environmentId]
+        environmentName: { type: string, minLength: 1, maxLength: 80 }
+        branch: { type: string, minLength: 1, maxLength: 255 }
+        configuration: { $ref: '#/components/schemas/RuntimeConfiguration' }
+        configurationVersion: { type: integer, minimum: 1 }
+        version: { type: integer, minimum: 1 }
+        desiredDeploymentId: { type: string, pattern: '^dpl-[a-z2-7]{20}$' }
+        currentDeploymentId: { type: string, pattern: '^dpl-[a-z2-7]{20}$' }
+        currentReleaseId: { type: string, pattern: '^rel-[a-z2-7]{20}$' }
+        state: { type: string, enum: [Pending, Progressing, Ready, Degraded, Unknown] }
+        message: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    DeploymentInput:
+      type: object
+      required: [releaseId]
+      additionalProperties: false
+      properties:
+        releaseId: { type: string, pattern: '^rel-[a-z2-7]{20}$' }
     ResourceValues:
       type: object
       required: [cpuMillis, memoryMiB]
@@ -1134,17 +1068,15 @@ components:
         path: { type: string, maxLength: 2048, pattern: '^/' }
     Deployment:
       type: object
-      required: [id, intent, version, state, createdAt, updatedAt]
+      required: [id, appEnvironmentId, releaseId, configurationVersion, configuration, state, createdAt, updatedAt]
+      additionalProperties: false
       properties:
-        id: { type: string, pattern: '^ap-' }
-        projectId: { type: string, pattern: '^prj-[a-z2-7]{20}$' }
-        appId: { type: string, pattern: '^app-[a-z2-7]{20}$' }
-        environmentId: { type: string, pattern: '^env-[a-z2-7]{20}$' }
+        id: { type: string, pattern: '^dpl-[a-z2-7]{20}$' }
+        appEnvironmentId: { type: string, pattern: '^aev-[a-z2-7]{20}$' }
         releaseId: { type: string, pattern: '^rel-[a-z2-7]{20}$' }
-        intent: { $ref: '#/components/schemas/DeploymentIntent' }
-        version: { type: integer, minimum: 1 }
-        observedVersion: { type: integer, minimum: 0 }
-        state: { type: string, enum: [Pending, Progressing, Ready, Degraded, Unknown] }
+        configurationVersion: { type: integer, minimum: 1 }
+        configuration: { $ref: '#/components/schemas/RuntimeConfiguration' }
+        state: { type: string, enum: [Pending, Progressing, Ready, Degraded] }
         message: { type: string }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
@@ -1153,9 +1085,10 @@ components:
       required: [id, kind, status, desiredVersion, attempts]
       properties:
         id: { type: string, pattern: '^op-' }
-        deploymentId: { type: string, pattern: '^ap-' }
-        kind: { type: string, enum: [CreateDeployment, UpdateDeployment, DeleteDeployment, EnsureWorkspace] }
-        status: { type: string, enum: [Pending, Running, Succeeded, Failed, Superseded] }
+        appEnvironmentId: { type: string, pattern: '^aev-[a-z2-7]{20}$' }
+        deploymentId: { type: string, pattern: '^dpl-[a-z2-7]{20}$' }
+        kind: { type: string, enum: [ApplyDeployment, DeleteAppEnvironment, EnsureWorkspace] }
+        status: { type: string, enum: [Pending, Running, Succeeded, Failed] }
         desiredVersion: { type: integer, minimum: 1 }
         attempts: { type: integer, minimum: 0 }
         errorCode: { type: string }

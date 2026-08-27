@@ -23,23 +23,18 @@ certificate and key remain under ignored `.local/certs`; `mkcert` installs its
 local CA in the developer trust store. The HTTP equivalents are
 `just dev-api-http` and `just dev-frontend-http`.
 
-The Console administration page creates Workspaces, Projects, Environments, and
-Apps exclusively through the authenticated REST API. AppDeployment creation is
-scoped by the selected Workspace and requires an App and Environment from the
-same Project. The API returns `404` for resources outside the Actor membership
+The Console creates Workspaces, Projects, Environments, and Apps exclusively
+through the authenticated REST API. An AppEnvironment requires an App and
+Environment from the same Project and owns branch and runtime configuration.
+Each Deployment is an immutable Release plus configuration snapshot. The API returns `404` for resources outside the Actor membership
 boundary and `403` when a tester attempts a mutation.
 
-Hierarchy migrations use versions 005 through 007: expand, deterministic
-backfill, then contract constraints. Run `just hierarchy-backfill-expand` to
-apply only version 005, followed by `just hierarchy-backfill-dry-run` to report
-the exact links and compatibility resources to create. Use
-`just hierarchy-backfill-apply` only after the approved export to apply the
-remaining forward migrations and confirm that no nullable relationship remains.
-The integrated migration Job invokes this same guarded apply flow: it reports
-the pre-mutation plan before backfill and only applies the contract after the
-post-backfill verification, followed by later migrations in version order. The
-commands are idempotent and never print
-connection credentials.
+Migration 011 replaces the experimental mutable deployment model with
+AppEnvironments and immutable Deployments. It intentionally clears existing
+Build, Release, Deployment, and operation history while preserving Actors,
+Workspaces, Projects, Apps, Environments, and GitHub connections. The migration
+Job applies forward migrations in version order and never prints connection
+credentials.
 
 The public Console origin is `https://cloud.molejo.dev`. Repository access uses a
 GitHub App, following an installation model instead of a classic OAuth App. Set
@@ -145,10 +140,11 @@ terminal. Retrieve the owner password locally for the browser acceptance and
 rotate it after the test. Do not paste passwords, hashes, database URLs, Secret
 data, or kubeconfigs into issues, logs, commits, or chat.
 
-After automated acceptance, use the Console to create the recorded Testkit
-digest as `Public`, wait for `Ready`, update it, inspect history, restart
-`deployment/control-plane-api`, reload the same browser session, and delete the
-deployment. Record only public IDs, image digests, operation states, route
+After automated acceptance, use the Console to connect the Testkit App to an
+Environment, configure it as `Public`, build its configured branch, and deploy
+the resulting Release. Wait for `Ready`, update the AppEnvironment, inspect its
+Deployment history, restart `deployment/control-plane-api`, reload the same
+browser session, and delete the AppEnvironment. Record only public IDs, image digests, operation states, route
 conditions, and resource counts. A second application of the same release
 bundle is the first-release rollback proof; a different previous digest may be
 reapplied only when its binary understands every applied forward migration.
@@ -170,8 +166,9 @@ select the database destination and CNI first, then validate the resulting polic
 
 ## Phase 8 build plane
 
-An owner starts a Build for an App with a connected GitHub source. The API
-records the exact default-branch commit before enqueueing. The worker accepts
+An owner starts a Build for an AppEnvironment whose App has a connected GitHub
+source. The API records the exact commit of the AppEnvironment branch before
+enqueueing. The worker accepts
 only a root `Dockerfile`, builds `linux/amd64`, pushes a commit-SHA tag, and
 promotes a Release only after recording the OCI digest. Logs are bounded and
 sanitized. A failed Build never creates a Release.

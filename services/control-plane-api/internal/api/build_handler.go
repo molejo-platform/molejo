@@ -2,7 +2,6 @@ package api
 
 import (
 	"errors"
-	"io"
 	"net/http"
 
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/api/generated"
@@ -42,10 +41,14 @@ func (h *generatedHandler) CreateAppBuild(w http.ResponseWriter, r *http.Request
 	idempotencyHash := auth.HashToken(idempotencyKey)
 	payloadHash = scopedBuildPayloadHash(r, payloadHash)
 	var input struct {
-		Branch string `json:"branch"`
+		AppEnvironmentID string `json:"appEnvironmentId"`
 	}
-	if err := decodeJSON(r, &input); err != nil && !errors.Is(err, io.EOF) {
+	if err := decodeJSON(r, &input); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_json", "request body is invalid", r)
+		return
+	}
+	if err := domain.ValidateAppEnvironmentID(input.AppEnvironmentID); err != nil {
+		writeError(w, http.StatusBadRequest, "app_environment_invalid", err.Error(), r)
 		return
 	}
 	if existing, found, err := h.server.Store.FindBuildByIdempotency(r.Context(), workspace.ID, actor.ID, idempotencyHash, payloadHash); err != nil {
@@ -58,19 +61,12 @@ func (h *generatedHandler) CreateAppBuild(w http.ResponseWriter, r *http.Request
 	if !h.githubAvailable(w, r) {
 		return
 	}
-	source, err := h.server.Store.GitHubBuildSource(r.Context(), workspace.ID, string(projectID), string(appID))
+	source, err := h.server.Store.GitHubBuildSource(r.Context(), workspace.ID, string(projectID), string(appID), input.AppEnvironmentID)
 	if err != nil {
 		writeBuildError(w, r, err)
 		return
 	}
-	branch := source.PrimaryBranch
-	if input.Branch != "" {
-		branch, err = domain.NormalizeSourceBranch(input.Branch)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "branch_invalid", "branch is invalid", r)
-			return
-		}
-	}
+	branch := source.SourceBranch
 	commitSHA, err := h.server.GitHub.ResolveCommit(r.Context(), source.InstallationExternalID, source.RepositoryID, branch)
 	if err != nil {
 		if errors.Is(err, githubapp.ErrNotFound) {
@@ -86,7 +82,7 @@ func (h *generatedHandler) CreateAppBuild(w http.ResponseWriter, r *http.Request
 		if idErr != nil {
 			break
 		}
-		build, _, createErr := h.server.Store.CreateBuild(r.Context(), workspace.ID, actor.ID, publicID, string(projectID), string(appID), branch, commitSHA, idempotencyHash, payloadHash)
+		build, _, createErr := h.server.Store.CreateBuild(r.Context(), workspace.ID, actor.ID, publicID, string(projectID), string(appID), input.AppEnvironmentID, branch, commitSHA, idempotencyHash, payloadHash)
 		if errors.Is(createErr, store.ErrPublicIDCollision) {
 			continue
 		}
@@ -142,65 +138,6 @@ func (h *generatedHandler) ListAppReleases(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	writeHierarchyList(w, items, nextCursor)
-}
-
-func (h *generatedHandler) CreateReleaseDeployment(w http.ResponseWriter, r *http.Request, workspaceID generated.WorkspaceId, projectID generated.ProjectId, appID generated.AppId, releaseID generated.ReleaseId, _ generated.CreateReleaseDeploymentParams) {
-	actor, workspace, ok := h.authorizeWorkspace(w, r, string(workspaceID), true)
-	if !ok {
-		return
-	}
-	idempotencyKey, payloadHash, ok := idempotency(r)
-	if !ok {
-		writeError(w, http.StatusBadRequest, "idempotency_required", "Idempotency-Key is required", r)
-		return
-	}
-	payloadHash = scopedBuildPayloadHash(r, payloadHash)
-	var input struct {
-		Name          string           `json:"name"`
-		EnvironmentID string           `json:"environmentId"`
-		Replicas      int32            `json:"replicas"`
-		Port          int32            `json:"port"`
-		Resources     domain.Resources `json:"resources"`
-		Probes        domain.Probes    `json:"probes"`
-		Exposure      string           `json:"exposure"`
-		Slug          string           `json:"slug,omitempty"`
-	}
-	if err := decodeJSON(r, &input); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "request body is invalid", r)
-		return
-	}
-	release, err := h.server.Store.FindRelease(r.Context(), workspace.ID, string(projectID), string(appID), string(releaseID))
-	if err != nil {
-		writeBuildError(w, r, err)
-		return
-	}
-	intent := domain.NormalizeIntent(domain.Intent{Name: input.Name, AppID: string(appID), EnvironmentID: input.EnvironmentID, Image: release.Image, Replicas: input.Replicas, Port: input.Port, Resources: input.Resources, Probes: input.Probes, Exposure: input.Exposure, Slug: input.Slug})
-	if err = domain.ValidateIntent(intent, h.server.Config.MaxReplicas, h.server.Config.MaxCPU, h.server.Config.MaxMemory); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_intent", err.Error(), r)
-		return
-	}
-	if !h.server.Config.RegistryAllowed(intent.Image) {
-		writeError(w, http.StatusBadRequest, "registry_not_allowed", "image registry is not allowed", r)
-		return
-	}
-	for range 3 {
-		deploymentID, idErr := h.server.deploymentID()
-		if idErr != nil {
-			break
-		}
-		deployment, operation, _, createErr := h.server.Store.CreateDeploymentForRelease(r.Context(), workspace.ID, actor.ID, deploymentID, string(appID), input.EnvironmentID, release, intent, auth.HashToken(idempotencyKey), payloadHash)
-		if errors.Is(createErr, store.ErrPublicIDCollision) {
-			continue
-		}
-		if createErr != nil {
-			writeBuildError(w, r, createErr)
-			return
-		}
-		h.server.logAcceptedOperation(r, operation)
-		writeJSON(w, http.StatusAccepted, map[string]any{"deployment": deployment, "operation": operation})
-		return
-	}
-	writeError(w, http.StatusServiceUnavailable, "id_generation_failed", "could not allocate a deployment identifier", r)
 }
 
 func scopedBuildPayloadHash(r *http.Request, bodyHash []byte) []byte {

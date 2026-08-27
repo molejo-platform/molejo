@@ -164,6 +164,33 @@ spec:
                 minLength: 1
                 pattern: ^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$
                 type: string
+              variables:
+                description: Variables are non-secret environment variables projected
+                  into the workload.
+                items:
+                  description: AppDeploymentVariable declares one non-secret environment
+                    variable.
+                  properties:
+                    name:
+                      description: Name follows the portable environment variable
+                        identifier format.
+                      maxLength: 253
+                      pattern: ^[A-Za-z_][A-Za-z0-9_]*$
+                      type: string
+                    value:
+                      description: Value is stored in clear text and must not contain
+                        secret material.
+                      maxLength: 4096
+                      type: string
+                  required:
+                  - name
+                  - value
+                  type: object
+                maxItems: 100
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
             required:
             - image
             - port

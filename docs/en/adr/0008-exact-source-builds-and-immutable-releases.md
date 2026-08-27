@@ -11,8 +11,10 @@ digest is not a reproducible product release.
 
 ## Decision
 
-The API resolves the selected repository default branch to an exact 40-character
-commit SHA before creating an idempotent Build. A separate worker claims Builds
+The App selects one repository, while each AppEnvironment owns the branch used
+for that App in its Environment. The API resolves that branch to an exact
+40-character commit SHA before creating an idempotent Build linked to the
+AppEnvironment. A separate worker claims Builds
 with a lease and fencing token, obtains a short-lived GitHub installation token,
 downloads the archive for that exact SHA, and safely extracts it into an
 ephemeral directory. The first contract accepts only a regular `Dockerfile` at
@@ -27,9 +29,9 @@ multi-tenant isolation.
 
 The pushed tag is the exact commit SHA. A Release is promoted transactionally
 only after BuildKit returns a valid OCI digest, and stores the digest-pinned
-image, commit, App, Build, and platform. Deployments created from a Release take
-their image from the server-side Release; clients cannot replace that image in a
-later update.
+image, commit, App, Build, and platform. Deploying a Release creates an immutable
+Deployment with the AppEnvironment configuration revision captured at request
+time; clients cannot replace its image or configuration later.
 
 Buildpacks, monorepo path selection, build variables, build secrets, webhooks,
 CI orchestration, cache contracts, SBOM, signing, and scanning remain outside

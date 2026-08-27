@@ -18,26 +18,30 @@ type GitHubBuildSource struct {
 	ProjectPublicID        string
 	AppID                  int64
 	AppPublicID            string
+	AppEnvironmentID       int64
+	AppEnvironmentPublicID string
 	InstallationID         int64
 	InstallationExternalID int64
 	RepositoryID           int64
 	RepositoryFullName     string
-	PrimaryBranch          string
+	SourceBranch           string
 }
 
-func (s *Store) GitHubBuildSource(ctx context.Context, workspaceID int64, projectPublicID, appPublicID string) (GitHubBuildSource, error) {
+func (s *Store) GitHubBuildSource(ctx context.Context, workspaceID int64, projectPublicID, appPublicID, appEnvironmentPublicID string) (GitHubBuildSource, error) {
 	var source GitHubBuildSource
 	err := s.Pool.QueryRow(ctx, `
-		SELECT p.workspace_id,p.id,p.public_id,a.id,a.public_id,i.id,i.github_installation_id,
-		       src.repository_id,src.repository_full_name,src.primary_branch
+		SELECT p.workspace_id,p.id,p.public_id,a.id,a.public_id,ae.id,ae.public_id,i.id,i.github_installation_id,
+		       src.repository_id,src.repository_full_name,ae.source_branch
 		FROM projects p
 		JOIN apps a ON a.project_id=p.id
+		JOIN app_environments ae ON ae.app_id=a.id
 		JOIN app_github_sources src ON src.app_id=a.id
 		JOIN github_installations i ON i.id=src.github_installation_id AND i.workspace_id=p.workspace_id
-		WHERE p.workspace_id=$1 AND p.public_id=$2 AND a.public_id=$3
-		  AND p.archived_at IS NULL AND a.archived_at IS NULL`, workspaceID, projectPublicID, appPublicID).
+		WHERE p.workspace_id=$1 AND p.public_id=$2 AND a.public_id=$3 AND ae.public_id=$4
+		  AND p.archived_at IS NULL AND a.archived_at IS NULL AND ae.archived_at IS NULL AND ae.deletion_requested_at IS NULL`, workspaceID, projectPublicID, appPublicID, appEnvironmentPublicID).
 		Scan(&source.WorkspaceID, &source.ProjectID, &source.ProjectPublicID, &source.AppID, &source.AppPublicID,
-			&source.InstallationID, &source.InstallationExternalID, &source.RepositoryID, &source.RepositoryFullName, &source.PrimaryBranch)
+			&source.AppEnvironmentID, &source.AppEnvironmentPublicID, &source.InstallationID, &source.InstallationExternalID,
+			&source.RepositoryID, &source.RepositoryFullName, &source.SourceBranch)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return GitHubBuildSource{}, ErrNotFound
 	}
@@ -58,7 +62,7 @@ func (s *Store) FindBuildByIdempotency(ctx context.Context, workspaceID, actorID
 	return build, true, nil
 }
 
-func (s *Store) CreateBuild(ctx context.Context, workspaceID, actorID int64, publicID, projectPublicID, appPublicID, sourceBranch, commitSHA string, idempotencyHash, payloadHash []byte) (domain.Build, bool, error) {
+func (s *Store) CreateBuild(ctx context.Context, workspaceID, actorID int64, publicID, projectPublicID, appPublicID, appEnvironmentPublicID, sourceBranch, commitSHA string, idempotencyHash, payloadHash []byte) (domain.Build, bool, error) {
 	if _, err := domain.NormalizeSourceBranch(sourceBranch); err != nil {
 		return domain.Build{}, false, err
 	}
@@ -87,21 +91,22 @@ func (s *Store) CreateBuild(ctx context.Context, workspaceID, actorID int64, pub
 
 	var build domain.Build
 	err = tx.QueryRow(ctx, `
-		INSERT INTO builds(public_id,workspace_id,project_id,app_id,requested_by_actor_id,
+		INSERT INTO builds(public_id,workspace_id,project_id,app_id,app_environment_id,requested_by_actor_id,
 		  github_installation_id,github_installation_external_id,repository_id,repository_full_name,
 		  source_branch,commit_sha,platform,idempotency_hash,payload_hash)
-		SELECT $1,p.workspace_id,p.id,a.id,$2,i.id,i.github_installation_id,src.repository_id,
-		       src.repository_full_name,$6,$7,'linux/amd64',$8,$9
+		SELECT $1,p.workspace_id,p.id,a.id,ae.id,$2,i.id,i.github_installation_id,src.repository_id,
+		       src.repository_full_name,$7,$8,'linux/amd64',$9,$10
 		FROM projects p
 		JOIN apps a ON a.project_id=p.id
+		JOIN app_environments ae ON ae.app_id=a.id
 		JOIN app_github_sources src ON src.app_id=a.id
 		JOIN github_installations i ON i.id=src.github_installation_id AND i.workspace_id=p.workspace_id
-		WHERE p.workspace_id=$3 AND p.public_id=$4 AND a.public_id=$5
-		  AND p.archived_at IS NULL AND a.archived_at IS NULL
-		RETURNING id,public_id,workspace_id,project_id,app_id,github_installation_external_id,
+		WHERE p.workspace_id=$3 AND p.public_id=$4 AND a.public_id=$5 AND ae.public_id=$6
+		  AND p.archived_at IS NULL AND a.archived_at IS NULL AND ae.archived_at IS NULL AND ae.deletion_requested_at IS NULL
+		RETURNING id,public_id,workspace_id,project_id,app_id,app_environment_id,github_installation_external_id,
 		          repository_id,repository_full_name,source_branch,commit_sha,platform,status,attempts,COALESCE(worker_id,''),
 		          fencing_token,lease_until,COALESCE(error_code,''),COALESCE(error_message,''),created_at,updated_at`,
-		publicID, actorID, workspaceID, projectPublicID, appPublicID, sourceBranch, commitSHA, idempotencyHash, payloadHash).
+		publicID, actorID, workspaceID, projectPublicID, appPublicID, appEnvironmentPublicID, sourceBranch, commitSHA, idempotencyHash, payloadHash).
 		Scan(buildScanTargets(&build)...)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.Build{}, false, ErrNotFound
@@ -114,6 +119,7 @@ func (s *Store) CreateBuild(ctx context.Context, workspaceID, actorID int64, pub
 	}
 	build.ProjectPublicID = projectPublicID
 	build.AppPublicID = appPublicID
+	build.AppEnvironmentPublicID = appEnvironmentPublicID
 	if err = tx.Commit(ctx); err != nil {
 		return domain.Build{}, false, err
 	}
@@ -128,13 +134,13 @@ func (s *Store) buildByIdempotency(ctx context.Context, query buildQuery, worksp
 	var build domain.Build
 	var payload []byte
 	err := query.QueryRow(ctx, `
-		SELECT b.id,b.public_id,b.workspace_id,b.project_id,b.app_id,b.github_installation_external_id,
+		SELECT b.id,b.public_id,b.workspace_id,b.project_id,b.app_id,b.app_environment_id,b.github_installation_external_id,
 		       b.repository_id,b.repository_full_name,b.source_branch,b.commit_sha,b.platform,b.status,b.attempts,COALESCE(b.worker_id,''),
 		       b.fencing_token,b.lease_until,COALESCE(b.error_code,''),COALESCE(b.error_message,''),b.created_at,b.updated_at,
-		       p.public_id,a.public_id,b.payload_hash
-		FROM builds b JOIN projects p ON p.id=b.project_id JOIN apps a ON a.id=b.app_id
+		       p.public_id,a.public_id,ae.public_id,b.payload_hash
+		FROM builds b JOIN projects p ON p.id=b.project_id JOIN apps a ON a.id=b.app_id JOIN app_environments ae ON ae.id=b.app_environment_id
 		WHERE b.workspace_id=$1 AND b.requested_by_actor_id=$2 AND b.idempotency_hash=$3`, workspaceID, actorID, hash).
-		Scan(append(buildScanTargets(&build), &build.ProjectPublicID, &build.AppPublicID, &payload)...)
+		Scan(append(buildScanTargets(&build), &build.ProjectPublicID, &build.AppPublicID, &build.AppEnvironmentPublicID, &payload)...)
 	return build, payload, err
 }
 
@@ -155,12 +161,12 @@ func (s *Store) ClaimNextBuild(ctx context.Context, workerID string, lease time.
 			FROM candidate c WHERE b.id=c.id
 			RETURNING b.*
 		)
-		SELECT b.id,b.public_id,b.workspace_id,b.project_id,b.app_id,b.github_installation_external_id,
+		SELECT b.id,b.public_id,b.workspace_id,b.project_id,b.app_id,b.app_environment_id,b.github_installation_external_id,
 		       b.repository_id,b.repository_full_name,b.source_branch,b.commit_sha,b.platform,b.status,b.attempts,COALESCE(b.worker_id,''),
 		       b.fencing_token,b.lease_until,COALESCE(b.error_code,''),COALESCE(b.error_message,''),b.created_at,b.updated_at,
-		       p.public_id,a.public_id
-		FROM claimed b JOIN projects p ON p.id=b.project_id JOIN apps a ON a.id=b.app_id`, workerID, lease.String()).
-		Scan(append(buildScanTargets(&build), &build.ProjectPublicID, &build.AppPublicID)...)
+		       p.public_id,a.public_id,ae.public_id
+		FROM claimed b JOIN projects p ON p.id=b.project_id JOIN apps a ON a.id=b.app_id JOIN app_environments ae ON ae.id=b.app_environment_id`, workerID, lease.String()).
+		Scan(append(buildScanTargets(&build), &build.ProjectPublicID, &build.AppPublicID, &build.AppEnvironmentPublicID)...)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.Build{}, false, nil
 	}
@@ -265,10 +271,10 @@ func (s *Store) ListBuilds(ctx context.Context, workspaceID int64, projectPublic
 		beforeID = math.MaxInt64
 	}
 	rows, err := s.Pool.Query(ctx, `
-		SELECT b.id,b.public_id,b.workspace_id,b.project_id,b.app_id,b.github_installation_external_id,
+		SELECT b.id,b.public_id,b.workspace_id,b.project_id,b.app_id,b.app_environment_id,b.github_installation_external_id,
 		       b.repository_id,b.repository_full_name,b.source_branch,b.commit_sha,b.platform,b.status,b.attempts,COALESCE(b.worker_id,''),
-		       b.fencing_token,b.lease_until,COALESCE(b.error_code,''),COALESCE(b.error_message,''),b.created_at,b.updated_at,p.public_id,a.public_id
-		FROM builds b JOIN projects p ON p.id=b.project_id JOIN apps a ON a.id=b.app_id
+		       b.fencing_token,b.lease_until,COALESCE(b.error_code,''),COALESCE(b.error_message,''),b.created_at,b.updated_at,p.public_id,a.public_id,ae.public_id
+		FROM builds b JOIN projects p ON p.id=b.project_id JOIN apps a ON a.id=b.app_id JOIN app_environments ae ON ae.id=b.app_environment_id
 		WHERE b.workspace_id=$1 AND p.public_id=$2 AND a.public_id=$3 AND b.id < $4
 		ORDER BY b.id DESC LIMIT $5`, workspaceID, projectPublicID, appPublicID, beforeID, limit+1)
 	if err != nil {
@@ -278,7 +284,7 @@ func (s *Store) ListBuilds(ctx context.Context, workspaceID int64, projectPublic
 	items := []domain.Build{}
 	for rows.Next() {
 		var build domain.Build
-		if err = rows.Scan(append(buildScanTargets(&build), &build.ProjectPublicID, &build.AppPublicID)...); err != nil {
+		if err = rows.Scan(append(buildScanTargets(&build), &build.ProjectPublicID, &build.AppPublicID, &build.AppEnvironmentPublicID)...); err != nil {
 			return nil, "", err
 		}
 		items = append(items, build)
@@ -296,12 +302,12 @@ func (s *Store) ListBuilds(ctx context.Context, workspaceID int64, projectPublic
 func (s *Store) FindBuild(ctx context.Context, workspaceID int64, publicID string) (domain.Build, error) {
 	var build domain.Build
 	err := s.Pool.QueryRow(ctx, `
-		SELECT b.id,b.public_id,b.workspace_id,b.project_id,b.app_id,b.github_installation_external_id,
+		SELECT b.id,b.public_id,b.workspace_id,b.project_id,b.app_id,b.app_environment_id,b.github_installation_external_id,
 		       b.repository_id,b.repository_full_name,b.source_branch,b.commit_sha,b.platform,b.status,b.attempts,COALESCE(b.worker_id,''),
-		       b.fencing_token,b.lease_until,COALESCE(b.error_code,''),COALESCE(b.error_message,''),b.created_at,b.updated_at,p.public_id,a.public_id
-		FROM builds b JOIN projects p ON p.id=b.project_id JOIN apps a ON a.id=b.app_id
+		       b.fencing_token,b.lease_until,COALESCE(b.error_code,''),COALESCE(b.error_message,''),b.created_at,b.updated_at,p.public_id,a.public_id,ae.public_id
+		FROM builds b JOIN projects p ON p.id=b.project_id JOIN apps a ON a.id=b.app_id JOIN app_environments ae ON ae.id=b.app_environment_id
 		WHERE b.workspace_id=$1 AND b.public_id=$2`, workspaceID, publicID).
-		Scan(append(buildScanTargets(&build), &build.ProjectPublicID, &build.AppPublicID)...)
+		Scan(append(buildScanTargets(&build), &build.ProjectPublicID, &build.AppPublicID, &build.AppEnvironmentPublicID)...)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.Build{}, ErrNotFound
 	}
@@ -375,7 +381,7 @@ func (s *Store) FindRelease(ctx context.Context, workspaceID int64, projectPubli
 
 func buildScanTargets(build *domain.Build) []any {
 	return []any{
-		&build.ID, &build.PublicID, &build.WorkspaceID, &build.ProjectID, &build.AppID,
+		&build.ID, &build.PublicID, &build.WorkspaceID, &build.ProjectID, &build.AppID, &build.AppEnvironmentID,
 		&build.InstallationExternalID, &build.RepositoryID, &build.RepositoryFullName, &build.SourceBranch, &build.CommitSHA,
 		&build.Platform, &build.Status, &build.Attempts, &build.WorkerID, &build.FencingToken,
 		&build.LeaseUntil, &build.ErrorCode, &build.ErrorMessage, &build.CreatedAt, &build.UpdatedAt,

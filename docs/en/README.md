@@ -37,8 +37,10 @@ Workspace → Project → App + Environment
 ```
 
 `App` and `Environment` are siblings beneath the same Project. An `App` is the
-logical application identity. An `AppDeployment` represents the intent to run
-an App in an Environment.
+logical application identity. An `AppEnvironment` owns the branch and runtime
+configuration for one App in one Environment. A `Deployment` is an immutable
+record of a Release and configuration revision applied to that target. The
+Kubernetes `AppDeployment` is an internal runtime projection.
 
 The platform remains the source of truth for product identity, ownership, and
 authorization. Kubernetes names, namespaces, labels, and annotations are runtime

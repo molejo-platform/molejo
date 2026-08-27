@@ -1,17 +1,24 @@
 import { createIdempotencyKey, request } from "../../shared/api/http-client";
-import type { Build, BuildInput, BuildLog, DeploymentMutationAccepted, GitHubSource, GitHubSourceInput, Release, ReleaseDeploymentIntent } from "../../shared/api/types";
+import type { AppEnvironment, AppEnvironmentCreateInput, AppEnvironmentInput, Build, BuildInput, BuildLog, Deployment, DeploymentInput, DeploymentMutationAccepted, GitHubSource, GitHubSourceInput, Operation, Release } from "../../shared/api/types";
 
 type ResourceList<T> = { items: T[]; nextCursor: string | null };
 const appBase = (workspaceId: string, projectId: string, appId: string) => `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/projects/${encodeURIComponent(projectId)}/apps/${encodeURIComponent(appId)}`;
 const sourceBase = (workspaceId: string, projectId: string, appId: string) => `${appBase(workspaceId, projectId, appId)}/source`;
 const buildBase = (workspaceId: string, projectId: string, appId: string) => `${appBase(workspaceId, projectId, appId)}/builds`;
+const appEnvironmentBase = (workspaceId: string, projectId: string, appId: string) => `${appBase(workspaceId, projectId, appId)}/environments`;
 
 export const getAppSource = (workspaceId: string, projectId: string, appId: string) => request<{ source: GitHubSource | null }>(sourceBase(workspaceId, projectId, appId));
 export const setAppSource = (workspaceId: string, projectId: string, appId: string, input: GitHubSourceInput) => request<GitHubSource>(sourceBase(workspaceId, projectId, appId), { method: "PUT", body: JSON.stringify(input) });
 export const clearAppSource = (workspaceId: string, projectId: string, appId: string) => request<void>(sourceBase(workspaceId, projectId, appId), { method: "DELETE" });
 export const listAppBuilds = (workspaceId: string, projectId: string, appId: string) => request<ResourceList<Build>>(buildBase(workspaceId, projectId, appId));
-export const createAppBuild = (workspaceId: string, projectId: string, appId: string, input: BuildInput = {}) => request<Build>(buildBase(workspaceId, projectId, appId), { method: "POST", headers: { "Idempotency-Key": createIdempotencyKey() }, body: JSON.stringify(input) });
+export const createAppBuild = (workspaceId: string, projectId: string, appId: string, input: BuildInput) => request<Build>(buildBase(workspaceId, projectId, appId), { method: "POST", headers: { "Idempotency-Key": createIdempotencyKey() }, body: JSON.stringify(input) });
 export const getAppBuild = (workspaceId: string, projectId: string, appId: string, buildId: string) => request<Build>(`${buildBase(workspaceId, projectId, appId)}/${encodeURIComponent(buildId)}`);
 export const listAppBuildLogs = (workspaceId: string, projectId: string, appId: string, buildId: string) => request<{ items: BuildLog[] }>(`${buildBase(workspaceId, projectId, appId)}/${encodeURIComponent(buildId)}/logs`);
 export const listAppReleases = (workspaceId: string, projectId: string, appId: string) => request<ResourceList<Release>>(`${appBase(workspaceId, projectId, appId)}/releases`);
-export const createReleaseDeployment = (workspaceId: string, projectId: string, appId: string, releaseId: string, input: ReleaseDeploymentIntent) => request<DeploymentMutationAccepted>(`${appBase(workspaceId, projectId, appId)}/releases/${encodeURIComponent(releaseId)}/deployments`, { method: "POST", headers: { "Idempotency-Key": createIdempotencyKey() }, body: JSON.stringify(input) });
+export const listAppEnvironments = (workspaceId: string, projectId: string, appId: string) => request<ResourceList<AppEnvironment>>(appEnvironmentBase(workspaceId, projectId, appId));
+export const createAppEnvironment = (workspaceId: string, projectId: string, appId: string, input: AppEnvironmentCreateInput) => request<AppEnvironment>(appEnvironmentBase(workspaceId, projectId, appId), { method: "POST", body: JSON.stringify(input) });
+export const getAppEnvironment = (workspaceId: string, projectId: string, appId: string, appEnvironmentId: string) => request<AppEnvironment>(`${appEnvironmentBase(workspaceId, projectId, appId)}/${encodeURIComponent(appEnvironmentId)}`);
+export const updateAppEnvironment = (workspaceId: string, projectId: string, appId: string, appEnvironmentId: string, version: number, input: AppEnvironmentInput) => request<AppEnvironment>(`${appEnvironmentBase(workspaceId, projectId, appId)}/${encodeURIComponent(appEnvironmentId)}`, { method: "PUT", headers: { "If-Match": String(version) }, body: JSON.stringify(input) });
+export const deleteAppEnvironment = (workspaceId: string, projectId: string, appId: string, appEnvironmentId: string, version: number) => request<Operation>(`${appEnvironmentBase(workspaceId, projectId, appId)}/${encodeURIComponent(appEnvironmentId)}`, { method: "DELETE", headers: { "Idempotency-Key": createIdempotencyKey(), "If-Match": String(version) } });
+export const listAppEnvironmentDeployments = (workspaceId: string, projectId: string, appId: string, appEnvironmentId: string) => request<ResourceList<Deployment>>(`${appEnvironmentBase(workspaceId, projectId, appId)}/${encodeURIComponent(appEnvironmentId)}/deployments`);
+export const createAppEnvironmentDeployment = (workspaceId: string, projectId: string, appId: string, appEnvironmentId: string, input: DeploymentInput) => request<DeploymentMutationAccepted>(`${appEnvironmentBase(workspaceId, projectId, appId)}/${encodeURIComponent(appEnvironmentId)}/deployments`, { method: "POST", headers: { "Idempotency-Key": createIdempotencyKey() }, body: JSON.stringify(input) });

@@ -8,7 +8,7 @@ describe("App source API", () => {
     setCsrfToken("csrf");
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({}) });
     vi.stubGlobal("fetch", fetchMock);
-    const source = { installationId: "ghi-aaaaaaaaaaaaaaaaaaaa", repositoryId: "42", primaryBranch: "develop" };
+    const source = { installationId: "ghi-aaaaaaaaaaaaaaaaaaaa", repositoryId: "42" };
 
     await setAppSource("ws-aaaaaaaaaaaaaaaaaaaa", "prj-aaaaaaaaaaaaaaaaaaaa", "app-aaaaaaaaaaaaaaaaaaaa", source);
     await setAppSource("ws-aaaaaaaaaaaaaaaaaaaa", "prj-aaaaaaaaaaaaaaaaaaaa", "app-bbbbbbbbbbbbbbbbbbbb", source);
@@ -26,11 +26,11 @@ describe("App build API", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: "bld-aaaaaaaaaaaaaaaaaaaa" }), { status: 202 })));
     vi.stubGlobal("crypto", { randomUUID: vi.fn().mockReturnValue("build-idem") });
 
-    await createAppBuild("ws-aaaaaaaaaaaaaaaaaaaa", "prj-aaaaaaaaaaaaaaaaaaaa", "app-aaaaaaaaaaaaaaaaaaaa", { branch: "develop" });
+    await createAppBuild("ws-aaaaaaaaaaaaaaaaaaaa", "prj-aaaaaaaaaaaaaaaaaaaa", "app-aaaaaaaaaaaaaaaaaaaa", { appEnvironmentId: "aev-aaaaaaaaaaaaaaaaaaaa" });
 
     expect(vi.mocked(fetch).mock.calls[0]?.[0]).toBe("/api/v1/workspaces/ws-aaaaaaaaaaaaaaaaaaaa/projects/prj-aaaaaaaaaaaaaaaaaaaa/apps/app-aaaaaaaaaaaaaaaaaaaa/builds");
     expect(new Headers((vi.mocked(fetch).mock.calls[0]?.[1] as RequestInit).headers).get("Idempotency-Key")).toBe("build-idem");
-    expect(JSON.parse((vi.mocked(fetch).mock.calls[0]?.[1] as RequestInit).body as string)).toEqual({ branch: "develop" });
+    expect(JSON.parse((vi.mocked(fetch).mock.calls[0]?.[1] as RequestInit).body as string)).toEqual({ appEnvironmentId: "aev-aaaaaaaaaaaaaaaaaaaa" });
     vi.unstubAllGlobals();
   });
 });

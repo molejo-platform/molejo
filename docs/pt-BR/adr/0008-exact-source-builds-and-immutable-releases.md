@@ -11,8 +11,9 @@ não representa uma release reproduzível do produto.
 
 ## Decision
 
-A API resolve a branch padrão do repositório selecionado para um SHA exato de 40
-caracteres antes de criar um Build idempotente. Um worker separado reivindica
+O App seleciona um repositório, enquanto cada AppEnvironment controla a branch
+usada pelo App naquele Environment. A API resolve essa branch para um SHA exato
+de 40 caracteres antes de criar um Build idempotente vinculado ao AppEnvironment. Um worker separado reivindica
 Builds com lease e fencing token, obtém um token efêmero da instalação GitHub,
 baixa o archive daquele SHA exato e o extrai com segurança em diretório
 descartável. O primeiro contrato aceita somente um `Dockerfile` regular na raiz
@@ -27,9 +28,10 @@ isolamento multi-tenant forte.
 
 A tag publicada é o SHA exato do commit. Uma Release é promovida
 transacionalmente somente depois que o BuildKit devolve um digest OCI válido e
-persiste imagem pinada por digest, commit, App, Build e plataforma. Deployments
-criados por uma Release recebem a imagem da Release no servidor; clientes não
-podem substituir essa imagem em uma atualização posterior.
+persiste imagem pinada por digest, commit, App, Build e plataforma. Implantar uma
+Release cria um Deployment imutável com a revisão de configuração do
+AppEnvironment capturada na solicitação; clientes não podem substituir sua imagem
+ou configuração posteriormente.
 
 Buildpacks, seleção de caminho em monorepo, variáveis e secrets de build,
 webhooks, orquestração de CI, contratos de cache, SBOM, assinatura e scanning

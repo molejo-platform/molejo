@@ -18,8 +18,8 @@ spec:
       containers:
         - name: migrate
           image: ghcr.io/fruto-platform/control-plane-api@sha256:0000000000000000000000000000000000000000000000000000000000000000
-          command: ["/hierarchy-backfill"]
-          args: ["--apply"]
+          command: ["/control-plane-api"]
+          args: ["migrate"]
           env:
             - name: FRUTO_DATABASE_URL
               valueFrom:

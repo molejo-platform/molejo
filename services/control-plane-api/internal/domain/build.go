@@ -29,8 +29,10 @@ type Build struct {
 	WorkspaceID            int64      `json:"-"`
 	ProjectID              int64      `json:"-"`
 	AppID                  int64      `json:"-"`
+	AppEnvironmentID       int64      `json:"-"`
 	ProjectPublicID        string     `json:"projectId"`
 	AppPublicID            string     `json:"appId"`
+	AppEnvironmentPublicID string     `json:"appEnvironmentId"`
 	InstallationExternalID int64      `json:"-"`
 	RepositoryID           int64      `json:"-"`
 	RepositoryFullName     string     `json:"repository"`
