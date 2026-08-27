@@ -38,6 +38,7 @@ type AppGithubSource struct {
 	DefaultBranch        string             `json:"default_branch"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	PrimaryBranch        string             `json:"primary_branch"`
 }
 
 type Build struct {
@@ -66,6 +67,7 @@ type Build struct {
 	CompletedAt                  pgtype.Timestamptz `json:"completed_at"`
 	CreatedAt                    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt                    pgtype.Timestamptz `json:"updated_at"`
+	SourceBranch                 string             `json:"source_branch"`
 }
 
 type BuildLog struct {

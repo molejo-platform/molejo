@@ -620,18 +620,24 @@ export interface components {
         GitHubSourceInput: {
             installationId: string;
             repositoryId: string;
+            primaryBranch: string;
         };
         GitHubSource: {
             installationId: string;
             repository: components["schemas"]["GitHubRepository"];
+            primaryBranch: string;
             /** Format: date-time */
             connectedAt: string;
+        };
+        BuildInput: {
+            branch?: string;
         };
         Build: {
             id: string;
             projectId: string;
             appId: string;
             repository: string;
+            branch: string;
             commitSha: string;
             /** @enum {string} */
             platform: "linux/amd64";
@@ -656,6 +662,7 @@ export interface components {
             projectId: string;
             appId: string;
             buildId: string;
+            branch: string;
             commitSha: string;
             image: string;
             /** @enum {string} */
@@ -1772,9 +1779,13 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["BuildInput"];
+            };
+        };
         responses: {
-            /** @description Build of the current default-branch commit accepted */
+            /** @description Build of the selected branch commit accepted */
             202: {
                 headers: {
                     [name: string]: unknown;

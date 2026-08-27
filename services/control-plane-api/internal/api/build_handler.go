@@ -2,11 +2,13 @@ package api
 
 import (
 	"errors"
+	"io"
 	"net/http"
 
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/api/generated"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/auth"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/domain"
+	"github.com/fruto-platform/fruto/services/control-plane-api/internal/githubapp"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/store"
 )
 
@@ -39,6 +41,13 @@ func (h *generatedHandler) CreateAppBuild(w http.ResponseWriter, r *http.Request
 	}
 	idempotencyHash := auth.HashToken(idempotencyKey)
 	payloadHash = scopedBuildPayloadHash(r, payloadHash)
+	var input struct {
+		Branch string `json:"branch"`
+	}
+	if err := decodeJSON(r, &input); err != nil && !errors.Is(err, io.EOF) {
+		writeError(w, http.StatusBadRequest, "invalid_json", "request body is invalid", r)
+		return
+	}
 	if existing, found, err := h.server.Store.FindBuildByIdempotency(r.Context(), workspace.ID, actor.ID, idempotencyHash, payloadHash); err != nil {
 		writeBuildError(w, r, err)
 		return
@@ -54,8 +63,20 @@ func (h *generatedHandler) CreateAppBuild(w http.ResponseWriter, r *http.Request
 		writeBuildError(w, r, err)
 		return
 	}
-	commitSHA, err := h.server.GitHub.ResolveCommit(r.Context(), source.InstallationExternalID, source.RepositoryID, source.DefaultBranch)
+	branch := source.PrimaryBranch
+	if input.Branch != "" {
+		branch, err = domain.NormalizeSourceBranch(input.Branch)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "branch_invalid", "branch is invalid", r)
+			return
+		}
+	}
+	commitSHA, err := h.server.GitHub.ResolveCommit(r.Context(), source.InstallationExternalID, source.RepositoryID, branch)
 	if err != nil {
+		if errors.Is(err, githubapp.ErrNotFound) {
+			writeError(w, http.StatusBadRequest, "branch_not_found", "branch was not found in the repository", r)
+			return
+		}
 		h.server.logger().Warn("resolve GitHub build commit", "request_id", requestID(r), "app_id", source.AppPublicID, "error", err)
 		writeError(w, http.StatusServiceUnavailable, "github_unavailable", "GitHub commit could not be resolved", r)
 		return
@@ -65,7 +86,7 @@ func (h *generatedHandler) CreateAppBuild(w http.ResponseWriter, r *http.Request
 		if idErr != nil {
 			break
 		}
-		build, _, createErr := h.server.Store.CreateBuild(r.Context(), workspace.ID, actor.ID, publicID, string(projectID), string(appID), commitSHA, idempotencyHash, payloadHash)
+		build, _, createErr := h.server.Store.CreateBuild(r.Context(), workspace.ID, actor.ID, publicID, string(projectID), string(appID), branch, commitSHA, idempotencyHash, payloadHash)
 		if errors.Is(createErr, store.ErrPublicIDCollision) {
 			continue
 		}

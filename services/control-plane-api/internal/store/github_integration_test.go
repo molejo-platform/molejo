@@ -29,13 +29,13 @@ func TestGitHubRepositoryCanBeSharedByAppsButInstallationCannotBeDisconnectedWhi
 	}
 	repository := domain.GitHubRepository{ID: "99", Name: "platform", FullName: "molejo/platform", Private: true, DefaultBranch: "main"}
 	for _, app := range []domain.App{first, second} {
-		if _, err = storage.SetAppGitHubSource(ctx, workspaceID, project.PublicID, app.PublicID, installation.PublicID, repository); err != nil {
+		if _, err = storage.SetAppGitHubSource(ctx, workspaceID, project.PublicID, app.PublicID, installation.PublicID, repository, "develop"); err != nil {
 			t.Fatalf("set source for %s: %v", app.PublicID, err)
 		}
 	}
 	for _, app := range []domain.App{first, second} {
 		source, getErr := storage.GetAppGitHubSource(ctx, workspaceID, project.PublicID, app.PublicID)
-		if getErr != nil || source == nil || source.Repository.ID != repository.ID {
+		if getErr != nil || source == nil || source.Repository.ID != repository.ID || source.PrimaryBranch != "develop" || source.Repository.DefaultBranch != "main" {
 			t.Fatalf("source for %s=%+v err=%v", app.PublicID, source, getErr)
 		}
 	}

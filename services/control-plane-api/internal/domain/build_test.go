@@ -25,6 +25,31 @@ func TestValidateCommitSHARequiresFullImmutableGitObjectID(t *testing.T) {
 	}
 }
 
+func TestNormalizeSourceBranch(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		value string
+		want  string
+		valid bool
+	}{
+		{name: "main", value: "main", want: "main", valid: true},
+		{name: "nested", value: " feature/platform ", want: "feature/platform", valid: true},
+		{name: "empty", value: "  ", valid: false},
+		{name: "control", value: "develop\nnext", valid: false},
+		{name: "oversized", value: strings.Repeat("a", 256), valid: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := NormalizeSourceBranch(test.value)
+			if test.valid && (err != nil || got != test.want) {
+				t.Fatalf("NormalizeSourceBranch(%q)=%q,%v want %q", test.value, got, err, test.want)
+			}
+			if !test.valid && err == nil {
+				t.Fatalf("NormalizeSourceBranch(%q) succeeded", test.value)
+			}
+		})
+	}
+}
+
 func TestReleaseImageReferenceAlwaysUsesDigest(t *testing.T) {
 	repository := "registry.example/molejo/apps/app-abcdefghijklmnopqrst"
 	digest := "sha256:" + strings.Repeat("a", 64)

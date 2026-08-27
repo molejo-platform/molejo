@@ -70,10 +70,56 @@ func TestGitHubConnectionRequiresOwnerBrowserStateAndUserInstallationAccess(t *t
 	}
 }
 
+func TestAppSourceStoresVerifiedPrimaryBranch(t *testing.T) {
+	ctx := context.Background()
+	storage, workspaceID, ownerID, _ := newExecutorIntegrationFixture(t)
+	workspace, err := storage.Workspace(ctx, workspaceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	project, err := storage.CreateProject(ctx, workspaceID, mustAPIID(t, "prj"), "Platform", "platform")
+	if err != nil {
+		t.Fatal(err)
+	}
+	app, err := storage.CreateApp(ctx, workspaceID, project.PublicID, mustAPIID(t, "app"), "API", "api")
+	if err != nil {
+		t.Fatal(err)
+	}
+	installation, err := storage.ConnectGitHubInstallation(ctx, mustAPIID(t, "ghi"), workspaceID, ownerID, 4242, 7, "molejo", "Organization", "selected")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	config := DefaultConfig()
+	config.PublicURL = "https://console.example"
+	config.AllowedOrigin = "https://console.example"
+	config.AllowedHosts = []string{"console.example"}
+	server := NewServer(storage, nil, config, nil)
+	github := &fakeGitHubService{}
+	server.GitHub = github
+	owner := createAPISession(t, storage, ownerID, "source-owner-session", "source-owner-csrf")
+	path := "/api/v1/workspaces/" + workspace.PublicID + "/projects/" + project.PublicID + "/apps/" + app.PublicID + "/source"
+	body := `{"installationId":"` + installation.PublicID + `","repositoryId":"99","primaryBranch":"develop"}`
+
+	response := hierarchyRequest(t, server, owner, http.MethodPut, path, body, nil)
+	if response.Code != http.StatusOK {
+		t.Fatalf("set source status=%d body=%s", response.Code, response.Body.String())
+	}
+	var source domain.GitHubSource
+	decodeResponse(t, response, &source)
+	if source.PrimaryBranch != "develop" || source.Repository.DefaultBranch != "main" {
+		t.Fatalf("source=%+v", source)
+	}
+	if len(github.resolvedRefs) != 1 || github.resolvedRefs[0] != "develop" {
+		t.Fatalf("resolved refs=%v", github.resolvedRefs)
+	}
+}
+
 type fakeGitHubService struct {
 	installation githubapp.Installation
 	userAllowed  bool
 	commitSHA    string
+	resolvedRefs []string
 }
 
 func (f *fakeGitHubService) InstallationURL(state string) string {
@@ -96,7 +142,8 @@ func (f *fakeGitHubService) Repositories(context.Context, int64) ([]domain.GitHu
 	return []domain.GitHubRepository{{ID: "99", Name: "platform", FullName: "molejo/platform", DefaultBranch: "main"}}, nil
 }
 
-func (f *fakeGitHubService) ResolveCommit(context.Context, int64, int64, string) (string, error) {
+func (f *fakeGitHubService) ResolveCommit(_ context.Context, _ int64, _ int64, ref string) (string, error) {
+	f.resolvedRefs = append(f.resolvedRefs, ref)
 	if f.commitSHA != "" {
 		return f.commitSHA, nil
 	}

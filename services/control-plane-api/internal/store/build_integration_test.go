@@ -25,12 +25,12 @@ func TestBuildFailureNeverPromotesAReleaseAndRetryCompletesImmutably(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = storage.SetAppGitHubSource(ctx, workspaceID, project.PublicID, app.PublicID, installation.PublicID, domain.GitHubRepository{ID: "99", Name: "platform", FullName: "molejo/platform", DefaultBranch: "main"}); err != nil {
+	if _, err = storage.SetAppGitHubSource(ctx, workspaceID, project.PublicID, app.PublicID, installation.PublicID, domain.GitHubRepository{ID: "99", Name: "platform", FullName: "molejo/platform", DefaultBranch: "main"}, "main"); err != nil {
 		t.Fatal(err)
 	}
 	sha := "0123456789abcdef0123456789abcdef01234567"
-	build, reused, err := storage.CreateBuild(ctx, workspaceID, actorID, mustPublicID(t, "bld"), project.PublicID, app.PublicID, sha, domain.SHA256([]byte("build-key")), domain.SHA256([]byte("{}")))
-	if err != nil || reused || build.CommitSHA != sha || build.Status != domain.BuildPending {
+	build, reused, err := storage.CreateBuild(ctx, workspaceID, actorID, mustPublicID(t, "bld"), project.PublicID, app.PublicID, "develop", sha, domain.SHA256([]byte("build-key")), domain.SHA256([]byte("{}")))
+	if err != nil || reused || build.SourceBranch != "develop" || build.CommitSHA != sha || build.Status != domain.BuildPending {
 		t.Fatalf("build=%+v reused=%v err=%v", build, reused, err)
 	}
 	claimed, ok, err := storage.ClaimNextBuild(ctx, "worker-1", time.Minute)
@@ -52,7 +52,7 @@ func TestBuildFailureNeverPromotesAReleaseAndRetryCompletesImmutably(t *testing.
 	}
 	image := "registry.example/molejo/apps/" + app.PublicID + "@sha256:" + strings.Repeat("a", 64)
 	release, err := storage.CompleteBuild(ctx, claimed, mustPublicID(t, "rel"), image)
-	if err != nil || release.BuildPublicID != build.PublicID || release.Image != image || release.CommitSHA != sha {
+	if err != nil || release.BuildPublicID != build.PublicID || release.SourceBranch != "develop" || release.Image != image || release.CommitSHA != sha {
 		t.Fatalf("release=%+v err=%v", release, err)
 	}
 	if _, err = storage.CompleteBuild(ctx, claimed, mustPublicID(t, "rel"), strings.Replace(image, strings.Repeat("a", 64), strings.Repeat("b", 64), 1)); !errors.Is(err, ErrConflict) {

@@ -147,6 +147,7 @@ type GitHubRepository struct {
 type GitHubSource struct {
 	InstallationID string           `json:"installationId"`
 	Repository     GitHubRepository `json:"repository"`
+	PrimaryBranch  string           `json:"primaryBranch"`
 	ConnectedAt    time.Time        `json:"connectedAt"`
 }
 

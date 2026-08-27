@@ -33,7 +33,7 @@ func TestBuildAPIResolvesExactCommitAndCreatesDeploymentFromPromotedRelease(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = storage.SetAppGitHubSource(ctx, workspaceID, project.PublicID, app.PublicID, installation.PublicID, domain.GitHubRepository{ID: "99", Name: "platform", FullName: "molejo/platform", DefaultBranch: "main"}); err != nil {
+	if _, err = storage.SetAppGitHubSource(ctx, workspaceID, project.PublicID, app.PublicID, installation.PublicID, domain.GitHubRepository{ID: "99", Name: "platform", FullName: "molejo/platform", DefaultBranch: "main"}, "main"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -48,20 +48,32 @@ func TestBuildAPIResolvesExactCommitAndCreatesDeploymentFromPromotedRelease(t *t
 	owner := createAPISession(t, storage, ownerID, "build-owner-session", "build-owner-csrf")
 	base := "/api/v1/workspaces/" + workspace.PublicID + "/projects/" + project.PublicID + "/apps/" + app.PublicID
 
-	response := hierarchyRequest(t, server, owner, http.MethodPost, base+"/builds", "", map[string]string{"Idempotency-Key": "build-main"})
+	response := hierarchyRequest(t, server, owner, http.MethodPost, base+"/builds", `{"branch":"develop"}`, map[string]string{"Idempotency-Key": "build-develop"})
 	if response.Code != http.StatusAccepted {
 		t.Fatalf("create build status=%d body=%s", response.Code, response.Body.String())
 	}
 	var build domain.Build
 	decodeResponse(t, response, &build)
-	if build.CommitSHA != commitSHA || build.RepositoryFullName != "molejo/platform" || build.Platform != domain.BuildPlatform {
+	if build.SourceBranch != "develop" || build.CommitSHA != commitSHA || build.RepositoryFullName != "molejo/platform" || build.Platform != domain.BuildPlatform {
 		t.Fatalf("build=%+v", build)
 	}
-	response = hierarchyRequest(t, server, owner, http.MethodPost, base+"/builds", "", map[string]string{"Idempotency-Key": "build-main"})
+	if len(server.GitHub.(*fakeGitHubService).resolvedRefs) != 1 || server.GitHub.(*fakeGitHubService).resolvedRefs[0] != "develop" {
+		t.Fatalf("resolved refs=%v", server.GitHub.(*fakeGitHubService).resolvedRefs)
+	}
+	response = hierarchyRequest(t, server, owner, http.MethodPost, base+"/builds", `{"branch":"develop"}`, map[string]string{"Idempotency-Key": "build-develop"})
 	var retried domain.Build
 	decodeResponse(t, response, &retried)
 	if response.Code != http.StatusAccepted || retried.PublicID != build.PublicID {
 		t.Fatalf("retry status=%d build=%+v", response.Code, retried)
+	}
+	response = hierarchyRequest(t, server, owner, http.MethodPost, base+"/builds", "", map[string]string{"Idempotency-Key": "build-primary"})
+	var primary domain.Build
+	decodeResponse(t, response, &primary)
+	if response.Code != http.StatusAccepted || primary.SourceBranch != "main" {
+		t.Fatalf("primary status=%d build=%+v", response.Code, primary)
+	}
+	if got := server.GitHub.(*fakeGitHubService).resolvedRefs; len(got) != 2 || got[0] != "develop" || got[1] != "main" {
+		t.Fatalf("resolved refs=%v", got)
 	}
 
 	claimed, ok, err := storage.ClaimNextBuild(ctx, "integration-builder", time.Minute)

@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -390,6 +391,7 @@ type App struct {
 type Build struct {
 	AppId        string        `json:"appId"`
 	Attempts     int           `json:"attempts"`
+	Branch       string        `json:"branch"`
 	CommitSha    string        `json:"commitSha"`
 	CreatedAt    time.Time     `json:"createdAt"`
 	ErrorCode    *string       `json:"errorCode,omitempty"`
@@ -407,6 +409,11 @@ type BuildPlatform string
 
 // BuildStatus defines model for Build.Status.
 type BuildStatus string
+
+// BuildInput defines model for BuildInput.
+type BuildInput struct {
+	Branch *string `json:"branch,omitempty"`
+}
 
 // BuildLog defines model for BuildLog.
 type BuildLog struct {
@@ -519,12 +526,14 @@ type GitHubRepository struct {
 type GitHubSource struct {
 	ConnectedAt    time.Time        `json:"connectedAt"`
 	InstallationId string           `json:"installationId"`
+	PrimaryBranch  string           `json:"primaryBranch"`
 	Repository     GitHubRepository `json:"repository"`
 }
 
 // GitHubSourceInput defines model for GitHubSourceInput.
 type GitHubSourceInput struct {
 	InstallationId string `json:"installationId"`
+	PrimaryBranch  string `json:"primaryBranch"`
 	RepositoryId   string `json:"repositoryId"`
 }
 
@@ -580,6 +589,7 @@ type Project struct {
 // Release defines model for Release.
 type Release struct {
 	AppId     string          `json:"appId"`
+	Branch    string          `json:"branch"`
 	BuildId   string          `json:"buildId"`
 	CommitSha string          `json:"commitSha"`
 	CreatedAt time.Time       `json:"createdAt"`
@@ -921,6 +931,9 @@ type CreateAppJSONRequestBody = HierarchyInput
 
 // UpdateAppJSONRequestBody defines body for UpdateApp for application/json ContentType.
 type UpdateAppJSONRequestBody = HierarchyInput
+
+// CreateAppBuildJSONRequestBody defines body for CreateAppBuild for application/json ContentType.
+type CreateAppBuildJSONRequestBody = BuildInput
 
 // CreateReleaseDeploymentJSONRequestBody defines body for CreateReleaseDeployment for application/json ContentType.
 type CreateReleaseDeploymentJSONRequestBody = ReleaseDeploymentIntent
@@ -6509,6 +6522,7 @@ type CreateAppBuildRequestObject struct {
 	ProjectId   ProjectId   `json:"projectId"`
 	AppId       AppId       `json:"appId"`
 	Params      CreateAppBuildParams
+	Body        *CreateAppBuildJSONRequestBody
 }
 
 type CreateAppBuildResponseObject interface {
@@ -8553,6 +8567,16 @@ func (sh *strictHandler) CreateAppBuild(w http.ResponseWriter, r *http.Request, 
 	request.ProjectId = projectId
 	request.AppId = appId
 	request.Params = params
+
+	var body CreateAppBuildJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if !errors.Is(err, io.EOF) {
+			sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+			return
+		}
+	} else {
+		request.Body = &body
+	}
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.CreateAppBuild(ctx, request.(CreateAppBuildRequestObject))

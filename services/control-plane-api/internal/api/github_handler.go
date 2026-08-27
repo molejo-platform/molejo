@@ -9,6 +9,7 @@ import (
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/api/generated"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/auth"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/domain"
+	"github.com/fruto-platform/fruto/services/control-plane-api/internal/githubapp"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/store"
 )
 
@@ -221,12 +222,14 @@ func (h *generatedHandler) SetAppSource(w http.ResponseWriter, r *http.Request, 
 	var input struct {
 		InstallationID string `json:"installationId"`
 		RepositoryID   string `json:"repositoryId"`
+		PrimaryBranch  string `json:"primaryBranch"`
 	}
 	if err := decodeJSON(r, &input); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_json", "request body is invalid", r)
 		return
 	}
-	if _, err := strconv.ParseInt(input.RepositoryID, 10, 64); err != nil {
+	repositoryID, err := strconv.ParseInt(input.RepositoryID, 10, 64)
+	if err != nil {
 		writeError(w, http.StatusBadRequest, "repository_invalid", "repositoryId is invalid", r)
 		return
 	}
@@ -251,7 +254,24 @@ func (h *generatedHandler) SetAppSource(w http.ResponseWriter, r *http.Request, 
 		writeError(w, http.StatusNotFound, "repository_not_found", "repository is not accessible to this installation", r)
 		return
 	}
-	source, err := h.server.Store.SetAppGitHubSource(r.Context(), workspace.ID, string(projectID), string(appID), installation.PublicID, *selected)
+	if input.PrimaryBranch == "" {
+		input.PrimaryBranch = selected.DefaultBranch
+	}
+	primaryBranch, err := domain.NormalizeSourceBranch(input.PrimaryBranch)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "branch_invalid", "primaryBranch is invalid", r)
+		return
+	}
+	if _, err = h.server.GitHub.ResolveCommit(r.Context(), installation.ExternalID, repositoryID, primaryBranch); err != nil {
+		if errors.Is(err, githubapp.ErrNotFound) {
+			writeError(w, http.StatusBadRequest, "branch_not_found", "primaryBranch was not found in the repository", r)
+		} else {
+			h.server.logger().Warn("verify GitHub source branch", "request_id", requestID(r), "error", err)
+			writeError(w, http.StatusServiceUnavailable, "github_unavailable", "GitHub branch could not be verified", r)
+		}
+		return
+	}
+	source, err := h.server.Store.SetAppGitHubSource(r.Context(), workspace.ID, string(projectID), string(appID), installation.PublicID, *selected, primaryBranch)
 	if err != nil {
 		writeHierarchyError(w, r, err)
 		return

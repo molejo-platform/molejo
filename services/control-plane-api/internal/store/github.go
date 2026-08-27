@@ -129,11 +129,11 @@ func (s *Store) GitHubInstallationInUse(ctx context.Context, installationID int6
 	return inUse, err
 }
 
-func (s *Store) SetAppGitHubSource(ctx context.Context, workspaceID int64, projectPublicID, appPublicID, installationPublicID string, repository domain.GitHubRepository) (domain.GitHubSource, error) {
+func (s *Store) SetAppGitHubSource(ctx context.Context, workspaceID int64, projectPublicID, appPublicID, installationPublicID string, repository domain.GitHubRepository, primaryBranch string) (domain.GitHubSource, error) {
 	var source domain.GitHubSource
 	err := s.Pool.QueryRow(ctx, `
-		INSERT INTO app_github_sources(app_id,github_installation_id,repository_id,repository_name,repository_full_name,repository_private,default_branch)
-		SELECT a.id,i.id,$5,$6,$7,$8,$9
+		INSERT INTO app_github_sources(app_id,github_installation_id,repository_id,repository_name,repository_full_name,repository_private,default_branch,primary_branch)
+		SELECT a.id,i.id,$5,$6,$7,$8,$9,$10
 		FROM apps a
 		JOIN projects p ON p.id=a.project_id
 		JOIN github_installations i ON i.workspace_id=p.workspace_id AND i.public_id=$4
@@ -146,10 +146,11 @@ func (s *Store) SetAppGitHubSource(ctx context.Context, workspaceID int64, proje
 			repository_full_name=EXCLUDED.repository_full_name,
 			repository_private=EXCLUDED.repository_private,
 			default_branch=EXCLUDED.default_branch,
+			primary_branch=EXCLUDED.primary_branch,
 			updated_at=now()
-		RETURNING $4,repository_id::text,repository_name,repository_full_name,repository_private,default_branch,updated_at`,
-		workspaceID, projectPublicID, appPublicID, installationPublicID, repository.ID, repository.Name, repository.FullName, repository.Private, repository.DefaultBranch).
-		Scan(&source.InstallationID, &source.Repository.ID, &source.Repository.Name, &source.Repository.FullName, &source.Repository.Private, &source.Repository.DefaultBranch, &source.ConnectedAt)
+		RETURNING $4,repository_id::text,repository_name,repository_full_name,repository_private,default_branch,primary_branch,updated_at`,
+		workspaceID, projectPublicID, appPublicID, installationPublicID, repository.ID, repository.Name, repository.FullName, repository.Private, repository.DefaultBranch, primaryBranch).
+		Scan(&source.InstallationID, &source.Repository.ID, &source.Repository.Name, &source.Repository.FullName, &source.Repository.Private, &source.Repository.DefaultBranch, &source.PrimaryBranch, &source.ConnectedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.GitHubSource{}, ErrNotFound
 	}
@@ -162,14 +163,14 @@ func (s *Store) GetAppGitHubSource(ctx context.Context, workspaceID int64, proje
 	}
 	var source domain.GitHubSource
 	err := s.Pool.QueryRow(ctx, `
-		SELECT i.public_id,s.repository_id::text,s.repository_name,s.repository_full_name,s.repository_private,s.default_branch,s.updated_at
+		SELECT i.public_id,s.repository_id::text,s.repository_name,s.repository_full_name,s.repository_private,s.default_branch,s.primary_branch,s.updated_at
 		FROM apps a
 		JOIN projects p ON p.id=a.project_id
 		JOIN app_github_sources s ON s.app_id=a.id
 		JOIN github_installations i ON i.id=s.github_installation_id
 		WHERE p.workspace_id=$1 AND p.public_id=$2 AND a.public_id=$3
 		  AND p.archived_at IS NULL AND a.archived_at IS NULL`, workspaceID, projectPublicID, appPublicID).
-		Scan(&source.InstallationID, &source.Repository.ID, &source.Repository.Name, &source.Repository.FullName, &source.Repository.Private, &source.Repository.DefaultBranch, &source.ConnectedAt)
+		Scan(&source.InstallationID, &source.Repository.ID, &source.Repository.Name, &source.Repository.FullName, &source.Repository.Private, &source.Repository.DefaultBranch, &source.PrimaryBranch, &source.ConnectedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}

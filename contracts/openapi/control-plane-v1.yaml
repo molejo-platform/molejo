@@ -506,9 +506,14 @@ paths:
       operationId: createAppBuild
       security: [{ sessionCookie: [] }]
       parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BuildInput' }
       responses:
         '202':
-          description: Build of the current default-branch commit accepted
+          description: Build of the selected branch commit accepted
           content: { application/json: { schema: { $ref: '#/components/schemas/Build' } } }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -981,28 +986,36 @@ components:
         defaultBranch: { type: string, minLength: 1 }
     GitHubSourceInput:
       type: object
-      required: [installationId, repositoryId]
+      required: [installationId, repositoryId, primaryBranch]
       additionalProperties: false
       properties:
         installationId: { type: string, pattern: '^ghi-[a-z2-7]{20}$' }
         repositoryId: { type: string, pattern: '^[1-9][0-9]*$' }
+        primaryBranch: { type: string, minLength: 1, maxLength: 255 }
     GitHubSource:
       type: object
-      required: [installationId, repository, connectedAt]
+      required: [installationId, repository, primaryBranch, connectedAt]
       additionalProperties: false
       properties:
         installationId: { type: string, pattern: '^ghi-[a-z2-7]{20}$' }
         repository: { $ref: '#/components/schemas/GitHubRepository' }
+        primaryBranch: { type: string, minLength: 1, maxLength: 255 }
         connectedAt: { type: string, format: date-time }
+    BuildInput:
+      type: object
+      additionalProperties: false
+      properties:
+        branch: { type: string, minLength: 1, maxLength: 255 }
     Build:
       type: object
-      required: [id, projectId, appId, repository, commitSha, platform, status, attempts, createdAt, updatedAt]
+      required: [id, projectId, appId, repository, branch, commitSha, platform, status, attempts, createdAt, updatedAt]
       additionalProperties: false
       properties:
         id: { type: string, pattern: '^bld-[a-z2-7]{20}$' }
         projectId: { type: string, pattern: '^prj-[a-z2-7]{20}$' }
         appId: { type: string, pattern: '^app-[a-z2-7]{20}$' }
         repository: { type: string, minLength: 3 }
+        branch: { type: string, minLength: 1, maxLength: 255 }
         commitSha: { type: string, pattern: '^[a-f0-9]{40}$' }
         platform: { type: string, enum: [linux/amd64] }
         status: { type: string, enum: [Pending, Running, Succeeded, Failed] }
@@ -1021,13 +1034,14 @@ components:
         createdAt: { type: string, format: date-time }
     Release:
       type: object
-      required: [id, projectId, appId, buildId, commitSha, image, platform, createdAt]
+      required: [id, projectId, appId, buildId, branch, commitSha, image, platform, createdAt]
       additionalProperties: false
       properties:
         id: { type: string, pattern: '^rel-[a-z2-7]{20}$' }
         projectId: { type: string, pattern: '^prj-[a-z2-7]{20}$' }
         appId: { type: string, pattern: '^app-[a-z2-7]{20}$' }
         buildId: { type: string, pattern: '^bld-[a-z2-7]{20}$' }
+        branch: { type: string, minLength: 1, maxLength: 255 }
         commitSha: { type: string, pattern: '^[a-f0-9]{40}$' }
         image: { type: string, pattern: '^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$' }
         platform: { type: string, enum: [linux/amd64] }

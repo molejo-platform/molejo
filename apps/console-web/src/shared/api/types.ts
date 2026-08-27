@@ -11,6 +11,7 @@ export type GitHubInstallation = components["schemas"]["GitHubInstallation"];
 export type GitHubRepository = components["schemas"]["GitHubRepository"];
 export type GitHubSource = components["schemas"]["GitHubSource"];
 export type GitHubSourceInput = components["schemas"]["GitHubSourceInput"];
+export type BuildInput = components["schemas"]["BuildInput"];
 export type Build = components["schemas"]["Build"];
 export type BuildLog = components["schemas"]["BuildLog"];
 export type Release = components["schemas"]["Release"];
