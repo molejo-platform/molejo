@@ -225,37 +225,6 @@ func TestGeneratedCRDPreservesRuntimeIntentAndIntentionalQuotaAsymmetry(t *testi
 	}
 }
 
-func TestConsoleDefaultsAndLimitsMatchThePublicAPI(t *testing.T) {
-	model, err := os.ReadFile("../../../../apps/console-web/src/features/deployments/model.ts")
-	if err != nil {
-		t.Fatal(err)
-	}
-	form, err := os.ReadFile("../../../../apps/console-web/src/features/deployments/DeploymentFlow.tsx")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for description, expected := range map[string]string{
-		"replica default":  `replicas: 1`,
-		"exposure default": `exposure: "Private"`,
-	} {
-		if !strings.Contains(string(model), expected) {
-			t.Errorf("console %s drifted from the public API", description)
-		}
-	}
-	for description, expected := range map[string]string{
-		"replica quota":   `min="1" max="5"`,
-		"port bounds":     `min="1" max="65535"`,
-		"CPU quota":       `min="1" max="2000"`,
-		"memory quota":    `min="1" max="2048"`,
-		"name length":     `maxLength={63}`,
-		"probe path size": `maxLength={2048}`,
-	} {
-		if !strings.Contains(string(form), expected) {
-			t.Errorf("console %s drifted from the public API", description)
-		}
-	}
-}
-
 func contains(values []string, expected string) bool {
 	for _, value := range values {
 		if value == expected {

@@ -32,7 +32,6 @@ export function WorkspaceHeader() {
   const navItems = [
     { label: "Visão geral", to: "/workspaces/$workspaceId/overview" },
     { label: "Projects", to: "/workspaces/$workspaceId/projects" },
-    { label: "Deployments", to: "/workspaces/$workspaceId/deployments" },
   ] as const;
 
   return (

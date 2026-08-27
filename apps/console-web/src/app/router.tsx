@@ -7,9 +7,6 @@ import { AppReleasesPage } from "../features/apps/AppReleasesPage";
 import { AppSourcePage } from "../features/apps/AppSourcePage";
 import { LoginPage } from "../features/auth/LoginPage";
 import { sessionQueryOptions } from "../features/auth/model";
-import { DeploymentDetailPage } from "../features/deployments/DeploymentDetailPage";
-import { DeploymentListPage } from "../features/deployments/DeploymentListPage";
-import { EditDeploymentPage, NewDeploymentPage } from "../features/deployments/DeploymentRoutes";
 import { OverviewPage } from "../features/overview/OverviewPage";
 import { ProjectAppsPage, ProjectEnvironmentsPage, ProjectOverviewPage, ProjectsPage } from "../features/projects/ProjectPages";
 import { GitHubSettingsPage, NewWorkspacePage, WorkspaceSettingsPage } from "../features/settings/SettingsPages";
@@ -44,7 +41,7 @@ async function requireOwner(context: RouterContext, workspaceId?: string) {
   const session = await context.queryClient.ensureQueryData(sessionQueryOptions());
   if (!session) throw redirect({ to: "/login" });
   if (session.actor.role !== "owner") {
-    if (workspaceId) throw redirect({ to: "/workspaces/$workspaceId/deployments", params: { workspaceId } });
+    if (workspaceId) throw redirect({ to: "/workspaces/$workspaceId/overview", params: { workspaceId } });
     throw redirect({ to: "/" });
   }
 }
@@ -60,10 +57,11 @@ const appSourceRoute = createRoute({ getParentRoute: () => protectedRoute, path:
 const appBuildsRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/$workspaceId/projects/$projectId/apps/$appId/builds", component: AppBuildsPage });
 const buildDetailRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/$workspaceId/projects/$projectId/apps/$appId/builds/$buildId", component: BuildDetailPage });
 const appReleasesRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/$workspaceId/projects/$projectId/apps/$appId/releases", component: AppReleasesPage });
-const deploymentsRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/$workspaceId/deployments", component: DeploymentListPage });
-const newDeploymentRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/$workspaceId/deployments/new", beforeLoad: ({ context, params }) => requireOwner(context, params.workspaceId), component: NewDeploymentPage });
-const detailDeploymentRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/$workspaceId/deployments/$deploymentId", component: DeploymentDetailPage });
-const editDeploymentRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/$workspaceId/deployments/$deploymentId/edit", beforeLoad: ({ context, params }) => requireOwner(context, params.workspaceId), component: EditDeploymentPage });
+const retiredDeploymentsRoute = createRoute({
+  getParentRoute: () => protectedRoute,
+  path: "/workspaces/$workspaceId/deployments",
+  beforeLoad: ({ params }) => { throw redirect({ to: "/workspaces/$workspaceId/overview", params: { workspaceId: params.workspaceId }, replace: true }); },
+});
 const settingsRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/$workspaceId/settings", component: WorkspaceSettingsPage });
 const githubSettingsRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/$workspaceId/settings/github", component: GitHubSettingsPage });
 const newWorkspaceRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/new", beforeLoad: ({ context }) => requireOwner(context), component: NewWorkspacePage });
@@ -72,7 +70,7 @@ const legacyAdminRoute = createRoute({ getParentRoute: () => protectedRoute, pat
 
 const routeTree = rootRoute.addChildren([
   loginRoute,
-  protectedRoute.addChildren([workspaceEntryRoute, overviewRoute, projectsRoute, projectOverviewRoute, projectAppsRoute, projectEnvironmentsRoute, appOverviewRoute, appSourceRoute, appBuildsRoute, buildDetailRoute, appReleasesRoute, deploymentsRoute, newDeploymentRoute, detailDeploymentRoute, editDeploymentRoute, settingsRoute, githubSettingsRoute, newWorkspaceRoute, legacyDeploymentsRoute, legacyAdminRoute]),
+  protectedRoute.addChildren([workspaceEntryRoute, overviewRoute, projectsRoute, projectOverviewRoute, projectAppsRoute, projectEnvironmentsRoute, appOverviewRoute, appSourceRoute, appBuildsRoute, buildDetailRoute, appReleasesRoute, retiredDeploymentsRoute, settingsRoute, githubSettingsRoute, newWorkspaceRoute, legacyDeploymentsRoute, legacyAdminRoute]),
 ]);
 
 export function createAppRouter(queryClient: QueryClient, history: ReturnType<typeof createBrowserHistory> = createBrowserHistory()) {
