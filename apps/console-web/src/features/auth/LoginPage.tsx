@@ -18,7 +18,7 @@ export function LoginPage() {
     try {
       await mutation.mutateAsync({ actor, password });
       setPassword("");
-      await navigate({ to: "/deployments", replace: true });
+      await navigate({ to: "/", replace: true });
     } catch {
       // The mutation error is rendered below without exposing server details.
     }

@@ -14,21 +14,21 @@ const mocks = vi.hoisted(() => ({
   listReleases: vi.fn(),
 }));
 
-vi.mock("@tanstack/react-router", () => ({ useNavigate: () => mocks.navigate }));
+vi.mock("@tanstack/react-router", () => ({ useNavigate: () => mocks.navigate, useSearch: () => ({}), Link: ({ children }: { children: React.ReactNode }) => <a href="#cancel">{children}</a> }));
 vi.mock("./mutations", () => ({
   useCreateDeploymentMutation: () => ({ mutateAsync: mocks.create, isPending: false, isError: false }),
   useCreateReleaseDeploymentMutation: () => ({ mutateAsync: mocks.createRelease, isPending: false, isError: false }),
   useUpdateDeploymentMutation: () => ({ mutateAsync: mocks.update, isPending: false, isError: false }),
 }));
 vi.mock("../workspace/WorkspaceContext", () => ({ useSelectedWorkspace: () => ({ workspace: { id: mocks.workspaceId, name: "Default" } }) }));
-vi.mock("../admin/api", () => ({
+vi.mock("../projects/api", () => ({
   listProjects: (...args: unknown[]) => mocks.listProjects(...args),
   listApps: (...args: unknown[]) => mocks.listApps(...args),
   listEnvironments: (...args: unknown[]) => mocks.listEnvironments(...args),
-  listAppReleases: (...args: unknown[]) => mocks.listReleases(...args),
 }));
+vi.mock("../apps/api", () => ({ listAppReleases: (...args: unknown[]) => mocks.listReleases(...args) }));
 
-import { DeploymentForm } from "./DeploymentForm";
+import { DeploymentFlow } from "./DeploymentFlow";
 import { renderWithQueryClient } from "../../test/render";
 
 beforeEach(() => {
@@ -68,13 +68,15 @@ describe("deployment form integration", () => {
     const name = screen.getByLabelText("Nome");
     await user.clear(name);
     await user.type(name, "my-app");
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
     await user.click(screen.getByRole("button", { name: "Criar deployment" }));
 
     expect(mocks.create).toHaveBeenCalledTimes(1);
     expect(mocks.create.mock.calls[0]?.[0]).toMatchObject({ name: "my-app", appId: "app-aaaaaaaaaaaaaaaaaaaa", environmentId: "env-aaaaaaaaaaaaaaaaaaaa", exposure: "Private" });
     expect(mocks.navigate).toHaveBeenCalledWith({
-      to: "/deployments/$deploymentId",
-      params: { deploymentId: "ap-aaaaaaaaaaaaaaaaaaaa" },
+      to: "/workspaces/$workspaceId/deployments/$deploymentId",
+      params: { workspaceId: "ws-aaaaaaaaaaaaaaaaaaaa", deploymentId: "ap-aaaaaaaaaaaaaaaaaaaa" },
       search: { operationId: "op-aaaaaaaaaaaaaaaaaaaa" },
       replace: true,
     });
@@ -93,8 +95,10 @@ describe("deployment form integration", () => {
     await user.selectOptions(screen.getByLabelText("App"), "app-aaaaaaaaaaaaaaaaaaaa");
     await user.selectOptions(screen.getByLabelText("Environment"), "env-aaaaaaaaaaaaaaaaaaaa");
 
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
     await user.selectOptions(screen.getByLabelText("Exposição"), "Public");
     await user.type(screen.getByLabelText("Slug público"), "phase7-testkit");
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
     await user.click(screen.getByRole("button", { name: "Criar deployment" }));
 
     expect(mocks.create.mock.calls[0]?.[0]).toMatchObject({ exposure: "Public", slug: "phase7-testkit" });
@@ -114,6 +118,8 @@ describe("deployment form integration", () => {
     await user.selectOptions(screen.getByLabelText("Environment"), "env-aaaaaaaaaaaaaaaaaaaa");
     await screen.findByRole("option", { name: /0123456789ab/ });
     await user.selectOptions(screen.getByLabelText("Release construída"), "rel-aaaaaaaaaaaaaaaaaaaa");
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
     await user.click(screen.getByRole("button", { name: "Criar deployment" }));
 
     expect(mocks.create).not.toHaveBeenCalled();
@@ -144,9 +150,9 @@ describe("deployment form integration", () => {
 });
 
 function renderForm() {
-  const result = renderWithQueryClient(<DeploymentForm />);
+  const result = renderWithQueryClient(<DeploymentFlow workspaceId={mocks.workspaceId}/>);
   return {
     ...result,
-    rerenderForm: () => result.rerenderWithQueryClient(<DeploymentForm />),
+    rerenderForm: () => result.rerenderWithQueryClient(<DeploymentFlow workspaceId={mocks.workspaceId}/>),
   };
 }

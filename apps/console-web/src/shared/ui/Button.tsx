@@ -1,7 +1,7 @@
-import type { ButtonHTMLAttributes } from "react";
+import { forwardRef, type ButtonHTMLAttributes } from "react";
 
-type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "secondary" | "danger" | "icon" };
+type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "secondary" | "danger" | "ghost" | "icon"; loading?: boolean };
 
-export function Button({ variant = "primary", className = "", ...props }: ButtonProps) {
-  return <button className={`${variant} ${className}`.trim()} {...props} />;
-}
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button({ variant = "primary", className = "", loading = false, disabled, children, ...props }, ref) {
+  return <button ref={ref} className={`${variant} ${className}`.trim()} disabled={disabled || loading} aria-busy={loading || undefined} {...props}>{loading && <span className="spinner" aria-hidden="true" />}{children}</button>;
+});

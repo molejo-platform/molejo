@@ -230,7 +230,7 @@ func TestConsoleDefaultsAndLimitsMatchThePublicAPI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	form, err := os.ReadFile("../../../../apps/console-web/src/features/deployments/DeploymentForm.tsx")
+	form, err := os.ReadFile("../../../../apps/console-web/src/features/deployments/DeploymentFlow.tsx")
 	if err != nil {
 		t.Fatal(err)
 	}

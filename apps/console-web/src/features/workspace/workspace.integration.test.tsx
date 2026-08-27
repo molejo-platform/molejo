@@ -1,6 +1,6 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const workspaces = [
   { id: "ws-aaaaaaaaaaaaaaaaaaaa", name: "Alpha", version: 1 },
@@ -10,6 +10,11 @@ const workspaces = [
 vi.mock("./queries", () => ({
   useWorkspaceQuery: () => ({ data: { items: workspaces, nextCursor: null }, isPending: false }),
 }));
+
+beforeEach(() => {
+  const storage = new Map<string, string>();
+  Object.defineProperty(window, "localStorage", { configurable: true, value: { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => storage.set(key, value), clear: () => storage.clear() } });
+});
 
 import { WorkspaceProvider, useSelectedWorkspace } from "./WorkspaceContext";
 

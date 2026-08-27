@@ -1,20 +1,21 @@
 import { Link, useParams } from "@tanstack/react-router";
 
-import { DeploymentForm } from "./DeploymentForm";
+import { DeploymentFlow } from "./DeploymentFlow";
 import { useDeploymentQuery } from "./queries";
 
 export function NewDeploymentPage() {
-  return <section className="card"><div className="section-heading"><div><p className="eyebrow">Nova intenção</p><h2>Deployment</h2></div><Link to="/deployments">Cancelar</Link></div><DeploymentForm /></section>;
+  const { workspaceId } = useParams({ strict: false }) as { workspaceId: string };
+  return <DeploymentFlow workspaceId={workspaceId}/>;
 }
 
 export function EditDeploymentPage() {
-  const { deploymentId } = useParams({ strict: false }) as { deploymentId: string };
-  return <EditDeploymentLoader deploymentId={deploymentId} />;
+  const { workspaceId, deploymentId } = useParams({ strict: false }) as { workspaceId: string; deploymentId: string };
+  return <EditDeploymentLoader workspaceId={workspaceId} deploymentId={deploymentId} />;
 }
 
-function EditDeploymentLoader({ deploymentId }: { deploymentId: string }) {
+function EditDeploymentLoader({ workspaceId, deploymentId }: { workspaceId: string; deploymentId: string }) {
   const deployment = useDeploymentQuery(deploymentId);
   if (deployment.isPending) return <section className="card"><p className="muted">Carregando deployment…</p></section>;
-  if (deployment.isError || !deployment.data) return <section className="card"><p>Deployment não encontrado.</p><Link to="/deployments">Voltar para lista</Link></section>;
-  return <section className="card"><div className="section-heading"><div><p className="eyebrow">Editar intenção</p><h2>{deployment.data.intent.name}</h2></div><Link to="/deployments/$deploymentId" params={{ deploymentId }}>Cancelar</Link></div><DeploymentForm deployment={deployment.data} /></section>;
+  if (deployment.isError || !deployment.data) return <section className="panel"><p>Deployment não encontrado.</p><Link to="/workspaces/$workspaceId/deployments" params={{ workspaceId }}>Voltar para lista</Link></section>;
+  return <DeploymentFlow workspaceId={workspaceId} deployment={deployment.data}/>;
 }

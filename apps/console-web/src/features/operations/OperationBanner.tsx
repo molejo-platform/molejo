@@ -22,9 +22,10 @@ export function OperationBanner({ operationId, deploymentId }: { operationId: st
     }
   }, [deploymentId, operation.data, queryClient, workspaceId]);
 
-  if (operation.isPending) return <Alert tone="success">Acompanhando operação…</Alert>;
+  if (operation.isPending) return <Alert tone="info">Acompanhando operação assíncrona… Você pode continuar navegando.</Alert>;
   if (operation.isError) return <Alert>{userFacingError(operation.error)}</Alert>;
   if (!operation.data) return null;
-  const failed = operation.data.status === "Failed";
-  return <Alert tone={failed ? "error" : "success"}>Operação {operation.data.id}: {operation.data.status}{operation.data.errorMessage ? ` — ${operation.data.errorMessage}` : ""}</Alert>;
+  const tone = operation.data.status === "Failed" ? "error" : operation.data.status === "Superseded" ? "warning" : operation.data.status === "Succeeded" ? "success" : "info";
+  const next = operation.data.status === "Succeeded" ? " O estado observado será atualizado em seguida." : operation.data.status === "Superseded" ? " Uma intenção mais recente substituiu esta operação." : "";
+  return <Alert tone={tone}>Operação {operation.data.id}: {operation.data.status}{operation.data.errorMessage ? ` — ${operation.data.errorMessage}` : ""}{next}</Alert>;
 }

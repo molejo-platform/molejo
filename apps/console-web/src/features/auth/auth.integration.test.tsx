@@ -40,7 +40,7 @@ describe("authentication components", () => {
 
     expect(mocks.login).toHaveBeenCalledWith({ actor: "owner", password: "secret" });
     expect((screen.getByLabelText("Senha") as HTMLInputElement).value).toBe("");
-    expect(mocks.navigate).toHaveBeenCalledWith({ to: "/deployments", replace: true });
+    expect(mocks.navigate).toHaveBeenCalledWith({ to: "/", replace: true });
   });
 
   it("redirects an expired session without rendering protected content", () => {

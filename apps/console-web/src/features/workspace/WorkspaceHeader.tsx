@@ -1,6 +1,8 @@
 import { Link, useNavigate } from "@tanstack/react-router";
+import { useState } from "react";
 
 import { Button } from "../../shared/ui/Button";
+import { Icon } from "../../shared/ui/Icon";
 import { useLogoutMutation } from "../auth/model";
 import { useSessionQuery } from "../auth/model";
 import { useSelectedWorkspace } from "./WorkspaceContext";
@@ -10,6 +12,7 @@ export function WorkspaceHeader() {
   const { workspace, workspaces, selectWorkspace } = useSelectedWorkspace();
   const logout = useLogoutMutation();
   const navigate = useNavigate();
+  const [menuOpen, setMenuOpen] = useState(false);
 
   async function signOut() {
     try {
@@ -19,16 +22,26 @@ export function WorkspaceHeader() {
     }
   }
 
+  async function changeWorkspace(workspaceId: string) {
+    selectWorkspace(workspaceId);
+    setMenuOpen(false);
+    await navigate({ to: "/workspaces/$workspaceId/overview", params: { workspaceId } });
+  }
+
+  const workspaceId = workspace?.id ?? "";
+  const navItems = [
+    { label: "Visão geral", to: "/workspaces/$workspaceId/overview" },
+    { label: "Projects", to: "/workspaces/$workspaceId/projects" },
+    { label: "Deployments", to: "/workspaces/$workspaceId/deployments" },
+  ] as const;
+
   return (
-    <>
-      <header className="topbar">
-        <Link to="/deployments" className="brand"><span className="mark">M</span><span>Molejo Console</span></Link>
-        <nav className="topbar-actions" aria-label="Navegação principal"><Link to="/deployments">Deployments</Link><Link to="/admin">Administração</Link><span className="actor">{session.data?.actor.id}</span><Button variant="secondary" onClick={signOut} disabled={logout.isPending}>Sair</Button></nav>
-      </header>
-      <section className="hero">
-        <div><p className="eyebrow">Workspace</p><h1>{workspace?.name ?? "Carregando…"}</h1><label className="workspace-select">Workspace ativo<select aria-label="Workspace ativo" value={workspace?.id ?? ""} onChange={(event) => selectWorkspace(event.target.value)}>{workspaces.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><p className="muted">Apps e ambientes administrados pelo control plane.</p></div>
-        {session.data?.actor.role === "owner" && <Link to="/deployments/new" className="primary-link">Novo deployment</Link>}
-      </section>
-    </>
+    <><header className="mobile-topbar"><Link to={workspaceId ? "/workspaces/$workspaceId/overview" : "/"} params={workspaceId ? { workspaceId } : undefined} className="brand"><span className="mark">M</span><span>Molejo</span></Link><Button variant="icon" aria-label={menuOpen ? "Fechar navegação" : "Abrir navegação"} aria-expanded={menuOpen} onClick={() => setMenuOpen((current) => !current)}><Icon name={menuOpen ? "close" : "menu"}/></Button></header>
+    <aside className={`sidebar ${menuOpen ? "open" : ""}`}>
+      <Link to={workspaceId ? "/workspaces/$workspaceId/overview" : "/"} params={workspaceId ? { workspaceId } : undefined} className="brand desktop-brand" onClick={() => setMenuOpen(false)}><span className="mark">M</span><span><strong>Molejo</strong><small>Console</small></span></Link>
+      <label className="workspace-switcher"><span>Workspace</span><select aria-label="Workspace ativo" value={workspaceId} onChange={(event) => void changeWorkspace(event.target.value)}>{workspaces.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+      <nav className="primary-nav" aria-label="Navegação principal">{workspaceId && navItems.map((item) => <Link key={item.label} to={item.to} params={{ workspaceId }} activeProps={{ className: "active" }} onClick={() => setMenuOpen(false)}>{item.label}</Link>)}</nav>
+      <div className="sidebar-footer">{workspaceId && <Link to="/workspaces/$workspaceId/settings" params={{ workspaceId }} activeProps={{ className: "active" }} onClick={() => setMenuOpen(false)}>Configurações</Link>}{session.data?.actor.role === "owner" && <Link to="/workspaces/new" onClick={() => setMenuOpen(false)}>Novo Workspace</Link>}<div className="account-summary"><span>{session.data?.actor.role === "owner" ? "Owner" : "Somente leitura"}</span><small title={session.data?.actor.id}>{session.data?.actor.id}</small></div><Button variant="ghost" onClick={signOut} loading={logout.isPending}>Sair</Button></div>
+    </aside>{menuOpen && <button className="sidebar-scrim" aria-label="Fechar navegação" onClick={() => setMenuOpen(false)} />}</>
   );
 }
