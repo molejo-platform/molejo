@@ -1,0 +1,11 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: console-web
+  namespace: fruto-control-plane
+spec:
+  template:
+    spec:
+      containers:
+        - name: web
+          imagePullPolicy: Never

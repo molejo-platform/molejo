@@ -780,6 +780,12 @@ func routeWithConditions(conditions ...metav1.Condition) *gatewayv1.HTTPRoute {
 		if conditions[index].ObservedGeneration == 0 {
 			conditions[index].ObservedGeneration = routeGeneration
 		}
+		if conditions[index].Reason == "" {
+			conditions[index].Reason = "TestCondition"
+		}
+		if conditions[index].LastTransitionTime.IsZero() {
+			conditions[index].LastTransitionTime = metav1.Now()
+		}
 	}
 	gatewayNamespace := gatewayv1.Namespace("fruto-system")
 	httpsSection := gatewayv1.SectionName("https-molejo")
@@ -804,9 +810,21 @@ func publicationGatewayWithConditions(
 	if programmed.ObservedGeneration == 0 {
 		programmed.ObservedGeneration = generation
 	}
+	if programmed.Reason == "" {
+		programmed.Reason = "TestCondition"
+	}
+	if programmed.LastTransitionTime.IsZero() {
+		programmed.LastTransitionTime = metav1.Now()
+	}
 	for index := range listenerConditions {
 		if listenerConditions[index].ObservedGeneration == 0 {
 			listenerConditions[index].ObservedGeneration = generation
+		}
+		if listenerConditions[index].Reason == "" {
+			listenerConditions[index].Reason = "TestCondition"
+		}
+		if listenerConditions[index].LastTransitionTime.IsZero() {
+			listenerConditions[index].LastTransitionTime = metav1.Now()
 		}
 	}
 	return &gatewayv1.Gateway{

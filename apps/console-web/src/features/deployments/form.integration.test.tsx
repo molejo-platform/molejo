@@ -1,7 +1,6 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -30,6 +29,7 @@ vi.mock("../admin/api", () => ({
 }));
 
 import { DeploymentForm } from "./DeploymentForm";
+import { renderWithQueryClient } from "../../test/render";
 
 beforeEach(() => {
   mocks.workspaceId = "ws-aaaaaaaaaaaaaaaaaaaa";
@@ -144,10 +144,9 @@ describe("deployment form integration", () => {
 });
 
 function renderForm() {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const result = render(<QueryClientProvider client={queryClient}><DeploymentForm /></QueryClientProvider>);
+  const result = renderWithQueryClient(<DeploymentForm />);
   return {
     ...result,
-    rerenderForm: () => result.rerender(<QueryClientProvider client={queryClient}><DeploymentForm /></QueryClientProvider>),
+    rerenderForm: () => result.rerenderWithQueryClient(<DeploymentForm />),
   };
 }

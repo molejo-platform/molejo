@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/domain"
+	"github.com/fruto-platform/fruto/services/control-plane-api/internal/testsupport"
 	"github.com/jackc/pgx/v5"
 	"github.com/pressly/goose/v3"
 )
@@ -1116,7 +1117,16 @@ func newIntegrationFixture(t *testing.T) (*Store, int64, int64) {
 	}
 
 	ctx := context.Background()
-	s, err := New(ctx, dsn)
+	isolatedDSN, cleanup, err := testsupport.IsolatedPostgres(ctx, dsn, "control_plane_store")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := cleanup(context.Background()); err != nil {
+			t.Errorf("drop integration schema: %v", err)
+		}
+	})
+	s, err := New(ctx, isolatedDSN)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1151,50 +1161,5 @@ func newIntegrationFixture(t *testing.T) (*Store, int64, int64) {
 	if _, err := s.Pool.Exec(ctx, `UPDATE operations SET status='Succeeded',started_at=COALESCE(started_at,now()),completed_at=now(),updated_at=now() WHERE workspace_id=$1 AND kind='EnsureWorkspace'`, workspaceID); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() {
-		cleanupCtx := context.Background()
-		if _, err := s.Pool.Exec(cleanupCtx, `DELETE FROM github_connection_states WHERE workspace_id=$1`, workspaceID); err != nil {
-			t.Errorf("delete integration GitHub states: %v", err)
-		}
-		if _, err := s.Pool.Exec(cleanupCtx, `DELETE FROM app_github_sources WHERE github_installation_id IN (SELECT id FROM github_installations WHERE workspace_id=$1)`, workspaceID); err != nil {
-			t.Errorf("delete integration GitHub sources: %v", err)
-		}
-		if _, err := s.Pool.Exec(cleanupCtx, `DELETE FROM github_installations WHERE workspace_id=$1`, workspaceID); err != nil {
-			t.Errorf("delete integration GitHub installations: %v", err)
-		}
-		if _, err := s.Pool.Exec(cleanupCtx, `DELETE FROM sessions WHERE actor_id=$1`, actorID); err != nil {
-			t.Errorf("delete integration sessions: %v", err)
-		}
-		if _, err := s.Pool.Exec(cleanupCtx, `DELETE FROM operations WHERE workspace_id=$1`, workspaceID); err != nil {
-			t.Errorf("delete integration operations: %v", err)
-		}
-		if _, err := s.Pool.Exec(cleanupCtx, `DELETE FROM deployments WHERE workspace_id=$1`, workspaceID); err != nil {
-			t.Errorf("delete integration deployments: %v", err)
-		}
-		if _, err := s.Pool.Exec(cleanupCtx, `DELETE FROM releases WHERE workspace_id=$1`, workspaceID); err != nil {
-			t.Errorf("delete integration releases: %v", err)
-		}
-		if _, err := s.Pool.Exec(cleanupCtx, `DELETE FROM builds WHERE workspace_id=$1`, workspaceID); err != nil {
-			t.Errorf("delete integration builds: %v", err)
-		}
-		if _, err := s.Pool.Exec(cleanupCtx, `DELETE FROM apps WHERE project_id IN (SELECT id FROM projects WHERE workspace_id=$1)`, workspaceID); err != nil {
-			t.Errorf("delete integration apps: %v", err)
-		}
-		if _, err := s.Pool.Exec(cleanupCtx, `DELETE FROM environments WHERE project_id IN (SELECT id FROM projects WHERE workspace_id=$1)`, workspaceID); err != nil {
-			t.Errorf("delete integration environments: %v", err)
-		}
-		if _, err := s.Pool.Exec(cleanupCtx, `DELETE FROM projects WHERE workspace_id=$1`, workspaceID); err != nil {
-			t.Errorf("delete integration projects: %v", err)
-		}
-		if _, err := s.Pool.Exec(cleanupCtx, `DELETE FROM workspace_actors WHERE workspace_id=$1`, workspaceID); err != nil {
-			t.Errorf("delete integration memberships: %v", err)
-		}
-		if _, err := s.Pool.Exec(cleanupCtx, `DELETE FROM workspaces WHERE id=$1`, workspaceID); err != nil {
-			t.Errorf("delete integration workspace: %v", err)
-		}
-		if _, err := s.Pool.Exec(cleanupCtx, `DELETE FROM actors WHERE id=$1`, actorID); err != nil {
-			t.Errorf("delete integration actor: %v", err)
-		}
-	})
 	return s, workspaceID, actorID
 }

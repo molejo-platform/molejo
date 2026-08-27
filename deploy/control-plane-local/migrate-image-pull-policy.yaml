@@ -1,0 +1,11 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: control-plane-migrate
+  namespace: fruto-control-plane
+spec:
+  template:
+    spec:
+      containers:
+        - name: migrate
+          imagePullPolicy: Never

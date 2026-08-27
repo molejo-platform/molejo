@@ -1,5 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -52,6 +51,7 @@ vi.mock("./api", () => ({
 
 import { AdminPage } from "./AdminPage";
 import { ApiRequestError } from "../../shared/api/errors";
+import { renderWithQueryClient } from "../../test/render";
 
 afterEach(() => {
   cleanup();
@@ -132,6 +132,5 @@ describe("admin page integration", () => {
 });
 
 function renderAdmin() {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={queryClient}><AdminPage /></QueryClientProvider>);
+  return renderWithQueryClient(<AdminPage />);
 }

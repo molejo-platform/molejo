@@ -1,0 +1,129 @@
+package contracts
+
+import (
+	"io"
+	"os"
+	"path/filepath"
+	"reflect"
+	"strings"
+	"testing"
+
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/util/yaml"
+)
+
+func TestControlPlaneWorkloadsKeepLeastPrivilegeAndImmutableImages(t *testing.T) {
+	tests := []struct {
+		path, kind, name, container string
+		requireAutomountFalse       bool
+	}{
+		{"deploy/control-plane/migration-job.yaml", "Job", "control-plane-migrate", "migrate", true},
+		{"deploy/control-plane/bootstrap-job.yaml", "Job", "control-plane-bootstrap", "bootstrap", true},
+		{"deploy/control-plane/deployments.yaml", "Deployment", "console-web", "web", true},
+		{"deploy/operator/manager/deployment.yaml", "Deployment", "platform-operator", "manager", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			object := findObject(t, tt.path, tt.kind, tt.name)
+			podSpec := workloadPodSpec(t, object)
+			if value, found, err := unstructured.NestedBool(podSpec, "automountServiceAccountToken"); tt.requireAutomountFalse && (err != nil || !found || value) {
+				t.Fatalf("automountServiceAccountToken=%v found=%v err=%v", value, found, err)
+			}
+			container := findContainer(t, podSpec, tt.container)
+			image, _, _ := unstructured.NestedString(container, "image")
+			if !strings.Contains(image, "@sha256:") {
+				t.Fatalf("container image is not digest-pinned: %q", image)
+			}
+		})
+	}
+
+	migration := findContainer(t, workloadPodSpec(t, findObject(t, "deploy/control-plane/migration-job.yaml", "Job", "control-plane-migrate")), "migrate")
+	command, _, _ := unstructured.NestedStringSlice(migration, "command")
+	args, _, _ := unstructured.NestedStringSlice(migration, "args")
+	if !reflect.DeepEqual(command, []string{"/hierarchy-backfill"}) || !reflect.DeepEqual(args, []string{"--apply"}) {
+		t.Fatalf("migration command=%v args=%v", command, args)
+	}
+}
+
+func TestControlPlaneRouteTargetsTheMolejoGateway(t *testing.T) {
+	route := findObject(t, "deploy/control-plane/http-route.yaml", "HTTPRoute", "control-plane-console")
+	hostnames, _, _ := unstructured.NestedStringSlice(route.Object, "spec", "hostnames")
+	if !reflect.DeepEqual(hostnames, []string{"cloud.molejo.dev"}) {
+		t.Fatalf("route hostnames=%v", hostnames)
+	}
+	parents, _, _ := unstructured.NestedSlice(route.Object, "spec", "parentRefs")
+	if len(parents) != 1 {
+		t.Fatalf("route parentRefs=%v", parents)
+	}
+	parent, ok := parents[0].(map[string]any)
+	if !ok || parent["name"] != "fruto" || parent["namespace"] != "fruto-system" || parent["sectionName"] != "https-molejo" {
+		t.Fatalf("route parentRef=%v", parents[0])
+	}
+}
+
+func TestLabPostgresIsExplicitlyDisposableAndBounded(t *testing.T) {
+	statefulSet := findObject(t, "deploy/control-plane-lab/postgres.yaml", "StatefulSet", "fruto-control-plane-postgres")
+	if statefulSet.GetAnnotations()["molejo.dev/disposable"] != "true" {
+		t.Fatal("lab PostgreSQL is not marked disposable")
+	}
+	templates, _, _ := unstructured.NestedSlice(statefulSet.Object, "spec", "volumeClaimTemplates")
+	if len(templates) != 1 {
+		t.Fatalf("volumeClaimTemplates=%v", templates)
+	}
+	template := templates[0].(map[string]any)
+	requests, _, _ := unstructured.NestedStringMap(template, "spec", "resources", "requests")
+	if requests["storage"] != "2Gi" {
+		t.Fatalf("lab PostgreSQL storage=%q", requests["storage"])
+	}
+}
+
+func findObject(t *testing.T, relativePath, kind, name string) *unstructured.Unstructured {
+	t.Helper()
+	path := filepath.Join("..", "..", relativePath)
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	decoder := yaml.NewYAMLOrJSONDecoder(file, 4096)
+	for {
+		object := &unstructured.Unstructured{}
+		if err = decoder.Decode(object); err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		if object.GetKind() == kind && object.GetName() == name {
+			return object
+		}
+	}
+	t.Fatalf("%s %s not found in %s", kind, name, relativePath)
+	return nil
+}
+
+func workloadPodSpec(t *testing.T, object *unstructured.Unstructured) map[string]any {
+	t.Helper()
+	path := []string{"spec", "template", "spec"}
+	podSpec, found, err := unstructured.NestedMap(object.Object, path...)
+	if err != nil || !found {
+		t.Fatalf("pod spec not found: found=%v err=%v", found, err)
+	}
+	return podSpec
+}
+
+func findContainer(t *testing.T, podSpec map[string]any, name string) map[string]any {
+	t.Helper()
+	containers, found, err := unstructured.NestedSlice(podSpec, "containers")
+	if err != nil || !found {
+		t.Fatalf("containers not found: found=%v err=%v", found, err)
+	}
+	for _, item := range containers {
+		container := item.(map[string]any)
+		if container["name"] == name {
+			return container
+		}
+	}
+	t.Fatalf("container %s not found", name)
+	return nil
+}

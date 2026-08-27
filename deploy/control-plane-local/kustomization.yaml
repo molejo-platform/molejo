@@ -10,5 +10,7 @@ images:
     newName: fruto-console-web
     newTag: local
 patches:
-  - path: image-pull-policy.yaml
+  - path: control-plane-api-image-pull-policy.yaml
+  - path: console-web-image-pull-policy.yaml
+  - path: migrate-image-pull-policy.yaml
   - path: configmap.yaml

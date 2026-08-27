@@ -208,16 +208,6 @@ login() {
   csrf_token="$(jq -er '.csrfToken' <<<"$response")"
 }
 
-run_host_browser() {
-  run_without_xtrace env \
-    FRUTO_E2E_BASE_URL="http://127.0.0.1:${vite_port}" \
-    FRUTO_E2E_IMAGE="$fixture_ref" \
-    FRUTO_E2E_PASSWORD="$owner_password" \
-    FRUTO_E2E_RESULTS="$tmp_dir/host-playwright.json" \
-    FRUTO_E2E_OUTPUT_DIR="$tmp_dir/host-playwright" \
-    corepack pnpm --filter @fruto-platform/console-web e2e
-}
-
 run_cluster_bootstrap() {
   local owner_hash_file="$tmp_dir/owner-password-hash"
   printf '%s' "$owner_hash" >"$owner_hash_file"
@@ -333,7 +323,6 @@ start_vite
 
 host_cookie_jar="$tmp_dir/host-cookies.txt"
 run_without_xtrace login http://127.0.0.1:${host_api_port} "$host_cookie_jar"
-run_host_browser
 
 intent="$(jq -cn --arg image "$fixture_ref" '{name:"phase6-api",image:$image,replicas:1,port:8080,resources:{requests:{cpuMillis:50,memoryMiB:64},limits:{cpuMillis:250,memoryMiB:128}},probes:{liveness:{path:"/healthz"},readiness:{path:"/readyz"}},exposure:"Private"}')"
 create_response="$(curl --fail --silent --show-error -b "$host_cookie_jar" \

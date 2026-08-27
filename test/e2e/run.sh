@@ -100,6 +100,29 @@ wait_for_resource() {
   return 1
 }
 
+wait_for_jsonpath() {
+  local resource=$1
+  local namespace=$2
+  local name=$3
+  local jsonpath=$4
+  local expected=$5
+  local timeout_seconds=${6:-120}
+  local actual=""
+
+  for _ in $(seq 1 "${timeout_seconds}"); do
+    actual="$(kubectl --kubeconfig "${KUBECONFIG_FILE}" get \
+      "${resource}/${name}" -n "${namespace}" \
+      -o "jsonpath=${jsonpath}" 2>/dev/null || true)"
+    if [[ ${actual} == "${expected}" ]]; then
+      return 0
+    fi
+    sleep 1
+  done
+
+  echo "timed out waiting for ${resource} ${namespace}/${name} ${jsonpath}=${expected}; got ${actual:-empty}" >&2
+  return 1
+}
+
 start_port_forward() {
   local namespace=$1
   local resource=$2
@@ -108,12 +131,17 @@ start_port_forward() {
   local pid_variable=$5
   local port_variable=$6
 
+  local local_port="${!port_variable:-}"
+  local port_mapping=":${remote_port}"
+  if [[ -n ${local_port} ]]; then
+    port_mapping="${local_port}:${remote_port}"
+  fi
+
   kubectl --kubeconfig "${KUBECONFIG_FILE}" port-forward \
     -n "${namespace}" \
     "${resource}" \
-    ":${remote_port}" >"${log_file}" 2>&1 &
+    "${port_mapping}" >"${log_file}" 2>&1 &
   local forward_pid=$!
-  local local_port=""
 
   for _ in $(seq 1 50); do
     local_port="$(sed -n 's/.*127\.0\.0\.1:\([0-9][0-9]*\).*/\1/p' "${log_file}" | head -n 1)"
@@ -136,7 +164,15 @@ stop_port_forward() {
   local pid=$1
   if [[ -n ${pid} ]]; then
     kill "${pid}" >/dev/null 2>&1 || true
+    wait "${pid}" >/dev/null 2>&1 || true
   fi
+}
+
+restart_gateway_forward() {
+  stop_port_forward "${GATEWAY_FORWARD_PID}"
+  GATEWAY_FORWARD_PID=""
+  start_port_forward fruto-system service/traefik-e2e 8443 "${GATEWAY_FORWARD_LOG}" \
+    GATEWAY_FORWARD_PID GATEWAY_LOCAL_PORT
 }
 
 containerd_manifest_digest() {
@@ -174,6 +210,10 @@ curl_json() {
   return 1
 }
 
+curl_success() {
+  curl --retry 5 --retry-all-errors --retry-delay 1 "$@"
+}
+
 wait_for_public_status() {
   local expected_status=$1
   local hostname=$2
@@ -189,6 +229,9 @@ wait_for_public_status() {
     if [[ ${status} == "${expected_status}" ]]; then
       return 0
     fi
+    if [[ -z ${status} || ${status} == "000" ]]; then
+      restart_gateway_forward
+    fi
     sleep 0.5
   done
 
@@ -203,10 +246,14 @@ wait_for_public_content() {
   local response=""
 
   for _ in $(seq 1 60); do
-    response="$(curl --noproxy '*' --cacert "${WILDCARD_CERT_FILE}" \
+    if ! response="$(curl --noproxy '*' --cacert "${WILDCARD_CERT_FILE}" \
       --connect-timeout 2 --max-time 3 --fail --silent \
       --resolve "${hostname}:${GATEWAY_LOCAL_PORT}:127.0.0.1" \
-      "${url}")" || true
+      "${url}")"; then
+      restart_gateway_forward
+      sleep 0.5
+      continue
+    fi
     if grep -Fq "${expected}" <<<"${response}"; then
       printf '%s' "${response}"
       return 0
@@ -229,6 +276,7 @@ assert_response_header() {
 }
 
 dump_diagnostics() {
+  [[ -f ${GATEWAY_FORWARD_LOG} ]] && cat "${GATEWAY_FORWARD_LOG}" >&2 || true
   kubectl --kubeconfig "${KUBECONFIG_FILE}" get pods -A -o wide || true
   kubectl --kubeconfig "${KUBECONFIG_FILE}" get appdeployments -A -o yaml || true
   kubectl --kubeconfig "${KUBECONFIG_FILE}" get services -A -o wide || true
@@ -578,16 +626,10 @@ kubectl --kubeconfig "${KUBECONFIG_FILE}" patch \
   --type=merge \
   --patch '{"spec":{"exposure":"Public","slug":"phase3-e2e"}}'
 wait_for_resource httproute.gateway.networking.k8s.io ws-e2e ap-e2e000001
-kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
-  --for=jsonpath='{.status.parents[0].conditions[?(@.type=="Accepted")].status}'=True \
-  httproute/ap-e2e000001 \
-  -n ws-e2e \
-  --timeout=120s
-kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
-  --for=jsonpath='{.status.parents[0].conditions[?(@.type=="ResolvedRefs")].status}'=True \
-  httproute/ap-e2e000001 \
-  -n ws-e2e \
-  --timeout=120s
+wait_for_jsonpath httproute ws-e2e ap-e2e000001 \
+  '{.status.parents[0].conditions[?(@.type=="Accepted")].status}' True
+wait_for_jsonpath httproute ws-e2e ap-e2e000001 \
+  '{.status.parents[0].conditions[?(@.type=="ResolvedRefs")].status}' True
 kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
   --for=condition=Ready \
   appdeployment/ap-e2e000001 \
@@ -595,11 +637,11 @@ kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
   --timeout=120s
 
 public_base_url="https://phase3-e2e.molejo.dev:${GATEWAY_LOCAL_PORT}"
-public_rest="$(curl --noproxy '*' --cacert "${WILDCARD_CERT_FILE}" --fail --silent --show-error \
+public_rest="$(curl_success --noproxy '*' --cacert "${WILDCARD_CERT_FILE}" --fail --silent --show-error \
   --resolve "phase3-e2e.molejo.dev:${GATEWAY_LOCAL_PORT}:127.0.0.1" \
   "${public_base_url}/")"
 grep -q '"status":"ok"' <<<"${public_rest}"
-public_graphql="$(curl --noproxy '*' --cacert "${WILDCARD_CERT_FILE}" --fail --silent --show-error \
+public_graphql="$(curl_success --noproxy '*' --cacert "${WILDCARD_CERT_FILE}" --fail --silent --show-error \
   --resolve "phase3-e2e.molejo.dev:${GATEWAY_LOCAL_PORT}:127.0.0.1" \
   --header 'Content-Type: application/json' \
   --data '{"query":"{ status version }"}' \
@@ -657,7 +699,7 @@ curl_json "http://127.0.0.1:${APP_LOCAL_PORT}/" >/dev/null
 
 metrics_token="$(kubectl --kubeconfig "${KUBECONFIG_FILE}" create token \
   metrics-reader-e2e -n fruto-system --duration=10m)"
-metrics_output="$(curl --insecure --fail --silent --show-error \
+metrics_output="$(curl_success --insecure --fail --silent --show-error \
   --header "Authorization: Bearer ${metrics_token}" \
   "https://127.0.0.1:${METRICS_LOCAL_PORT}/metrics")"
 grep -q '^fruto_platform_operator_build_info' <<<"${metrics_output}"
@@ -701,11 +743,8 @@ kubectl --kubeconfig "${KUBECONFIG_FILE}" patch \
   --patch "{\"spec\":{\"image\":\"${FIXTURE_IMAGE_V2}\",\"replicas\":2}}"
 updated_generation="$(kubectl --kubeconfig "${KUBECONFIG_FILE}" get \
   appdeployment/ap-e2e000001 -n ws-e2e -o jsonpath='{.metadata.generation}')"
-kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
-  --for=jsonpath='{.status.observedGeneration}'="${updated_generation}" \
-  appdeployment/ap-e2e000001 \
-  -n ws-e2e \
-  --timeout=120s
+wait_for_jsonpath appdeployment ws-e2e ap-e2e000001 \
+  '{.status.observedGeneration}' "${updated_generation}"
 kubectl --kubeconfig "${KUBECONFIG_FILE}" rollout status \
   deployment/ap-e2e000001 \
   -n ws-e2e \
@@ -727,11 +766,7 @@ kubectl --kubeconfig "${KUBECONFIG_FILE}" patch service/ap-e2e000001 \
   -n ws-e2e \
   --type=merge \
   --patch '{"spec":{"type":"LoadBalancer","externalIPs":["192.0.2.10"],"loadBalancerSourceRanges":["192.0.2.0/24"],"selector":{"drift":"true"}}}'
-kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
-  --for=jsonpath='{.spec.type}'=ClusterIP \
-  service/ap-e2e000001 \
-  -n ws-e2e \
-  --timeout=120s
+wait_for_jsonpath service ws-e2e ap-e2e000001 '{.spec.type}' ClusterIP
 service_external_ips="$(kubectl --kubeconfig "${KUBECONFIG_FILE}" get \
   service/ap-e2e000001 -n ws-e2e -o jsonpath='{.spec.externalIPs}')"
 service_load_balancer_source_ranges="$(kubectl --kubeconfig "${KUBECONFIG_FILE}" get \
@@ -749,11 +784,8 @@ kubectl --kubeconfig "${KUBECONFIG_FILE}" patch deployment/ap-e2e000001 \
   -n ws-e2e \
   --type=merge \
   --patch '{"spec":{"paused":true,"strategy":{"type":"Recreate","rollingUpdate":null},"minReadySeconds":60,"progressDeadlineSeconds":1200,"revisionHistoryLimit":1}}'
-kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
-  --for=jsonpath='{.spec.strategy.type}'=RollingUpdate \
-  deployment/ap-e2e000001 \
-  -n ws-e2e \
-  --timeout=120s
+wait_for_jsonpath deployment ws-e2e ap-e2e000001 \
+  '{.spec.strategy.type}' RollingUpdate
 deployment_paused="$(kubectl --kubeconfig "${KUBECONFIG_FILE}" get \
   deployment/ap-e2e000001 -n ws-e2e -o jsonpath='{.spec.paused}')"
 deployment_min_ready="$(kubectl --kubeconfig "${KUBECONFIG_FILE}" get \
@@ -929,23 +961,14 @@ kubectl --kubeconfig "${KUBECONFIG_FILE}" patch \
   --type=merge \
   --patch '{"spec":{"exposure":"Public","slug":"phase4-static"}}'
 wait_for_resource httproute.gateway.networking.k8s.io ws-static-e2e ap-static000001
-kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
-  --for=jsonpath='{.status.parents[0].conditions[?(@.type=="Accepted")].status}'=True \
-  httproute/ap-static000001 \
-  -n ws-static-e2e \
-  --timeout=120s
-kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
-  --for=jsonpath='{.status.parents[0].conditions[?(@.type=="ResolvedRefs")].status}'=True \
-  httproute/ap-static000001 \
-  -n ws-static-e2e \
-  --timeout=120s
+wait_for_jsonpath httproute ws-static-e2e ap-static000001 \
+  '{.status.parents[0].conditions[?(@.type=="Accepted")].status}' True
+wait_for_jsonpath httproute ws-static-e2e ap-static000001 \
+  '{.status.parents[0].conditions[?(@.type=="ResolvedRefs")].status}' True
 static_public_generation="$(kubectl --kubeconfig "${KUBECONFIG_FILE}" get \
   appdeployment/ap-static000001 -n ws-static-e2e -o jsonpath='{.metadata.generation}')"
-kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
-  --for=jsonpath='{.status.observedGeneration}'="${static_public_generation}" \
-  appdeployment/ap-static000001 \
-  -n ws-static-e2e \
-  --timeout=120s
+wait_for_jsonpath appdeployment ws-static-e2e ap-static000001 \
+  '{.status.observedGeneration}' "${static_public_generation}"
 kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
   --for=condition=Ready \
   appdeployment/ap-static000001 \
@@ -955,7 +978,7 @@ kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
 static_public_url="https://phase4-static.molejo.dev:${GATEWAY_LOCAL_PORT}"
 wait_for_public_status 200 phase4-static.molejo.dev \
   "${static_public_url}/"
-curl --noproxy '*' --cacert "${WILDCARD_CERT_FILE}" --fail --silent --show-error \
+curl_success --noproxy '*' --cacert "${WILDCARD_CERT_FILE}" --fail --silent --show-error \
   --resolve "phase4-static.molejo.dev:${GATEWAY_LOCAL_PORT}:127.0.0.1" \
   --dump-header "${FRONTEND_HEADERS}" \
   --output "${FRONTEND_BODY}" \
@@ -983,11 +1006,8 @@ kubectl --kubeconfig "${KUBECONFIG_FILE}" patch service/ap-static000001 \
   -n ws-static-e2e \
   --type=merge \
   --patch '{"spec":{"selector":{"drift":"true"}}}'
-kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
-  --for=jsonpath='{.spec.selector.platform\.fruto\.calouro\.tech/app-deployment}'=ap-static000001 \
-  service/ap-static000001 \
-  -n ws-static-e2e \
-  --timeout=120s
+wait_for_jsonpath service ws-static-e2e ap-static000001 \
+  '{.spec.selector.platform\.fruto\.calouro\.tech/app-deployment}' ap-static000001
 for _ in $(seq 1 60); do
   static_service_selector_drift="$(kubectl --kubeconfig "${KUBECONFIG_FILE}" get \
     service/ap-static000001 -n ws-static-e2e -o jsonpath='{.spec.selector.drift}')"
@@ -1006,16 +1026,10 @@ sed "s|__SPA_IMAGE__|${SPA_IMAGE_V1}|" \
   test/e2e/spa-appdeployment.yaml >"${SPA_MANIFEST_FILE}"
 kubectl --kubeconfig "${KUBECONFIG_FILE}" apply -f "${SPA_MANIFEST_FILE}"
 wait_for_resource httproute.gateway.networking.k8s.io ws-spa-e2e ap-spa000001
-kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
-  --for=jsonpath='{.status.parents[0].conditions[?(@.type=="Accepted")].status}'=True \
-  httproute/ap-spa000001 \
-  -n ws-spa-e2e \
-  --timeout=120s
-kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
-  --for=jsonpath='{.status.parents[0].conditions[?(@.type=="ResolvedRefs")].status}'=True \
-  httproute/ap-spa000001 \
-  -n ws-spa-e2e \
-  --timeout=120s
+wait_for_jsonpath httproute ws-spa-e2e ap-spa000001 \
+  '{.status.parents[0].conditions[?(@.type=="Accepted")].status}' True
+wait_for_jsonpath httproute ws-spa-e2e ap-spa000001 \
+  '{.status.parents[0].conditions[?(@.type=="ResolvedRefs")].status}' True
 kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
   --for=condition=Ready \
   appdeployment/ap-spa000001 \
@@ -1029,7 +1043,7 @@ kubectl --kubeconfig "${KUBECONFIG_FILE}" rollout status \
 spa_public_url="https://phase4-spa.molejo.dev:${GATEWAY_LOCAL_PORT}"
 wait_for_public_status 200 phase4-spa.molejo.dev \
   "${spa_public_url}/projects/example"
-curl --noproxy '*' --cacert "${WILDCARD_CERT_FILE}" --fail --silent --show-error \
+curl_success --noproxy '*' --cacert "${WILDCARD_CERT_FILE}" --fail --silent --show-error \
   --resolve "phase4-spa.molejo.dev:${GATEWAY_LOCAL_PORT}:127.0.0.1" \
   --dump-header "${FRONTEND_HEADERS}" \
   --output "${FRONTEND_BODY}" \
@@ -1042,7 +1056,7 @@ if [[ -z ${spa_asset} ]]; then
   echo "could not discover the fingerprinted SPA asset through the public route" >&2
   exit 1
 fi
-curl --noproxy '*' --cacert "${WILDCARD_CERT_FILE}" --fail --silent --show-error \
+curl_success --noproxy '*' --cacert "${WILDCARD_CERT_FILE}" --fail --silent --show-error \
   --resolve "phase4-spa.molejo.dev:${GATEWAY_LOCAL_PORT}:127.0.0.1" \
   --dump-header "${FRONTEND_HEADERS}" \
   --output /dev/null \
@@ -1069,11 +1083,8 @@ kubectl --kubeconfig "${KUBECONFIG_FILE}" patch \
   --patch "{\"spec\":{\"image\":\"${SPA_IMAGE_V2}\"}}"
 spa_updated_generation="$(kubectl --kubeconfig "${KUBECONFIG_FILE}" get \
   appdeployment/ap-spa000001 -n ws-spa-e2e -o jsonpath='{.metadata.generation}')"
-kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
-  --for=jsonpath='{.status.observedGeneration}'="${spa_updated_generation}" \
-  appdeployment/ap-spa000001 \
-  -n ws-spa-e2e \
-  --timeout=120s
+wait_for_jsonpath appdeployment ws-spa-e2e ap-spa000001 \
+  '{.status.observedGeneration}' "${spa_updated_generation}"
 kubectl --kubeconfig "${KUBECONFIG_FILE}" rollout status \
   deployment/ap-spa000001 \
   -n ws-spa-e2e \
@@ -1083,6 +1094,8 @@ kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
   appdeployment/ap-spa000001 \
   -n ws-spa-e2e \
   --timeout=120s
+restart_gateway_forward
+spa_public_url="https://phase4-spa.molejo.dev:${GATEWAY_LOCAL_PORT}"
 spa_v2_response="$(wait_for_public_content \
   'name="fruto-version" content="v2"' \
   phase4-spa.molejo.dev \

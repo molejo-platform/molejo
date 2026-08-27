@@ -38,6 +38,8 @@ frontend-build: frontend-install
 
 frontend-test: frontend-install
     corepack pnpm frontend:test
+
+frontend-image-test:
     bash test/frontend/run.sh
 
 audit-frontend-images:
@@ -84,7 +86,7 @@ control-plane-integration-test:
     fi
     FRUTO_TEST_DATABASE_URL="postgres://fruto:fruto@127.0.0.1:${postgres_port}/fruto?sslmode=disable" \
       GOCACHE="/tmp/fruto-go-cache" GOMODCACHE="/tmp/fruto-go-mod-cache" \
-      go test -count=1 -p=1 ./services/control-plane-api/internal/store ./services/control-plane-api/internal/api ./services/control-plane-api/cmd/hierarchy-backfill
+      go test -count=1 ./services/control-plane-api/internal/store ./services/control-plane-api/internal/api ./services/control-plane-api/cmd/hierarchy-backfill
 
 db-up:
     docker compose -f deploy/control-plane/docker-compose.yaml up -d postgres
@@ -183,11 +185,21 @@ builds-prepare-k3s:
 builds-apply-k3s:
     bash test/e2e/apply-builds-k3s.sh
 
-verify: generate fmt-check lint test control-plane-verify frontend-check frontend-test
+generated-check:
+    bash test/generated/check.sh
+
+verify-fast: generated-check fmt-check lint test control-plane-race-test control-plane-build frontend-check frontend-test
+
+verify: verify-fast frontend-image-test
+
+integration-test: control-plane-integration-test frontend-image-test
+
+buildkit-system-test:
+    bash test/buildkit/run.sh
+
+system-test: buildkit-system-test control-plane-e2e-kind e2e
 
 ci:
-    bash test/generated/check.sh
-    just verify
-    just control-plane-integration-test
-    just control-plane-e2e-kind
-    just e2e
+    just verify-fast
+    just integration-test
+    just system-test
