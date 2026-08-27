@@ -2,6 +2,7 @@ export const workspaceScopeKeys = {
   projects: (workspaceId: string) => ["workspaces", workspaceId, "projects", "list"] as const,
   project: (workspaceId: string, projectId: string) => ["workspaces", workspaceId, "projects", "detail", projectId] as const,
   environments: (workspaceId: string, projectId: string) => ["workspaces", workspaceId, "projects", projectId, "environments", "list"] as const,
+  environmentApps: (workspaceId: string, projectId: string, environmentId: string) => ["workspaces", workspaceId, "projects", projectId, "environments", environmentId, "apps"] as const,
   apps: (workspaceId: string, projectId: string) => ["workspaces", workspaceId, "projects", projectId, "apps", "list"] as const,
   app: (workspaceId: string, projectId: string, appId: string) => ["workspaces", workspaceId, "projects", projectId, "apps", "detail", appId] as const,
   githubInstallations: (workspaceId: string) => ["workspaces", workspaceId, "github", "installations"] as const,

@@ -126,6 +126,18 @@ func TestHierarchyAPIEnforcesMembershipRoleAndDeploymentAncestry(t *testing.T) {
 	if target.AppPublicID != app.PublicID || target.EnvironmentPublicID != environment.PublicID || target.ProjectPublicID != project.PublicID {
 		t.Fatalf("App Environment hierarchy=%+v", target)
 	}
+	var environmentApps struct {
+		Items []struct {
+			ID      string `json:"id"`
+			AppID   string `json:"appId"`
+			AppName string `json:"appName"`
+		} `json:"items"`
+	}
+	response = hierarchyRequest(t, server, owner, http.MethodGet, "/api/v1/workspaces/"+workspace.PublicID+"/projects/"+project.PublicID+"/environments/"+environment.PublicID+"/apps", "", nil)
+	decodeResponse(t, response, &environmentApps)
+	if response.Code != http.StatusOK || len(environmentApps.Items) != 1 || environmentApps.Items[0].ID != target.PublicID || environmentApps.Items[0].AppID != app.PublicID || environmentApps.Items[0].AppName != app.Name {
+		t.Fatalf("environment Apps status=%d items=%+v", response.Code, environmentApps.Items)
+	}
 	response = hierarchyRequest(t, server, owner, http.MethodDelete, "/api/v1/workspaces/"+workspace.PublicID+"/projects/"+project.PublicID+"/apps/"+app.PublicID, "", map[string]string{"If-Match": "1"})
 	if response.Code != http.StatusConflict {
 		t.Fatalf("archive app with App Environment status=%d body=%s", response.Code, response.Body.String())

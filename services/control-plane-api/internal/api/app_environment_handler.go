@@ -33,6 +33,27 @@ func (h *generatedHandler) ListAppEnvironments(w http.ResponseWriter, r *http.Re
 	writeHierarchyList(w, items, nextCursor)
 }
 
+func (h *generatedHandler) ListEnvironmentApps(w http.ResponseWriter, r *http.Request, workspaceID generated.WorkspaceId, projectID generated.ProjectId, environmentID generated.EnvironmentId, params generated.ListEnvironmentAppsParams) {
+	_, workspace, ok := h.authorizeWorkspace(w, r, string(workspaceID), false)
+	if !ok {
+		return
+	}
+	if _, err := h.server.Store.FindEnvironment(r.Context(), workspace.ID, string(projectID), string(environmentID)); err != nil {
+		writeHierarchyError(w, r, err)
+		return
+	}
+	beforeID, limit, ok := hierarchyPage(w, r, params.Cursor, params.Limit)
+	if !ok {
+		return
+	}
+	items, nextCursor, err := h.server.Store.ListEnvironmentApps(r.Context(), workspace.ID, string(projectID), string(environmentID), beforeID, limit)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "storage_failed", "could not list Environment Apps", r)
+		return
+	}
+	writeHierarchyList(w, items, nextCursor)
+}
+
 func (h *generatedHandler) CreateAppEnvironment(w http.ResponseWriter, r *http.Request, workspaceID generated.WorkspaceId, projectID generated.ProjectId, appID generated.AppId) {
 	_, workspace, ok := h.authorizeWorkspace(w, r, string(workspaceID), true)
 	if !ok {

@@ -37,6 +37,31 @@ func TestAppEnvironmentOwnsBranchConfigurationAndUniquePair(t *testing.T) {
 	}
 }
 
+func TestListEnvironmentAppsReturnsOnlyTargetsFromThatEnvironment(t *testing.T) {
+	ctx := context.Background()
+	storage, workspaceID, _ := newIntegrationFixture(t)
+	project, app, environment := createHierarchy(t, storage, workspaceID)
+	otherEnvironment, err := storage.CreateEnvironment(ctx, workspaceID, project.PublicID, newID(t, "env"), "Production", "production")
+	if err != nil {
+		t.Fatal(err)
+	}
+	target, err := storage.CreateAppEnvironment(ctx, workspaceID, newID(t, "aev"), project.PublicID, app.PublicID, environment.PublicID, "develop", integrationConfiguration("testkit-dev"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = storage.CreateAppEnvironment(ctx, workspaceID, newID(t, "aev"), project.PublicID, app.PublicID, otherEnvironment.PublicID, "main", integrationConfiguration("testkit-prod")); err != nil {
+		t.Fatal(err)
+	}
+
+	items, nextCursor, err := storage.ListEnvironmentApps(ctx, workspaceID, project.PublicID, environment.PublicID, 0, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if nextCursor != "" || len(items) != 1 || items[0].PublicID != target.PublicID || items[0].AppName != app.Name {
+		t.Fatalf("environment Apps = %+v, cursor=%q", items, nextCursor)
+	}
+}
+
 func TestDeploymentsAreImmutableConfigurationSnapshots(t *testing.T) {
 	ctx := context.Background()
 	storage, workspaceID, actorID := newIntegrationFixture(t)

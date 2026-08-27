@@ -17,7 +17,7 @@ type rowQuerier interface {
 }
 
 const appEnvironmentColumns = `
-	ae.id,ae.public_id,ae.workspace_id,ae.project_id,p.public_id,ae.app_id,a.public_id,
+	ae.id,ae.public_id,ae.workspace_id,ae.project_id,p.public_id,ae.app_id,a.public_id,a.name,
 	ae.environment_id,e.public_id,e.name,ae.source_branch,ae.runtime_name,
 	ae.configuration_json::text,ae.configuration_version,ae.version,
 	COALESCE(dd.public_id,''),COALESCE(cd.public_id,''),COALESCE(cr.public_id,''),
@@ -36,7 +36,7 @@ func scanAppEnvironment(row pgx.Row) (domain.AppEnvironment, error) {
 	var configuration []byte
 	err := row.Scan(
 		&item.ID, &item.PublicID, &item.WorkspaceID, &item.ProjectID, &item.ProjectPublicID,
-		&item.AppID, &item.AppPublicID, &item.EnvironmentID, &item.EnvironmentPublicID,
+		&item.AppID, &item.AppPublicID, &item.AppName, &item.EnvironmentID, &item.EnvironmentPublicID,
 		&item.EnvironmentName, &item.SourceBranch, &item.RuntimeName, &configuration,
 		&item.ConfigurationVersion, &item.Version, &item.DesiredDeploymentPublicID,
 		&item.CurrentDeploymentPublicID, &item.CurrentReleasePublicID, &item.State, &item.Message,
@@ -107,6 +107,37 @@ func (s *Store) ListAppEnvironments(ctx context.Context, workspaceID int64, proj
 		  AND ae.id < $4 AND ae.archived_at IS NULL
 		ORDER BY ae.id DESC LIMIT $5`
 	rows, err := s.Pool.Query(ctx, query, workspaceID, projectPublicID, appPublicID, beforeID, limit+1)
+	if err != nil {
+		return nil, "", err
+	}
+	defer rows.Close()
+	items := []domain.AppEnvironment{}
+	for rows.Next() {
+		item, scanErr := scanAppEnvironment(rows)
+		if scanErr != nil {
+			return nil, "", scanErr
+		}
+		items = append(items, item)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, "", err
+	}
+	if len(items) > limit {
+		items = items[:limit]
+		return items, domain.EncodeCursor(items[len(items)-1].ID), nil
+	}
+	return items, "", nil
+}
+
+func (s *Store) ListEnvironmentApps(ctx context.Context, workspaceID int64, projectPublicID, environmentPublicID string, beforeID int64, limit int) ([]domain.AppEnvironment, string, error) {
+	if beforeID == 0 {
+		beforeID = math.MaxInt64
+	}
+	query := `SELECT ` + appEnvironmentColumns + ` FROM app_environments ae ` + appEnvironmentJoins + `
+		WHERE ae.workspace_id=$1 AND p.public_id=$2 AND e.public_id=$3
+		  AND ae.id < $4 AND ae.archived_at IS NULL
+		ORDER BY ae.id DESC LIMIT $5`
+	rows, err := s.Pool.Query(ctx, query, workspaceID, projectPublicID, environmentPublicID, beforeID, limit+1)
 	if err != nil {
 		return nil, "", err
 	}

@@ -83,6 +83,7 @@ small { color: var(--color-text-muted); font-size: .75rem; line-height: 1.4; }
 
 button, .primary-link, .button-link { align-items: center; border: 1px solid transparent; border-radius: var(--radius-sm); cursor: pointer; display: inline-flex; font-weight: 750; gap: var(--space-2); justify-content: center; min-height: 44px; padding: .65rem 1rem; text-decoration: none; transition: background-color .18s ease, border-color .18s ease, color .18s ease, box-shadow .18s ease; }
 button { background: var(--color-accent); color: white; }
+.primary-link { background: var(--color-accent); color: white; }
 button:hover:not(:disabled), .primary-link:hover { background: var(--color-accent-strong); color: white; }
 button:disabled { cursor: not-allowed; opacity: .48; }
 .secondary, .secondary.button-link { background: var(--color-surface-subtle); border-color: var(--color-border); color: var(--color-brand); }
@@ -117,6 +118,21 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .summary-card > strong { color: var(--color-brand); font-size: 2rem; line-height: 1.2; }
 .summary-card > .summary-text { font-size: 1rem; overflow-wrap: anywhere; }
 .summary-card.static:hover { border-color: var(--color-border); box-shadow: var(--shadow-sm); }
+
+.environment-actions { align-items: flex-end; display: flex; gap: var(--space-3); }
+.environment-actions .field { min-width: 190px; }
+.service-grid { display: grid; gap: var(--space-4); grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.service-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); color: var(--color-text); display: grid; gap: var(--space-6); min-height: 230px; padding: var(--space-6); text-decoration: none; transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease; }
+.service-card:hover { border-color: var(--color-accent); box-shadow: 0 10px 28px rgb(18 51 63 / 10%); color: var(--color-text); transform: translateY(-2px); }
+.service-card-heading { align-items: center; display: flex; justify-content: space-between; }
+.service-mark { align-items: center; background: var(--color-brand); border-radius: var(--radius-sm); color: white; display: inline-flex; font-weight: 850; height: 2.5rem; justify-content: center; width: 2.5rem; }
+.service-card h3, .service-card p { margin-bottom: 0; }
+.service-card p { color: var(--color-text-muted); font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: .85rem; }
+.service-card dl { border-top: 1px solid var(--color-border); display: grid; gap: var(--space-3); grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0; padding-top: var(--space-4); }
+.service-card dt { color: var(--color-text-muted); font-size: .72rem; }
+.service-card dd { font-size: .82rem; margin: .1rem 0 0; overflow-wrap: anywhere; }
+.choice-grid { display: grid; gap: var(--space-3); grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.deployment-composer { align-items: flex-end; display: grid; gap: var(--space-3); grid-template-columns: minmax(240px, 1fr) auto; }
 
 .data-list { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden; }
 .data-row { align-items: center; color: var(--color-text); display: flex; gap: var(--space-4); justify-content: space-between; min-height: 72px; padding: var(--space-4); text-decoration: none; }
@@ -215,6 +231,9 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
   .inline-create, .inline-edit, .form-row { align-items: stretch; flex-direction: column; }
   .inline-create, .inline-edit { max-width: none; width: 100%; }
   .summary-grid { grid-template-columns: 1fr; }
+  .environment-actions { align-items: stretch; flex-direction: column; width: 100%; }
+  .environment-actions .field { min-width: 0; }
+  .service-grid, .choice-grid, .deployment-composer { grid-template-columns: 1fr; }
   .summary-card { min-height: 120px; }
   .data-row { align-items: flex-start; flex-direction: column; }
   .row-controls { justify-content: flex-start; width: 100%; }

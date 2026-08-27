@@ -299,6 +299,7 @@ type App struct {
 // AppEnvironment defines model for AppEnvironment.
 type AppEnvironment struct {
 	AppId                string               `json:"appId"`
+	AppName              string               `json:"appName"`
 	Branch               string               `json:"branch"`
 	Configuration        RuntimeConfiguration `json:"configuration"`
 	ConfigurationVersion int                  `json:"configurationVersion"`
@@ -756,6 +757,12 @@ type UpdateEnvironmentParams struct {
 	IfMatch IfMatch `json:"If-Match"`
 }
 
+// ListEnvironmentAppsParams defines parameters for ListEnvironmentApps.
+type ListEnvironmentAppsParams struct {
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
 // LoginJSONRequestBody defines body for Login for application/json ContentType.
 type LoginJSONRequestBody = LoginRequest
 
@@ -938,6 +945,9 @@ type ServerInterface interface {
 
 	// (PUT /api/v1/workspaces/{workspaceId}/projects/{projectId}/environments/{environmentId})
 	UpdateEnvironment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, environmentId EnvironmentId, params UpdateEnvironmentParams)
+
+	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/environments/{environmentId}/apps)
+	ListEnvironmentApps(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, environmentId EnvironmentId, params ListEnvironmentAppsParams)
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
@@ -1171,6 +1181,11 @@ func (_ Unimplemented) GetEnvironment(w http.ResponseWriter, r *http.Request, wo
 
 // (PUT /api/v1/workspaces/{workspaceId}/projects/{projectId}/environments/{environmentId})
 func (_ Unimplemented) UpdateEnvironment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, environmentId EnvironmentId, params UpdateEnvironmentParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/environments/{environmentId}/apps)
+func (_ Unimplemented) ListEnvironmentApps(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, environmentId EnvironmentId, params ListEnvironmentAppsParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -3541,6 +3556,79 @@ func (siw *ServerInterfaceWrapper) UpdateEnvironment(w http.ResponseWriter, r *h
 	handler.ServeHTTP(w, r)
 }
 
+// ListEnvironmentApps operation middleware
+func (siw *ServerInterfaceWrapper) ListEnvironmentApps(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "environmentId" -------------
+	var environmentId EnvironmentId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "environmentId", chi.URLParam(r, "environmentId"), &environmentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "environmentId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListEnvironmentAppsParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListEnvironmentApps(w, r, workspaceId, projectId, environmentId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 type UnescapedCookieParamError struct {
 	ParamName string
 	Err       error
@@ -3707,6 +3795,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Put(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/environments/{environmentId}", wrapper.UpdateEnvironment)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/environments/{environmentId}/apps", wrapper.ListEnvironmentApps)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps", wrapper.ListApps)
@@ -6318,6 +6409,48 @@ func (response UpdateEnvironment409JSONResponse) VisitUpdateEnvironmentResponse(
 	return err
 }
 
+type ListEnvironmentAppsRequestObject struct {
+	WorkspaceId   WorkspaceId   `json:"workspaceId"`
+	ProjectId     ProjectId     `json:"projectId"`
+	EnvironmentId EnvironmentId `json:"environmentId"`
+	Params        ListEnvironmentAppsParams
+}
+
+type ListEnvironmentAppsResponseObject interface {
+	VisitListEnvironmentAppsResponse(w http.ResponseWriter) error
+}
+
+type ListEnvironmentApps200JSONResponse struct {
+	Items      []AppEnvironment `json:"items"`
+	NextCursor *string          `json:"nextCursor,omitempty"`
+}
+
+func (response ListEnvironmentApps200JSONResponse) VisitListEnvironmentAppsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListEnvironmentApps404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ListEnvironmentApps404JSONResponse) VisitListEnvironmentAppsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 
@@ -6458,6 +6591,9 @@ type StrictServerInterface interface {
 
 	// (PUT /api/v1/workspaces/{workspaceId}/projects/{projectId}/environments/{environmentId})
 	UpdateEnvironment(ctx context.Context, request UpdateEnvironmentRequestObject) (UpdateEnvironmentResponseObject, error)
+
+	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/environments/{environmentId}/apps)
+	ListEnvironmentApps(ctx context.Context, request ListEnvironmentAppsRequestObject) (ListEnvironmentAppsResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -7858,6 +7994,35 @@ func (sh *strictHandler) UpdateEnvironment(w http.ResponseWriter, r *http.Reques
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateEnvironmentResponseObject); ok {
 		if err := validResponse.VisitUpdateEnvironmentResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListEnvironmentApps operation middleware
+func (sh *strictHandler) ListEnvironmentApps(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, environmentId EnvironmentId, params ListEnvironmentAppsParams) {
+	var request ListEnvironmentAppsRequestObject
+
+	request.WorkspaceId = workspaceId
+	request.ProjectId = projectId
+	request.EnvironmentId = environmentId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListEnvironmentApps(ctx, request.(ListEnvironmentAppsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListEnvironmentApps")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListEnvironmentAppsResponseObject); ok {
+		if err := validResponse.VisitListEnvironmentAppsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

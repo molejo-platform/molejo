@@ -174,6 +174,7 @@ type AppEnvironment struct {
 	EnvironmentID             int64         `json:"-"`
 	ProjectPublicID           string        `json:"projectId"`
 	AppPublicID               string        `json:"appId"`
+	AppName                   string        `json:"appName"`
 	EnvironmentPublicID       string        `json:"environmentId"`
 	EnvironmentName           string        `json:"environmentName"`
 	SourceBranch              string        `json:"branch"`

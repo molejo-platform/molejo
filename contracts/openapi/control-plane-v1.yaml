@@ -259,6 +259,29 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/environments/{environmentId}/apps:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/EnvironmentId' }
+    get:
+      operationId: listEnvironmentApps
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Apps configured in the Environment
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/AppEnvironment' } }
+                  nextCursor: { type: [string, 'null'] }
+        '404': { $ref: '#/components/responses/NotFound' }
   /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps:
     parameters:
       - { $ref: '#/components/parameters/WorkspaceId' }
@@ -1028,12 +1051,13 @@ components:
         configuration: { $ref: '#/components/schemas/RuntimeConfiguration' }
     AppEnvironment:
       type: object
-      required: [id, projectId, appId, environmentId, environmentName, branch, configuration, configurationVersion, version, state, createdAt, updatedAt]
+      required: [id, projectId, appId, appName, environmentId, environmentName, branch, configuration, configurationVersion, version, state, createdAt, updatedAt]
       additionalProperties: false
       properties:
         id: { type: string, pattern: '^aev-[a-z2-7]{20}$' }
         projectId: { type: string, pattern: '^prj-[a-z2-7]{20}$' }
         appId: { type: string, pattern: '^app-[a-z2-7]{20}$' }
+        appName: { type: string, minLength: 1, maxLength: 80 }
         environmentId: { type: string, pattern: '^env-[a-z2-7]{20}$' }
         environmentName: { type: string, minLength: 1, maxLength: 80 }
         branch: { type: string, minLength: 1, maxLength: 255 }
