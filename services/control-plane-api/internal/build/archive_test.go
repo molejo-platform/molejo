@@ -104,6 +104,7 @@ func testGitHubArchive(t *testing.T) []byte {
 		header   tar.Header
 		contents string
 	}{
+		{header: tar.Header{Typeflag: tar.TypeXGlobalHeader, PAXRecords: map[string]string{"comment": "GitHub repository archive"}}},
 		{header: tar.Header{Name: "repository-sha/", Mode: 0o755, Typeflag: tar.TypeDir}},
 		{header: tar.Header{Name: "repository-sha/src/", Mode: 0o755, Typeflag: tar.TypeDir}},
 		{header: tar.Header{Name: "repository-sha/Dockerfile", Mode: 0o644, Size: int64(len("FROM scratch\n")), Typeflag: tar.TypeReg}, contents: "FROM scratch\n"},

@@ -42,6 +42,9 @@ func ExtractArchive(source io.Reader, destination string) error {
 		if entries > maxArchiveEntries {
 			return errors.New("source archive contains too many entries")
 		}
+		if header.Typeflag == tar.TypeXGlobalHeader {
+			continue
+		}
 		name := strings.TrimPrefix(header.Name, "./")
 		if header.Typeflag == tar.TypeDir {
 			name = strings.TrimSuffix(name, "/")
