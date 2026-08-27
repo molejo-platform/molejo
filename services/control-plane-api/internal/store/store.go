@@ -157,7 +157,7 @@ func (s *Store) migrateTo(ctx context.Context, targetVersion int64) error {
 		return err
 	}
 	if targetVersion > 0 && currentVersion > targetVersion {
-		return fmt.Errorf("database schema version %d is newer than requested version %d", currentVersion, targetVersion)
+		return nil
 	}
 	if currentVersion == 0 {
 		for version := range applied {
