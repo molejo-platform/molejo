@@ -108,7 +108,7 @@ func TestHTTPTraceContainsOnlySanitizedRequestMetadata(t *testing.T) {
 	t.Cleanup(func() { _ = provider.Shutdown(context.Background()) })
 	server := NewServer(nil, nil, DefaultConfig(), nil)
 	server.Tracer = provider.Tracer("test")
-	request := httptest.NewRequest(http.MethodPost, "/api/v1/deployments/ap-secret-value", strings.NewReader(`{"password":"do-not-record","csrf":"do-not-record"}`))
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/workspaces/ws-secret-value/projects/prj-secret-value/apps/app-secret-value/environments/aev-secret-value/deployments", strings.NewReader(`{"password":"do-not-record","csrf":"do-not-record"}`))
 	request.Host = "127.0.0.1:8080"
 	recorder := httptest.NewRecorder()
 
@@ -119,10 +119,18 @@ func TestHTTPTraceContainsOnlySanitizedRequestMetadata(t *testing.T) {
 		t.Fatalf("span count = %d", len(spans))
 	}
 	serialized := spans[0].Name
+	route := ""
 	for _, item := range spans[0].Attributes {
 		serialized += string(item.Key) + item.Value.AsString()
+		if string(item.Key) == "http.route" {
+			route = item.Value.AsString()
+		}
 	}
-	for _, forbidden := range []string{"ap-secret-value", "do-not-record", "password", "csrf"} {
+	const expectedRoute = "/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/deployments"
+	if route != expectedRoute {
+		t.Fatalf("trace route = %q, want %q", route, expectedRoute)
+	}
+	for _, forbidden := range []string{"secret-value", "do-not-record", "password", "csrf"} {
 		if strings.Contains(serialized, forbidden) {
 			t.Fatalf("trace contains sensitive value %q: %s", forbidden, serialized)
 		}

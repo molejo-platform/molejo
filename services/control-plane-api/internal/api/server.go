@@ -74,7 +74,7 @@ func NewServer(s *store.Store, r runtime.Client, cfg Config, logger *slog.Logger
 }
 
 func (s *Server) Handler() http.Handler {
-	return requestIDMiddleware(tracingMiddleware(s, securityMiddleware(s, s.generatedHandler())))
+	return requestIDMiddleware(s.generatedHandler())
 }
 
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {

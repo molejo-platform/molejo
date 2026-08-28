@@ -26,6 +26,7 @@ kubeconfig="$tmp_dir/kubeconfig"
 gateway_api_manifest="$tmp_dir/gateway-api.yaml"
 api_binary="$tmp_dir/control-plane-api"
 api_log="$tmp_dir/api.log"
+runtime_worker_log="$tmp_dir/runtime-worker.log"
 vite_log="$tmp_dir/vite.log"
 gateway_log="$tmp_dir/gateway-port-forward.log"
 operator_manifest="$tmp_dir/operator.yaml"
@@ -44,6 +45,7 @@ console_image_built=false
 operator_image_built=false
 fixture_image_built=false
 host_api_pid=""
+runtime_worker_pid=""
 vite_pid=""
 gateway_port_forward_pid=""
 gateway_port=""
@@ -67,10 +69,12 @@ cleanup() {
     cleanup_failed=true
   fi
   stop_pid "$host_api_pid"
+  stop_pid "$runtime_worker_pid"
   stop_pid "$vite_pid"
   stop_pid "$gateway_port_forward_pid"
   if [[ "$exit_code" -ne 0 && "$cluster_created" == true ]]; then
     [[ -f "$api_log" ]] && sed -n '1,160p' "$api_log" || true
+    [[ -f "$runtime_worker_log" ]] && sed -n '1,160p' "$runtime_worker_log" || true
     [[ -f "$vite_log" ]] && sed -n '1,160p' "$vite_log" || true
     kubectl --kubeconfig "$kubeconfig" get pods -A -o wide || true
     kubectl --kubeconfig "$kubeconfig" get events -A --sort-by=.lastTimestamp || true
@@ -146,6 +150,20 @@ start_host_api() {
     "$api_binary" serve >"$api_log" 2>&1 &
   host_api_pid=$!
   wait_http "http://127.0.0.1:${host_api_port}/readyz"
+}
+
+start_host_runtime_worker() {
+  FRUTO_DATABASE_URL="postgres://fruto:fruto@127.0.0.1:${postgres_port}/fruto?sslmode=disable" \
+    KUBECONFIG="$kubeconfig" \
+    FRUTO_EXPECTED_KUBE_CONTEXT="$expected_kube_context" \
+    FRUTO_EXPECTED_KUBE_SERVER="$expected_kube_server" \
+    FRUTO_EXPECTED_CLUSTER_UID="$expected_cluster_uid" \
+    FRUTO_OPERATION_LEASE=2s \
+  FRUTO_RUNTIME_WORKER_ID=e2e-runtime-worker \
+    "$api_binary" runtime-worker >"$runtime_worker_log" 2>&1 &
+  runtime_worker_pid=$!
+  sleep 0.2
+  kill -0 "$runtime_worker_pid" 2>/dev/null || { cat "$runtime_worker_log" >&2; return 1; }
 }
 
 start_vite() {
@@ -226,7 +244,6 @@ run_cluster_browser() {
     FRUTO_E2E_BASE_URL="$gateway_base_url" \
     FRUTO_E2E_HOST=cloud.molejo.dev \
     FRUTO_E2E_ALLOW_UNTRUSTED_TLS=true \
-    FRUTO_E2E_IMAGE="$fixture_ref" \
     FRUTO_E2E_PASSWORD="$owner_password" \
     FRUTO_E2E_RESULTS="$tmp_dir/in-cluster-playwright.json" \
     FRUTO_E2E_OUTPUT_DIR="$tmp_dir/in-cluster-playwright" \
@@ -241,24 +258,63 @@ assert_http_status() {
 }
 
 assert_rbac() {
-  local identity="system:serviceaccount:fruto-control-plane:control-plane-api"
-  [[ "$(kubectl --kubeconfig "$kubeconfig" auth can-i get appdeployments.platform.fruto.calouro.tech -n fruto-workspaces --as="$identity")" == yes ]]
-  [[ "$(kubectl --kubeconfig "$kubeconfig" auth can-i patch appdeployments.platform.fruto.calouro.tech -n fruto-workspaces --as="$identity")" == yes ]]
-  for resource in deployments.apps services httproutes.gateway.networking.k8s.io secrets pods; do
-    [[ "$(kubectl --kubeconfig "$kubeconfig" auth can-i create "$resource" -n fruto-workspaces --as="$identity")" == no ]]
-  done
-  [[ "$(kubectl --kubeconfig "$kubeconfig" auth can-i get namespaces/fruto-workspaces --as="$identity")" == yes ]]
-  [[ "$(kubectl --kubeconfig "$kubeconfig" auth can-i get namespaces/kube-system --as="$identity")" == yes ]]
-  [[ "$(kubectl --kubeconfig "$kubeconfig" auth can-i create namespaces --as="$identity")" == yes ]]
-  [[ "$(kubectl --kubeconfig "$kubeconfig" auth can-i delete namespaces --as="$identity")" == no ]]
+  local api_identity="system:serviceaccount:fruto-control-plane:control-plane-api"
+  local worker_identity="system:serviceaccount:fruto-control-plane:control-plane-runtime-worker"
+  local parameter_worker_identity="system:serviceaccount:fruto-control-plane:control-plane-parameter-worker"
+  [[ "$(kubectl --kubeconfig "$kubeconfig" auth can-i get appdeployments.platform.fruto.calouro.tech -n fruto-workspaces --as="$api_identity")" == no ]]
+  [[ "$(kubectl --kubeconfig "$kubeconfig" auth can-i get secrets -n fruto-workspaces --as="$api_identity")" == no ]]
+  [[ "$(kubectl --kubeconfig "$kubeconfig" auth can-i get appdeployments.platform.fruto.calouro.tech -n fruto-workspaces --as="$worker_identity")" == yes ]]
+  [[ "$(kubectl --kubeconfig "$kubeconfig" auth can-i patch appdeployments.platform.fruto.calouro.tech -n fruto-workspaces --as="$worker_identity")" == yes ]]
+  [[ "$(kubectl --kubeconfig "$kubeconfig" auth can-i create secrets -n fruto-workspaces --as="$worker_identity")" == yes ]]
+  [[ "$(kubectl --kubeconfig "$kubeconfig" auth can-i get deployments.apps -n fruto-workspaces --as="$worker_identity")" == no ]]
+  [[ "$(kubectl --kubeconfig "$kubeconfig" auth can-i get secrets -n fruto-control-plane --as="$worker_identity")" == no ]]
+  [[ "$(kubectl --kubeconfig "$kubeconfig" auth can-i get secrets -n fruto-workspaces --as="$parameter_worker_identity")" == no ]]
 }
 
 run_concurrent_request() {
   local output="$1"
   curl --fail --silent --show-error -b "$host_cookie_jar" \
     -H "Origin: http://127.0.0.1:${vite_port}" -H "X-CSRF-Token: $csrf_token" \
-    -H 'Idempotency-Key: phase6-concurrent' -H 'Content-Type: application/json' \
-    -d "$concurrent_intent" "http://127.0.0.1:${host_api_port}/api/v1/deployments" >"$output"
+    -H 'Idempotency-Key: e2e-concurrent' -H 'Content-Type: application/json' \
+    -d "$deployment_intent" "$deployment_base" >"$output"
+}
+
+seed_test_release() {
+  FRUTO_POSTGRES_PORT="$postgres_port" docker compose --project-name "$compose_project" \
+    -f deploy/control-plane/docker-compose.yaml exec -T postgres \
+    psql -U fruto -d fruto -v ON_ERROR_STOP=1 \
+      -v workspace_id="$workspace_id" -v project_id="$project_id" \
+      -v app_id="$app_id" -v app_environment_id="$app_environment_id" \
+      -v fixture_ref="$fixture_ref" -v release_id="$release_id" >/dev/null <<'SQL'
+WITH refs AS (
+  SELECT w.id AS workspace_id, p.id AS project_id, a.id AS app_id,
+         ae.id AS app_environment_id, wa.actor_id
+  FROM workspaces w
+  JOIN projects p ON p.workspace_id=w.id
+  JOIN apps a ON a.project_id=p.id
+  JOIN app_environments ae ON ae.app_id=a.id
+  JOIN workspace_actors wa ON wa.workspace_id=w.id
+  WHERE w.public_id=:'workspace_id' AND p.public_id=:'project_id'
+    AND a.public_id=:'app_id' AND ae.public_id=:'app_environment_id'
+  LIMIT 1
+), inserted_build AS (
+  INSERT INTO builds(
+    public_id,workspace_id,project_id,app_id,app_environment_id,
+    requested_by_actor_id,github_installation_external_id,repository_id,
+    repository_full_name,source_branch,commit_sha,platform,status,
+    idempotency_hash,payload_hash,completed_at
+  )
+  SELECT 'bld-aaaaaaaaaaaaaaaaaaaa',workspace_id,project_id,app_id,
+    app_environment_id,actor_id,1,1,'molejo/e2e','main',repeat('a',40),
+    'linux/amd64','Succeeded',decode(repeat('01',32),'hex'),
+    decode(repeat('02',32),'hex'),now()
+  FROM refs
+  RETURNING id,workspace_id,project_id,app_id
+)
+INSERT INTO releases(public_id,workspace_id,project_id,app_id,build_id,commit_sha,image,platform)
+SELECT :'release_id',workspace_id,project_id,app_id,id,repeat('a',40),:'fixture_ref','linux/amd64'
+FROM inserted_build;
+SQL
 }
 
 kind_cli create cluster --name "$cluster_name" --kubeconfig "$kubeconfig" --wait 120s
@@ -319,50 +375,80 @@ GOCACHE="$tmp_dir/go-cache" GOMODCACHE="${GOMODCACHE:-/tmp/fruto-go-mod-cache}" 
 run_without_xtrace prepare_owner_credentials
 run_without_xtrace bootstrap_host_database
 start_host_api
+start_host_runtime_worker
 start_vite
 
 host_cookie_jar="$tmp_dir/host-cookies.txt"
 run_without_xtrace login http://127.0.0.1:${host_api_port} "$host_cookie_jar"
 
-intent="$(jq -cn --arg image "$fixture_ref" '{name:"phase6-api",image:$image,replicas:1,port:8080,resources:{requests:{cpuMillis:50,memoryMiB:64},limits:{cpuMillis:250,memoryMiB:128}},probes:{liveness:{path:"/healthz"},readiness:{path:"/readyz"}},exposure:"Private"}')"
+api_base="http://127.0.0.1:${host_api_port}/api/v1"
+workspace_id="$(curl --fail --silent --show-error -b "$host_cookie_jar" "$api_base/workspaces/current" | jq -er '.id')"
+project_response="$(curl --fail --silent --show-error -b "$host_cookie_jar" \
+  -H "Origin: http://127.0.0.1:${vite_port}" -H "X-CSRF-Token: $csrf_token" \
+  -H 'Content-Type: application/json' -d '{"name":"E2E Project"}' \
+  "$api_base/workspaces/$workspace_id/projects")"
+project_id="$(jq -er '.id' <<<"$project_response")"
+environment_response="$(curl --fail --silent --show-error -b "$host_cookie_jar" \
+  -H "Origin: http://127.0.0.1:${vite_port}" -H "X-CSRF-Token: $csrf_token" \
+  -H 'Content-Type: application/json' -d '{"name":"Development"}' \
+  "$api_base/workspaces/$workspace_id/projects/$project_id/environments")"
+environment_id="$(jq -er '.id' <<<"$environment_response")"
+app_response="$(curl --fail --silent --show-error -b "$host_cookie_jar" \
+  -H "Origin: http://127.0.0.1:${vite_port}" -H "X-CSRF-Token: $csrf_token" \
+  -H 'Content-Type: application/json' -d '{"name":"E2E App"}' \
+  "$api_base/workspaces/$workspace_id/projects/$project_id/apps")"
+app_id="$(jq -er '.id' <<<"$app_response")"
+configuration="$(jq -cn --arg environment "$environment_id" '{environmentId:$environment,branch:"main",configuration:{replicas:1,port:8080,resources:{requests:{cpuMillis:50,memoryMiB:64},limits:{cpuMillis:250,memoryMiB:128}},probes:{liveness:{path:"/healthz"},readiness:{path:"/readyz"}},exposure:"Private",variables:[],parameters:[]}}')"
+app_environment_response="$(curl --fail --silent --show-error -b "$host_cookie_jar" \
+  -H "Origin: http://127.0.0.1:${vite_port}" -H "X-CSRF-Token: $csrf_token" \
+  -H 'Content-Type: application/json' -d "$configuration" \
+  "$api_base/workspaces/$workspace_id/projects/$project_id/apps/$app_id/environments")"
+app_environment_id="$(jq -er '.id' <<<"$app_environment_response")"
+app_environment_base="$api_base/workspaces/$workspace_id/projects/$project_id/apps/$app_id/environments/$app_environment_id"
+deployment_base="$app_environment_base/deployments"
+release_id="rel-bbbbbbbbbbbbbbbbbbbb"
+run_without_xtrace seed_test_release
+deployment_intent="$(jq -cn --arg release "$release_id" '{releaseId:$release}')"
 create_response="$(curl --fail --silent --show-error -b "$host_cookie_jar" \
   -H "Origin: http://127.0.0.1:${vite_port}" -H "X-CSRF-Token: $csrf_token" \
-  -H 'Idempotency-Key: phase6-idempotent' -H 'Content-Type: application/json' \
-  -d "$intent" "http://127.0.0.1:${host_api_port}/api/v1/deployments")"
+  -H 'Idempotency-Key: e2e-idempotent' -H 'Content-Type: application/json' \
+  -d "$deployment_intent" "$deployment_base")"
 api_deployment_id="$(jq -er '.deployment.id' <<<"$create_response")"
 api_operation_id="$(jq -er '.operation.id' <<<"$create_response")"
 repeat_response="$(curl --fail --silent --show-error -b "$host_cookie_jar" \
   -H "Origin: http://127.0.0.1:${vite_port}" -H "X-CSRF-Token: $csrf_token" \
-  -H 'Idempotency-Key: phase6-idempotent' -H 'Content-Type: application/json' \
-  -d "$intent" "http://127.0.0.1:${host_api_port}/api/v1/deployments")"
+  -H 'Idempotency-Key: e2e-idempotent' -H 'Content-Type: application/json' \
+  -d "$deployment_intent" "$deployment_base")"
 [[ "$(jq -r '.operation.id' <<<"$repeat_response")" == "$api_operation_id" ]]
-conflict_intent="$(jq '.name = "phase6-conflict"' <<<"$intent")"
-assert_http_status 409 "http://127.0.0.1:${host_api_port}/api/v1/deployments" \
+conflict_intent='{"releaseId":"rel-cccccccccccccccccccc"}'
+assert_http_status 409 "$deployment_base" \
   -X POST -b "$host_cookie_jar" -H "Origin: http://127.0.0.1:${vite_port}" \
-  -H "X-CSRF-Token: $csrf_token" -H 'Idempotency-Key: phase6-idempotent' \
+  -H "X-CSRF-Token: $csrf_token" -H 'Idempotency-Key: e2e-idempotent' \
   -H 'Content-Type: application/json' -d "$conflict_intent"
-assert_http_status 403 "http://127.0.0.1:${host_api_port}/api/v1/deployments" \
+assert_http_status 403 "$deployment_base" \
   -X POST -b "$host_cookie_jar" -H "Origin: http://127.0.0.1:${vite_port}" \
-  -H 'Idempotency-Key: phase6-no-csrf' -H 'Content-Type: application/json' -d "$intent"
+  -H 'Idempotency-Key: e2e-no-csrf' -H 'Content-Type: application/json' -d "$deployment_intent"
 assert_http_status 403 "http://127.0.0.1:${host_api_port}/api/v1/session" \
   -X POST -H 'Origin: https://invalid.example' -H 'Content-Type: application/json' \
   -d '{"actor":"owner","password":"invalid"}'
-assert_http_status 404 "http://127.0.0.1:${host_api_port}/api/v1/deployments/ap-aaaaaaaaaaaaaaaaaaaa" -b "$host_cookie_jar"
+assert_http_status 404 "$deployment_base/dpl-aaaaaaaaaaaaaaaaaaaa" -b "$host_cookie_jar"
 
 wait_operation "http://127.0.0.1:${host_api_port}" "$api_operation_id" "$host_cookie_jar"
-ready_response="$(curl --fail --silent --show-error -b "$host_cookie_jar" "http://127.0.0.1:${host_api_port}/api/v1/deployments/$api_deployment_id")"
+ready_response="$(curl --fail --silent --show-error -b "$host_cookie_jar" "$deployment_base/$api_deployment_id")"
 [[ "$(jq -r '.state' <<<"$ready_response")" == Ready ]]
 
 kubectl --kubeconfig "$kubeconfig" scale deployment/platform-operator -n fruto-system --replicas=0
 stop_pid "$host_api_pid"; host_api_pid=""
+stop_pid "$runtime_worker_pid"; runtime_worker_pid=""
 runtime_timeout="30s"
 start_host_api
+start_host_runtime_worker
 docker pause "$node_name" >/dev/null
 node_paused=true
 pending_response="$(curl --fail --silent --show-error -b "$host_cookie_jar" \
   -H "Origin: http://127.0.0.1:${vite_port}" -H "X-CSRF-Token: $csrf_token" \
-  -H 'Idempotency-Key: phase6-restart' -H 'Content-Type: application/json' \
-  -d "$(jq '.name = "phase6-restart"' <<<"$intent")" "http://127.0.0.1:${host_api_port}/api/v1/deployments")"
+  -H 'Idempotency-Key: e2e-restart' -H 'Content-Type: application/json' \
+  -d "$deployment_intent" "$deployment_base")"
 pending_operation_id="$(jq -er '.operation.id' <<<"$pending_response")"
 pending_status=""
 for _ in $(seq 1 100); do
@@ -371,25 +457,26 @@ for _ in $(seq 1 100); do
   sleep 0.1
 done
 [[ "$pending_status" == Running ]]
-kill -KILL "$host_api_pid"
-wait "$host_api_pid" >/dev/null 2>&1 || true
-host_api_pid=""
+kill -KILL "$runtime_worker_pid"
+wait "$runtime_worker_pid" >/dev/null 2>&1 || true
+runtime_worker_pid=""
+stop_pid "$host_api_pid"; host_api_pid=""
 docker unpause "$node_name" >/dev/null
 node_paused=false
 runtime_timeout="1s"
 kubectl --kubeconfig "$kubeconfig" scale deployment/platform-operator -n fruto-system --replicas=1
 kubectl --kubeconfig "$kubeconfig" -n fruto-system rollout status deployment/platform-operator --timeout=120s
 start_host_api
+start_host_runtime_worker
 wait_operation "http://127.0.0.1:${host_api_port}" "$pending_operation_id" "$host_cookie_jar"
 
 docker pause "$node_name"
 node_paused=true
-unknown_response="$(curl --fail --silent --show-error --max-time 8 -b "$host_cookie_jar" "http://127.0.0.1:${host_api_port}/api/v1/deployments/$api_deployment_id")"
+unknown_response="$(curl --fail --silent --show-error --max-time 8 -b "$host_cookie_jar" "$app_environment_base")"
 [[ "$(jq -r '.state' <<<"$unknown_response")" == Unknown ]]
 docker unpause "$node_name" >/dev/null
 node_paused=false
 
-concurrent_intent="$(jq '.name = "phase6-concurrent"' <<<"$intent")"
 rm -f "$tmp_dir/concurrent-a.json" "$tmp_dir/concurrent-b.json"
 run_without_xtrace run_concurrent_request "$tmp_dir/concurrent-a.json" &
 concurrent_a_pid=$!
@@ -398,27 +485,25 @@ concurrent_b_pid=$!
 wait "$concurrent_a_pid" "$concurrent_b_pid"
 [[ "$(jq -r '.operation.id' "$tmp_dir/concurrent-a.json")" == "$(jq -r '.operation.id' "$tmp_dir/concurrent-b.json")" ]]
 concurrent_operation_id="$(jq -r '.operation.id' "$tmp_dir/concurrent-a.json")"
-concurrent_deployment_id="$(jq -r '.deployment.id' "$tmp_dir/concurrent-a.json")"
 wait_operation "http://127.0.0.1:${host_api_port}" "$concurrent_operation_id" "$host_cookie_jar"
-concurrent_runtime_name="$concurrent_deployment_id"
+concurrent_runtime_name="ap-$app_environment_id"
 [[ "$(kubectl --kubeconfig "$kubeconfig" -n fruto-workspaces get appdeployment "$concurrent_runtime_name" -o name)" == "appdeployment.platform.fruto.calouro.tech/$concurrent_runtime_name" ]]
 
-delete_api_deployment() {
-  local deployment_id="$1" key="$2"
+delete_app_environment() {
   local detail version response operation
-  detail="$(curl --fail --silent --show-error -b "$host_cookie_jar" "http://127.0.0.1:${host_api_port}/api/v1/deployments/$deployment_id")"
+  detail="$(curl --fail --silent --show-error -b "$host_cookie_jar" "$app_environment_base")"
   version="$(jq -r '.version' <<<"$detail")"
   response="$(curl --fail --silent --show-error -b "$host_cookie_jar" -X DELETE \
     -H "Origin: http://127.0.0.1:${vite_port}" -H "X-CSRF-Token: $csrf_token" \
-    -H "Idempotency-Key: $key" -H "If-Match: $version" \
-    "http://127.0.0.1:${host_api_port}/api/v1/deployments/$deployment_id")"
-  operation="$(jq -r '.operation.id' <<<"$response")"
+    -H 'Idempotency-Key: e2e-delete-app-environment' -H "If-Match: $version" \
+    "$app_environment_base")"
+  operation="$(jq -r '.id' <<<"$response")"
   wait_operation "http://127.0.0.1:${host_api_port}" "$operation" "$host_cookie_jar"
 }
-run_without_xtrace delete_api_deployment "$api_deployment_id" phase6-delete-api
-run_without_xtrace delete_api_deployment "$concurrent_deployment_id" phase6-delete-concurrent
+run_without_xtrace delete_app_environment
 stop_pid "$vite_pid"; vite_pid=""
 stop_pid "$host_api_pid"; host_api_pid=""
+stop_pid "$runtime_worker_pid"; runtime_worker_pid=""
 FRUTO_POSTGRES_PORT="$postgres_port" docker compose --project-name "$compose_project" -f deploy/control-plane/docker-compose.yaml down >/dev/null
 compose_started=false
 
@@ -469,7 +554,7 @@ gateway_console_body=""
 for _ in $(seq 1 60); do
   gateway_api_status="$(curl "${gateway_curl_args[@]}" --silent --output /dev/null --write-out '%{http_code}' "$gateway_base_url/api/v1/session" || true)"
   if [[ "$gateway_api_status" == 401 ]]; then
-    gateway_console_body="$(curl "${gateway_curl_args[@]}" --silent "$gateway_base_url/deployments/ap-deep-link" || true)"
+    gateway_console_body="$(curl "${gateway_curl_args[@]}" --silent "$gateway_base_url/workspaces/example/projects" || true)"
     grep -q '<div id="root">' <<<"$gateway_console_body" && break
   fi
   sleep 1
@@ -478,4 +563,4 @@ done
 grep -q '<div id="root">' <<<"$gateway_console_body"
 run_cluster_browser
 
-echo "control-plane Phase 6 E2E passed"
+echo "control-plane hierarchy E2E passed"

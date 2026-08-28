@@ -19,4 +19,4 @@ spec:
     readiness:
       path: /readyz
   exposure: Public
-  slug: phase4-spa
+  slug: spa-e2e

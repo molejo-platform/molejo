@@ -6,14 +6,14 @@ readonly KUBE_CONTEXT="${FRUTO_KUBE_CONTEXT:-fruto-lab}"
 readonly REGISTRY="${FRUTO_REGISTRY:-registry.apps.calouro.tech}"
 readonly REGISTRY_SECRET_NAMESPACE="${FRUTO_REGISTRY_SECRET_NAMESPACE:-fruto-system}"
 readonly REGISTRY_SECRET_NAME="${FRUTO_REGISTRY_SECRET_NAME:-registry-pull}"
-readonly STATIC_NAMESPACE="ws-phase4-static"
-readonly SPA_NAMESPACE="ws-phase4-spa"
+readonly STATIC_NAMESPACE="ws-e2e-static"
+readonly SPA_NAMESPACE="ws-e2e-spa"
 readonly STATIC_APP="ap-static000001"
 readonly SPA_APP="ap-spa000001"
 readonly STATIC_HOSTNAME="static.molejo.dev"
 readonly SPA_HOSTNAME="spa.molejo.dev"
-readonly STATIC_REPOSITORY="${REGISTRY}/fruto-phase4-static-html"
-readonly SPA_REPOSITORY="${REGISTRY}/fruto-phase4-vite-react-spa"
+readonly STATIC_REPOSITORY="${REGISTRY}/fruto-static-html"
+readonly SPA_REPOSITORY="${REGISTRY}/fruto-vite-react-spa"
 readonly RELEASE_ID="$(date -u +%Y%m%d%H%M%S)-$$"
 readonly STATIC_METADATA="$(mktemp)"
 readonly SPA_V1_METADATA="$(mktemp)"
@@ -73,7 +73,7 @@ fi
 kube get --raw=/readyz >/dev/null
 node_architectures="$(kube get nodes -o jsonpath='{range .items[*]}{.status.nodeInfo.architecture}{"\n"}{end}' | sort -u)"
 if [[ ${node_architectures} != "amd64" ]]; then
-  echo "phase 4 publication expects an amd64-only cluster, got: ${node_architectures}" >&2
+  echo "frontend publication expects an amd64-only cluster, got: ${node_architectures}" >&2
   exit 1
 fi
 kube wait --for=condition=Programmed gateway/fruto -n fruto-system --timeout=60s
@@ -162,7 +162,7 @@ sed \
 sed \
   -e "s|ws-spa-e2e|${SPA_NAMESPACE}|" \
   -e "s|__SPA_IMAGE__|${SPA_IMAGE_V1}|" \
-  -e 's|slug: phase4-spa|slug: spa|' \
+  -e 's|slug: spa-e2e|slug: spa|' \
   test/e2e/spa-appdeployment.yaml >"${SPA_MANIFEST}"
 
 kube apply -f "${STATIC_MANIFEST}"
@@ -354,6 +354,6 @@ if [[ -n ${static_service_selector_drift} ]]; then
   exit 1
 fi
 
-echo "phase 4 k3s validation passed"
+echo "frontend k3s validation passed"
 echo "static frontend: https://${STATIC_HOSTNAME} (${STATIC_IMAGE})"
 echo "SPA frontend: https://${SPA_HOSTNAME} (${SPA_IMAGE_V2})"

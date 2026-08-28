@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1.20
-
 FROM scratch AS content
 COPY test/fixtures/static-html/index.html /site/index.html
 COPY test/fixtures/static-html/about.html /site/about.html

@@ -141,7 +141,7 @@ Secret de origen del registry `fruto-system/registry-pull`. El target usa
 esa protección.
 
 El target publica tres imágenes amd64 con tags temporales, crea o actualiza
-`ws-phase4-static` y `ws-phase4-spa`, copia el Secret del registry en esos
+`ws-e2e-static` y `ws-e2e-spa`, copia el Secret del registry en esos
 namespaces, modifica sus ServiceAccounts `default` y mantiene ambos AppDeployments
 y sus rutas públicas disponibles. Los archivos locales temporales se eliminan,
 pero las imágenes del registry y los recursos estables del cluster se conservan

@@ -37,7 +37,7 @@ func main() {
 		WriteTimeout:      0,
 		IdleTimeout:       30 * time.Second,
 	}
-	log.Printf("phase 2 HTTP fixture %s listening on %s", version, server.Addr)
+	log.Printf("HTTP fixture %s listening on %s", version, server.Addr)
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatal(err)
 	}
@@ -98,7 +98,7 @@ func outbound(writer http.ResponseWriter, request *http.Request) {
 		http.Error(writer, "create upstream request", http.StatusBadGateway)
 		return
 	}
-	upstreamRequest.Header.Set("User-Agent", "fruto-phase2-http-fixture/"+version)
+	upstreamRequest.Header.Set("User-Agent", "molejo-http-fixture/"+version)
 
 	upstreamResponse, err := client.Do(upstreamRequest)
 	if err != nil {

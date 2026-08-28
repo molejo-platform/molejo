@@ -135,7 +135,7 @@ fruto-lab` and refuses another context unless both `FRUTO_KUBE_CONTEXT` and
 `FRUTO_ALLOW_CUSTOM_CONTEXT=true` explicitly override the guard.
 
 The target pushes three timestamped amd64 images, creates or updates
-`ws-phase4-static` and `ws-phase4-spa`, copies the registry Secret into them,
+`ws-e2e-static` and `ws-e2e-spa`, copies the registry Secret into them,
 patches their default ServiceAccounts, and leaves both AppDeployments and their
 public routes available. Temporary local files are removed, but registry images
 and stable cluster resources are intentionally retained. It must never be added

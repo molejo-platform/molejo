@@ -62,7 +62,7 @@ caso, os endpoints GitHub retornam `github_not_configured`. Use
 `deploy/control-plane/github-app-secret.example.yaml` apenas como referência de
 estrutura e nunca coloque credenciais reais no Git.
 
-## Evidência local da Fase 6
+## Evidência local do control plane
 
 `just control-plane-e2e-kind` cria um cluster Kind descartável e comprova as
 duas topologias. A primeira executa o binário da API com `KUBECONFIG` temporário
@@ -72,14 +72,14 @@ Console, Job de migration, Services e HTTPRoutes no Kind.
 Decisões puras e clientes HTTP do frontend rodam primeiro como testes unitários
 Node, sem React ou DOM. Testes de integração React/jsdom cobrem login, sessão
 expirada, formulário, roteamento e estados do produto. O Playwright fica
-limitado a um teste estratégico: login e ciclo completo de create, observe,
-update, histórico e delete. A suíte Go com PostgreSQL comprova separadamente a
-rejeição de sessões expiradas e revogadas. O runner também
-comprova a recuperação de operação pendente após restart da API, `Unknown`
+limitado a um teste estratégico: login e o fluxo principal de organização de
+Project, Environment e App. A suíte Go com PostgreSQL comprova separadamente a
+rejeição de sessões expiradas e revogadas. O runner shell comprova o ciclo de
+deployment, a recuperação de operação pendente após falha do worker, `Unknown`
 enquanto o API server do Kind está pausado, idempotência por repetição e
-concorrência e a ServiceAccount do control plane com `kubectl auth can-i`.
-Secrets são gerados em tempo de execução e diagnósticos são coletados antes da
-remoção dos recursos temporários.
+concorrência e as ServiceAccounts restritas com `kubectl auth can-i`. Secrets
+são gerados em tempo de execução e diagnósticos são coletados antes da remoção
+dos recursos temporários.
 
 ## Recuperação e fronteiras
 

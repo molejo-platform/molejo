@@ -9,13 +9,13 @@ readonly GATEWAY_API_SHA256="751002b3b91a87f7ae3bd2517c79a47a8d7ed6702901808a1cf
 readonly PERSISTENT_TRANSPORT_SECONDS=11
 readonly CLUSTER_NAME="fruto-e2e-$$"
 readonly OPERATOR_IMAGE="fruto-platform-operator:e2e-$$"
-readonly FIXTURE_IMAGE_V1_TAG="fruto-phase2-http-app:e2e-v1-$$"
-readonly FIXTURE_IMAGE_V2_TAG="fruto-phase2-http-app:e2e-v2-$$"
+readonly FIXTURE_IMAGE_V1_TAG="fruto-http-app:e2e-v1-$$"
+readonly FIXTURE_IMAGE_V2_TAG="fruto-http-app:e2e-v2-$$"
 readonly FIXTURE_IMAGE_V1_FULL="docker.io/library/${FIXTURE_IMAGE_V1_TAG}"
 readonly FIXTURE_IMAGE_V2_FULL="docker.io/library/${FIXTURE_IMAGE_V2_TAG}"
-readonly STATIC_IMAGE_TAG="fruto-phase4-static-html:e2e-$$"
-readonly SPA_IMAGE_V1_TAG="fruto-phase4-vite-react-spa:e2e-v1-$$"
-readonly SPA_IMAGE_V2_TAG="fruto-phase4-vite-react-spa:e2e-v2-$$"
+readonly STATIC_IMAGE_TAG="fruto-static-html:e2e-$$"
+readonly SPA_IMAGE_V1_TAG="fruto-vite-react-spa:e2e-v1-$$"
+readonly SPA_IMAGE_V2_TAG="fruto-vite-react-spa:e2e-v2-$$"
 readonly STATIC_IMAGE_FULL="docker.io/library/${STATIC_IMAGE_TAG}"
 readonly SPA_IMAGE_V1_FULL="docker.io/library/${SPA_IMAGE_V1_TAG}"
 readonly SPA_IMAGE_V2_FULL="docker.io/library/${SPA_IMAGE_V2_TAG}"
@@ -520,21 +520,21 @@ if [[ ${unauthenticated_status} != "401" && ${unauthenticated_status} != "403" ]
 fi
 
 kubectl --kubeconfig "${KUBECONFIG_FILE}" create namespace external-e2e
-kubectl --kubeconfig "${KUBECONFIG_FILE}" create deployment phase2-upstream \
+kubectl --kubeconfig "${KUBECONFIG_FILE}" create deployment fixture-upstream \
   -n external-e2e \
   --image="${FIXTURE_IMAGE_V1}" \
   --port=8080
-kubectl --kubeconfig "${KUBECONFIG_FILE}" expose deployment phase2-upstream \
+kubectl --kubeconfig "${KUBECONFIG_FILE}" expose deployment fixture-upstream \
   -n external-e2e \
   --port=8080 \
   --target-port=8080
 kubectl --kubeconfig "${KUBECONFIG_FILE}" rollout status \
-  deployment/phase2-upstream \
+  deployment/fixture-upstream \
   -n external-e2e \
   --timeout=120s
 
 kubectl --kubeconfig "${KUBECONFIG_FILE}" create namespace ws-e2e
-sed "s|__PHASE2_APP_IMAGE__|${FIXTURE_IMAGE_V1}|" \
+sed "s|__APP_IMAGE__|${FIXTURE_IMAGE_V1}|" \
   test/e2e/appdeployment.yaml >"${APP_MANIFEST_FILE}"
 kubectl --kubeconfig "${KUBECONFIG_FILE}" apply -f "${APP_MANIFEST_FILE}"
 kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
@@ -604,7 +604,7 @@ root_response="$(curl_json "http://127.0.0.1:${APP_LOCAL_PORT}/")"
 grep -q '"status":"ok"' <<<"${root_response}"
 grep -q '"version":"v1"' <<<"${root_response}"
 upstream_response="$(curl --fail --silent --show-error --get \
-  --data-urlencode 'url=http://phase2-upstream.external-e2e.svc.cluster.local:8080/' \
+  --data-urlencode 'url=http://fixture-upstream.external-e2e.svc.cluster.local:8080/' \
   "http://127.0.0.1:${APP_LOCAL_PORT}/outbound")"
 grep -q '"upstreamStatus":200' <<<"${upstream_response}"
 grep -q '\\"version\\":\\"v1\\"' <<<"${upstream_response}"
@@ -617,14 +617,14 @@ fi
 
 start_port_forward fruto-system service/traefik-e2e 8443 "${GATEWAY_FORWARD_LOG}" \
   GATEWAY_FORWARD_PID GATEWAY_LOCAL_PORT
-wait_for_public_status 404 phase3-e2e.molejo.dev \
-  "https://phase3-e2e.molejo.dev:${GATEWAY_LOCAL_PORT}/"
+wait_for_public_status 404 runtime-e2e.molejo.dev \
+  "https://runtime-e2e.molejo.dev:${GATEWAY_LOCAL_PORT}/"
 
 kubectl --kubeconfig "${KUBECONFIG_FILE}" patch \
   appdeployment/ap-e2e000001 \
   -n ws-e2e \
   --type=merge \
-  --patch '{"spec":{"exposure":"Public","slug":"phase3-e2e"}}'
+  --patch '{"spec":{"exposure":"Public","slug":"runtime-e2e"}}'
 wait_for_resource httproute.gateway.networking.k8s.io ws-e2e ap-e2e000001
 wait_for_jsonpath httproute ws-e2e ap-e2e000001 \
   '{.status.parents[0].conditions[?(@.type=="Accepted")].status}' True
@@ -636,19 +636,19 @@ kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
   -n ws-e2e \
   --timeout=120s
 
-public_base_url="https://phase3-e2e.molejo.dev:${GATEWAY_LOCAL_PORT}"
+public_base_url="https://runtime-e2e.molejo.dev:${GATEWAY_LOCAL_PORT}"
 public_rest="$(curl_success --noproxy '*' --cacert "${WILDCARD_CERT_FILE}" --fail --silent --show-error \
-  --resolve "phase3-e2e.molejo.dev:${GATEWAY_LOCAL_PORT}:127.0.0.1" \
+  --resolve "runtime-e2e.molejo.dev:${GATEWAY_LOCAL_PORT}:127.0.0.1" \
   "${public_base_url}/")"
 grep -q '"status":"ok"' <<<"${public_rest}"
 public_graphql="$(curl_success --noproxy '*' --cacert "${WILDCARD_CERT_FILE}" --fail --silent --show-error \
-  --resolve "phase3-e2e.molejo.dev:${GATEWAY_LOCAL_PORT}:127.0.0.1" \
+  --resolve "runtime-e2e.molejo.dev:${GATEWAY_LOCAL_PORT}:127.0.0.1" \
   --header 'Content-Type: application/json' \
   --data '{"query":"{ status version }"}' \
   "${public_base_url}/graphql")"
 grep -q '"data":{"status":"ok"' <<<"${public_graphql}"
 curl --noproxy '*' --cacert "${WILDCARD_CERT_FILE}" --fail --silent --show-error --no-buffer \
-  --resolve "phase3-e2e.molejo.dev:${GATEWAY_LOCAL_PORT}:127.0.0.1" \
+  --resolve "runtime-e2e.molejo.dev:${GATEWAY_LOCAL_PORT}:127.0.0.1" \
   "${public_base_url}/events" >"${PUBLIC_SSE_OUTPUT}" &
 PUBLIC_SSE_PID=$!
 for _ in $(seq 1 50); do
@@ -682,7 +682,7 @@ GOCACHE=/tmp/fruto-go-cache go run ./test/fixtures/transport-client \
   --address "127.0.0.1:${GATEWAY_LOCAL_PORT}" \
   --ca "${WILDCARD_CERT_FILE}" \
   --idle-duration "${PERSISTENT_TRANSPORT_SECONDS}s" \
-  --url "wss://phase3-e2e.molejo.dev:${GATEWAY_LOCAL_PORT}/ws"
+  --url "wss://runtime-e2e.molejo.dev:${GATEWAY_LOCAL_PORT}/ws"
 
 kubectl --kubeconfig "${KUBECONFIG_FILE}" patch \
   appdeployment/ap-e2e000001 \
@@ -694,7 +694,7 @@ kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
   httproute/ap-e2e000001 \
   -n ws-e2e \
   --timeout=120s
-wait_for_public_status 404 phase3-e2e.molejo.dev "${public_base_url}/"
+wait_for_public_status 404 runtime-e2e.molejo.dev "${public_base_url}/"
 curl_json "http://127.0.0.1:${APP_LOCAL_PORT}/" >/dev/null
 
 metrics_token="$(kubectl --kubeconfig "${KUBECONFIG_FILE}" create token \
@@ -959,7 +959,7 @@ kubectl --kubeconfig "${KUBECONFIG_FILE}" patch \
   appdeployment/ap-static000001 \
   -n ws-static-e2e \
   --type=merge \
-  --patch '{"spec":{"exposure":"Public","slug":"phase4-static"}}'
+  --patch '{"spec":{"exposure":"Public","slug":"static-e2e"}}'
 wait_for_resource httproute.gateway.networking.k8s.io ws-static-e2e ap-static000001
 wait_for_jsonpath httproute ws-static-e2e ap-static000001 \
   '{.status.parents[0].conditions[?(@.type=="Accepted")].status}' True
@@ -975,19 +975,19 @@ kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
   -n ws-static-e2e \
   --timeout=120s
 
-static_public_url="https://phase4-static.molejo.dev:${GATEWAY_LOCAL_PORT}"
-wait_for_public_status 200 phase4-static.molejo.dev \
+static_public_url="https://static-e2e.molejo.dev:${GATEWAY_LOCAL_PORT}"
+wait_for_public_status 200 static-e2e.molejo.dev \
   "${static_public_url}/"
 curl_success --noproxy '*' --cacert "${WILDCARD_CERT_FILE}" --fail --silent --show-error \
-  --resolve "phase4-static.molejo.dev:${GATEWAY_LOCAL_PORT}:127.0.0.1" \
+  --resolve "static-e2e.molejo.dev:${GATEWAY_LOCAL_PORT}:127.0.0.1" \
   --dump-header "${FRONTEND_HEADERS}" \
   --output "${FRONTEND_BODY}" \
   "${static_public_url}/"
 grep -Fq 'data-profile="static-html"' "${FRONTEND_BODY}"
 assert_response_header "${FRONTEND_HEADERS}" 'Cache-Control: no-cache'
-wait_for_public_status 404 phase4-static.molejo.dev \
+wait_for_public_status 404 static-e2e.molejo.dev \
   "${static_public_url}/missing"
-wait_for_public_status 404 phase4-static.molejo.dev \
+wait_for_public_status 404 static-e2e.molejo.dev \
   "${static_public_url}/assets/missing.css"
 
 static_app_uid="$(kubectl --kubeconfig "${KUBECONFIG_FILE}" get \
@@ -1040,11 +1040,11 @@ kubectl --kubeconfig "${KUBECONFIG_FILE}" rollout status \
   -n ws-spa-e2e \
   --timeout=180s
 
-spa_public_url="https://phase4-spa.molejo.dev:${GATEWAY_LOCAL_PORT}"
-wait_for_public_status 200 phase4-spa.molejo.dev \
+spa_public_url="https://spa-e2e.molejo.dev:${GATEWAY_LOCAL_PORT}"
+wait_for_public_status 200 spa-e2e.molejo.dev \
   "${spa_public_url}/projects/example"
 curl_success --noproxy '*' --cacert "${WILDCARD_CERT_FILE}" --fail --silent --show-error \
-  --resolve "phase4-spa.molejo.dev:${GATEWAY_LOCAL_PORT}:127.0.0.1" \
+  --resolve "spa-e2e.molejo.dev:${GATEWAY_LOCAL_PORT}:127.0.0.1" \
   --dump-header "${FRONTEND_HEADERS}" \
   --output "${FRONTEND_BODY}" \
   "${spa_public_url}/projects/example"
@@ -1057,15 +1057,15 @@ if [[ -z ${spa_asset} ]]; then
   exit 1
 fi
 curl_success --noproxy '*' --cacert "${WILDCARD_CERT_FILE}" --fail --silent --show-error \
-  --resolve "phase4-spa.molejo.dev:${GATEWAY_LOCAL_PORT}:127.0.0.1" \
+  --resolve "spa-e2e.molejo.dev:${GATEWAY_LOCAL_PORT}:127.0.0.1" \
   --dump-header "${FRONTEND_HEADERS}" \
   --output /dev/null \
   "${spa_public_url}${spa_asset}"
 assert_response_header "${FRONTEND_HEADERS}" \
   'Cache-Control: public, max-age=31536000, immutable'
-wait_for_public_status 404 phase4-spa.molejo.dev \
+wait_for_public_status 404 spa-e2e.molejo.dev \
   "${spa_public_url}/assets/missing.js"
-wait_for_public_status 404 phase4-spa.molejo.dev \
+wait_for_public_status 404 spa-e2e.molejo.dev \
   "${spa_public_url}/missing.css"
 
 spa_app_uid_before="$(kubectl --kubeconfig "${KUBECONFIG_FILE}" get \
@@ -1095,10 +1095,10 @@ kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
   -n ws-spa-e2e \
   --timeout=120s
 restart_gateway_forward
-spa_public_url="https://phase4-spa.molejo.dev:${GATEWAY_LOCAL_PORT}"
+spa_public_url="https://spa-e2e.molejo.dev:${GATEWAY_LOCAL_PORT}"
 spa_v2_response="$(wait_for_public_content \
   'name="fruto-version" content="v2"' \
-  phase4-spa.molejo.dev \
+  spa-e2e.molejo.dev \
   "${spa_public_url}/")"
 grep -Fq 'name="fruto-version" content="v2"' <<<"${spa_v2_response}"
 

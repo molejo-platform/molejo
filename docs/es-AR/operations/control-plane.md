@@ -64,7 +64,7 @@ existe; en ese caso, los endpoints de GitHub responden
 `deploy/control-plane/github-app-secret.example.yaml` solamente como referencia
 de estructura y nunca coloques credenciales reales en Git.
 
-## Evidencia local de la Fase 6
+## Evidencia local del control plane
 
 `just control-plane-e2e-kind` crea un cluster Kind descartable y comprueba las
 dos topologías. La primera ejecuta el binario de la API con `KUBECONFIG`
@@ -74,14 +74,15 @@ ejecuta API, Console, Job de migration, Services y HTTPRoutes dentro de Kind.
 Las decisiones puras y los clientes HTTP del frontend se ejecutan primero como
 tests unitarios Node, sin React ni DOM. Los tests de integración React/jsdom
 cubren login, sesión vencida, formulario, rutas y estados del producto.
-Playwright queda limitado a un test estratégico: login y ciclo completo de
-create, observe, update, historial y delete. La suite Go con PostgreSQL comprueba
-por separado el rechazo de sesiones expiradas y revocadas. El runner
-también comprueba la recuperación de una operación pendiente después de
-reiniciar la API, `Unknown` mientras se pausa el API server de Kind, idempotencia
-por repetición y concurrencia y la ServiceAccount del control plane con
-`kubectl auth can-i`. Los Secrets se generan durante la ejecución y los
-diagnósticos se recopilan antes de eliminar los recursos temporarios.
+Playwright queda limitado a un test estratégico: login y el flujo principal de
+organización de Project, Environment y App. La suite Go con PostgreSQL comprueba
+por separado el rechazo de sesiones expiradas y revocadas. El runner shell
+comprueba el ciclo de deployment, la recuperación de una operación pendiente
+después de una falla del worker, `Unknown` mientras se pausa el API server de
+Kind, idempotencia por repetición y concurrencia y las ServiceAccounts
+restringidas con `kubectl auth can-i`. Los Secrets se generan durante la
+ejecución y los diagnósticos se recopilan antes de eliminar los recursos
+temporarios.
 
 ## Recuperación y fronteras
 

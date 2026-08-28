@@ -4,7 +4,7 @@ metadata:
   name: ap-e2e000001
   namespace: ws-e2e
 spec:
-  image: __PHASE2_APP_IMAGE__
+  image: __APP_IMAGE__
   port: 8080
   resources:
     requests:

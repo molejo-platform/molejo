@@ -138,7 +138,7 @@ e recusa outro contexto, salvo quando `FRUTO_KUBE_CONTEXT` e
 `FRUTO_ALLOW_CUSTOM_CONTEXT=true` substituem explicitamente essa proteção.
 
 O alvo publica três imagens amd64 com tags temporais, cria ou atualiza
-`ws-phase4-static` e `ws-phase4-spa`, copia o Secret do registry para esses
+`ws-e2e-static` e `ws-e2e-spa`, copia o Secret do registry para esses
 namespaces, altera seus ServiceAccounts `default` e mantém os dois AppDeployments e
 suas rotas públicas disponíveis. Arquivos locais temporários são removidos, mas
 imagens do registry e recursos estáveis do cluster são preservados

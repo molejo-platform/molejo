@@ -67,8 +67,8 @@ func TestConsoleUsesReactViteAndPinnedStaticRuntime(t *testing.T) {
 	if _, err := os.Stat("../../apps/console-web/src/app/router.tsx"); err != nil {
 		t.Fatalf("expected code-based application router: %v", err)
 	}
-	if _, err := os.Stat("../../apps/console-web/src/features/deployments"); err != nil {
-		t.Fatalf("expected deployments vertical slice: %v", err)
+	if _, err := os.Stat("../../apps/console-web/src/features/environments"); err != nil {
+		t.Fatalf("expected App Environment vertical slice: %v", err)
 	}
 
 	dockerfile, err := os.ReadFile("../../apps/console-web/Dockerfile")

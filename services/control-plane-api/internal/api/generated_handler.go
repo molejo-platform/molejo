@@ -16,6 +16,8 @@ var _ generated.ServerInterface = (*generatedHandler)(nil)
 
 func (s *Server) generatedHandler() http.Handler {
 	router := chi.NewRouter()
+	router.Use(tracingMiddleware(s))
+	router.Use(func(next http.Handler) http.Handler { return securityMiddleware(s, next) })
 	router.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})

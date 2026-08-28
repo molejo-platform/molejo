@@ -48,7 +48,7 @@ func TestK3SFrontendValidationKeepsPublicDigestPinnedWorkloads(t *testing.T) {
 		"validates the SPA deep link":           "https://${SPA_HOSTNAME}/projects/example",
 		"validates the second SPA release":      `content="v2"`,
 		"preserves identities during rollout":   "k3s rollout replaced a logical Kubernetes child",
-		"leaves stable validation applications": "phase 4 k3s validation passed",
+		"leaves stable validation applications": "frontend k3s validation passed",
 	}
 	for description, expected := range checks {
 		if !strings.Contains(script, expected) {
@@ -56,7 +56,7 @@ func TestK3SFrontendValidationKeepsPublicDigestPinnedWorkloads(t *testing.T) {
 		}
 	}
 	if strings.Contains(script, "delete namespace") || strings.Contains(script, "delete appdeployment") {
-		t.Error("k3s validation must keep the public phase 4 applications available")
+		t.Error("k3s validation must keep the public validation applications available")
 	}
 }
 
@@ -68,7 +68,7 @@ func TestK3SFrontendValidationProvesServiceDriftWasRemoved(t *testing.T) {
 	script := string(contents)
 
 	start := strings.Index(script, `patch "service/${STATIC_APP}"`)
-	end := strings.Index(script, `echo "phase 4 k3s validation passed"`)
+	end := strings.Index(script, `echo "frontend k3s validation passed"`)
 	if start < 0 || end <= start {
 		t.Fatal("expected k3s Service drift validation section")
 	}
