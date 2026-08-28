@@ -619,11 +619,19 @@ func (r *AppDeploymentReconciler) applyDeployment(
 		for _, variable := range appDeployment.Spec.Variables {
 			environment = append(environment, corev1.EnvVar{Name: variable.Name, Value: variable.Value})
 		}
+		environmentFrom := []corev1.EnvFromSource{}
+		if appDeployment.Spec.ConfigMapRef != "" {
+			environmentFrom = append(environmentFrom, corev1.EnvFromSource{ConfigMapRef: &corev1.ConfigMapEnvSource{LocalObjectReference: corev1.LocalObjectReference{Name: appDeployment.Spec.ConfigMapRef}}})
+		}
+		if appDeployment.Spec.SecretRef != "" {
+			environmentFrom = append(environmentFrom, corev1.EnvFromSource{SecretRef: &corev1.SecretEnvSource{LocalObjectReference: corev1.LocalObjectReference{Name: appDeployment.Spec.SecretRef}}})
+		}
 		deployment.Spec.Template.Spec.Containers = []corev1.Container{{
 			Name:            containerName,
 			Image:           appDeployment.Spec.Image,
 			ImagePullPolicy: corev1.PullIfNotPresent,
 			Env:             environment,
+			EnvFrom:         environmentFrom,
 			Ports: []corev1.ContainerPort{{
 				Name:          httpPortName,
 				ContainerPort: appDeployment.Spec.Port,

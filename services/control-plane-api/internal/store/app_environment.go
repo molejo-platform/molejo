@@ -48,6 +48,7 @@ func scanAppEnvironment(row pgx.Row) (domain.AppEnvironment, error) {
 	if err = jsonUnmarshal(configuration, &item.Configuration); err != nil {
 		return domain.AppEnvironment{}, err
 	}
+	item.Configuration = domain.NormalizeRuntimeConfig(item.Configuration)
 	return item, nil
 }
 
@@ -56,6 +57,11 @@ func (s *Store) CreateAppEnvironment(ctx context.Context, workspaceID int64, pub
 	if err != nil {
 		return domain.AppEnvironment{}, err
 	}
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return domain.AppEnvironment{}, err
+	}
+	defer tx.Rollback(ctx)
 	query := `WITH inserted AS (
 		INSERT INTO app_environments(public_id,workspace_id,project_id,app_id,environment_id,source_branch,runtime_name,configuration_json)
 		SELECT $1,p.workspace_id,p.id,a.id,e.id,$6,$7,$8
@@ -66,14 +72,20 @@ func (s *Store) CreateAppEnvironment(ctx context.Context, workspaceID int64, pub
 		  AND p.archived_at IS NULL AND a.archived_at IS NULL AND e.archived_at IS NULL
 		RETURNING *
 	) SELECT ` + appEnvironmentColumns + ` FROM inserted ae ` + appEnvironmentJoins
-	item, err := scanAppEnvironment(s.Pool.QueryRow(ctx, query, publicID, workspaceID, projectPublicID, appPublicID, environmentPublicID, branch, domain.RuntimeName(publicID), configurationJSON))
+	item, err := scanAppEnvironment(tx.QueryRow(ctx, query, publicID, workspaceID, projectPublicID, appPublicID, environmentPublicID, branch, domain.RuntimeName(publicID), configurationJSON))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.AppEnvironment{}, ErrNotFound
 	}
 	if uniqueConstraint(err) == "app_environments_public_id_key" {
 		return domain.AppEnvironment{}, ErrPublicIDCollision
 	}
-	return item, translateDBError(err)
+	if err != nil {
+		return domain.AppEnvironment{}, translateDBError(err)
+	}
+	if err = replaceParameterBindings(ctx, tx, item.ID, workspaceID, configuration.Parameters); err != nil {
+		return domain.AppEnvironment{}, err
+	}
+	return item, tx.Commit(ctx)
 }
 
 func (s *Store) UpdateAppEnvironment(ctx context.Context, workspaceID int64, publicID, branch string, configuration domain.RuntimeConfig, version int64) (domain.AppEnvironment, error) {
@@ -81,6 +93,11 @@ func (s *Store) UpdateAppEnvironment(ctx context.Context, workspaceID int64, pub
 	if err != nil {
 		return domain.AppEnvironment{}, err
 	}
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return domain.AppEnvironment{}, err
+	}
+	defer tx.Rollback(ctx)
 	query := `WITH updated AS (
 		UPDATE app_environments SET source_branch=$3,configuration_json=$4,
 		  configuration_version=configuration_version+1,version=version+1,updated_at=now()
@@ -88,14 +105,66 @@ func (s *Store) UpdateAppEnvironment(ctx context.Context, workspaceID int64, pub
 		  AND archived_at IS NULL AND deletion_requested_at IS NULL
 		RETURNING *
 	) SELECT ` + appEnvironmentColumns + ` FROM updated ae ` + appEnvironmentJoins
-	item, err := scanAppEnvironment(s.Pool.QueryRow(ctx, query, workspaceID, publicID, branch, configurationJSON, version))
+	item, err := scanAppEnvironment(tx.QueryRow(ctx, query, workspaceID, publicID, branch, configurationJSON, version))
 	if errors.Is(err, pgx.ErrNoRows) {
-		if _, findErr := s.FindAppEnvironment(ctx, workspaceID, publicID); errors.Is(findErr, ErrNotFound) {
+		var exists bool
+		if findErr := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM app_environments WHERE workspace_id=$1 AND public_id=$2 AND archived_at IS NULL)`, workspaceID, publicID).Scan(&exists); findErr != nil {
+			return domain.AppEnvironment{}, findErr
+		}
+		if !exists {
 			return domain.AppEnvironment{}, ErrNotFound
 		}
 		return domain.AppEnvironment{}, ErrVersionConflict
 	}
-	return item, translateDBError(err)
+	if err != nil {
+		return domain.AppEnvironment{}, translateDBError(err)
+	}
+	if err = replaceParameterBindings(ctx, tx, item.ID, workspaceID, configuration.Parameters); err != nil {
+		return domain.AppEnvironment{}, err
+	}
+	return item, tx.Commit(ctx)
+}
+
+func replaceParameterBindings(ctx context.Context, tx pgx.Tx, appEnvironmentID, workspaceID int64, bindings []domain.ParameterBinding) error {
+	if _, err := tx.Exec(ctx, `DELETE FROM app_environment_parameter_bindings WHERE app_environment_id=$1`, appEnvironmentID); err != nil {
+		return err
+	}
+	for _, binding := range bindings {
+		tag, err := tx.Exec(ctx, `INSERT INTO app_environment_parameter_bindings(app_environment_id,environment_name,parameter_id,parameter_version)
+			SELECT $1,$2,p.id,$4 FROM parameters p JOIN parameter_versions pv ON pv.parameter_id=p.id AND pv.version=$4
+			WHERE p.workspace_id=$3 AND p.public_id=$5 AND p.archived_at IS NULL`, appEnvironmentID, binding.Name, workspaceID, binding.ParameterVersion, binding.ParameterPublicID)
+		if err != nil {
+			return translateDBError(err)
+		}
+		if tag.RowsAffected() != 1 {
+			return ErrParameterBinding
+		}
+	}
+	return nil
+}
+
+func (s *Store) ResolveParameterBindings(ctx context.Context, workspaceID int64, bindings []domain.ParameterBinding) ([]domain.ResolvedParameter, error) {
+	resolved := make([]domain.ResolvedParameter, 0, len(bindings))
+	for _, binding := range bindings {
+		var item domain.ResolvedParameter
+		item.Binding = binding
+		var plainText *string
+		err := s.Pool.QueryRow(ctx, `SELECT p.kind,pv.plaintext_value,COALESCE(pv.secret_reference,''),COALESCE(pv.secret_backend_version,0)
+			FROM parameters p JOIN parameter_versions pv ON pv.parameter_id=p.id
+			WHERE p.workspace_id=$1 AND p.public_id=$2 AND pv.version=$3`, workspaceID, binding.ParameterPublicID, binding.ParameterVersion).
+			Scan(&item.Kind, &plainText, &item.SecretReference, &item.SecretBackendVersion)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		if err != nil {
+			return nil, err
+		}
+		if plainText != nil {
+			item.PlainTextValue = *plainText
+		}
+		resolved = append(resolved, item)
+	}
+	return resolved, nil
 }
 
 func (s *Store) ListAppEnvironments(ctx context.Context, workspaceID int64, projectPublicID, appPublicID string, beforeID int64, limit int) ([]domain.AppEnvironment, string, error) {
@@ -344,6 +413,7 @@ func scanDeployment(row pgx.Row) (domain.Deployment, error) {
 	if err = jsonUnmarshal(configuration, &item.Configuration); err != nil {
 		return domain.Deployment{}, err
 	}
+	item.Configuration = domain.NormalizeRuntimeConfig(item.Configuration)
 	return item, nil
 }
 

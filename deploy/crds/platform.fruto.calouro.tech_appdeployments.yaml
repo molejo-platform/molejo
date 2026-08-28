@@ -50,6 +50,10 @@ spec:
             description: AppDeploymentSpec declares the minimum workload intent understood
               by the platform operator.
             properties:
+              configMapRef:
+                description: ConfigMapRef names an immutable ConfigMap prepared by
+                  the control plane.
+                type: string
               exposure:
                 default: Private
                 description: Exposure controls whether the workload is reachable through
@@ -157,6 +161,10 @@ spec:
                   rule: self.requests.cpuMillis <= self.limits.cpuMillis
                 - message: memory requests must not exceed memory limits
                   rule: self.requests.memoryMiB <= self.limits.memoryMiB
+              secretRef:
+                description: SecretRef names an immutable Secret prepared by the control
+                  plane.
+                type: string
               slug:
                 description: Slug is the globally unique DNS label used for public
                   exposure.

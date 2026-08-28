@@ -376,6 +376,8 @@ var ErrNameConflict = fmt.Errorf("name conflict: %w", ErrConflict)
 
 var ErrDependencyConflict = fmt.Errorf("dependency conflict: %w", ErrConflict)
 
+var ErrParameterBinding = errors.New("parameter binding is invalid")
+
 var ErrLeaseLost = errors.New("operation lease lost")
 
 var ErrNotFound = errors.New("not found")

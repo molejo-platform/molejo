@@ -46,6 +46,8 @@ func run() error {
 		return bootstrap()
 	case "build-worker":
 		return runBuildWorker()
+	case "runtime-worker":
+		return runRuntimeWorker()
 	}
 	if command != "serve" {
 		return fmt.Errorf("unknown command %q", command)
@@ -136,11 +138,6 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	workerDone := make(chan struct{})
-	go func() {
-		defer close(workerDone)
-		server.RunWorker(ctx, env("FRUTO_WORKER_ID", "control-plane-1"))
-	}()
 	httpServer := &http.Server{Addr: env("FRUTO_HTTP_ADDR", ":8080"), Handler: server.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 20 * time.Second, WriteTimeout: 20 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
 	go func() {
 		<-ctx.Done()
@@ -150,22 +147,62 @@ func run() error {
 	}()
 	slog.Info("control plane listening", "address", httpServer.Addr)
 	if err = httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		cancel()
-		<-workerDone
 		return err
-	}
-	select {
-	case <-workerDone:
-	case <-time.After(5 * time.Second):
-		return fmt.Errorf("worker shutdown timed out")
 	}
 	return nil
 }
 
+func runRuntimeWorker() error {
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+	databaseURL := strings.TrimSpace(os.Getenv("FRUTO_DATABASE_URL"))
+	if databaseURL == "" {
+		return fmt.Errorf("FRUTO_DATABASE_URL is required")
+	}
+	s, err := store.New(ctx, databaseURL)
+	if err != nil {
+		return err
+	}
+	defer s.Close()
+	if err = s.SchemaReady(ctx); err != nil {
+		return fmt.Errorf("runtime schema is not ready: %w", err)
+	}
+	rt, err := runtimeClient(10 * time.Second)
+	if err != nil {
+		return err
+	}
+	if rt == nil {
+		return fmt.Errorf("runtime is not configured")
+	}
+	if preflight, ok := rt.(interface{ Preflight(context.Context) error }); ok {
+		if err = preflight.Preflight(ctx); err != nil {
+			return fmt.Errorf("runtime preflight: %w", err)
+		}
+	}
+	backend, err := openBaoStore()
+	if err != nil {
+		return err
+	}
+	cfg := api.DefaultConfig()
+	if value := os.Getenv("FRUTO_OPERATION_LEASE"); value != "" {
+		cfg.OperationLease, err = durationEnv("FRUTO_OPERATION_LEASE", cfg.OperationLease)
+		if err != nil {
+			return err
+		}
+	}
+	worker := api.NewServer(s, rt, cfg, slog.Default())
+	worker.ParameterSecrets = backend
+	worker.RunWorker(ctx, env("FRUTO_RUNTIME_WORKER_ID", "runtime-worker-1"))
+	return nil
+}
+
 func parameterSecretStore() (parameters.SecretValueStore, []byte, error) {
-	address := strings.TrimSpace(os.Getenv("FRUTO_OPENBAO_ADDR"))
-	if address == "" {
-		return parameters.UnavailableStore{}, nil, nil
+	backend, err := openBaoStore()
+	if err != nil {
+		return nil, nil, err
+	}
+	if _, unavailable := backend.(parameters.UnavailableStore); unavailable {
+		return backend, nil, nil
 	}
 	fingerprintKey, err := readSecretFile("FRUTO_PARAMETER_FINGERPRINT_KEY_FILE")
 	if err != nil {
@@ -174,17 +211,25 @@ func parameterSecretStore() (parameters.SecretValueStore, []byte, error) {
 	if len(fingerprintKey) < 32 {
 		return nil, nil, fmt.Errorf("FRUTO_PARAMETER_FINGERPRINT_KEY_FILE must contain at least 32 bytes")
 	}
+	return backend, []byte(fingerprintKey), nil
+}
+
+func openBaoStore() (parameters.SecretValueStore, error) {
+	address := strings.TrimSpace(os.Getenv("FRUTO_OPENBAO_ADDR"))
+	if address == "" {
+		return parameters.UnavailableStore{}, nil
+	}
 	caPath := strings.TrimSpace(os.Getenv("FRUTO_OPENBAO_CA_FILE"))
 	if caPath == "" {
-		return nil, nil, fmt.Errorf("FRUTO_OPENBAO_CA_FILE is required")
+		return nil, fmt.Errorf("FRUTO_OPENBAO_CA_FILE is required")
 	}
 	caPEM, err := os.ReadFile(caPath)
 	if err != nil {
-		return nil, nil, fmt.Errorf("read OpenBao CA: %w", err)
+		return nil, fmt.Errorf("read OpenBao CA: %w", err)
 	}
 	roots := x509.NewCertPool()
 	if !roots.AppendCertsFromPEM(caPEM) {
-		return nil, nil, fmt.Errorf("OpenBao CA is invalid")
+		return nil, fmt.Errorf("OpenBao CA is invalid")
 	}
 	client := &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots}}}
 	backend, err := parameters.NewOpenBaoKV2(parameters.OpenBaoConfig{
@@ -196,9 +241,24 @@ func parameterSecretStore() (parameters.SecretValueStore, []byte, error) {
 		HTTPClient:              client,
 	})
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return backend, []byte(fingerprintKey), nil
+	return backend, nil
+}
+
+func runtimeClient(timeout time.Duration) (runtime.Client, error) {
+	if kubeconfig := os.Getenv("KUBECONFIG"); kubeconfig != "" {
+		return runtime.NewKubernetesClient(runtime.ExternalConfig{
+			Kubeconfig:         kubeconfig,
+			Context:            os.Getenv("FRUTO_EXPECTED_KUBE_CONTEXT"),
+			Server:             os.Getenv("FRUTO_EXPECTED_KUBE_SERVER"),
+			ExpectedClusterUID: os.Getenv("FRUTO_EXPECTED_CLUSTER_UID"),
+		}, env("FRUTO_FIELD_MANAGER", "fruto-control-plane"), timeout)
+	}
+	if os.Getenv("FRUTO_IN_CLUSTER") == "true" {
+		return runtime.NewInClusterClient(env("FRUTO_FIELD_MANAGER", "fruto-control-plane"), timeout, os.Getenv("FRUTO_EXPECTED_CLUSTER_UID"))
+	}
+	return nil, nil
 }
 
 func runBuildWorker() error {

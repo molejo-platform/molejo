@@ -411,6 +411,25 @@ func (s *Server) RunOnce(ctx context.Context, workerID string) (bool, error) {
 		return true, s.Store.CompleteAppEnvironmentDeletion(ctx, op, obs.Message)
 	}
 	intent := domain.IntentFromConfiguration(deployment.Image, deployment.Configuration)
+	intent.ConfigurationVersion = deployment.ConfigurationVersion
+	resolved, err := s.Store.ResolveParameterBindings(ctx, deployment.WorkspaceID, deployment.Configuration.Parameters)
+	if err != nil {
+		return true, s.failOperation(ctx, op, "configuration_unavailable", "configuration references are unavailable", false)
+	}
+	for _, parameter := range resolved {
+		switch parameter.Kind {
+		case domain.ParameterPlainText:
+			intent.Variables = append(intent.Variables, domain.Variable{Name: parameter.Binding.Name, Value: parameter.PlainTextValue})
+		case domain.ParameterSecret:
+			value, secretErr := s.ParameterSecrets.Get(ctx, parameter.SecretReference, parameter.SecretBackendVersion)
+			if secretErr != nil {
+				return true, s.failOperation(ctx, op, "secret_unavailable", "secret configuration is unavailable", true)
+			}
+			intent.SecretVariables = append(intent.SecretVariables, domain.Variable{Name: parameter.Binding.Name, Value: value})
+		default:
+			return true, s.failOperation(ctx, op, "configuration_invalid", "configuration reference type is invalid", false)
+		}
+	}
 	if err = s.Runtime.ApplyDeployment(ctx, workspace.Namespace, appEnvironment.RuntimeName, intent); err != nil {
 		return true, s.failOperation(ctx, op, "runtime_error", "runtime operation failed", true)
 	}

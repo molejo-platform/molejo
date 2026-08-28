@@ -85,6 +85,14 @@ type AppDeploymentSpec struct {
 	// +listMapKey=name
 	// +kubebuilder:validation:MaxItems=100
 	Variables []AppDeploymentVariable `json:"variables,omitempty"`
+
+	// ConfigMapRef names an immutable ConfigMap prepared by the control plane.
+	// +optional
+	ConfigMapRef string `json:"configMapRef,omitempty"`
+
+	// SecretRef names an immutable Secret prepared by the control plane.
+	// +optional
+	SecretRef string `json:"secretRef,omitempty"`
 }
 
 // AppDeploymentVariable declares one non-secret environment variable.

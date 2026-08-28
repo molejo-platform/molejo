@@ -17,7 +17,7 @@ const target = vi.hoisted(() => ({
   environmentId: "env-aaaaaaaaaaaaaaaaaaaa",
   environmentName: "Production",
   branch: "main",
-  configuration: { replicas: 1, port: 8080, resources: { requests: { cpuMillis: 50, memoryMiB: 64 }, limits: { cpuMillis: 250, memoryMiB: 128 } }, probes: { liveness: { path: "/healthz" }, readiness: { path: "/readyz" } }, exposure: "Private", variables: [] },
+  configuration: { replicas: 1, port: 8080, resources: { requests: { cpuMillis: 50, memoryMiB: 64 }, limits: { cpuMillis: 250, memoryMiB: 128 } }, probes: { liveness: { path: "/healthz" }, readiness: { path: "/readyz" } }, exposure: "Private", variables: [], parameters: [] },
   configurationVersion: 1,
   version: 1,
   state: "Ready",
@@ -41,6 +41,7 @@ vi.mock("@tanstack/react-router", () => ({
   Link: ({ children }: { children: React.ReactNode }) => <a href="#target">{children}</a>,
 }));
 vi.mock("../auth/model", () => ({ useSessionQuery: () => ({ data: { actor: { id: "actor", role: "owner" } } }) }));
+vi.mock("../parameters/api", () => ({ listParameters: vi.fn().mockResolvedValue({ items: [{ id: "par-aaaaaaaaaaaaaaaaaaaa", path: "/shared/api-token", type: "Secret", description: "", currentVersion: 2, version: 2, configured: true, createdAt: "2026-08-27T00:00:00Z", updatedAt: "2026-08-27T00:00:00Z" }], nextCursor: null }) }));
 vi.mock("./ProjectEnvironmentLayout", () => ({ ProjectEnvironmentLayout: ({ children }: { children: React.ReactNode }) => <>{children}</> }));
 vi.mock("../projects/api", () => ({
   createApp: mocks.createApp,
@@ -93,10 +94,11 @@ describe("Environment-first project experience", () => {
     await user.selectOptions(screen.getByLabelText("App existente"), "app-bbbbbbbbbbbbbbbbbbbb");
     await user.clear(screen.getByLabelText("Branch"));
     await user.type(screen.getByLabelText("Branch"), "develop");
-    await user.type(screen.getByLabelText("Variáveis não secretas"), "APP_MODE=staging");
+    await user.type(screen.getByLabelText("Variáveis comuns"), "APP_MODE=staging");
+    await user.click(screen.getByRole("button", { name: "Adicionar parâmetro" }));
     await user.click(screen.getByRole("button", { name: "Adicionar ao Environment" }));
 
-    await waitFor(() => expect(mocks.createAppEnvironment).toHaveBeenCalledWith(params.workspaceId, params.projectId, "app-bbbbbbbbbbbbbbbbbbbb", expect.objectContaining({ environmentId: params.environmentId, branch: "develop", configuration: expect.objectContaining({ variables: [{ name: "APP_MODE", value: "staging" }] }) })));
+    await waitFor(() => expect(mocks.createAppEnvironment).toHaveBeenCalledWith(params.workspaceId, params.projectId, "app-bbbbbbbbbbbbbbbbbbbb", expect.objectContaining({ environmentId: params.environmentId, branch: "develop", configuration: expect.objectContaining({ variables: [{ name: "APP_MODE", value: "staging" }], parameters: [{ name: "API_TOKEN", parameterId: "par-aaaaaaaaaaaaaaaaaaaa", parameterVersion: 2 }] }) })));
   });
 
   it("creates a new App and immediately configures it in the active Environment", async () => {

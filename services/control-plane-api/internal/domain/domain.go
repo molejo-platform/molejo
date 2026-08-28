@@ -95,25 +95,44 @@ type ParameterValue struct {
 	Fingerprint          []byte
 }
 
+type ParameterBinding struct {
+	Name              string `json:"name"`
+	ParameterPublicID string `json:"parameterId"`
+	ParameterVersion  int64  `json:"parameterVersion"`
+}
+
+type ResolvedParameter struct {
+	Binding              ParameterBinding
+	Kind                 string
+	PlainTextValue       string
+	SecretReference      string
+	SecretBackendVersion int64
+}
+
 type RuntimeConfig struct {
-	Replicas  int32      `json:"replicas"`
-	Port      int32      `json:"port"`
-	Resources Resources  `json:"resources"`
-	Probes    Probes     `json:"probes"`
-	Exposure  string     `json:"exposure"`
-	Slug      string     `json:"slug,omitempty"`
-	Variables []Variable `json:"variables"`
+	Replicas   int32              `json:"replicas"`
+	Port       int32              `json:"port"`
+	Resources  Resources          `json:"resources"`
+	Probes     Probes             `json:"probes"`
+	Exposure   string             `json:"exposure"`
+	Slug       string             `json:"slug,omitempty"`
+	Variables  []Variable         `json:"variables"`
+	Parameters []ParameterBinding `json:"parameters"`
 }
 
 type Intent struct {
-	Image     string     `json:"image"`
-	Replicas  int32      `json:"replicas"`
-	Port      int32      `json:"port"`
-	Resources Resources  `json:"resources"`
-	Probes    Probes     `json:"probes"`
-	Exposure  string     `json:"exposure"`
-	Slug      string     `json:"slug,omitempty"`
-	Variables []Variable `json:"variables"`
+	Image                string     `json:"image"`
+	Replicas             int32      `json:"replicas"`
+	Port                 int32      `json:"port"`
+	Resources            Resources  `json:"resources"`
+	Probes               Probes     `json:"probes"`
+	Exposure             string     `json:"exposure"`
+	Slug                 string     `json:"slug,omitempty"`
+	Variables            []Variable `json:"variables"`
+	ConfigMapRef         string     `json:"configMapRef,omitempty"`
+	SecretRef            string     `json:"secretRef,omitempty"`
+	SecretVariables      []Variable `json:"-"`
+	ConfigurationVersion int64      `json:"-"`
 }
 
 type Actor struct {
@@ -358,6 +377,9 @@ func NormalizeRuntimeConfig(config RuntimeConfig) RuntimeConfig {
 	if config.Variables == nil {
 		config.Variables = []Variable{}
 	}
+	if config.Parameters == nil {
+		config.Parameters = []ParameterBinding{}
+	}
 	return config
 }
 
@@ -379,7 +401,7 @@ func IntentFromConfiguration(image string, configuration RuntimeConfig) Intent {
 }
 
 func ConfigurationFromIntent(intent Intent) RuntimeConfig {
-	return RuntimeConfig{Replicas: intent.Replicas, Port: intent.Port, Resources: intent.Resources, Probes: intent.Probes, Exposure: intent.Exposure, Slug: intent.Slug, Variables: intent.Variables}
+	return RuntimeConfig{Replicas: intent.Replicas, Port: intent.Port, Resources: intent.Resources, Probes: intent.Probes, Exposure: intent.Exposure, Slug: intent.Slug, Variables: intent.Variables, Parameters: []ParameterBinding{}}
 }
 
 func ValidateRuntimeConfig(config RuntimeConfig, maxReplicas int32, maxCPU, maxMemory int64) error {
@@ -407,7 +429,10 @@ func ValidateRuntimeConfig(config RuntimeConfig, maxReplicas int32, maxCPU, maxM
 	if config.Exposure == ExposurePublic && (len(config.Slug) == 0 || len(config.Slug) > 63 || !slugPattern.MatchString(config.Slug)) {
 		return errors.New("slug is required and must be a lowercase DNS label for public exposure")
 	}
-	seen := make(map[string]struct{}, len(config.Variables))
+	if len(config.Variables)+len(config.Parameters) > 100 {
+		return errors.New("configuration must contain at most 100 variables and parameters")
+	}
+	seen := make(map[string]struct{}, len(config.Variables)+len(config.Parameters))
 	for _, variable := range config.Variables {
 		if !variableNamePattern.MatchString(variable.Name) || len(variable.Name) > 253 {
 			return errors.New("variable names must be valid environment variable identifiers")
@@ -419,6 +444,18 @@ func ValidateRuntimeConfig(config RuntimeConfig, maxReplicas int32, maxCPU, maxM
 			return errors.New("variable names must be unique")
 		}
 		seen[variable.Name] = struct{}{}
+	}
+	for _, binding := range config.Parameters {
+		if !variableNamePattern.MatchString(binding.Name) || len(binding.Name) > 253 {
+			return errors.New("parameter binding names must be valid environment variable identifiers")
+		}
+		if err := ValidateParameterID(binding.ParameterPublicID); err != nil || binding.ParameterVersion < 1 {
+			return errors.New("parameter bindings must reference an opaque Parameter identifier and positive version")
+		}
+		if _, exists := seen[binding.Name]; exists {
+			return errors.New("variable and parameter binding names must be unique")
+		}
+		seen[binding.Name] = struct{}{}
 	}
 	return nil
 }

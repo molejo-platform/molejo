@@ -22,6 +22,22 @@ func TestWorkerAppliesAnImmutableDeploymentAndCorrelatesItsLogs(t *testing.T) {
 	ctx := context.Background()
 	s, workspaceID, actorID, workspaceNamespace := newExecutorIntegrationFixture(t)
 	target, releaseID, image := createExecutorTargetAndRelease(t, s, workspaceID, actorID)
+	plainValue := "https://internal.example"
+	plain, err := s.CreateParameter(ctx, workspaceID, actorID, mustAPIID(t, "par"), "/test/internal-url", domain.ParameterPlainText, "", domain.ParameterValue{PlainTextValue: &plainValue})
+	if err != nil {
+		t.Fatal(err)
+	}
+	secretReference := "workspaces/test/parameters/runtime-token"
+	secret, err := s.CreateParameter(ctx, workspaceID, actorID, mustAPIID(t, "par"), "/test/runtime-token", domain.ParameterSecret, "", domain.ParameterValue{SecretReference: secretReference, SecretBackendVersion: 1, Fingerprint: bytes.Repeat([]byte{1}, 32)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	configuration := target.Configuration
+	configuration.Parameters = []domain.ParameterBinding{{Name: "INTERNAL_URL", ParameterPublicID: plain.PublicID, ParameterVersion: 1}, {Name: "RUNTIME_TOKEN", ParameterPublicID: secret.PublicID, ParameterVersion: 1}}
+	target, err = s.UpdateAppEnvironment(ctx, workspaceID, target.PublicID, target.SourceBranch, configuration, target.Version)
+	if err != nil {
+		t.Fatal(err)
+	}
 	deployment, operation, _, err := s.CreateDeployment(ctx, workspaceID, actorID, target.PublicID, mustAPIID(t, "dpl"), releaseID, domain.SHA256([]byte("worker-apply")), domain.SHA256([]byte("worker-apply-payload")))
 	if err != nil {
 		t.Fatal(err)
@@ -29,6 +45,7 @@ func TestWorkerAppliesAnImmutableDeploymentAndCorrelatesItsLogs(t *testing.T) {
 	runtimeClient := &recordingRuntime{}
 	var output bytes.Buffer
 	server := NewServer(s, runtimeClient, Config{OperationLease: time.Minute, WorkspaceNamespace: workspaceNamespace}, slog.New(slog.NewJSONHandler(&output, nil)))
+	server.ParameterSecrets = &recordingSecretStore{values: map[string]string{secretReference: "secret-runtime-value"}, versions: map[string]int64{secretReference: 1}}
 
 	if processed, runErr := server.RunOnce(ctx, "worker-correlation"); runErr != nil || !processed {
 		t.Fatalf("run operation: processed=%v err=%v", processed, runErr)
@@ -40,11 +57,23 @@ func TestWorkerAppliesAnImmutableDeploymentAndCorrelatesItsLogs(t *testing.T) {
 	if runtimeClient.name != target.RuntimeName || runtimeClient.intent.Image != image || current.CurrentDeploymentPublicID != deployment.PublicID || current.CurrentReleasePublicID != releaseID || current.State != domain.Ready {
 		t.Fatalf("runtime=%+v App Environment=%+v", runtimeClient, current)
 	}
+	if runtimeClient.intent.ConfigurationVersion != target.ConfigurationVersion || len(runtimeClient.intent.SecretVariables) != 1 || runtimeClient.intent.SecretVariables[0].Value != "secret-runtime-value" || !containsVariable(runtimeClient.intent.Variables, "INTERNAL_URL", plainValue) {
+		t.Fatalf("materialized intent=%+v", runtimeClient.intent)
+	}
 	for _, expected := range []string{`"operation_id":"` + operation.PublicID + `"`, `"app_environment_id":"` + target.PublicID + `"`, `"deployment_id":"` + deployment.PublicID + `"`, `"worker_id":"worker-correlation"`} {
 		if !strings.Contains(output.String(), expected) {
 			t.Errorf("worker log is missing %s: %s", expected, output.String())
 		}
 	}
+}
+
+func containsVariable(items []domain.Variable, name, value string) bool {
+	for _, item := range items {
+		if item.Name == name && item.Value == value {
+			return true
+		}
+	}
+	return false
 }
 
 func TestWorkerRetriesAppEnvironmentDeletionUntilRuntimeAbsenceIsObserved(t *testing.T) {

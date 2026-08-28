@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -174,10 +176,18 @@ func (k *KubernetesClient) ApplyDeployment(ctx context.Context, namespace, name 
 	replicas := intent.Replicas
 	resourceSpec := platformv1alpha1.AppDeploymentResources{Requests: platformv1alpha1.AppDeploymentResourceValues{CPUMillis: intent.Resources.Requests.CPUMillis, MemoryMiB: intent.Resources.Requests.MemoryMiB}, Limits: platformv1alpha1.AppDeploymentResourceValues{CPUMillis: intent.Resources.Limits.CPUMillis, MemoryMiB: intent.Resources.Limits.MemoryMiB}}
 	variables := make([]platformv1alpha1.AppDeploymentVariable, 0, len(intent.Variables))
-	for _, variable := range intent.Variables {
-		variables = append(variables, platformv1alpha1.AppDeploymentVariable{Name: variable.Name, Value: variable.Value})
+	configMapRef, secretRef := intent.ConfigMapRef, intent.SecretRef
+	if intent.ConfigurationVersion > 0 {
+		configMapRef, secretRef, err = k.materializeConfiguration(applyCtx, namespace, name, intent.ConfigurationVersion, intent.Variables, intent.SecretVariables)
+		if err != nil {
+			return err
+		}
+	} else {
+		for _, variable := range intent.Variables {
+			variables = append(variables, platformv1alpha1.AppDeploymentVariable{Name: variable.Name, Value: variable.Value})
+		}
 	}
-	obj := &platformv1alpha1.AppDeployment{TypeMeta: metav1.TypeMeta{APIVersion: "platform.fruto.calouro.tech/v1alpha1", Kind: "AppDeployment"}, ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, Annotations: map[string]string{controlPlaneOwnerAnnotation: name}}, Spec: platformv1alpha1.AppDeploymentSpec{Image: intent.Image, Replicas: &replicas, Port: intent.Port, Resources: resourceSpec, Probes: platformv1alpha1.AppDeploymentProbes{Liveness: platformv1alpha1.AppDeploymentHTTPProbe{Path: intent.Probes.Liveness.Path}, Readiness: platformv1alpha1.AppDeploymentHTTPProbe{Path: intent.Probes.Readiness.Path}}, Exposure: platformv1alpha1.AppDeploymentExposure(intent.Exposure), Slug: intent.Slug, Variables: variables}}
+	obj := &platformv1alpha1.AppDeployment{TypeMeta: metav1.TypeMeta{APIVersion: "platform.fruto.calouro.tech/v1alpha1", Kind: "AppDeployment"}, ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, Annotations: map[string]string{controlPlaneOwnerAnnotation: name}}, Spec: platformv1alpha1.AppDeploymentSpec{Image: intent.Image, Replicas: &replicas, Port: intent.Port, Resources: resourceSpec, Probes: platformv1alpha1.AppDeploymentProbes{Liveness: platformv1alpha1.AppDeploymentHTTPProbe{Path: intent.Probes.Liveness.Path}, Readiness: platformv1alpha1.AppDeploymentHTTPProbe{Path: intent.Probes.Readiness.Path}}, Exposure: platformv1alpha1.AppDeploymentExposure(intent.Exposure), Slug: intent.Slug, Variables: variables, ConfigMapRef: configMapRef, SecretRef: secretRef}}
 	if !exists {
 		if err := k.client.Create(applyCtx, obj, client.FieldOwner(k.fieldManager)); err != nil {
 			if apierrors.IsAlreadyExists(err) {
@@ -189,6 +199,78 @@ func (k *KubernetesClient) ApplyDeployment(ctx context.Context, namespace, name 
 	}
 	if err := k.client.Patch(applyCtx, obj, client.Apply, client.FieldOwner(k.fieldManager), client.ForceOwnership); err != nil {
 		return fmt.Errorf("apply AppDeployment: %w", err)
+	}
+	return nil
+}
+
+func (k *KubernetesClient) materializeConfiguration(ctx context.Context, namespace, owner string, version int64, plain, secret []domain.Variable) (string, string, error) {
+	immutable := true
+	labels := map[string]string{"app.kubernetes.io/managed-by": workspaceOwnerValue, "platform.fruto.calouro.tech/configuration-version": strconv.FormatInt(version, 10)}
+	annotations := map[string]string{controlPlaneOwnerAnnotation: owner}
+	configMapName := fmt.Sprintf("%s-c%d", owner, version)
+	plainData := make(map[string]string, len(plain))
+	for _, variable := range plain {
+		plainData[variable.Name] = variable.Value
+	}
+	configMap := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: configMapName, Namespace: namespace, Labels: labels, Annotations: annotations}, Immutable: &immutable, Data: plainData}
+	if err := k.createOrVerifyConfigMap(ctx, configMap, owner); err != nil {
+		return "", "", err
+	}
+	secretName := ""
+	if len(secret) > 0 {
+		secretName = configMapName + "-secret"
+		secretData := make(map[string][]byte, len(secret))
+		for _, variable := range secret {
+			secretData[variable.Name] = []byte(variable.Value)
+		}
+		secretObject := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: namespace, Labels: labels, Annotations: annotations}, Immutable: &immutable, Data: secretData}
+		if err := k.createOrVerifySecret(ctx, secretObject, owner); err != nil {
+			return "", "", err
+		}
+	}
+	return configMapName, secretName, nil
+}
+
+func (k *KubernetesClient) createOrVerifyConfigMap(ctx context.Context, desired *corev1.ConfigMap, owner string) error {
+	var current corev1.ConfigMap
+	err := k.client.Get(ctx, types.NamespacedName{Namespace: desired.Namespace, Name: desired.Name}, &current)
+	if apierrors.IsNotFound(err) {
+		if err = k.client.Create(ctx, desired); err != nil && !apierrors.IsAlreadyExists(err) {
+			return fmt.Errorf("create immutable ConfigMap: %w", err)
+		}
+		if err == nil {
+			return nil
+		}
+		err = k.client.Get(ctx, types.NamespacedName{Namespace: desired.Namespace, Name: desired.Name}, &current)
+	}
+	if err != nil {
+		return fmt.Errorf("read immutable ConfigMap: %w", err)
+	}
+	dataMatches := len(current.Data) == len(desired.Data) && (len(current.Data) == 0 || reflect.DeepEqual(current.Data, desired.Data))
+	if current.Annotations[controlPlaneOwnerAnnotation] != owner || current.Immutable == nil || !*current.Immutable || !dataMatches {
+		return fmt.Errorf("%w: ConfigMap %s/%s differs from the immutable configuration", ErrOwnershipConflict, desired.Namespace, desired.Name)
+	}
+	return nil
+}
+
+func (k *KubernetesClient) createOrVerifySecret(ctx context.Context, desired *corev1.Secret, owner string) error {
+	var current corev1.Secret
+	err := k.client.Get(ctx, types.NamespacedName{Namespace: desired.Namespace, Name: desired.Name}, &current)
+	if apierrors.IsNotFound(err) {
+		if err = k.client.Create(ctx, desired); err != nil && !apierrors.IsAlreadyExists(err) {
+			return fmt.Errorf("create immutable Secret: %w", err)
+		}
+		if err == nil {
+			return nil
+		}
+		err = k.client.Get(ctx, types.NamespacedName{Namespace: desired.Namespace, Name: desired.Name}, &current)
+	}
+	if err != nil {
+		return fmt.Errorf("read immutable Secret: %w", err)
+	}
+	dataMatches := len(current.Data) == len(desired.Data) && (len(current.Data) == 0 || reflect.DeepEqual(current.Data, desired.Data))
+	if current.Annotations[controlPlaneOwnerAnnotation] != owner || current.Immutable == nil || !*current.Immutable || !dataMatches {
+		return fmt.Errorf("%w: Secret %s/%s differs from the immutable configuration", ErrOwnershipConflict, desired.Namespace, desired.Name)
 	}
 	return nil
 }

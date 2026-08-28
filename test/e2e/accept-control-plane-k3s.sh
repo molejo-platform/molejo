@@ -17,6 +17,7 @@ for job in control-plane-migrate control-plane-bootstrap; do
   [[ "$(kubectl --context "$context" -n fruto-control-plane get job "$job" -o jsonpath='{.status.conditions[?(@.type=="Complete")].status}')" == True ]]
 done
 [[ "$(kubectl --context "$context" -n fruto-control-plane get deployment control-plane-api -o jsonpath='{.spec.template.spec.containers[0].image}')" == "$api_image" ]]
+[[ "$(kubectl --context "$context" -n fruto-control-plane get deployment control-plane-runtime-worker -o jsonpath='{.spec.template.spec.containers[0].image}')" == "$api_image" ]]
 [[ "$(kubectl --context "$context" -n fruto-control-plane get deployment console-web -o jsonpath='{.spec.template.spec.containers[0].image}')" == "$console_image" ]]
 
 for route in control-plane-console; do
@@ -25,12 +26,16 @@ for route in control-plane-console; do
   jq -e 'any(.status.parents[].conditions[]; .type == "ResolvedRefs" and .status == "True")' <<<"$conditions" >/dev/null
 done
 
-identity="system:serviceaccount:fruto-control-plane:control-plane-api"
-[[ "$(kubectl --context "$context" auth can-i get appdeployments.platform.fruto.calouro.tech --as="$identity" -n fruto-workspaces)" == yes ]]
-[[ "$(kubectl --context "$context" auth can-i patch appdeployments.platform.fruto.calouro.tech --as="$identity" -n fruto-workspaces)" == yes ]]
-[[ "$(kubectl --context "$context" auth can-i update appdeployments.platform.fruto.calouro.tech/status --as="$identity" -n fruto-workspaces)" == no ]]
-[[ "$(kubectl --context "$context" auth can-i get secrets --as="$identity" -n fruto-control-plane)" == no ]]
-[[ "$(kubectl --context "$context" auth can-i get deployments.apps --as="$identity" -n fruto-workspaces)" == no ]]
+api_identity="system:serviceaccount:fruto-control-plane:control-plane-api"
+worker_identity="system:serviceaccount:fruto-control-plane:control-plane-runtime-worker"
+[[ "$(kubectl --context "$context" auth can-i get appdeployments.platform.fruto.calouro.tech --as="$api_identity" -n fruto-workspaces)" == no ]]
+[[ "$(kubectl --context "$context" auth can-i get secrets --as="$api_identity" -n fruto-workspaces)" == no ]]
+[[ "$(kubectl --context "$context" auth can-i get appdeployments.platform.fruto.calouro.tech --as="$worker_identity" -n fruto-workspaces)" == yes ]]
+[[ "$(kubectl --context "$context" auth can-i patch appdeployments.platform.fruto.calouro.tech --as="$worker_identity" -n fruto-workspaces)" == yes ]]
+[[ "$(kubectl --context "$context" auth can-i update appdeployments.platform.fruto.calouro.tech/status --as="$worker_identity" -n fruto-workspaces)" == no ]]
+[[ "$(kubectl --context "$context" auth can-i create secrets --as="$worker_identity" -n fruto-workspaces)" == yes ]]
+[[ "$(kubectl --context "$context" auth can-i get secrets --as="$worker_identity" -n fruto-control-plane)" == no ]]
+[[ "$(kubectl --context "$context" auth can-i get deployments.apps --as="$worker_identity" -n fruto-workspaces)" == no ]]
 
 https_result="$(curl --silent --show-error --output /dev/null --write-out '%{http_code} %{ssl_verify_result}' --max-time 15 https://cloud.molejo.dev/)"
 [[ "$https_result" == "200 0" ]]

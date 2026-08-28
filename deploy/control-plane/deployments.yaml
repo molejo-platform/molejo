@@ -32,8 +32,6 @@ spec:
             - name: FRUTO_DATABASE_URL
               valueFrom:
                 secretKeyRef: { name: fruto-control-plane-db, key: database-url }
-            - name: FRUTO_IN_CLUSTER
-              value: "true"
             - name: GITHUB_APP_ID
               valueFrom:
                 secretKeyRef: { name: molejo-github-app, key: GITHUB_APP_ID, optional: true }
@@ -93,6 +91,56 @@ spec:
         - name: parameter-fingerprint
           secret:
             secretName: fruto-parameter-fingerprint
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: control-plane-runtime-worker
+  namespace: fruto-control-plane
+  labels:
+    app.kubernetes.io/name: control-plane-runtime-worker
+    app.kubernetes.io/part-of: fruto-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: control-plane-runtime-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: control-plane-runtime-worker
+        app.kubernetes.io/part-of: fruto-platform
+    spec:
+      serviceAccountName: control-plane-runtime-worker
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: worker
+          image: ghcr.io/fruto-platform/control-plane-api@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          imagePullPolicy: IfNotPresent
+          args: ["runtime-worker"]
+          envFrom:
+            - configMapRef: { name: control-plane-config }
+          env:
+            - name: FRUTO_DATABASE_URL
+              valueFrom:
+                secretKeyRef: { name: fruto-control-plane-db, key: database-url }
+            - { name: FRUTO_IN_CLUSTER, value: "true" }
+            - { name: FRUTO_OPENBAO_ROLE, value: molejo-parameter-reader }
+            - { name: FRUTO_OPENBAO_CA_FILE, value: /var/run/secrets/molejo/openbao/ca.crt }
+          volumeMounts:
+            - { name: openbao-ca, mountPath: /var/run/secrets/molejo/openbao, readOnly: true }
+          resources:
+            requests: { cpu: 25m, memory: 64Mi }
+            limits: { cpu: 250m, memory: 256Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
+            readOnlyRootFilesystem: true
+      volumes:
+        - name: openbao-ca
+          configMap: { name: openbao-ca }
 ---
 apiVersion: apps/v1
 kind: Deployment

@@ -925,8 +925,10 @@ func newAppDeployment(namespace string, name string, image string) *platformv1al
 		},
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 		Spec: platformv1alpha1.AppDeploymentSpec{
-			Image: image,
-			Port:  8080,
+			Image:        image,
+			Port:         8080,
+			ConfigMapRef: name + "-c1",
+			SecretRef:    name + "-c1-secret",
 			Variables: []platformv1alpha1.AppDeploymentVariable{
 				{Name: "APP_MODE", Value: "test"},
 			},
@@ -972,6 +974,9 @@ func assertDeploymentRuntime(
 	container := deployment.Spec.Template.Spec.Containers[0]
 	if len(container.Env) != len(spec.Variables) || container.Env[0].Name != spec.Variables[0].Name || container.Env[0].Value != spec.Variables[0].Value {
 		t.Fatalf("unexpected environment variables: %#v", container.Env)
+	}
+	if len(container.EnvFrom) != 2 || container.EnvFrom[0].ConfigMapRef == nil || container.EnvFrom[0].ConfigMapRef.Name != spec.ConfigMapRef || container.EnvFrom[1].SecretRef == nil || container.EnvFrom[1].SecretRef.Name != spec.SecretRef {
+		t.Fatalf("unexpected environment references: %#v", container.EnvFrom)
 	}
 	if len(container.Ports) != 1 || container.Ports[0].Name != httpPortName ||
 		container.Ports[0].ContainerPort != spec.Port || container.Ports[0].Protocol != corev1.ProtocolTCP {

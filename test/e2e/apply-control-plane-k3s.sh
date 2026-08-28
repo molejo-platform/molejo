@@ -37,6 +37,7 @@ kubectl --context "$context" -n fruto-control-plane wait --for=condition=complet
 yq ea 'select(.kind == "Deployment" or .kind == "HTTPRoute")' "$release_file" |
   kubectl --context "$context" apply --server-side -f - >/dev/null
 kubectl --context "$context" -n fruto-control-plane rollout status deployment/control-plane-api --timeout=300s
+kubectl --context "$context" -n fruto-control-plane rollout status deployment/control-plane-runtime-worker --timeout=300s
 kubectl --context "$context" -n fruto-control-plane rollout status deployment/console-web --timeout=300s
 
 for route in control-plane-console; do

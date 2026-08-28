@@ -687,6 +687,11 @@ export interface components {
             name: string;
             value: string;
         };
+        ParameterBinding: {
+            name: string;
+            parameterId: string;
+            parameterVersion: number;
+        };
         ParameterInput: {
             path: string;
             /** @enum {string} */
@@ -730,6 +735,7 @@ export interface components {
             exposure: "Private" | "Public";
             slug?: string;
             variables: components["schemas"]["Variable"][];
+            parameters: components["schemas"]["ParameterBinding"][];
         };
         AppEnvironmentInput: {
             branch: string;

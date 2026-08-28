@@ -112,7 +112,7 @@ func TestOpenAPIRuntimeConfigurationConstraintsMatchDomainBoundaries(t *testing.
 	if configuration.AdditionalProperties == nil || *configuration.AdditionalProperties {
 		t.Fatal("OpenAPI RuntimeConfiguration must reject unknown fields")
 	}
-	if !reflect.DeepEqual(configuration.Required, []string{"replicas", "port", "resources", "probes", "exposure", "variables"}) {
+	if !reflect.DeepEqual(configuration.Required, []string{"replicas", "port", "resources", "probes", "exposure", "variables", "parameters"}) {
 		t.Fatalf("OpenAPI RuntimeConfiguration required fields drifted: %v", configuration.Required)
 	}
 	assertProperty := func(name string, got property, pattern string, minimum, maximum *int64, defaultValue any, enum []string) {
@@ -140,6 +140,20 @@ func TestOpenAPIRuntimeConfigurationConstraintsMatchDomainBoundaries(t *testing.
 		if value.AdditionalProperties == nil || *value.AdditionalProperties {
 			t.Errorf("OpenAPI %s must reject unknown fields", name)
 		}
+	}
+}
+
+func TestValidateRuntimeConfigRejectsAmbiguousParameterBindings(t *testing.T) {
+	configuration := ConfigurationFromIntent(validIntent())
+	configuration.Parameters = []ParameterBinding{{Name: "DATABASE_URL", ParameterPublicID: "par-abcdefghijklmnopqrst", ParameterVersion: 1}}
+	configuration.Variables = []Variable{{Name: "DATABASE_URL", Value: "inline"}}
+	if err := ValidateRuntimeConfig(configuration, 5, 2000, 2048); err == nil {
+		t.Fatal("ValidateRuntimeConfig accepted duplicate inline and parameter names")
+	}
+	configuration.Variables = nil
+	configuration.Parameters[0].ParameterVersion = 0
+	if err := ValidateRuntimeConfig(configuration, 5, 2000, 2048); err == nil {
+		t.Fatal("ValidateRuntimeConfig accepted a non-positive parameter version")
 	}
 }
 

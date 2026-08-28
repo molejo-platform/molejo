@@ -534,6 +534,13 @@ type Parameter struct {
 // ParameterType defines model for Parameter.Type.
 type ParameterType string
 
+// ParameterBinding defines model for ParameterBinding.
+type ParameterBinding struct {
+	Name             string `json:"name"`
+	ParameterId      string `json:"parameterId"`
+	ParameterVersion int    `json:"parameterVersion"`
+}
+
 // ParameterInput defines model for ParameterInput.
 type ParameterInput struct {
 	Description *string            `json:"description,omitempty"`
@@ -584,9 +591,10 @@ type ResourceValues struct {
 
 // RuntimeConfiguration defines model for RuntimeConfiguration.
 type RuntimeConfiguration struct {
-	Exposure RuntimeConfigurationExposure `json:"exposure"`
-	Port     int                          `json:"port"`
-	Probes   struct {
+	Exposure   RuntimeConfigurationExposure `json:"exposure"`
+	Parameters []ParameterBinding           `json:"parameters"`
+	Port       int                          `json:"port"`
+	Probes     struct {
 		Liveness  Probe `json:"liveness"`
 		Readiness Probe `json:"readiness"`
 	} `json:"probes"`

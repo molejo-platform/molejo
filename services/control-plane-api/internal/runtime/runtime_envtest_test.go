@@ -7,6 +7,7 @@ import (
 	"time"
 
 	platformv1alpha1 "github.com/fruto-platform/fruto/packages/kubernetes-api/apis/platform/v1alpha1"
+	"github.com/fruto-platform/fruto/services/control-plane-api/internal/domain"
 	corev1 "k8s.io/api/core/v1"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -40,12 +41,16 @@ func TestEnvtestEnsuresExactWorkspaceAndAppDeploymentIdempotently(t *testing.T) 
 	}
 	adapter := &KubernetesClient{client: runtimeClient, fieldManager: "envtest-control-plane", applyTimeout: 5 * time.Second}
 	ctx := context.Background()
+	intent := runtimeTestIntent("envtest")
+	intent.Variables = []domain.Variable{{Name: "APP_MODE", Value: "test"}}
+	intent.ConfigurationVersion = 3
+	intent.SecretVariables = []domain.Variable{{Name: "API_TOKEN", Value: "runtime-only-secret"}}
 
 	for range 2 {
 		if err := adapter.EnsureWorkspace(ctx, "fruto-workspaces"); err != nil {
 			t.Fatal(err)
 		}
-		if err := adapter.ApplyDeployment(ctx, "fruto-workspaces", "ap-aaaaaaaaaaaaaaaaaaaa", runtimeTestIntent("envtest")); err != nil {
+		if err := adapter.ApplyDeployment(ctx, "fruto-workspaces", "ap-aaaaaaaaaaaaaaaaaaaa", intent); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -63,5 +68,20 @@ func TestEnvtestEnsuresExactWorkspaceAndAppDeploymentIdempotently(t *testing.T) 
 	}
 	if len(deployments.Items) != 1 || deployments.Items[0].Name != "ap-aaaaaaaaaaaaaaaaaaaa" {
 		t.Fatalf("AppDeployments = %+v", deployments.Items)
+	}
+	deployment := deployments.Items[0]
+	if deployment.Spec.ConfigMapRef != "ap-aaaaaaaaaaaaaaaaaaaa-c3" || deployment.Spec.SecretRef != "ap-aaaaaaaaaaaaaaaaaaaa-c3-secret" || len(deployment.Spec.Variables) != 0 {
+		t.Fatalf("configuration references = %+v", deployment.Spec)
+	}
+	var configMap corev1.ConfigMap
+	if err := runtimeClient.Get(ctx, client.ObjectKey{Namespace: "fruto-workspaces", Name: deployment.Spec.ConfigMapRef}, &configMap); err != nil {
+		t.Fatal(err)
+	}
+	var secret corev1.Secret
+	if err := runtimeClient.Get(ctx, client.ObjectKey{Namespace: "fruto-workspaces", Name: deployment.Spec.SecretRef}, &secret); err != nil {
+		t.Fatal(err)
+	}
+	if configMap.Immutable == nil || !*configMap.Immutable || configMap.Data["APP_MODE"] != "test" || secret.Immutable == nil || !*secret.Immutable || string(secret.Data["API_TOKEN"]) != "runtime-only-secret" {
+		t.Fatalf("materialized configuration ConfigMap=%+v Secret=%+v", configMap.Data, secret.Data)
 	}
 }

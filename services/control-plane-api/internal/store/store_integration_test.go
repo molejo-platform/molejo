@@ -105,6 +105,39 @@ func TestDeploymentsAreImmutableConfigurationSnapshots(t *testing.T) {
 	}
 }
 
+func TestAppEnvironmentBindsAnExactWorkspaceParameterVersion(t *testing.T) {
+	ctx := context.Background()
+	storage, workspaceID, actorID := newIntegrationFixture(t)
+	project, app, environment := createHierarchy(t, storage, workspaceID)
+	value := "postgres://version-one"
+	parameter, err := storage.CreateParameter(ctx, workspaceID, actorID, newID(t, "par"), "/test/database-url", domain.ParameterPlainText, "", domain.ParameterValue{PlainTextValue: &value})
+	if err != nil {
+		t.Fatal(err)
+	}
+	configuration := integrationConfiguration("parameter-binding")
+	configuration.Parameters = []domain.ParameterBinding{{Name: "DATABASE_URL", ParameterPublicID: parameter.PublicID, ParameterVersion: 1}}
+	target, err := storage.CreateAppEnvironment(ctx, workspaceID, newID(t, "aev"), project.PublicID, app.PublicID, environment.PublicID, "main", configuration)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := storage.ResolveParameterBindings(ctx, workspaceID, target.Configuration.Parameters)
+	if err != nil || len(resolved) != 1 || resolved[0].PlainTextValue != value {
+		t.Fatalf("resolved bindings = %+v, err=%v", resolved, err)
+	}
+	var otherWorkspaceID int64
+	if err = storage.Pool.QueryRow(ctx, `INSERT INTO workspaces(public_id,name,namespace_name,bootstrap_state) VALUES($1,'Other parameter workspace',$2,'Ready') RETURNING id`, newID(t, "ws"), "other-parameter-workspace").Scan(&otherWorkspaceID); err != nil {
+		t.Fatal(err)
+	}
+	configuration.Parameters[0].ParameterPublicID = newID(t, "par")
+	otherValue := "must-not-cross-workspaces"
+	if _, err = storage.CreateParameter(ctx, otherWorkspaceID, actorID, configuration.Parameters[0].ParameterPublicID, "/other/database-url", domain.ParameterPlainText, "", domain.ParameterValue{PlainTextValue: &otherValue}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = storage.UpdateAppEnvironment(ctx, workspaceID, target.PublicID, "main", configuration, target.Version); !errors.Is(err, ErrParameterBinding) {
+		t.Fatalf("cross-workspace binding error = %v, want invalid binding", err)
+	}
+}
+
 func TestDeploymentRejectsAReleaseFromAnotherApp(t *testing.T) {
 	ctx := context.Background()
 	storage, workspaceID, actorID := newIntegrationFixture(t)

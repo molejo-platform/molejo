@@ -267,6 +267,8 @@ func writeAppEnvironmentError(w http.ResponseWriter, r *http.Request, err error)
 		writeError(w, http.StatusConflict, "version_conflict", "App Environment changed since it was read", r)
 	case errors.Is(err, store.ErrConflict):
 		writeError(w, http.StatusConflict, "app_environment_conflict", "App Environment conflicts with existing state", r)
+	case errors.Is(err, store.ErrParameterBinding):
+		writeError(w, http.StatusBadRequest, "parameter_binding_invalid", "a Parameter binding is unavailable in this Workspace", r)
 	default:
 		writeError(w, http.StatusInternalServerError, "storage_failed", "App Environment state could not be persisted", r)
 	}

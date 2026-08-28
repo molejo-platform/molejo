@@ -64,6 +64,12 @@ bao write auth/kubernetes/role/molejo-parameter-writer \
   bound_service_account_names=control-plane-api \
   bound_service_account_namespaces=fruto-control-plane \
   policies=molejo-parameter-writer ttl=15m >/dev/null
+printf '%s\n' 'path "parameters/data/workspaces/*" { capabilities = ["read"] }' |
+  bao_with_stdin policy write molejo-parameter-reader - >/dev/null
+bao write auth/kubernetes/role/molejo-parameter-reader \
+  bound_service_account_names=control-plane-runtime-worker \
+  bound_service_account_namespaces=fruto-control-plane \
+  policies=molejo-parameter-reader ttl=15m >/dev/null
 
 kubectl --context "$context" -n molejo-secrets get secret openbao-server-tls -o jsonpath='{.data.ca\.crt}' |
   base64 --decode >"$release_dir/secrets/openbao-ca.crt"
