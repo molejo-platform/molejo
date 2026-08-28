@@ -12,7 +12,7 @@ release_file="${FRUTO_RELEASE_OUTPUT:?set FRUTO_RELEASE_OUTPUT to the rendered r
 
 actual_uid="$(kubectl --context "$context" get namespace kube-system -o jsonpath='{.metadata.uid}')"
 [[ "$actual_uid" == "$expected_uid" ]] || { echo "cluster UID does not match the approved target" >&2; exit 1; }
-for secret in fruto-control-plane-postgres fruto-control-plane-db fruto-control-plane-bootstrap registry-pull fruto-parameter-fingerprint; do
+for secret in fruto-control-plane-postgres fruto-control-plane-db fruto-control-plane-bootstrap registry-pull fruto-parameter-fingerprint molejo-observability-reader; do
   kubectl --context "$context" -n fruto-control-plane get secret "$secret" >/dev/null
 done
 kubectl --context "$context" -n fruto-control-plane get configmap openbao-ca >/dev/null

@@ -1,0 +1,223 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: clickhouse
+  namespace: molejo-observability
+spec:
+  serviceName: clickhouse
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: clickhouse }
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: clickhouse
+        app.kubernetes.io/part-of: molejo-observability
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
+        fsGroup: 101
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: clickhouse
+          image: clickhouse/clickhouse-server@sha256:4ff0d6c199a9ebb906af75ae406496e8a96edd0187afdc16d51c0fb77ffca588
+          imagePullPolicy: IfNotPresent
+          env:
+            - { name: CLICKHOUSE_SKIP_USER_SETUP, value: "1" }
+          ports:
+            - { name: http, containerPort: 8123 }
+            - { name: native, containerPort: 9000 }
+          startupProbe: { httpGet: { path: /ping, port: http }, periodSeconds: 5, failureThreshold: 60 }
+          readinessProbe: { httpGet: { path: /ping, port: http }, periodSeconds: 10 }
+          livenessProbe: { httpGet: { path: /ping, port: http }, periodSeconds: 20 }
+          resources:
+            requests: { cpu: 100m, memory: 512Mi }
+            limits: { cpu: "1", memory: 2Gi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/clickhouse }
+            - { name: logs, mountPath: /var/log/clickhouse-server }
+            - { name: config, mountPath: /etc/clickhouse-server/config.d/retention.xml, subPath: retention.xml, readOnly: true }
+            - { name: credentials, mountPath: /etc/clickhouse-server/users.d/molejo.xml, subPath: users.xml, readOnly: true }
+      volumes:
+        - { name: logs, emptyDir: {} }
+        - { name: config, configMap: { name: clickhouse-config } }
+        - { name: credentials, secret: { secretName: molejo-observability-credentials } }
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources: { requests: { storage: 20Gi } }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: victoria-metrics
+  namespace: molejo-observability
+spec:
+  serviceName: victoria-metrics
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: victoria-metrics }
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: victoria-metrics
+        app.kubernetes.io/part-of: molejo-observability
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: victoria-metrics
+          image: victoriametrics/victoria-metrics@sha256:c1aa24f64a45e65eb55b93212d4906b788a5f473dfbb44f1e1650a58787ec75f
+          imagePullPolicy: IfNotPresent
+          args:
+            - -storageDataPath=/storage
+            - -retentionPeriod=30d
+            - -httpListenAddr=:8428
+            - -opentelemetry.usePrometheusNaming
+          ports: [{ name: http, containerPort: 8428 }]
+          startupProbe: { httpGet: { path: /health, port: http }, periodSeconds: 5, failureThreshold: 30 }
+          readinessProbe: { httpGet: { path: /health, port: http }, periodSeconds: 10 }
+          livenessProbe: { httpGet: { path: /health, port: http }, periodSeconds: 20 }
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
+          volumeMounts: [{ name: data, mountPath: /storage }]
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources: { requests: { storage: 10Gi } }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-gateway
+  namespace: molejo-observability
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: otel-gateway }
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: otel-gateway
+        app.kubernetes.io/part-of: molejo-observability
+    spec:
+      serviceAccountName: otel-gateway
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: collector
+          image: otel/opentelemetry-collector-contrib@sha256:b503672022a65e079f56f18a759fb25a5050d70182bbac385dc83e2009d74de6
+          args: ["--config=/etc/otelcol/collector.yaml"]
+          env:
+            - name: CLICKHOUSE_INGEST_PASSWORD
+              valueFrom: { secretKeyRef: { name: molejo-observability-credentials, key: ingest-password } }
+          ports:
+            - { name: otlp-grpc, containerPort: 4317 }
+            - { name: otlp-http, containerPort: 4318 }
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
+            readOnlyRootFilesystem: true
+          volumeMounts: [{ name: config, mountPath: /etc/otelcol, readOnly: true }]
+      volumes: [{ name: config, configMap: { name: otel-gateway-config } }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-cluster
+  namespace: molejo-observability
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: otel-cluster }
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: otel-cluster
+        app.kubernetes.io/part-of: molejo-observability
+    spec:
+      serviceAccountName: otel-cluster
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: collector
+          image: otel/opentelemetry-collector-contrib@sha256:b503672022a65e079f56f18a759fb25a5050d70182bbac385dc83e2009d74de6
+          args: ["--config=/etc/otelcol/collector.yaml"]
+          resources:
+            requests: { cpu: 25m, memory: 64Mi }
+            limits: { cpu: 250m, memory: 256Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
+            readOnlyRootFilesystem: true
+          volumeMounts: [{ name: config, mountPath: /etc/otelcol, readOnly: true }]
+      volumes: [{ name: config, configMap: { name: otel-cluster-config } }]
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: otel-agent
+  namespace: molejo-observability
+spec:
+  selector:
+    matchLabels: { app.kubernetes.io/name: otel-agent }
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: otel-agent
+        app.kubernetes.io/part-of: molejo-observability
+    spec:
+      serviceAccountName: otel-agent
+      securityContext:
+        runAsUser: 0
+        runAsGroup: 0
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: collector
+          image: otel/opentelemetry-collector-contrib@sha256:b503672022a65e079f56f18a759fb25a5050d70182bbac385dc83e2009d74de6
+          args: ["--config=/etc/otelcol/collector.yaml"]
+          env:
+            - name: K8S_NODE_NAME
+              valueFrom: { fieldRef: { fieldPath: spec.nodeName } }
+          resources:
+            requests: { cpu: 25m, memory: 64Mi }
+            limits: { cpu: 250m, memory: 256Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - { name: config, mountPath: /etc/otelcol, readOnly: true }
+            - { name: podlogs, mountPath: /var/log/pods, readOnly: true }
+      volumes:
+        - { name: config, configMap: { name: otel-agent-config } }
+        - { name: podlogs, hostPath: { path: /var/log/pods, type: Directory } }

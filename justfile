@@ -167,6 +167,15 @@ control-plane-accept-k3s:
 openbao-prepare-k3s:
     bash test/e2e/prepare-openbao-k3s.sh
 
+observability-prepare-k3s:
+    bash test/e2e/prepare-observability-k3s.sh
+
+observability-apply-k3s:
+    bash test/e2e/apply-observability-k3s.sh
+
+observability-accept-k3s:
+    bash test/e2e/accept-observability-k3s.sh
+
 builds-build-release:
     bash test/e2e/build-build-worker-release.sh
 

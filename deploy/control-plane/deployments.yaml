@@ -65,6 +65,9 @@ spec:
             - name: parameter-fingerprint
               mountPath: /var/run/secrets/molejo/parameter-fingerprint
               readOnly: true
+            - name: observability-reader
+              mountPath: /var/run/secrets/molejo/observability
+              readOnly: true
           ports: [{ name: http, containerPort: 8080, protocol: TCP }]
           readinessProbe:
             httpGet:
@@ -104,6 +107,9 @@ spec:
         - name: parameter-fingerprint
           secret:
             secretName: fruto-parameter-fingerprint
+        - name: observability-reader
+          secret:
+            secretName: molejo-observability-reader
 ---
 apiVersion: apps/v1
 kind: Deployment

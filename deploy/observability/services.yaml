@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: clickhouse
+  namespace: molejo-observability
+spec:
+  selector: { app.kubernetes.io/name: clickhouse }
+  ports:
+    - { name: http, port: 8123, targetPort: http }
+    - { name: native, port: 9000, targetPort: native }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: victoria-metrics
+  namespace: molejo-observability
+spec:
+  selector: { app.kubernetes.io/name: victoria-metrics }
+  ports:
+    - { name: http, port: 8428, targetPort: http }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-gateway
+  namespace: molejo-observability
+spec:
+  selector: { app.kubernetes.io/name: otel-gateway }
+  ports:
+    - { name: otlp-grpc, port: 4317, targetPort: otlp-grpc }
+    - { name: otlp-http, port: 4318, targetPort: otlp-http }

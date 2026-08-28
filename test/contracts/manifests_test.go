@@ -90,6 +90,46 @@ func TestLabParameterWorkerUsesThePrivateRegistryCredential(t *testing.T) {
 	}
 }
 
+func TestObservabilityPlaneIsInternalBoundedAndDigestPinned(t *testing.T) {
+	workloads := []struct{ kind, name, container string }{
+		{"StatefulSet", "clickhouse", "clickhouse"},
+		{"StatefulSet", "victoria-metrics", "victoria-metrics"},
+		{"Deployment", "otel-gateway", "collector"},
+		{"Deployment", "otel-cluster", "collector"},
+		{"DaemonSet", "otel-agent", "collector"},
+	}
+	for _, workload := range workloads {
+		t.Run(workload.name, func(t *testing.T) {
+			object := findObject(t, "deploy/observability/workloads.yaml", workload.kind, workload.name)
+			container := findContainer(t, workloadPodSpec(t, object), workload.container)
+			image, _, _ := unstructured.NestedString(container, "image")
+			if !strings.Contains(image, "@sha256:") {
+				t.Fatalf("container image is not digest-pinned: %q", image)
+			}
+			requests, found, err := unstructured.NestedStringMap(container, "resources", "requests")
+			if err != nil || !found || requests["cpu"] == "" || requests["memory"] == "" {
+				t.Fatalf("resource requests=%v found=%v err=%v", requests, found, err)
+			}
+		})
+	}
+
+	for _, name := range []string{"clickhouse", "victoria-metrics", "otel-gateway"} {
+		service := findObject(t, "deploy/observability/services.yaml", "Service", name)
+		serviceType, found, err := unstructured.NestedString(service.Object, "spec", "type")
+		if err != nil || found && serviceType != "ClusterIP" {
+			t.Fatalf("service %s exposes type %q", name, serviceType)
+		}
+	}
+
+	for _, name := range []string{"clickhouse", "victoria-metrics"} {
+		statefulSet := findObject(t, "deploy/observability/workloads.yaml", "StatefulSet", name)
+		templates, found, err := unstructured.NestedSlice(statefulSet.Object, "spec", "volumeClaimTemplates")
+		if err != nil || !found || len(templates) != 1 {
+			t.Fatalf("%s volumeClaimTemplates=%v found=%v err=%v", name, templates, found, err)
+		}
+	}
+}
+
 func findObject(t *testing.T, relativePath, kind, name string) *unstructured.Unstructured {
 	t.Helper()
 	path := filepath.Join("..", "..", relativePath)

@@ -19,6 +19,15 @@ data:
   FRUTO_OPENBAO_ROLE: molejo-parameter-writer
   FRUTO_PARAMETER_RETENTION: 168h
   FRUTO_PARAMETER_MUTATION_TIMEOUT: 5m
+  FRUTO_CLICKHOUSE_URL: http://clickhouse.molejo-observability.svc:8123
+  FRUTO_CLICKHOUSE_DATABASE: otel
+  FRUTO_CLICKHOUSE_USERNAME: molejo_reader
+  FRUTO_CLICKHOUSE_PASSWORD_FILE: /var/run/secrets/molejo/observability/reader-password
+  FRUTO_VICTORIAMETRICS_URL: http://victoria-metrics.molejo-observability.svc:8428
+  FRUTO_OBSERVABILITY_MAX_WINDOW: 24h
+  FRUTO_OBSERVABILITY_LIVE_TTL: 10m
+  FRUTO_OBSERVABILITY_LIVE_POLL: 2s
+  FRUTO_OBSERVABILITY_LIVE_PER_USER: "3"
   # Required external release input. Replace this with the target cluster's
   # kube-system Namespace UID before applying the control plane.
   FRUTO_EXPECTED_CLUSTER_UID: required-external-cluster-uid
