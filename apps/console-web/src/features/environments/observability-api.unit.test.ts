@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { getRuntimeMetrics, listRuntimeEvents, listRuntimeLogs, runtimeLogStreamURL } from "./observability-api";
+import { getRuntimeMetrics, listRuntimeEvents, listRuntimeLogs, runtimeLogStreamURL, runtimeMetricStreamURL } from "./observability-api";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -25,5 +25,6 @@ describe("runtime observability API", () => {
     const url = runtimeLogStreamURL("ws", "project", "app", "target", { search: "error", instance: "pod-a" });
     const parsed = new URL(url, "https://cloud.molejo.dev");
     expect([...parsed.searchParams.keys()]).toEqual(["search", "instance"]);
+    expect(runtimeMetricStreamURL("ws", "project", "app", "target")).toBe("/api/v1/workspaces/ws/projects/project/apps/app/environments/target/observability/metrics/live");
   });
 });

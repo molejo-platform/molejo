@@ -15,7 +15,9 @@ The public API resolves the complete product hierarchy and injects the trusted
 Namespace and runtime identity into every query. Clients cannot provide tenant
 selectors. Historical queries are limited to 24 hours and bounded result sizes;
 live logs use authenticated SSE with per-actor concurrency and duration limits.
-Authorization is revalidated during the stream.
+Current metric snapshots use a separate authenticated SSE budget and a polling
+interval aligned with collection. Both streams send heartbeats, expire, and
+revalidate authorization while connected.
 
 OpenTelemetry Collectors form the portable ingestion boundary. A node agent
 collects container logs and kubelet metrics, while a cluster collector gathers
@@ -31,6 +33,11 @@ loading, partial, and unavailable states are explicit. Runtime events expose
 stable, sanitized product messages rather than raw Kubernetes object names,
 UIDs, or messages. Traces, public dashboards, alerts, long retention, and backup
 remain outside this decision.
+
+Every AppEnvironment view carries a compact operational scoreboard. Metrics are
+live only while that view is visible; historical log search is the default and
+live tail is explicit. Unknown and stale telemetry remains distinguishable from
+zero, and deployment events can be correlated with historical charts.
 
 ## Consequences
 

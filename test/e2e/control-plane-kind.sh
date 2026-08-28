@@ -275,6 +275,7 @@ run_concurrent_request() {
   local output="$1"
   curl --fail --silent --show-error -b "$host_cookie_jar" \
     -H "Origin: http://127.0.0.1:${vite_port}" -H "X-CSRF-Token: $csrf_token" \
+    -H "If-Match: $app_environment_version" \
     -H 'Idempotency-Key: e2e-concurrent' -H 'Content-Type: application/json' \
     -d "$deployment_intent" "$deployment_base" >"$output"
 }
@@ -404,29 +405,35 @@ app_environment_response="$(curl --fail --silent --show-error -b "$host_cookie_j
   -H 'Content-Type: application/json' -d "$configuration" \
   "$api_base/workspaces/$workspace_id/projects/$project_id/apps/$app_id/environments")"
 app_environment_id="$(jq -er '.id' <<<"$app_environment_response")"
+app_environment_version="$(jq -er '.version' <<<"$app_environment_response")"
+configuration_version="$(jq -er '.configurationVersion' <<<"$app_environment_response")"
 app_environment_base="$api_base/workspaces/$workspace_id/projects/$project_id/apps/$app_id/environments/$app_environment_id"
 deployment_base="$app_environment_base/deployments"
 release_id="rel-bbbbbbbbbbbbbbbbbbbb"
 run_without_xtrace seed_test_release
-deployment_intent="$(jq -cn --arg release "$release_id" '{releaseId:$release}')"
+deployment_intent="$(jq -cn --arg release "$release_id" --argjson configuration "$configuration_version" '{releaseId:$release,configurationVersion:$configuration,currentDeploymentId:null}')"
 create_response="$(curl --fail --silent --show-error -b "$host_cookie_jar" \
   -H "Origin: http://127.0.0.1:${vite_port}" -H "X-CSRF-Token: $csrf_token" \
+  -H "If-Match: $app_environment_version" \
   -H 'Idempotency-Key: e2e-idempotent' -H 'Content-Type: application/json' \
   -d "$deployment_intent" "$deployment_base")"
 api_deployment_id="$(jq -er '.deployment.id' <<<"$create_response")"
 api_operation_id="$(jq -er '.operation.id' <<<"$create_response")"
 repeat_response="$(curl --fail --silent --show-error -b "$host_cookie_jar" \
   -H "Origin: http://127.0.0.1:${vite_port}" -H "X-CSRF-Token: $csrf_token" \
+  -H "If-Match: $app_environment_version" \
   -H 'Idempotency-Key: e2e-idempotent' -H 'Content-Type: application/json' \
   -d "$deployment_intent" "$deployment_base")"
 [[ "$(jq -r '.operation.id' <<<"$repeat_response")" == "$api_operation_id" ]]
-conflict_intent='{"releaseId":"rel-cccccccccccccccccccc"}'
+conflict_intent="$(jq -cn --argjson configuration "$configuration_version" '{releaseId:"rel-cccccccccccccccccccc",configurationVersion:$configuration,currentDeploymentId:null}')"
 assert_http_status 409 "$deployment_base" \
   -X POST -b "$host_cookie_jar" -H "Origin: http://127.0.0.1:${vite_port}" \
   -H "X-CSRF-Token: $csrf_token" -H 'Idempotency-Key: e2e-idempotent' \
+  -H "If-Match: $app_environment_version" \
   -H 'Content-Type: application/json' -d "$conflict_intent"
 assert_http_status 403 "$deployment_base" \
   -X POST -b "$host_cookie_jar" -H "Origin: http://127.0.0.1:${vite_port}" \
+  -H "If-Match: $app_environment_version" \
   -H 'Idempotency-Key: e2e-no-csrf' -H 'Content-Type: application/json' -d "$deployment_intent"
 assert_http_status 403 "http://127.0.0.1:${host_api_port}/api/v1/session" \
   -X POST -H 'Origin: https://invalid.example' -H 'Content-Type: application/json' \
@@ -436,6 +443,10 @@ assert_http_status 404 "$deployment_base/dpl-aaaaaaaaaaaaaaaaaaaa" -b "$host_coo
 wait_operation "http://127.0.0.1:${host_api_port}" "$api_operation_id" "$host_cookie_jar"
 ready_response="$(curl --fail --silent --show-error -b "$host_cookie_jar" "$deployment_base/$api_deployment_id")"
 [[ "$(jq -r '.state' <<<"$ready_response")" == Ready ]]
+app_environment_detail="$(curl --fail --silent --show-error -b "$host_cookie_jar" "$app_environment_base")"
+app_environment_version="$(jq -er '.version' <<<"$app_environment_detail")"
+current_deployment_id="$(jq -er '.currentDeploymentId' <<<"$app_environment_detail")"
+deployment_intent="$(jq -cn --arg release "$release_id" --arg current "$current_deployment_id" --argjson configuration "$configuration_version" '{releaseId:$release,configurationVersion:$configuration,currentDeploymentId:$current}')"
 
 kubectl --kubeconfig "$kubeconfig" scale deployment/platform-operator -n fruto-system --replicas=0
 stop_pid "$host_api_pid"; host_api_pid=""
@@ -447,6 +458,7 @@ docker pause "$node_name" >/dev/null
 node_paused=true
 pending_response="$(curl --fail --silent --show-error -b "$host_cookie_jar" \
   -H "Origin: http://127.0.0.1:${vite_port}" -H "X-CSRF-Token: $csrf_token" \
+  -H "If-Match: $app_environment_version" \
   -H 'Idempotency-Key: e2e-restart' -H 'Content-Type: application/json' \
   -d "$deployment_intent" "$deployment_base")"
 pending_operation_id="$(jq -er '.operation.id' <<<"$pending_response")"
@@ -476,6 +488,11 @@ unknown_response="$(curl --fail --silent --show-error --max-time 8 -b "$host_coo
 [[ "$(jq -r '.state' <<<"$unknown_response")" == Unknown ]]
 docker unpause "$node_name" >/dev/null
 node_paused=false
+
+app_environment_detail="$(curl --fail --silent --show-error -b "$host_cookie_jar" "$app_environment_base")"
+app_environment_version="$(jq -er '.version' <<<"$app_environment_detail")"
+current_deployment_id="$(jq -er '.currentDeploymentId' <<<"$app_environment_detail")"
+deployment_intent="$(jq -cn --arg release "$release_id" --arg current "$current_deployment_id" --argjson configuration "$configuration_version" '{releaseId:$release,configurationVersion:$configuration,currentDeploymentId:$current}')"
 
 rm -f "$tmp_dir/concurrent-a.json" "$tmp_dir/concurrent-b.json"
 run_without_xtrace run_concurrent_request "$tmp_dir/concurrent-a.json" &

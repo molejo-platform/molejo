@@ -16,7 +16,9 @@ A API pública resolve a hierarquia completa do produto e injeta o Namespace e a
 identidade do runtime confiáveis em toda consulta. Clientes não podem informar
 seletores de tenant. Consultas históricas ficam limitadas a 24 horas e volumes de
 resultado definidos; logs live usam SSE autenticado com limites de concorrência
-por ator e duração. A autorização é revalidada durante o stream.
+por ator e duração. Snapshots atuais de métricas usam um orçamento SSE autenticado
+separado e intervalo de consulta alinhado à coleta. Ambos os streams enviam
+heartbeats, expiram e revalidam autorização enquanto conectados.
 
 OpenTelemetry Collectors formam a fronteira portátil de ingestão. Um agente por
 nó coleta logs de containers e métricas do kubelet, enquanto um collector de
@@ -33,6 +35,12 @@ de carregamento, parciais e indisponíveis são explícitos. Eventos de runtime
 expõem mensagens estáveis e sanitizadas do produto, nunca nomes de objetos, UIDs
 ou mensagens brutas do Kubernetes. Traces, dashboards públicos, alertas, retenção
 longa e backup permanecem fora desta decisão.
+
+Cada visão de AppEnvironment carrega um placar operacional compacto. Métricas
+ficam live somente enquanto a visão está visível; a busca histórica de logs é o
+padrão e o live tail é explícito. Telemetria desconhecida ou atrasada permanece
+distinguível de zero, e eventos de implantação podem ser correlacionados com os
+gráficos históricos.
 
 ## Consequences
 

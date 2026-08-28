@@ -33,3 +33,7 @@ export function listRuntimeEvents(workspaceId: string, projectId: string, appId:
 export function runtimeLogStreamURL(workspaceId: string, projectId: string, appId: string, appEnvironmentId: string, filters: Pick<RuntimeLogFilters, "search" | "instance">) {
   return withQuery(`${runtimeObservabilityBase(workspaceId, projectId, appId, appEnvironmentId)}/logs/live`, { search: filters.search, instance: filters.instance });
 }
+
+export function runtimeMetricStreamURL(workspaceId: string, projectId: string, appId: string, appEnvironmentId: string) {
+  return `${runtimeObservabilityBase(workspaceId, projectId, appId, appEnvironmentId)}/metrics/live`;
+}

@@ -6,3 +6,5 @@ metadata:
 data:
   FRUTO_ALLOWED_REGISTRIES: docker.io,ghcr.io
   FRUTO_OPENBAO_ADDR: ""
+  FRUTO_CLICKHOUSE_URL: ""
+  FRUTO_VICTORIAMETRICS_URL: ""

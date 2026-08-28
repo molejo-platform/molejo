@@ -1,4 +1,4 @@
-import { cleanup, screen } from "@testing-library/react";
+import { act, cleanup, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ listRuntimeLogs: vi.fn() }));
@@ -22,7 +22,16 @@ const target = {
 } as never;
 const params = { workspaceId: "ws-aaaaaaaaaaaaaaaaaaaa", projectId: "prj-aaaaaaaaaaaaaaaaaaaa", environmentId: "env-aaaaaaaaaaaaaaaaaaaa", appEnvironmentId: "aev-aaaaaaaaaaaaaaaaaaaa" };
 
-afterEach(() => { cleanup(); mocks.listRuntimeLogs.mockReset(); });
+class FakeEventSource {
+  static instances: FakeEventSource[] = [];
+  onopen: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+  addEventListener() {}
+  removeEventListener() {}
+  close() {}
+}
+
+afterEach(() => { cleanup(); mocks.listRuntimeLogs.mockReset(); FakeEventSource.instances = []; vi.unstubAllGlobals(); });
 
 describe("runtime observability", () => {
   it("distinguishes an empty log interval from a backend failure", async () => {
@@ -42,5 +51,17 @@ describe("runtime observability", () => {
     renderWithQueryClient(<MetricCard series={{ name: "memory", unit: "bytes", instance: "pod-a", points: [{ timestamp: "2026-08-28T10:00:00Z", value: 1048576 }, { timestamp: "2026-08-28T10:01:00Z", value: 2097152 }] }}/>);
     expect(screen.getByRole("img", { name: "Memória: de 1 MiB a 2 MiB" })).toBeTruthy();
     expect(screen.getAllByText("2 MiB")).toHaveLength(2);
+  });
+
+  it("keeps live logs enabled while EventSource reconnects", async () => {
+    vi.stubGlobal("EventSource", class extends FakeEventSource { constructor() { super(); FakeEventSource.instances.push(this); } });
+    mocks.listRuntimeLogs.mockResolvedValue({ from: "2026-08-28T10:00:00Z", to: "2026-08-28T11:00:00Z", items: [] });
+    renderWithQueryClient(<RuntimeLogsPage target={target} params={params}/>);
+    const start = await screen.findByRole("button", { name: "Ver ao vivo" });
+    act(() => start.click());
+    expect(FakeEventSource.instances).toHaveLength(1);
+    act(() => FakeEventSource.instances[0].onerror?.());
+    expect(screen.getByText("Reconectando ao vivo…")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Parar live" })).toBeTruthy();
   });
 });

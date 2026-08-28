@@ -617,6 +617,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/observability/metrics/live": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                projectId: components["parameters"]["ProjectId"];
+                appId: components["parameters"]["AppId"];
+                appEnvironmentId: components["parameters"]["AppEnvironmentId"];
+            };
+            cookie?: never;
+        };
+        get: operations["streamAppEnvironmentRuntimeMetrics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/observability/events": {
         parameters: {
             query?: never;
@@ -997,6 +1018,21 @@ export interface components {
             to: string;
             step: string;
             series: components["schemas"]["RuntimeMetricSeries"][];
+        };
+        RuntimeMetricSample: {
+            /** @enum {string} */
+            name: "cpu" | "memory" | "restarts" | "available" | "desired";
+            /** @enum {string} */
+            unit: "cores" | "bytes" | "count" | "replicas";
+            instance?: string;
+            /** Format: date-time */
+            timestamp: string;
+            value: number;
+        };
+        RuntimeMetricSnapshot: {
+            /** Format: date-time */
+            observedAt: string;
+            samples: components["schemas"]["RuntimeMetricSample"][];
         };
         RuntimeEvent: {
             /** Format: date-time */
@@ -2702,6 +2738,34 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    streamAppEnvironmentRuntimeMetrics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                projectId: components["parameters"]["ProjectId"];
+                appId: components["parameters"]["AppId"];
+                appEnvironmentId: components["parameters"]["AppEnvironmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Server-sent stream of current runtime metric snapshots */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
+            };
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
             503: components["responses"]["Unavailable"];
         };
     };

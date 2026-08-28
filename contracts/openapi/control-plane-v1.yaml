@@ -898,6 +898,22 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '404': { $ref: '#/components/responses/NotFound' }
         '503': { $ref: '#/components/responses/Unavailable' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/observability/metrics/live:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/AppId' }
+      - { $ref: '#/components/parameters/AppEnvironmentId' }
+    get:
+      operationId: streamAppEnvironmentRuntimeMetrics
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Server-sent stream of current runtime metric snapshots
+          content: { text/event-stream: { schema: { type: string } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/Unavailable' }
   /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/observability/events:
     parameters:
       - { $ref: '#/components/parameters/WorkspaceId' }
@@ -1459,6 +1475,23 @@ components:
         to: { type: string, format: date-time }
         step: { type: string }
         series: { type: array, items: { $ref: '#/components/schemas/RuntimeMetricSeries' } }
+    RuntimeMetricSample:
+      type: object
+      required: [name, unit, timestamp, value]
+      additionalProperties: false
+      properties:
+        name: { type: string, enum: [cpu, memory, restarts, available, desired] }
+        unit: { type: string, enum: [cores, bytes, count, replicas] }
+        instance: { type: string, maxLength: 253 }
+        timestamp: { type: string, format: date-time }
+        value: { type: number }
+    RuntimeMetricSnapshot:
+      type: object
+      required: [observedAt, samples]
+      additionalProperties: false
+      properties:
+        observedAt: { type: string, format: date-time }
+        samples: { type: array, items: { $ref: '#/components/schemas/RuntimeMetricSample' } }
     RuntimeEvent:
       type: object
       required: [timestamp, source, type, reason, message]

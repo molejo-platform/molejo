@@ -118,6 +118,16 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .summary-card > strong { color: var(--color-brand); font-size: 2rem; line-height: 1.2; }
 .summary-card > .summary-text { font-size: 1rem; overflow-wrap: anywhere; }
 .summary-card.static:hover { border-color: var(--color-border); box-shadow: var(--shadow-sm); }
+.runtime-scoreboard { background: var(--color-brand); border-radius: var(--radius-lg); color: white; display: grid; gap: var(--space-4); padding: var(--space-4) var(--space-6); }
+.runtime-scoreboard-heading { align-items: center; display: flex; gap: var(--space-3); justify-content: space-between; }
+.runtime-scoreboard .status-badge { background: rgb(255 255 255 / 13%); color: white; }
+.telemetry-state { color: rgb(255 255 255 / 72%); font-size: .75rem; font-weight: 750; }
+.telemetry-state.connected { color: #ccefd9; }
+.telemetry-state.reconnecting, .telemetry-state.stale { color: #ffe0a8; }
+.runtime-scoreboard dl { display: grid; gap: var(--space-4); grid-template-columns: repeat(6, minmax(0, 1fr)); margin: 0; }
+.runtime-scoreboard dl > div { border-left: 1px solid rgb(255 255 255 / 16%); display: grid; min-width: 0; padding-left: var(--space-3); }
+.runtime-scoreboard dt, .runtime-scoreboard small { color: rgb(255 255 255 / 64%); font-size: .68rem; }
+.runtime-scoreboard dd { font-size: .92rem; font-weight: 800; margin: .1rem 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .environment-actions { align-items: flex-end; display: flex; gap: var(--space-3); }
 .environment-actions .field { min-width: 190px; }
@@ -205,6 +215,7 @@ input:disabled, select:disabled, textarea:disabled { background: var(--color-sur
 .observability-toolbar { align-items: end; display: grid; gap: var(--space-3); grid-template-columns: minmax(190px, 300px) auto; justify-content: start; }
 .live-status { align-items: center; color: var(--color-success); display: flex; font-size: .82rem; font-weight: 800; gap: var(--space-2); margin: 0; }
 .live-status span { animation: live-pulse 1.8s ease-in-out infinite; background: currentColor; border-radius: 50%; height: .55rem; width: .55rem; }
+.live-status.pending { color: var(--color-warning); }
 .runtime-logs { background: var(--color-brand-strong); border: 1px solid var(--color-brand); border-radius: var(--radius-md); color: #e8f2ec; max-height: 42rem; overflow: auto; }
 .runtime-log { display: grid; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: .78rem; gap: .25rem; padding: var(--space-3) var(--space-4); }
 .runtime-log + .runtime-log { border-top: 1px solid rgb(255 255 255 / 11%); }
@@ -218,6 +229,7 @@ input:disabled, select:disabled, textarea:disabled { background: var(--color-sur
 .metric-card svg { height: 96px; overflow: visible; width: 100%; }
 .metric-line { fill: none; stroke: var(--color-accent); stroke-linecap: round; stroke-linejoin: round; stroke-width: 3; vector-effect: non-scaling-stroke; }
 .metric-area { fill: rgb(14 143 130 / 10%); stroke: none; }
+.metric-event-marker { stroke: var(--color-warning); stroke-dasharray: 3 4; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 .metric-card dl { display: grid; gap: var(--space-3); grid-template-columns: repeat(3, 1fr); margin: 0; }
 .metric-card dt { color: var(--color-text-muted); font-size: .7rem; }
 .metric-card dd { font-size: .82rem; font-weight: 750; margin: .15rem 0 0; }
@@ -254,6 +266,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
   .sidebar.open { transform: translateX(0); }
   .sidebar-scrim { background: rgb(18 33 38 / 48%); border: 0; border-radius: 0; display: block; inset: 0; min-height: 0; padding: 0; position: fixed; z-index: 40; }
   .main-content { padding: var(--space-8) var(--space-4); }
+  .runtime-scoreboard dl { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
 @media (max-width: 720px) {
@@ -268,6 +281,8 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
   .service-grid, .choice-grid, .deployment-composer, .observability-filters, .observability-toolbar { grid-template-columns: 1fr; }
   .observability-filters button, .observability-toolbar button { width: 100%; }
   .summary-card { min-height: 120px; }
+  .runtime-scoreboard { padding: var(--space-4); }
+  .runtime-scoreboard dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .data-row { align-items: flex-start; flex-direction: column; }
   .row-controls { justify-content: flex-start; width: 100%; }
   .detail-grid { grid-template-columns: 1fr; }

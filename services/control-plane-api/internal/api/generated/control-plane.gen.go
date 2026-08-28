@@ -335,27 +335,78 @@ func (e RuntimeEventSource) Valid() bool {
 	}
 }
 
+// Defines values for RuntimeMetricSampleName.
+const (
+	RuntimeMetricSampleNameAvailable RuntimeMetricSampleName = "available"
+	RuntimeMetricSampleNameCpu       RuntimeMetricSampleName = "cpu"
+	RuntimeMetricSampleNameDesired   RuntimeMetricSampleName = "desired"
+	RuntimeMetricSampleNameMemory    RuntimeMetricSampleName = "memory"
+	RuntimeMetricSampleNameRestarts  RuntimeMetricSampleName = "restarts"
+)
+
+// Valid indicates whether the value is a known member of the RuntimeMetricSampleName enum.
+func (e RuntimeMetricSampleName) Valid() bool {
+	switch e {
+	case RuntimeMetricSampleNameAvailable:
+		return true
+	case RuntimeMetricSampleNameCpu:
+		return true
+	case RuntimeMetricSampleNameDesired:
+		return true
+	case RuntimeMetricSampleNameMemory:
+		return true
+	case RuntimeMetricSampleNameRestarts:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RuntimeMetricSampleUnit.
+const (
+	RuntimeMetricSampleUnitBytes    RuntimeMetricSampleUnit = "bytes"
+	RuntimeMetricSampleUnitCores    RuntimeMetricSampleUnit = "cores"
+	RuntimeMetricSampleUnitCount    RuntimeMetricSampleUnit = "count"
+	RuntimeMetricSampleUnitReplicas RuntimeMetricSampleUnit = "replicas"
+)
+
+// Valid indicates whether the value is a known member of the RuntimeMetricSampleUnit enum.
+func (e RuntimeMetricSampleUnit) Valid() bool {
+	switch e {
+	case RuntimeMetricSampleUnitBytes:
+		return true
+	case RuntimeMetricSampleUnitCores:
+		return true
+	case RuntimeMetricSampleUnitCount:
+		return true
+	case RuntimeMetricSampleUnitReplicas:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for RuntimeMetricSeriesName.
 const (
-	Available RuntimeMetricSeriesName = "available"
-	Cpu       RuntimeMetricSeriesName = "cpu"
-	Desired   RuntimeMetricSeriesName = "desired"
-	Memory    RuntimeMetricSeriesName = "memory"
-	Restarts  RuntimeMetricSeriesName = "restarts"
+	RuntimeMetricSeriesNameAvailable RuntimeMetricSeriesName = "available"
+	RuntimeMetricSeriesNameCpu       RuntimeMetricSeriesName = "cpu"
+	RuntimeMetricSeriesNameDesired   RuntimeMetricSeriesName = "desired"
+	RuntimeMetricSeriesNameMemory    RuntimeMetricSeriesName = "memory"
+	RuntimeMetricSeriesNameRestarts  RuntimeMetricSeriesName = "restarts"
 )
 
 // Valid indicates whether the value is a known member of the RuntimeMetricSeriesName enum.
 func (e RuntimeMetricSeriesName) Valid() bool {
 	switch e {
-	case Available:
+	case RuntimeMetricSeriesNameAvailable:
 		return true
-	case Cpu:
+	case RuntimeMetricSeriesNameCpu:
 		return true
-	case Desired:
+	case RuntimeMetricSeriesNameDesired:
 		return true
-	case Memory:
+	case RuntimeMetricSeriesNameMemory:
 		return true
-	case Restarts:
+	case RuntimeMetricSeriesNameRestarts:
 		return true
 	default:
 		return false
@@ -364,22 +415,22 @@ func (e RuntimeMetricSeriesName) Valid() bool {
 
 // Defines values for RuntimeMetricSeriesUnit.
 const (
-	Bytes    RuntimeMetricSeriesUnit = "bytes"
-	Cores    RuntimeMetricSeriesUnit = "cores"
-	Count    RuntimeMetricSeriesUnit = "count"
-	Replicas RuntimeMetricSeriesUnit = "replicas"
+	RuntimeMetricSeriesUnitBytes    RuntimeMetricSeriesUnit = "bytes"
+	RuntimeMetricSeriesUnitCores    RuntimeMetricSeriesUnit = "cores"
+	RuntimeMetricSeriesUnitCount    RuntimeMetricSeriesUnit = "count"
+	RuntimeMetricSeriesUnitReplicas RuntimeMetricSeriesUnit = "replicas"
 )
 
 // Valid indicates whether the value is a known member of the RuntimeMetricSeriesUnit enum.
 func (e RuntimeMetricSeriesUnit) Valid() bool {
 	switch e {
-	case Bytes:
+	case RuntimeMetricSeriesUnitBytes:
 		return true
-	case Cores:
+	case RuntimeMetricSeriesUnitCores:
 		return true
-	case Count:
+	case RuntimeMetricSeriesUnitCount:
 		return true
-	case Replicas:
+	case RuntimeMetricSeriesUnitReplicas:
 		return true
 	default:
 		return false
@@ -795,6 +846,21 @@ type RuntimeMetricPoint struct {
 	Value     float32   `json:"value"`
 }
 
+// RuntimeMetricSample defines model for RuntimeMetricSample.
+type RuntimeMetricSample struct {
+	Instance  *string                 `json:"instance,omitempty"`
+	Name      RuntimeMetricSampleName `json:"name"`
+	Timestamp time.Time               `json:"timestamp"`
+	Unit      RuntimeMetricSampleUnit `json:"unit"`
+	Value     float32                 `json:"value"`
+}
+
+// RuntimeMetricSampleName defines model for RuntimeMetricSample.Name.
+type RuntimeMetricSampleName string
+
+// RuntimeMetricSampleUnit defines model for RuntimeMetricSample.Unit.
+type RuntimeMetricSampleUnit string
+
 // RuntimeMetricSeries defines model for RuntimeMetricSeries.
 type RuntimeMetricSeries struct {
 	Instance *string                 `json:"instance,omitempty"`
@@ -808,6 +874,12 @@ type RuntimeMetricSeriesName string
 
 // RuntimeMetricSeriesUnit defines model for RuntimeMetricSeries.Unit.
 type RuntimeMetricSeriesUnit string
+
+// RuntimeMetricSnapshot defines model for RuntimeMetricSnapshot.
+type RuntimeMetricSnapshot struct {
+	ObservedAt time.Time             `json:"observedAt"`
+	Samples    []RuntimeMetricSample `json:"samples"`
+}
 
 // RuntimeMetrics defines model for RuntimeMetrics.
 type RuntimeMetrics struct {
@@ -1311,6 +1383,9 @@ type ServerInterface interface {
 	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/observability/metrics)
 	GetAppEnvironmentRuntimeMetrics(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId, params GetAppEnvironmentRuntimeMetricsParams)
 
+	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/observability/metrics/live)
+	StreamAppEnvironmentRuntimeMetrics(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId)
+
 	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/releases)
 	ListAppReleases(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, params ListAppReleasesParams)
 
@@ -1583,6 +1658,11 @@ func (_ Unimplemented) StreamAppEnvironmentRuntimeLogs(w http.ResponseWriter, r 
 
 // (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/observability/metrics)
 func (_ Unimplemented) GetAppEnvironmentRuntimeMetrics(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId, params GetAppEnvironmentRuntimeMetricsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/observability/metrics/live)
+func (_ Unimplemented) StreamAppEnvironmentRuntimeMetrics(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -4334,6 +4414,59 @@ func (siw *ServerInterfaceWrapper) GetAppEnvironmentRuntimeMetrics(w http.Respon
 	handler.ServeHTTP(w, r)
 }
 
+// StreamAppEnvironmentRuntimeMetrics operation middleware
+func (siw *ServerInterfaceWrapper) StreamAppEnvironmentRuntimeMetrics(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appId" -------------
+	var appId AppId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appId", chi.URLParam(r, "appId"), &appId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appEnvironmentId" -------------
+	var appEnvironmentId AppEnvironmentId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appEnvironmentId", chi.URLParam(r, "appEnvironmentId"), &appEnvironmentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appEnvironmentId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.StreamAppEnvironmentRuntimeMetrics(w, r, workspaceId, projectId, appId, appEnvironmentId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListAppReleases operation middleware
 func (siw *ServerInterfaceWrapper) ListAppReleases(w http.ResponseWriter, r *http.Request) {
 
@@ -5189,6 +5322,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/observability/metrics", wrapper.GetAppEnvironmentRuntimeMetrics)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/observability/metrics/live", wrapper.StreamAppEnvironmentRuntimeMetrics)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/observability/events", wrapper.ListAppEnvironmentRuntimeEvents)
@@ -7982,6 +8118,102 @@ func (response GetAppEnvironmentRuntimeMetrics503JSONResponse) VisitGetAppEnviro
 	return err
 }
 
+type StreamAppEnvironmentRuntimeMetricsRequestObject struct {
+	WorkspaceId      WorkspaceId      `json:"workspaceId"`
+	ProjectId        ProjectId        `json:"projectId"`
+	AppId            AppId            `json:"appId"`
+	AppEnvironmentId AppEnvironmentId `json:"appEnvironmentId"`
+}
+
+type StreamAppEnvironmentRuntimeMetricsResponseObject interface {
+	VisitStreamAppEnvironmentRuntimeMetricsResponse(w http.ResponseWriter) error
+}
+
+type StreamAppEnvironmentRuntimeMetrics200TexteventStreamResponse struct {
+	Body          io.Reader
+	ContentLength int64
+}
+
+func (response StreamAppEnvironmentRuntimeMetrics200TexteventStreamResponse) VisitStreamAppEnvironmentRuntimeMetricsResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
+	w.WriteHeader(200)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		// If w doesn't support flushing, fall back to io.Copy.
+		_, err := io.Copy(w, response.Body)
+		return err
+	}
+	// text/event-stream messages are typically small; use a
+	// modest buffer and flush after each chunk so clients see
+	// events immediately instead of waiting on OS buffering.
+	buf := make([]byte, 4096)
+	for {
+		n, err := response.Body.Read(buf)
+		if n > 0 {
+			if _, writeErr := w.Write(buf[:n]); writeErr != nil {
+				return writeErr
+			}
+			flusher.Flush()
+		}
+		if err != nil {
+			if err == io.EOF {
+				return nil
+			}
+			return err
+		}
+	}
+}
+
+type StreamAppEnvironmentRuntimeMetrics404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response StreamAppEnvironmentRuntimeMetrics404JSONResponse) VisitStreamAppEnvironmentRuntimeMetricsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StreamAppEnvironmentRuntimeMetrics429JSONResponse struct{ TooManyRequestsJSONResponse }
+
+func (response StreamAppEnvironmentRuntimeMetrics429JSONResponse) VisitStreamAppEnvironmentRuntimeMetricsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StreamAppEnvironmentRuntimeMetrics503JSONResponse struct{ UnavailableJSONResponse }
+
+func (response StreamAppEnvironmentRuntimeMetrics503JSONResponse) VisitStreamAppEnvironmentRuntimeMetricsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListAppReleasesRequestObject struct {
 	WorkspaceId WorkspaceId `json:"workspaceId"`
 	ProjectId   ProjectId   `json:"projectId"`
@@ -8681,6 +8913,9 @@ type StrictServerInterface interface {
 
 	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/observability/metrics)
 	GetAppEnvironmentRuntimeMetrics(ctx context.Context, request GetAppEnvironmentRuntimeMetricsRequestObject) (GetAppEnvironmentRuntimeMetricsResponseObject, error)
+
+	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/observability/metrics/live)
+	StreamAppEnvironmentRuntimeMetrics(ctx context.Context, request StreamAppEnvironmentRuntimeMetricsRequestObject) (StreamAppEnvironmentRuntimeMetricsResponseObject, error)
 
 	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/releases)
 	ListAppReleases(ctx context.Context, request ListAppReleasesRequestObject) (ListAppReleasesResponseObject, error)
@@ -10173,6 +10408,35 @@ func (sh *strictHandler) GetAppEnvironmentRuntimeMetrics(w http.ResponseWriter, 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetAppEnvironmentRuntimeMetricsResponseObject); ok {
 		if err := validResponse.VisitGetAppEnvironmentRuntimeMetricsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// StreamAppEnvironmentRuntimeMetrics operation middleware
+func (sh *strictHandler) StreamAppEnvironmentRuntimeMetrics(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId) {
+	var request StreamAppEnvironmentRuntimeMetricsRequestObject
+
+	request.WorkspaceId = workspaceId
+	request.ProjectId = projectId
+	request.AppId = appId
+	request.AppEnvironmentId = appEnvironmentId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.StreamAppEnvironmentRuntimeMetrics(ctx, request.(StreamAppEnvironmentRuntimeMetricsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "StreamAppEnvironmentRuntimeMetrics")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(StreamAppEnvironmentRuntimeMetricsResponseObject); ok {
+		if err := validResponse.VisitStreamAppEnvironmentRuntimeMetricsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

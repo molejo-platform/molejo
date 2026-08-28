@@ -28,32 +28,34 @@ import (
 const maxRequestBody = 128 << 10
 
 type Config struct {
-	Mode                     string
-	PublicURL                string
-	CookieName               string
-	CookieSecure             bool
-	AllowedOrigin            string
-	AllowedHosts             []string
-	AllowedRegistries        []string
-	TrustedProxyCIDRs        []string
-	MaxReplicas              int32
-	MaxCPU                   int64
-	MaxMemory                int64
-	SessionTTL               time.Duration
-	OperationLease           time.Duration
-	ParameterRetention       time.Duration
-	ParameterMutationTimeout time.Duration
-	WorkspaceNamespace       string
-	GitHubStateTTL           time.Duration
-	GitHubCookieName         string
-	ObservabilityMaxWindow   time.Duration
-	ObservabilityLiveTTL     time.Duration
-	ObservabilityLivePoll    time.Duration
-	ObservabilityLivePerUser int
+	Mode                            string
+	PublicURL                       string
+	CookieName                      string
+	CookieSecure                    bool
+	AllowedOrigin                   string
+	AllowedHosts                    []string
+	AllowedRegistries               []string
+	TrustedProxyCIDRs               []string
+	MaxReplicas                     int32
+	MaxCPU                          int64
+	MaxMemory                       int64
+	SessionTTL                      time.Duration
+	OperationLease                  time.Duration
+	ParameterRetention              time.Duration
+	ParameterMutationTimeout        time.Duration
+	WorkspaceNamespace              string
+	GitHubStateTTL                  time.Duration
+	GitHubCookieName                string
+	ObservabilityMaxWindow          time.Duration
+	ObservabilityLiveTTL            time.Duration
+	ObservabilityLivePoll           time.Duration
+	ObservabilityLivePerUser        int
+	ObservabilityMetricsLivePoll    time.Duration
+	ObservabilityMetricsLivePerUser int
 }
 
 func DefaultConfig() Config {
-	return Config{Mode: "development", PublicURL: "http://127.0.0.1:8080", CookieName: "fruto_session", AllowedOrigin: "http://127.0.0.1:8080", AllowedHosts: []string{"127.0.0.1:8080", "localhost:8080"}, AllowedRegistries: []string{"ghcr.io"}, MaxReplicas: 5, MaxCPU: 2000, MaxMemory: 2048, SessionTTL: 12 * time.Hour, OperationLease: 30 * time.Second, ParameterRetention: 7 * 24 * time.Hour, ParameterMutationTimeout: 5 * time.Minute, WorkspaceNamespace: "fruto-workspaces", GitHubStateTTL: 10 * time.Minute, GitHubCookieName: "molejo_github_state", ObservabilityMaxWindow: 24 * time.Hour, ObservabilityLiveTTL: 10 * time.Minute, ObservabilityLivePoll: 2 * time.Second, ObservabilityLivePerUser: 3}
+	return Config{Mode: "development", PublicURL: "http://127.0.0.1:8080", CookieName: "fruto_session", AllowedOrigin: "http://127.0.0.1:8080", AllowedHosts: []string{"127.0.0.1:8080", "localhost:8080"}, AllowedRegistries: []string{"ghcr.io"}, MaxReplicas: 5, MaxCPU: 2000, MaxMemory: 2048, SessionTTL: 12 * time.Hour, OperationLease: 30 * time.Second, ParameterRetention: 7 * 24 * time.Hour, ParameterMutationTimeout: 5 * time.Minute, WorkspaceNamespace: "fruto-workspaces", GitHubStateTTL: 10 * time.Minute, GitHubCookieName: "molejo_github_state", ObservabilityMaxWindow: 24 * time.Hour, ObservabilityLiveTTL: 10 * time.Minute, ObservabilityLivePoll: 2 * time.Second, ObservabilityLivePerUser: 3, ObservabilityMetricsLivePoll: 30 * time.Second, ObservabilityMetricsLivePerUser: 2}
 }
 
 type Server struct {
@@ -67,7 +69,8 @@ type Server struct {
 	SecretFingerprintKey []byte
 	Observability        observability.Reader
 	limiter              *loginLimiter
-	liveLimiter          *concurrencyLimiter
+	logLiveLimiter       *concurrencyLimiter
+	metricsLiveLimiter   *concurrencyLimiter
 	token                func(int) (string, error)
 	deploymentID         func() (string, error)
 	parameterID          func() (string, error)
@@ -77,7 +80,7 @@ func NewServer(s *store.Store, r runtime.Client, cfg Config, logger *slog.Logger
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Server{Store: s, Runtime: r, Config: cfg, Logger: logger, Tracer: noop.NewTracerProvider().Tracer("github.com/fruto-platform/fruto/services/control-plane-api"), ParameterSecrets: parameters.UnavailableStore{}, Observability: observability.UnavailableReader{}, limiter: &loginLimiter{entries: map[string]loginAttempt{}}, liveLimiter: &concurrencyLimiter{active: map[int64]int{}}, token: randomToken, deploymentID: func() (string, error) { return domain.NewPublicID("dpl") }, parameterID: func() (string, error) { return domain.NewPublicID("par") }}
+	return &Server{Store: s, Runtime: r, Config: cfg, Logger: logger, Tracer: noop.NewTracerProvider().Tracer("github.com/fruto-platform/fruto/services/control-plane-api"), ParameterSecrets: parameters.UnavailableStore{}, Observability: observability.UnavailableReader{}, limiter: &loginLimiter{entries: map[string]loginAttempt{}}, logLiveLimiter: &concurrencyLimiter{active: map[int64]int{}}, metricsLiveLimiter: &concurrencyLimiter{active: map[int64]int{}}, token: randomToken, deploymentID: func() (string, error) { return domain.NewPublicID("dpl") }, parameterID: func() (string, error) { return domain.NewPublicID("par") }}
 }
 
 func (s *Server) Handler() http.Handler {

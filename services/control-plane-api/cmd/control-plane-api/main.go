@@ -119,6 +119,14 @@ func run() error {
 		return err
 	}
 	cfg.ObservabilityLivePerUser = int(livePerUser)
+	if cfg.ObservabilityMetricsLivePoll, err = durationEnv("FRUTO_OBSERVABILITY_METRICS_LIVE_POLL", cfg.ObservabilityMetricsLivePoll); err != nil {
+		return err
+	}
+	metricsLivePerUser, err := int64Env("FRUTO_OBSERVABILITY_METRICS_LIVE_PER_USER", int64(cfg.ObservabilityMetricsLivePerUser))
+	if err != nil {
+		return err
+	}
+	cfg.ObservabilityMetricsLivePerUser = int(metricsLivePerUser)
 	if err = cfg.Validate(); err != nil {
 		return fmt.Errorf("invalid HTTP configuration: %w", err)
 	}

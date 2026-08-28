@@ -76,6 +76,19 @@ type Metrics struct {
 	Series []MetricSeries `json:"series"`
 }
 
+type MetricSample struct {
+	Name      string    `json:"name"`
+	Unit      string    `json:"unit"`
+	Instance  string    `json:"instance,omitempty"`
+	Timestamp time.Time `json:"timestamp"`
+	Value     float64   `json:"value"`
+}
+
+type MetricSnapshot struct {
+	ObservedAt time.Time      `json:"observedAt"`
+	Samples    []MetricSample `json:"samples"`
+}
+
 type Event struct {
 	Timestamp time.Time `json:"timestamp"`
 	Source    string    `json:"source"`
@@ -88,6 +101,7 @@ type Event struct {
 type Reader interface {
 	Logs(context.Context, Scope, LogQuery) ([]LogEntry, error)
 	Metrics(context.Context, Scope, MetricQuery) (Metrics, error)
+	CurrentMetrics(context.Context, Scope, time.Time) (MetricSnapshot, error)
 	Events(context.Context, Scope, EventQuery) ([]Event, error)
 }
 
@@ -99,6 +113,10 @@ func (UnavailableReader) Logs(context.Context, Scope, LogQuery) ([]LogEntry, err
 
 func (UnavailableReader) Metrics(context.Context, Scope, MetricQuery) (Metrics, error) {
 	return Metrics{}, ErrUnavailable
+}
+
+func (UnavailableReader) CurrentMetrics(context.Context, Scope, time.Time) (MetricSnapshot, error) {
+	return MetricSnapshot{}, ErrUnavailable
 }
 
 func (UnavailableReader) Events(context.Context, Scope, EventQuery) ([]Event, error) {
@@ -337,6 +355,73 @@ func (c *VictoriaMetricsClient) Metrics(ctx context.Context, scope Scope, query 
 	return result, nil
 }
 
+func (c *VictoriaMetricsClient) CurrentMetrics(ctx context.Context, scope Scope, at time.Time) (MetricSnapshot, error) {
+	result := MetricSnapshot{ObservedAt: at.UTC(), Samples: make([]MetricSample, 0, len(metricDefinitions))}
+	selector := fmt.Sprintf(`k8s_namespace_name=%q,k8s_deployment_name=%q`, scope.Namespace, scope.RuntimeName)
+	for _, definition := range metricDefinitions {
+		samples, err := c.queryInstant(ctx, fmt.Sprintf(definition.Query, selector), at)
+		if err != nil {
+			return MetricSnapshot{}, err
+		}
+		for _, sample := range samples {
+			sample.Name = definition.Name
+			sample.Unit = definition.Unit
+			result.Samples = append(result.Samples, sample)
+		}
+	}
+	return result, nil
+}
+
+func (c *VictoriaMetricsClient) queryInstant(ctx context.Context, expression string, at time.Time) ([]MetricSample, error) {
+	endpoint := *c.endpoint
+	endpoint.Path = strings.TrimRight(endpoint.Path, "/") + "/api/v1/query"
+	values := endpoint.Query()
+	values.Set("query", expression)
+	values.Set("time", at.UTC().Format(time.RFC3339Nano))
+	endpoint.RawQuery = values.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrUnavailable, err)
+	}
+	response, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrUnavailable, err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4<<10))
+		return nil, fmt.Errorf("%w: VictoriaMetrics returned HTTP %d", ErrUnavailable, response.StatusCode)
+	}
+	var payload struct {
+		Status string `json:"status"`
+		Data   struct {
+			Result []struct {
+				Metric map[string]string `json:"metric"`
+				Value  []json.RawMessage `json:"value"`
+			} `json:"result"`
+		} `json:"data"`
+	}
+	if err = json.NewDecoder(io.LimitReader(response.Body, 8<<20)).Decode(&payload); err != nil || payload.Status != "success" {
+		return nil, fmt.Errorf("%w: invalid VictoriaMetrics response", ErrUnavailable)
+	}
+	samples := make([]MetricSample, 0, len(payload.Data.Result))
+	for _, row := range payload.Data.Result {
+		if len(row.Value) != 2 {
+			continue
+		}
+		var timestamp float64
+		var encoded string
+		if json.Unmarshal(row.Value[0], &timestamp) != nil || json.Unmarshal(row.Value[1], &encoded) != nil {
+			continue
+		}
+		number, parseErr := strconv.ParseFloat(encoded, 64)
+		if parseErr == nil {
+			samples = append(samples, MetricSample{Instance: sanitizeLabel(row.Metric["k8s_pod_name"]), Timestamp: time.Unix(0, int64(timestamp*float64(time.Second))).UTC(), Value: number})
+		}
+	}
+	return samples, nil
+}
+
 func (c *VictoriaMetricsClient) queryRange(ctx context.Context, expression string, query MetricQuery) ([]MetricSeries, error) {
 	endpoint := *c.endpoint
 	endpoint.Path = strings.TrimRight(endpoint.Path, "/") + "/api/v1/query_range"
@@ -410,6 +495,13 @@ func (c CombinedReader) Metrics(ctx context.Context, scope Scope, query MetricQu
 		return Metrics{}, ErrUnavailable
 	}
 	return c.MetricsDB.Metrics(ctx, scope, query)
+}
+
+func (c CombinedReader) CurrentMetrics(ctx context.Context, scope Scope, at time.Time) (MetricSnapshot, error) {
+	if c.MetricsDB == nil {
+		return MetricSnapshot{}, ErrUnavailable
+	}
+	return c.MetricsDB.CurrentMetrics(ctx, scope, at)
 }
 
 func (c CombinedReader) Events(ctx context.Context, scope Scope, query EventQuery) ([]Event, error) {

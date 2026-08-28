@@ -82,6 +82,43 @@ func TestVictoriaMetricsAlwaysScopesEveryMetricQuery(t *testing.T) {
 	}
 }
 
+func TestVictoriaMetricsCurrentMetricsUsesInstantScopedQueries(t *testing.T) {
+	t.Parallel()
+
+	var paths, queries []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.Path)
+		queries = append(queries, r.URL.Query().Get("query"))
+		_ = json.NewEncoder(w).Encode(map[string]any{"status": "success", "data": map[string]any{"resultType": "vector", "result": []any{
+			map[string]any{"metric": map[string]string{"k8s_pod_name": "pod-a"}, "value": []any{1_787_918_400, "1.5"}},
+		}}})
+	}))
+	defer server.Close()
+
+	client, err := NewVictoriaMetricsClient(server.URL, server.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := client.CurrentMetrics(context.Background(), Scope{Namespace: "workspace-a", RuntimeName: "runtime-a"}, time.Date(2026, 8, 28, 12, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snapshot.Samples) != len(metricDefinitions) || len(paths) != len(metricDefinitions) {
+		t.Fatalf("got %d samples and %d queries", len(snapshot.Samples), len(paths))
+	}
+	for index, path := range paths {
+		if path != "/api/v1/query" {
+			t.Fatalf("path[%d] = %q", index, path)
+		}
+		if !strings.Contains(queries[index], `k8s_namespace_name="workspace-a"`) || !strings.Contains(queries[index], `k8s_deployment_name="runtime-a"`) {
+			t.Fatalf("metric query is not tenant and runtime scoped: %s", queries[index])
+		}
+	}
+	if snapshot.Samples[0].Name != "cpu" || snapshot.Samples[0].Instance != "pod-a" || snapshot.Samples[0].Value != 1.5 {
+		t.Fatalf("unexpected sample: %#v", snapshot.Samples[0])
+	}
+}
+
 func TestClickHouseEventsUseKubernetesEventAttributesAndRuntimePrefix(t *testing.T) {
 	t.Parallel()
 

@@ -125,11 +125,11 @@ func (h *generatedHandler) StreamAppEnvironmentRuntimeLogs(w http.ResponseWriter
 	if !ok {
 		return
 	}
-	if !h.server.liveLimiter.acquire(actor.ID, h.server.Config.ObservabilityLivePerUser) {
+	if !h.server.logLiveLimiter.acquire(actor.ID, h.server.Config.ObservabilityLivePerUser) {
 		writeError(w, http.StatusTooManyRequests, "live_stream_limit", "too many live log streams", r)
 		return
 	}
-	defer h.server.liveLimiter.release(actor.ID)
+	defer h.server.logLiveLimiter.release(actor.ID)
 	search, instance := "", ""
 	if params.Search != nil {
 		search = strings.TrimSpace(*params.Search)
@@ -153,12 +153,15 @@ func (h *generatedHandler) StreamAppEnvironmentRuntimeLogs(w http.ResponseWriter
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
+	_, _ = fmt.Fprint(w, "retry: 5000\n\n")
 	seen := map[string]struct{}{}
 	if !writeLiveLogs(w, flusher, initial, seen) {
 		return
 	}
 	ticker := time.NewTicker(h.server.Config.ObservabilityLivePoll)
 	defer ticker.Stop()
+	heartbeat := time.NewTicker(15 * time.Second)
+	defer heartbeat.Stop()
 	reauthorize := time.NewTicker(30 * time.Second)
 	defer reauthorize.Stop()
 	timeout := time.NewTimer(h.server.Config.ObservabilityLiveTTL)
@@ -172,6 +175,9 @@ func (h *generatedHandler) StreamAppEnvironmentRuntimeLogs(w http.ResponseWriter
 			_, _ = fmt.Fprint(w, "event: end\ndata: {\"reason\":\"stream_ttl\"}\n\n")
 			flusher.Flush()
 			return
+		case <-heartbeat.C:
+			_, _ = fmt.Fprint(w, ": heartbeat\n\n")
+			flusher.Flush()
 		case <-reauthorize.C:
 			currentActor, _, authenticated := h.server.session(r)
 			currentWorkspace, authErr := h.server.Store.WorkspaceForActor(r.Context(), currentActor)
@@ -193,6 +199,78 @@ func (h *generatedHandler) StreamAppEnvironmentRuntimeLogs(w http.ResponseWriter
 			cursor = now.UTC()
 			if len(seen) > 2000 {
 				seen = map[string]struct{}{}
+			}
+		}
+	}
+}
+
+func (h *generatedHandler) StreamAppEnvironmentRuntimeMetrics(w http.ResponseWriter, r *http.Request, workspaceID generated.WorkspaceId, projectID generated.ProjectId, appID generated.AppId, appEnvironmentID generated.AppEnvironmentId) {
+	actor, workspace, appEnvironment, ok := h.observabilityScope(w, r, workspaceID, projectID, appID, appEnvironmentID)
+	if !ok {
+		return
+	}
+	if !h.server.metricsLiveLimiter.acquire(actor.ID, h.server.Config.ObservabilityMetricsLivePerUser) {
+		writeError(w, http.StatusTooManyRequests, "metrics_stream_limit", "too many live metric streams", r)
+		return
+	}
+	defer h.server.metricsLiveLimiter.release(actor.ID)
+
+	snapshot, err := h.server.Observability.CurrentMetrics(r.Context(), runtimeScope(workspace, appEnvironment), time.Now().UTC())
+	if err != nil {
+		h.writeObservabilityError(w, r, err)
+		return
+	}
+	flusher, supported := w.(http.Flusher)
+	if !supported {
+		writeError(w, http.StatusNotImplemented, "stream_unsupported", "live streaming is unavailable", r)
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	_, _ = fmt.Fprint(w, "retry: 5000\n\n")
+	if !writeMetricSnapshot(w, flusher, snapshot) {
+		return
+	}
+
+	poll := time.NewTicker(h.server.Config.ObservabilityMetricsLivePoll)
+	defer poll.Stop()
+	heartbeat := time.NewTicker(15 * time.Second)
+	defer heartbeat.Stop()
+	reauthorize := time.NewTicker(30 * time.Second)
+	defer reauthorize.Stop()
+	timeout := time.NewTimer(h.server.Config.ObservabilityLiveTTL)
+	defer timeout.Stop()
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-timeout.C:
+			_, _ = fmt.Fprint(w, "event: end\ndata: {\"reason\":\"stream_ttl\"}\n\n")
+			flusher.Flush()
+			return
+		case <-heartbeat.C:
+			_, _ = fmt.Fprint(w, ": heartbeat\n\n")
+			flusher.Flush()
+		case <-reauthorize.C:
+			currentActor, _, authenticated := h.server.session(r)
+			currentWorkspace, authErr := h.server.Store.WorkspaceForActor(r.Context(), currentActor)
+			if !authenticated || currentActor != actor.ID || authErr != nil || currentWorkspace.ID != workspace.ID {
+				_, _ = fmt.Fprint(w, "event: end\ndata: {\"reason\":\"authorization_changed\"}\n\n")
+				flusher.Flush()
+				return
+			}
+		case now := <-poll.C:
+			next, queryErr := h.server.Observability.CurrentMetrics(r.Context(), runtimeScope(workspace, appEnvironment), now.UTC())
+			if queryErr != nil {
+				_, _ = fmt.Fprint(w, "event: error\ndata: {\"code\":\"observability_unavailable\"}\n\n")
+				flusher.Flush()
+				return
+			}
+			if !writeMetricSnapshot(w, flusher, next) {
+				return
 			}
 		}
 	}
@@ -268,6 +346,20 @@ func writeLiveLogs(w http.ResponseWriter, flusher http.Flusher, items []observab
 		if _, err = fmt.Fprintf(w, "event: log\ndata: %s\n\n", payload); err != nil {
 			return false
 		}
+	}
+	flusher.Flush()
+	return true
+}
+
+func writeMetricSnapshot(w http.ResponseWriter, flusher http.Flusher, snapshot observability.MetricSnapshot) bool {
+	payload, err := json.Marshal(snapshot)
+	if err != nil {
+		return false
+	}
+	controller := http.NewResponseController(w)
+	_ = controller.SetWriteDeadline(time.Now().Add(5 * time.Second))
+	if _, err = fmt.Fprintf(w, "id: %d\nevent: metrics\ndata: %s\n\n", snapshot.ObservedAt.UnixMilli(), payload); err != nil {
+		return false
 	}
 	flusher.Flush()
 	return true

@@ -27,6 +27,11 @@ func (r *recordingObservabilityReader) Metrics(_ context.Context, scope observab
 	return observability.Metrics{From: query.From, To: query.To, Step: query.Step.String(), Series: []observability.MetricSeries{}}, nil
 }
 
+func (r *recordingObservabilityReader) CurrentMetrics(_ context.Context, scope observability.Scope, at time.Time) (observability.MetricSnapshot, error) {
+	r.scope = scope
+	return observability.MetricSnapshot{ObservedAt: at, Samples: []observability.MetricSample{{Name: "available", Unit: "replicas", Timestamp: at, Value: 1}}}, nil
+}
+
 func (r *recordingObservabilityReader) Events(context.Context, observability.Scope, observability.EventQuery) ([]observability.Event, error) {
 	return []observability.Event{}, nil
 }
@@ -94,6 +99,12 @@ func TestObservabilityAPIResolvesScopeOnlyAfterFullAncestryAuthorization(t *test
 	response := hierarchyRequest(t, server, owner, http.MethodGet, base+"/metrics", "", nil)
 	if response.Code != http.StatusOK || reader.scope.Namespace != workspace.Namespace || reader.scope.RuntimeName != persisted.RuntimeName {
 		t.Fatalf("status=%d scope=%+v body=%s", response.Code, reader.scope, response.Body.String())
+	}
+	server.Config.ObservabilityLiveTTL = time.Millisecond
+	server.Config.ObservabilityMetricsLivePoll = time.Hour
+	response = hierarchyRequest(t, server, owner, http.MethodGet, base+"/metrics/live", "", nil)
+	if response.Code != http.StatusOK || response.Header().Get("Content-Type") != "text/event-stream" || !strings.Contains(response.Body.String(), "event: metrics") || !strings.Contains(response.Body.String(), `"name":"available"`) {
+		t.Fatalf("live metrics status=%d content-type=%q body=%s", response.Code, response.Header().Get("Content-Type"), response.Body.String())
 	}
 
 	otherAppResponse := hierarchyRequest(t, server, owner, http.MethodPost, "/api/v1/workspaces/"+workspace.PublicID+"/projects/"+project.PublicID+"/apps", `{"name":"Other"}`, nil)

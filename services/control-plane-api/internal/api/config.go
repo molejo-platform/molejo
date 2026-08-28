@@ -16,6 +16,9 @@ func (c Config) Validate() error {
 	if c.ObservabilityLiveTTL <= 0 || c.ObservabilityLiveTTL > 30*time.Minute || c.ObservabilityLivePoll < time.Second || c.ObservabilityLivePerUser < 1 || c.ObservabilityLivePerUser > 10 {
 		return fmt.Errorf("observability live limits are invalid")
 	}
+	if c.ObservabilityMetricsLivePoll < 15*time.Second || c.ObservabilityMetricsLivePoll > 5*time.Minute || c.ObservabilityMetricsLivePerUser < 1 || c.ObservabilityMetricsLivePerUser > 10 {
+		return fmt.Errorf("observability metrics live limits are invalid")
+	}
 	if c.GitHubStateTTL <= 0 || c.GitHubStateTTL > 30*time.Minute {
 		return fmt.Errorf("GitHub state TTL must be positive and at most 30 minutes")
 	}

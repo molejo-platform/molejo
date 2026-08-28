@@ -27,9 +27,11 @@ test.describe("control plane browser flow", () => {
     await page.getByLabel("Branch").fill("develop");
     await page.getByRole("button", { name: "Criar e adicionar" }).click();
     await expect(page.getByRole("heading", { name: "Browser app" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Builds", exact: true })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Deployments", exact: true })).toBeVisible();
+    const operationalHealth = page.getByRole("region", { name: "Saúde operacional" });
+    await expect(operationalHealth).toBeVisible();
+    await expect(page.getByRole("link", { name: "Entrega", exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Observabilidade", exact: true })).toBeVisible();
     await expect(page.getByRole("link", { name: "Configuração", exact: true })).toBeVisible();
-    await expect(page.getByText("develop", { exact: true })).toBeVisible();
+    await expect(operationalHealth.getByText("develop", { exact: true })).toBeVisible();
   });
 });
