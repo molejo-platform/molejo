@@ -2,7 +2,9 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"errors"
+	"io/fs"
 	"os"
 	"strconv"
 	"strings"
@@ -11,7 +13,65 @@ import (
 
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/domain"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/testsupport"
+	"github.com/pressly/goose/v3"
 )
+
+func TestParameterHardeningMigrationBackfillsArchivedParameters(t *testing.T) {
+	dsn := strings.TrimSpace(os.Getenv("FRUTO_TEST_DATABASE_URL"))
+	if dsn == "" {
+		t.Skip("set FRUTO_TEST_DATABASE_URL to run PostgreSQL integration tests")
+	}
+	ctx := context.Background()
+	isolatedDSN, cleanup, err := testsupport.IsolatedPostgres(ctx, dsn, "parameter_hardening_upgrade")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := cleanup(context.Background()); err != nil {
+			t.Errorf("drop integration schema: %v", err)
+		}
+	})
+	db, err := sql.Open("pgx", isolatedDSN)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	migrationFiles, err := fs.Sub(migrationFS, "migrations")
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider, err := goose.NewProvider(goose.DialectPostgres, db, migrationFiles)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = provider.UpTo(ctx, 13); err != nil {
+		t.Fatal(err)
+	}
+	var actorID, workspaceID, parameterID int64
+	if err = db.QueryRowContext(ctx, `INSERT INTO actors(actor_key,role,password_hash) VALUES('migration-owner','owner','test') RETURNING id`).Scan(&actorID); err != nil {
+		t.Fatal(err)
+	}
+	if err = db.QueryRowContext(ctx, `INSERT INTO workspaces(public_id,name,namespace_name,bootstrap_state) VALUES($1,'Migration workspace','migration-workspace','Ready') RETURNING id`, newID(t, "ws")).Scan(&workspaceID); err != nil {
+		t.Fatal(err)
+	}
+	if err = db.QueryRowContext(ctx, `INSERT INTO parameters(public_id,workspace_id,path,kind,archived_at) VALUES($1,$2,'/legacy/archived','PlainText',now()) RETURNING id`, newID(t, "par"), workspaceID).Scan(&parameterID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.ExecContext(ctx, `INSERT INTO parameter_versions(parameter_id,version,created_by_actor_id,plaintext_value) VALUES($1,1,$2,'legacy-value')`, parameterID, actorID); err != nil {
+		t.Fatal(err)
+	}
+	upgradeStartedAt := time.Now()
+	if _, err = provider.UpTo(ctx, 14); err != nil {
+		t.Fatal(err)
+	}
+	var purgeAfter time.Time
+	if err = db.QueryRowContext(ctx, `SELECT purge_after FROM parameters WHERE id=$1`, parameterID).Scan(&purgeAfter); err != nil {
+		t.Fatal(err)
+	}
+	if purgeAfter.Before(upgradeStartedAt.Add(6 * 24 * time.Hour)) {
+		t.Fatalf("legacy archive retention was not renewed: purge_after=%s", purgeAfter)
+	}
+}
 
 func TestSchemaReadyAcceptsTheAppEnvironmentMigration(t *testing.T) {
 	storage, _, _ := newIntegrationFixture(t)

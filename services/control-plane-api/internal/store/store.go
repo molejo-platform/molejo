@@ -377,6 +377,8 @@ var ErrNameConflict = fmt.Errorf("name conflict: %w", ErrConflict)
 var ErrDependencyConflict = fmt.Errorf("dependency conflict: %w", ErrConflict)
 
 var ErrParameterBinding = errors.New("parameter binding is invalid")
+var ErrParameterInUse = errors.New("parameter is in use")
+var ErrIdempotencyConflict = errors.New("idempotency key was reused with another payload")
 
 var ErrLeaseLost = errors.New("operation lease lost")
 

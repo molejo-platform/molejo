@@ -48,6 +48,8 @@ func run() error {
 		return runBuildWorker()
 	case "runtime-worker":
 		return runRuntimeWorker()
+	case "parameter-worker":
+		return runParameterWorker()
 	}
 	if command != "serve" {
 		return fmt.Errorf("unknown command %q", command)
@@ -95,6 +97,12 @@ func run() error {
 			return fmt.Errorf("invalid FRUTO_OPERATION_LEASE")
 		}
 		cfg.OperationLease = d
+	}
+	if cfg.ParameterRetention, err = durationEnv("FRUTO_PARAMETER_RETENTION", cfg.ParameterRetention); err != nil {
+		return err
+	}
+	if cfg.ParameterMutationTimeout, err = durationEnv("FRUTO_PARAMETER_MUTATION_TIMEOUT", cfg.ParameterMutationTimeout); err != nil {
+		return err
 	}
 	if err = cfg.Validate(); err != nil {
 		return fmt.Errorf("invalid HTTP configuration: %w", err)
@@ -193,6 +201,38 @@ func runRuntimeWorker() error {
 	worker := api.NewServer(s, rt, cfg, slog.Default())
 	worker.ParameterSecrets = backend
 	worker.RunWorker(ctx, env("FRUTO_RUNTIME_WORKER_ID", "runtime-worker-1"))
+	return nil
+}
+
+func runParameterWorker() error {
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+	databaseURL := strings.TrimSpace(os.Getenv("FRUTO_DATABASE_URL"))
+	if databaseURL == "" {
+		return fmt.Errorf("FRUTO_DATABASE_URL is required")
+	}
+	s, err := store.New(ctx, databaseURL)
+	if err != nil {
+		return err
+	}
+	defer s.Close()
+	if err = s.SchemaReady(ctx); err != nil {
+		return fmt.Errorf("parameter schema is not ready: %w", err)
+	}
+	backend, err := openBaoStore()
+	if err != nil {
+		return err
+	}
+	cfg := api.DefaultConfig()
+	if cfg.ParameterRetention, err = durationEnv("FRUTO_PARAMETER_RETENTION", cfg.ParameterRetention); err != nil {
+		return err
+	}
+	if cfg.ParameterMutationTimeout, err = durationEnv("FRUTO_PARAMETER_MUTATION_TIMEOUT", cfg.ParameterMutationTimeout); err != nil {
+		return err
+	}
+	worker := api.NewServer(s, nil, cfg, slog.Default())
+	worker.ParameterSecrets = backend
+	worker.RunParameterMaintenanceWorker(ctx)
 	return nil
 }
 

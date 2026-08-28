@@ -77,6 +77,19 @@ func TestLabPostgresIsExplicitlyDisposableAndBounded(t *testing.T) {
 	}
 }
 
+func TestLabParameterWorkerUsesThePrivateRegistryCredential(t *testing.T) {
+	worker := findObject(t, "deploy/control-plane-lab/private-registry.yaml", "Deployment", "control-plane-parameter-worker")
+	podSpec := workloadPodSpec(t, worker)
+	pullSecrets, found, err := unstructured.NestedSlice(podSpec, "imagePullSecrets")
+	if err != nil || !found || len(pullSecrets) != 1 {
+		t.Fatalf("imagePullSecrets=%v found=%v err=%v", pullSecrets, found, err)
+	}
+	secret, ok := pullSecrets[0].(map[string]any)
+	if !ok || secret["name"] != "registry-pull" {
+		t.Fatalf("imagePullSecrets=%v", pullSecrets)
+	}
+}
+
 func findObject(t *testing.T, relativePath, kind, name string) *unstructured.Unstructured {
 	t.Helper()
 	path := filepath.Join("..", "..", relativePath)

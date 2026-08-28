@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/domain"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -239,6 +241,9 @@ func TestEnsureWorkspaceCreatesAndReusesTheManagedNamespace(t *testing.T) {
 	if err := corev1.AddToScheme(scheme); err != nil {
 		t.Fatal(err)
 	}
+	if err := rbacv1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
 	kubernetesClient := &KubernetesClient{
 		client:       fake.NewClientBuilder().WithScheme(scheme).Build(),
 		fieldManager: "test-control-plane",
@@ -258,6 +263,17 @@ func TestEnsureWorkspaceCreatesAndReusesTheManagedNamespace(t *testing.T) {
 	if current.Annotations[controlPlaneOwnerAnnotation] != workspaceOwnerValue {
 		t.Fatalf("namespace owner marker = %q", current.Annotations[controlPlaneOwnerAnnotation])
 	}
+	var role rbacv1.Role
+	if err := kubernetesClient.client.Get(context.Background(), client.ObjectKey{Namespace: "fruto-workspaces", Name: workspaceRuntimeAccessName}, &role); err != nil {
+		t.Fatal(err)
+	}
+	var binding rbacv1.RoleBinding
+	if err := kubernetesClient.client.Get(context.Background(), client.ObjectKey{Namespace: "fruto-workspaces", Name: workspaceRuntimeAccessName}, &binding); err != nil {
+		t.Fatal(err)
+	}
+	if len(binding.Subjects) != 1 || binding.Subjects[0].Name != runtimeWorkerServiceAccountName {
+		t.Fatalf("runtime binding subjects = %+v", binding.Subjects)
+	}
 }
 
 func TestEnsureWorkspaceRejectsAnUnmanagedNamespace(t *testing.T) {
@@ -273,6 +289,43 @@ func TestEnsureWorkspaceRejectsAnUnmanagedNamespace(t *testing.T) {
 	}
 
 	err := kubernetesClient.EnsureWorkspace(context.Background(), "fruto-workspaces")
+	if !errors.Is(err, ErrOwnershipConflict) {
+		t.Fatalf("expected ErrOwnershipConflict, got %v", err)
+	}
+}
+
+func TestEnsureWorkspaceRepairsOwnedRuntimeAccessAndRejectsUnownedAccess(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	if err := rbacv1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	namespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "fruto-workspaces", Annotations: map[string]string{controlPlaneOwnerAnnotation: workspaceOwnerValue}}}
+	ownedRole := &rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: workspaceRuntimeAccessName, Namespace: namespace.Name, Annotations: map[string]string{controlPlaneOwnerAnnotation: workspaceOwnerValue}}}
+	kubernetesClient := &KubernetesClient{client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(namespace, ownedRole).Build(), fieldManager: "test-control-plane", applyTimeout: time.Second}
+
+	if err := kubernetesClient.EnsureWorkspace(context.Background(), namespace.Name); err != nil {
+		t.Fatal(err)
+	}
+	var repaired rbacv1.Role
+	if err := kubernetesClient.client.Get(context.Background(), client.ObjectKey{Namespace: namespace.Name, Name: workspaceRuntimeAccessName}, &repaired); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(repaired.Rules, workspaceRuntimeRules()) {
+		t.Fatalf("runtime role rules = %+v", repaired.Rules)
+	}
+
+	var unownedBinding rbacv1.RoleBinding
+	if err := kubernetesClient.client.Get(context.Background(), client.ObjectKey{Namespace: namespace.Name, Name: workspaceRuntimeAccessName}, &unownedBinding); err != nil {
+		t.Fatal(err)
+	}
+	unownedBinding.Annotations = nil
+	if err := kubernetesClient.client.Update(context.Background(), &unownedBinding); err != nil {
+		t.Fatal(err)
+	}
+	err := kubernetesClient.EnsureWorkspace(context.Background(), namespace.Name)
 	if !errors.Is(err, ErrOwnershipConflict) {
 		t.Fatalf("expected ErrOwnershipConflict, got %v", err)
 	}

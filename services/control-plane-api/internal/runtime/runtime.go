@@ -14,6 +14,7 @@ import (
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/domain"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -27,6 +28,9 @@ const controlPlaneOwnerAnnotation = "platform.fruto.calouro.tech/control-plane-o
 const workspaceOwnerValue = "fruto-control-plane"
 const managedByLabel = "app.kubernetes.io/managed-by"
 const configurationVersionLabel = "platform.fruto.calouro.tech/configuration-version"
+const workspaceRuntimeAccessName = "control-plane-runtime"
+const runtimeWorkerServiceAccountName = "control-plane-runtime-worker"
+const controlPlaneNamespace = "fruto-control-plane"
 
 var ErrOwnershipConflict = errors.New("runtime object is not owned by the control plane")
 
@@ -109,6 +113,9 @@ func newKubernetesClient(config *rest.Config, fieldManager string, timeout time.
 	if err := appsv1.AddToScheme(scheme); err != nil {
 		return nil, err
 	}
+	if err := rbacv1.AddToScheme(scheme); err != nil {
+		return nil, err
+	}
 	if err := platformv1alpha1.AddToScheme(scheme); err != nil {
 		return nil, err
 	}
@@ -126,13 +133,15 @@ func (k *KubernetesClient) EnsureWorkspace(ctx context.Context, namespace string
 	err := k.client.Get(workspaceCtx, types.NamespacedName{Name: namespace}, &ns)
 	if apierrors.IsNotFound(err) {
 		ns = corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace, Annotations: map[string]string{controlPlaneOwnerAnnotation: workspaceOwnerValue}, Labels: map[string]string{"app.kubernetes.io/managed-by": workspaceOwnerValue}}}
-		if err = k.client.Create(workspaceCtx, &ns); err == nil {
-			return nil
-		}
-		if !apierrors.IsAlreadyExists(err) {
+		if err = k.client.Create(workspaceCtx, &ns); err != nil && !apierrors.IsAlreadyExists(err) {
 			return fmt.Errorf("create workspace namespace: %w", err)
 		}
-		if err = k.client.Get(workspaceCtx, types.NamespacedName{Name: namespace}, &ns); err != nil {
+		if apierrors.IsAlreadyExists(err) {
+			if err = k.client.Get(workspaceCtx, types.NamespacedName{Name: namespace}, &ns); err != nil {
+				return fmt.Errorf("workspace namespace appeared during create: %w", err)
+			}
+		}
+		if err != nil {
 			return fmt.Errorf("workspace namespace appeared during create: %w", err)
 		}
 	} else if err != nil {
@@ -140,6 +149,74 @@ func (k *KubernetesClient) EnsureWorkspace(ctx context.Context, namespace string
 	}
 	if ns.Annotations[controlPlaneOwnerAnnotation] != workspaceOwnerValue {
 		return fmt.Errorf("%w: Namespace %s is not managed by the control plane", ErrOwnershipConflict, namespace)
+	}
+	return k.ensureWorkspaceRuntimeAccess(workspaceCtx, namespace)
+}
+
+func workspaceRuntimeRules() []rbacv1.PolicyRule {
+	return []rbacv1.PolicyRule{
+		{APIGroups: []string{"platform.fruto.calouro.tech"}, Resources: []string{"appdeployments"}, Verbs: []string{"get", "list", "watch", "create", "patch", "delete"}},
+		{APIGroups: []string{"platform.fruto.calouro.tech"}, Resources: []string{"appdeployments/status"}, Verbs: []string{"get"}},
+		{APIGroups: []string{""}, Resources: []string{"configmaps", "secrets"}, Verbs: []string{"get", "list", "create", "delete"}},
+	}
+}
+
+func (k *KubernetesClient) ensureWorkspaceRuntimeAccess(ctx context.Context, namespace string) error {
+	metadata := metav1.ObjectMeta{
+		Name:        workspaceRuntimeAccessName,
+		Namespace:   namespace,
+		Annotations: map[string]string{controlPlaneOwnerAnnotation: workspaceOwnerValue},
+		Labels:      map[string]string{managedByLabel: workspaceOwnerValue},
+	}
+	desiredRole := &rbacv1.Role{ObjectMeta: metadata, Rules: workspaceRuntimeRules()}
+	var role rbacv1.Role
+	err := k.client.Get(ctx, client.ObjectKeyFromObject(desiredRole), &role)
+	if apierrors.IsNotFound(err) {
+		if err := k.client.Create(ctx, desiredRole); err != nil {
+			return fmt.Errorf("create workspace runtime Role: %w", err)
+		}
+	} else if err != nil {
+		return fmt.Errorf("read workspace runtime Role: %w", err)
+	} else {
+		if role.Annotations[controlPlaneOwnerAnnotation] != workspaceOwnerValue {
+			return fmt.Errorf("%w: Role %s/%s is not managed by the control plane", ErrOwnershipConflict, namespace, workspaceRuntimeAccessName)
+		}
+		if !reflect.DeepEqual(role.Rules, desiredRole.Rules) || !reflect.DeepEqual(role.Labels, desiredRole.Labels) {
+			role.Rules = desiredRole.Rules
+			role.Labels = desiredRole.Labels
+			if err := k.client.Update(ctx, &role); err != nil {
+				return fmt.Errorf("update workspace runtime Role: %w", err)
+			}
+		}
+	}
+
+	desiredBinding := &rbacv1.RoleBinding{
+		ObjectMeta: metadata,
+		Subjects:   []rbacv1.Subject{{Kind: rbacv1.ServiceAccountKind, Name: runtimeWorkerServiceAccountName, Namespace: controlPlaneNamespace}},
+		RoleRef:    rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "Role", Name: workspaceRuntimeAccessName},
+	}
+	var binding rbacv1.RoleBinding
+	err = k.client.Get(ctx, client.ObjectKeyFromObject(desiredBinding), &binding)
+	if apierrors.IsNotFound(err) {
+		if err := k.client.Create(ctx, desiredBinding); err != nil {
+			return fmt.Errorf("create workspace runtime RoleBinding: %w", err)
+		}
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read workspace runtime RoleBinding: %w", err)
+	}
+	if binding.Annotations[controlPlaneOwnerAnnotation] != workspaceOwnerValue {
+		return fmt.Errorf("%w: RoleBinding %s/%s is not managed by the control plane", ErrOwnershipConflict, namespace, workspaceRuntimeAccessName)
+	}
+	if reflect.DeepEqual(binding.Subjects, desiredBinding.Subjects) && reflect.DeepEqual(binding.RoleRef, desiredBinding.RoleRef) && reflect.DeepEqual(binding.Labels, desiredBinding.Labels) {
+		return nil
+	}
+	binding.Subjects = desiredBinding.Subjects
+	binding.RoleRef = desiredBinding.RoleRef
+	binding.Labels = desiredBinding.Labels
+	if err := k.client.Update(ctx, &binding); err != nil {
+		return fmt.Errorf("update workspace runtime RoleBinding: %w", err)
 	}
 	return nil
 }

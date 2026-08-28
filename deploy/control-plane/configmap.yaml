@@ -14,8 +14,11 @@ data:
   FRUTO_COOKIE_SECURE: "true"
   FRUTO_FIELD_MANAGER: fruto-control-plane
   FRUTO_OPENBAO_ADDR: https://openbao.molejo-secrets.svc:8200
+  FRUTO_OPENBAO_KUBERNETES_AUTH_MOUNT: kubernetes
   FRUTO_OPENBAO_KV_MOUNT: parameters
   FRUTO_OPENBAO_ROLE: molejo-parameter-writer
+  FRUTO_PARAMETER_RETENTION: 168h
+  FRUTO_PARAMETER_MUTATION_TIMEOUT: 5m
   # Required external release input. Replace this with the target cluster's
   # kube-system Namespace UID before applying the control plane.
   FRUTO_EXPECTED_CLUSTER_UID: required-external-cluster-uid

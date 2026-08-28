@@ -27,26 +27,28 @@ import (
 const maxRequestBody = 128 << 10
 
 type Config struct {
-	Mode               string
-	PublicURL          string
-	CookieName         string
-	CookieSecure       bool
-	AllowedOrigin      string
-	AllowedHosts       []string
-	AllowedRegistries  []string
-	TrustedProxyCIDRs  []string
-	MaxReplicas        int32
-	MaxCPU             int64
-	MaxMemory          int64
-	SessionTTL         time.Duration
-	OperationLease     time.Duration
-	WorkspaceNamespace string
-	GitHubStateTTL     time.Duration
-	GitHubCookieName   string
+	Mode                     string
+	PublicURL                string
+	CookieName               string
+	CookieSecure             bool
+	AllowedOrigin            string
+	AllowedHosts             []string
+	AllowedRegistries        []string
+	TrustedProxyCIDRs        []string
+	MaxReplicas              int32
+	MaxCPU                   int64
+	MaxMemory                int64
+	SessionTTL               time.Duration
+	OperationLease           time.Duration
+	ParameterRetention       time.Duration
+	ParameterMutationTimeout time.Duration
+	WorkspaceNamespace       string
+	GitHubStateTTL           time.Duration
+	GitHubCookieName         string
 }
 
 func DefaultConfig() Config {
-	return Config{Mode: "development", PublicURL: "http://127.0.0.1:8080", CookieName: "fruto_session", AllowedOrigin: "http://127.0.0.1:8080", AllowedHosts: []string{"127.0.0.1:8080", "localhost:8080"}, AllowedRegistries: []string{"ghcr.io"}, MaxReplicas: 5, MaxCPU: 2000, MaxMemory: 2048, SessionTTL: 12 * time.Hour, OperationLease: 30 * time.Second, WorkspaceNamespace: "fruto-workspaces", GitHubStateTTL: 10 * time.Minute, GitHubCookieName: "molejo_github_state"}
+	return Config{Mode: "development", PublicURL: "http://127.0.0.1:8080", CookieName: "fruto_session", AllowedOrigin: "http://127.0.0.1:8080", AllowedHosts: []string{"127.0.0.1:8080", "localhost:8080"}, AllowedRegistries: []string{"ghcr.io"}, MaxReplicas: 5, MaxCPU: 2000, MaxMemory: 2048, SessionTTL: 12 * time.Hour, OperationLease: 30 * time.Second, ParameterRetention: 7 * 24 * time.Hour, ParameterMutationTimeout: 5 * time.Minute, WorkspaceNamespace: "fruto-workspaces", GitHubStateTTL: 10 * time.Minute, GitHubCookieName: "molejo_github_state"}
 }
 
 type Server struct {

@@ -139,6 +139,7 @@ spec:
         app.kubernetes.io/part-of: fruto-platform
     spec:
       serviceAccountName: openbao
+      automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 100
@@ -182,6 +183,7 @@ spec:
             - { name: tls, mountPath: /openbao/tls, readOnly: true }
             - { name: data, mountPath: /openbao/data }
             - { name: tmp, mountPath: /tmp }
+            - { name: service-account, mountPath: /var/run/secrets/kubernetes.io/serviceaccount, readOnly: true }
       volumes:
         - name: config
           configMap: { name: openbao-config }
@@ -189,6 +191,21 @@ spec:
           secret: { secretName: openbao-server-tls }
         - name: tmp
           emptyDir: {}
+        - name: service-account
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  audience: https://kubernetes.default.svc.cluster.local
+                  expirationSeconds: 600
+              - configMap:
+                  name: kube-root-ca.crt
+                  items:
+                    - { key: ca.crt, path: ca.crt }
+              - downwardAPI:
+                  items:
+                    - path: namespace
+                      fieldRef: { apiVersion: v1, fieldPath: metadata.namespace }
   volumeClaimTemplates:
     - metadata:
         name: data

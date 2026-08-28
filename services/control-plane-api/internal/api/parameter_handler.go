@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/api/generated"
+	"github.com/fruto-platform/fruto/services/control-plane-api/internal/auth"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/domain"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/parameters"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/store"
@@ -37,30 +38,71 @@ func (h *generatedHandler) ListParameters(w http.ResponseWriter, r *http.Request
 	writeHierarchyList(w, items, nextCursor)
 }
 
-func (h *generatedHandler) CreateParameter(w http.ResponseWriter, r *http.Request, workspaceID generated.WorkspaceId) {
+func (h *generatedHandler) CreateParameter(w http.ResponseWriter, r *http.Request, workspaceID generated.WorkspaceId, _ generated.CreateParameterParams) {
 	actor, workspace, ok := h.authorizeWorkspace(w, r, string(workspaceID), true)
 	if !ok {
 		return
 	}
+	idempotencyKey, payloadHash, hasIdempotency := idempotency(r)
 	input, ok := decodeParameterInput(w, r)
 	if !ok {
 		return
 	}
+	if input.Kind == domain.ParameterPlainText {
+		for range 3 {
+			publicID, err := h.server.parameterID()
+			if err != nil {
+				break
+			}
+			value := domain.ParameterValue{PlainTextValue: &input.Value}
+			item, createErr := h.server.Store.CreateParameter(r.Context(), workspace.ID, actor.ID, publicID, input.Path, input.Kind, input.Description, value)
+			if errors.Is(createErr, store.ErrPublicIDCollision) {
+				continue
+			}
+			if createErr != nil {
+				writeParameterError(w, r, createErr)
+				return
+			}
+			h.server.logger().Info("parameter created", "request_id", requestID(r), "workspace_id", workspace.PublicID, "parameter_id", item.PublicID, "parameter_type", item.Kind, "parameter_version", item.CurrentVersion)
+			writeJSON(w, http.StatusCreated, item)
+			return
+		}
+		writeError(w, http.StatusServiceUnavailable, "id_generation_failed", "could not allocate a Parameter identifier", r)
+		return
+	}
+	if !hasIdempotency {
+		writeError(w, http.StatusBadRequest, "idempotency_required", "Idempotency-Key is required for Secret parameters", r)
+		return
+	}
+	payloadHash = scopedBuildPayloadHash(r, payloadHash)
+	if !h.secretBackendAvailable(w, r) {
+		return
+	}
+	fingerprint := h.secretFingerprint(input.Value)
 	for range 3 {
 		publicID, err := h.server.parameterID()
 		if err != nil {
 			break
 		}
-		value, ok := h.parameterValue(w, r, workspace.PublicID, publicID, input, 0)
-		if !ok {
-			return
-		}
-		item, err := h.server.Store.CreateParameter(r.Context(), workspace.ID, actor.ID, publicID, input.Path, input.Kind, input.Description, value)
-		if errors.Is(err, store.ErrPublicIDCollision) {
+		mutation, existing, beginErr := h.server.Store.BeginCreateSecretParameter(r.Context(), workspace.ID, actor.ID, publicID, input.Path, input.Description, secretReference(workspace.PublicID, publicID), fingerprint, auth.HashToken(idempotencyKey), payloadHash)
+		if errors.Is(beginErr, store.ErrPublicIDCollision) {
 			continue
 		}
-		if err != nil {
-			writeParameterError(w, r, err)
+		if beginErr != nil {
+			writeParameterError(w, r, beginErr)
+			return
+		}
+		if existing && mutation.State == "Ready" {
+			item, findErr := h.server.Store.FindParameter(r.Context(), workspace.ID, mutation.ParameterPublicID)
+			if findErr != nil {
+				writeParameterError(w, r, findErr)
+				return
+			}
+			writeJSON(w, http.StatusCreated, item)
+			return
+		}
+		item, ok := h.completeSecretMutation(w, r, mutation, input.Value)
+		if !ok {
 			return
 		}
 		h.server.logger().Info("parameter created", "request_id", requestID(r), "workspace_id", workspace.PublicID, "parameter_id", item.PublicID, "parameter_type", item.Kind, "parameter_version", item.CurrentVersion)
@@ -88,38 +130,59 @@ func (h *generatedHandler) ReplaceParameter(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return
 	}
+	idempotencyKey, payloadHash, hasIdempotency := idempotency(r)
+	input, ok := decodeParameterInput(w, r)
+	if !ok {
+		return
+	}
 	current, err := h.server.Store.FindParameter(r.Context(), workspace.ID, string(parameterID))
 	if err != nil {
 		writeParameterError(w, r, err)
-		return
-	}
-	if current.Version != int64(params.IfMatch) {
-		writeParameterError(w, r, store.ErrVersionConflict)
-		return
-	}
-	input, ok := decodeParameterInput(w, r)
-	if !ok {
 		return
 	}
 	if input.Kind != current.Kind {
 		writeError(w, http.StatusBadRequest, "parameter_type_immutable", "Parameter type cannot be changed", r)
 		return
 	}
-	expectedSecretVersion := int64(0)
-	if current.Kind == domain.ParameterSecret {
-		_, expectedSecretVersion, err = h.server.Store.ParameterSecretReference(r.Context(), workspace.ID, current.PublicID)
-		if err != nil {
-			writeParameterError(w, r, err)
+	if current.Kind == domain.ParameterPlainText {
+		if current.Version != int64(params.IfMatch) {
+			writeParameterError(w, r, store.ErrVersionConflict)
 			return
 		}
-	}
-	value, ok := h.parameterValue(w, r, workspace.PublicID, current.PublicID, input, expectedSecretVersion)
-	if !ok {
+		value := domain.ParameterValue{PlainTextValue: &input.Value}
+		item, replaceErr := h.server.Store.ReplaceParameter(r.Context(), workspace.ID, actor.ID, current.PublicID, input.Path, input.Description, int64(params.IfMatch), value)
+		if replaceErr != nil {
+			writeParameterError(w, r, replaceErr)
+			return
+		}
+		h.server.logger().Info("parameter replaced", "request_id", requestID(r), "workspace_id", workspace.PublicID, "parameter_id", item.PublicID, "parameter_type", item.Kind, "parameter_version", item.CurrentVersion)
+		writeJSON(w, http.StatusOK, item)
 		return
 	}
-	item, err := h.server.Store.ReplaceParameter(r.Context(), workspace.ID, actor.ID, current.PublicID, input.Path, input.Description, int64(params.IfMatch), value)
+	if !hasIdempotency {
+		writeError(w, http.StatusBadRequest, "idempotency_required", "Idempotency-Key is required for Secret parameters", r)
+		return
+	}
+	payloadHash = scopedBuildPayloadHash(r, payloadHash)
+	if !h.secretBackendAvailable(w, r) {
+		return
+	}
+	mutation, existing, err := h.server.Store.BeginReplaceSecretParameter(r.Context(), workspace.ID, actor.ID, current.PublicID, input.Path, input.Description, int64(params.IfMatch), h.secretFingerprint(input.Value), auth.HashToken(idempotencyKey), payloadHash)
 	if err != nil {
 		writeParameterError(w, r, err)
+		return
+	}
+	if existing && mutation.State == "Ready" {
+		item, findErr := h.server.Store.FindParameter(r.Context(), workspace.ID, mutation.ParameterPublicID)
+		if findErr != nil {
+			writeParameterError(w, r, findErr)
+			return
+		}
+		writeJSON(w, http.StatusOK, item)
+		return
+	}
+	item, ok := h.completeSecretMutation(w, r, mutation, input.Value)
+	if !ok {
 		return
 	}
 	h.server.logger().Info("parameter replaced", "request_id", requestID(r), "workspace_id", workspace.PublicID, "parameter_id", item.PublicID, "parameter_type", item.Kind, "parameter_version", item.CurrentVersion)
@@ -136,7 +199,7 @@ func (h *generatedHandler) ArchiveParameter(w http.ResponseWriter, r *http.Reque
 		writeParameterError(w, r, err)
 		return
 	}
-	if err = h.server.Store.ArchiveParameter(r.Context(), workspace.ID, item.PublicID, int64(params.IfMatch)); err != nil {
+	if err = h.server.Store.ArchiveParameter(r.Context(), workspace.ID, item.PublicID, int64(params.IfMatch), h.server.Config.ParameterRetention); err != nil {
 		writeParameterError(w, r, err)
 		return
 	}
@@ -164,27 +227,42 @@ func decodeParameterInput(w http.ResponseWriter, r *http.Request) (parameterInpu
 	return input, true
 }
 
-func (h *generatedHandler) parameterValue(w http.ResponseWriter, r *http.Request, workspaceID, parameterID string, input parameterInput, expectedVersion int64) (domain.ParameterValue, bool) {
-	if input.Kind == domain.ParameterPlainText {
-		return domain.ParameterValue{PlainTextValue: &input.Value}, true
-	}
+func (h *generatedHandler) secretBackendAvailable(w http.ResponseWriter, r *http.Request) bool {
 	if h.server.ParameterSecrets == nil || len(h.server.SecretFingerprintKey) < 32 {
 		writeError(w, http.StatusServiceUnavailable, "secret_store_unavailable", "secret storage is not configured", r)
-		return domain.ParameterValue{}, false
+		return false
 	}
-	reference := secretReference(workspaceID, parameterID)
-	backendVersion, err := h.server.ParameterSecrets.Put(r.Context(), reference, input.Value, expectedVersion)
+	return true
+}
+
+func (h *generatedHandler) secretFingerprint(value string) []byte {
+	mac := hmac.New(sha256.New, h.server.SecretFingerprintKey)
+	_, _ = mac.Write([]byte(value))
+	return mac.Sum(nil)
+}
+
+func (h *generatedHandler) completeSecretMutation(w http.ResponseWriter, r *http.Request, mutation domain.SecretMutation, value string) (domain.Parameter, bool) {
+	backendVersion, err := h.server.ParameterSecrets.Put(r.Context(), mutation.Reference, value, mutation.ExpectedBackendVersion)
 	if errors.Is(err, parameters.ErrConflict) {
-		writeError(w, http.StatusConflict, "secret_version_conflict", "secret changed since it was read", r)
-		return domain.ParameterValue{}, false
+		currentVersion, inspectErr := h.server.ParameterSecrets.CurrentVersion(r.Context(), mutation.Reference)
+		if inspectErr == nil && currentVersion == mutation.BackendVersion {
+			backendVersion = currentVersion
+			err = nil
+		} else {
+			writeError(w, http.StatusConflict, "secret_version_conflict", "secret changed since the mutation was reserved", r)
+			return domain.Parameter{}, false
+		}
 	}
 	if err != nil || backendVersion < 1 {
 		writeError(w, http.StatusServiceUnavailable, "secret_store_unavailable", "secret storage is unavailable", r)
-		return domain.ParameterValue{}, false
+		return domain.Parameter{}, false
 	}
-	mac := hmac.New(sha256.New, h.server.SecretFingerprintKey)
-	_, _ = mac.Write([]byte(input.Value))
-	return domain.ParameterValue{SecretReference: reference, SecretBackendVersion: backendVersion, Fingerprint: mac.Sum(nil)}, true
+	item, err := h.server.Store.CompleteSecretMutation(r.Context(), mutation, backendVersion)
+	if err != nil {
+		writeParameterError(w, r, err)
+		return domain.Parameter{}, false
+	}
+	return item, true
 }
 
 func secretReference(workspaceID, parameterID string) string {
@@ -199,6 +277,10 @@ func writeParameterError(w http.ResponseWriter, r *http.Request, err error) {
 		writeError(w, http.StatusConflict, "version_conflict", "Parameter changed since it was read", r)
 	case errors.Is(err, store.ErrNameConflict), errors.Is(err, store.ErrConflict):
 		writeError(w, http.StatusConflict, "parameter_conflict", "an active Parameter already uses this path", r)
+	case errors.Is(err, store.ErrParameterInUse):
+		writeError(w, http.StatusConflict, "parameter_in_use", "Parameter is still referenced by desired, running, or deployed configuration", r)
+	case errors.Is(err, store.ErrIdempotencyConflict):
+		writeError(w, http.StatusConflict, "idempotency_conflict", "Idempotency-Key was already used with another Parameter mutation", r)
 	default:
 		writeError(w, http.StatusInternalServerError, "storage_failed", "Parameter state could not be persisted", r)
 	}

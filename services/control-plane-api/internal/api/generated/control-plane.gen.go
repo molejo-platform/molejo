@@ -674,6 +674,9 @@ type IncludeArchived = bool
 // Limit defines model for Limit.
 type Limit = int
 
+// OptionalIdempotencyKey defines model for OptionalIdempotencyKey.
+type OptionalIdempotencyKey = string
+
 // ParameterId defines model for ParameterId.
 type ParameterId = string
 
@@ -730,7 +733,8 @@ type ListWorkspacesParams struct {
 
 // CreateWorkspaceParams defines parameters for CreateWorkspace.
 type CreateWorkspaceParams struct {
-	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+	// IdempotencyKey Required for Secret parameter mutations; ignored for PlainText mutations.
+	IdempotencyKey *OptionalIdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
 // UpdateWorkspaceParams defines parameters for UpdateWorkspace.
@@ -744,6 +748,11 @@ type ListParametersParams struct {
 	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
+// CreateParameterParams defines parameters for CreateParameter.
+type CreateParameterParams struct {
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
 // ArchiveParameterParams defines parameters for ArchiveParameter.
 type ArchiveParameterParams struct {
 	IfMatch IfMatch `json:"If-Match"`
@@ -751,7 +760,9 @@ type ArchiveParameterParams struct {
 
 // ReplaceParameterParams defines parameters for ReplaceParameter.
 type ReplaceParameterParams struct {
-	IfMatch IfMatch `json:"If-Match"`
+	// IdempotencyKey Required for Secret parameter mutations; ignored for PlainText mutations.
+	IdempotencyKey *OptionalIdempotencyKey `json:"Idempotency-Key,omitempty"`
+	IfMatch        IfMatch                 `json:"If-Match"`
 }
 
 // ListProjectsParams defines parameters for ListProjects.
@@ -956,7 +967,7 @@ type ServerInterface interface {
 	ListParameters(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, params ListParametersParams)
 
 	// (POST /api/v1/workspaces/{workspaceId}/parameters)
-	CreateParameter(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId)
+	CreateParameter(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, params CreateParameterParams)
 
 	// (DELETE /api/v1/workspaces/{workspaceId}/parameters/{parameterId})
 	ArchiveParameter(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, parameterId ParameterId, params ArchiveParameterParams)
@@ -1149,7 +1160,7 @@ func (_ Unimplemented) ListParameters(w http.ResponseWriter, r *http.Request, wo
 }
 
 // (POST /api/v1/workspaces/{workspaceId}/parameters)
-func (_ Unimplemented) CreateParameter(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId) {
+func (_ Unimplemented) CreateParameter(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, params CreateParameterParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1554,27 +1565,23 @@ func (siw *ServerInterfaceWrapper) CreateWorkspace(w http.ResponseWriter, r *htt
 
 	headers := r.Header
 
-	// ------------- Required header parameter "Idempotency-Key" -------------
+	// ------------- Optional header parameter "Idempotency-Key" -------------
 	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
-		var IdempotencyKey IdempotencyKey
+		var IdempotencyKey OptionalIdempotencyKey
 		n := len(valueList)
 		if n != 1 {
 			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
 			return
 		}
 
-		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
 		if err != nil {
 			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
 			return
 		}
 
-		params.IdempotencyKey = IdempotencyKey
+		params.IdempotencyKey = &IdempotencyKey
 
-	} else {
-		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
-		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
-		return
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1874,8 +1881,36 @@ func (siw *ServerInterfaceWrapper) CreateParameter(w http.ResponseWriter, r *htt
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateParameterParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreateParameter(w, r, workspaceId)
+		siw.Handler.CreateParameter(w, r, workspaceId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2011,6 +2046,25 @@ func (siw *ServerInterfaceWrapper) ReplaceParameter(w http.ResponseWriter, r *ht
 	var params ReplaceParameterParams
 
 	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey OptionalIdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = &IdempotencyKey
+
+	}
 
 	// ------------- Required header parameter "If-Match" -------------
 	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
@@ -5054,6 +5108,7 @@ func (response ListParameters404JSONResponse) VisitListParametersResponse(w http
 
 type CreateParameterRequestObject struct {
 	WorkspaceId WorkspaceId `json:"workspaceId"`
+	Params      CreateParameterParams
 	Body        *CreateParameterJSONRequestBody
 }
 
@@ -7805,10 +7860,11 @@ func (sh *strictHandler) ListParameters(w http.ResponseWriter, r *http.Request, 
 }
 
 // CreateParameter operation middleware
-func (sh *strictHandler) CreateParameter(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId) {
+func (sh *strictHandler) CreateParameter(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, params CreateParameterParams) {
 	var request CreateParameterRequestObject
 
 	request.WorkspaceId = workspaceId
+	request.Params = params
 
 	var body CreateParameterJSONRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {

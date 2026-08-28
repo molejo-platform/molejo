@@ -18,6 +18,16 @@ spec:
     spec:
       imagePullSecrets: [{ name: registry-pull }]
 ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: control-plane-parameter-worker
+  namespace: fruto-control-plane
+spec:
+  template:
+    spec:
+      imagePullSecrets: [{ name: registry-pull }]
+---
 apiVersion: batch/v1
 kind: Job
 metadata:

@@ -69,7 +69,7 @@ paths:
     post:
       operationId: createWorkspace
       security: [{ sessionCookie: [] }]
-      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      parameters: [{ $ref: '#/components/parameters/OptionalIdempotencyKey' }]
       requestBody:
         required: true
         content:
@@ -137,6 +137,7 @@ paths:
     post:
       operationId: createParameter
       security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/ParameterInput' } } }
@@ -164,7 +165,9 @@ paths:
     put:
       operationId: replaceParameter
       security: [{ sessionCookie: [] }]
-      parameters: [{ $ref: '#/components/parameters/IfMatch' }]
+      parameters:
+        - { $ref: '#/components/parameters/OptionalIdempotencyKey' }
+        - { $ref: '#/components/parameters/IfMatch' }
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/ParameterInput' } } }
@@ -891,6 +894,12 @@ components:
       name: Idempotency-Key
       in: header
       required: true
+      schema: { type: string, minLength: 1, maxLength: 128 }
+    OptionalIdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: Required for Secret parameter mutations; ignored for PlainText mutations.
       schema: { type: string, minLength: 1, maxLength: 128 }
     IfMatch:
       name: If-Match

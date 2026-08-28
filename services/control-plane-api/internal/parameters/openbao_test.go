@@ -51,6 +51,8 @@ func TestOpenBaoKV2UsesKubernetesAuthAndExactVersions(t *testing.T) {
 				t.Fatalf("expected exact version, got %q", r.URL.RawQuery)
 			}
 			_, _ = w.Write([]byte(`{"data":{"data":{"value":"sensitive-value"},"metadata":{"version":1}}}`))
+		case r.URL.Path == "/v1/parameters/metadata/workspaces/ws-a/parameters/par-a" && r.Method == http.MethodGet:
+			_, _ = w.Write([]byte(`{"data":{"current_version":1}}`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -68,6 +70,10 @@ func TestOpenBaoKV2UsesKubernetesAuthAndExactVersions(t *testing.T) {
 	value, err := client.Get(context.Background(), "workspaces/ws-a/parameters/par-a", 1)
 	if err != nil || value != "sensitive-value" {
 		t.Fatalf("Get() = %q, %v", value, err)
+	}
+	currentVersion, err := client.CurrentVersion(context.Background(), "workspaces/ws-a/parameters/par-a")
+	if err != nil || currentVersion != 1 {
+		t.Fatalf("CurrentVersion() = %d, %v", currentVersion, err)
 	}
 	mu.Lock()
 	defer mu.Unlock()

@@ -898,6 +898,8 @@ export interface components {
         BuildId: string;
         ReleaseId: string;
         IdempotencyKey: string;
+        /** @description Required for Secret parameter mutations; ignored for PlainText mutations. */
+        OptionalIdempotencyKey: string;
         IfMatch: number;
     };
     requestBodies: never;
@@ -1020,8 +1022,9 @@ export interface operations {
     createWorkspace: {
         parameters: {
             query?: never;
-            header: {
-                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            header?: {
+                /** @description Required for Secret parameter mutations; ignored for PlainText mutations. */
+                "Idempotency-Key"?: components["parameters"]["OptionalIdempotencyKey"];
             };
             path?: never;
             cookie?: never;
@@ -1136,7 +1139,9 @@ export interface operations {
     createParameter: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 workspaceId: components["parameters"]["WorkspaceId"];
             };
@@ -1192,6 +1197,8 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Required for Secret parameter mutations; ignored for PlainText mutations. */
+                "Idempotency-Key"?: components["parameters"]["OptionalIdempotencyKey"];
                 "If-Match": components["parameters"]["IfMatch"];
             };
             path: {

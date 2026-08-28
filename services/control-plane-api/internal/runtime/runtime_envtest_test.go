@@ -9,6 +9,7 @@ import (
 	platformv1alpha1 "github.com/fruto-platform/fruto/packages/kubernetes-api/apis/platform/v1alpha1"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/domain"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
@@ -30,6 +31,9 @@ func TestEnvtestEnsuresExactWorkspaceAndAppDeploymentIdempotently(t *testing.T) 
 	})
 	scheme := k8sruntime.NewScheme()
 	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	if err := rbacv1.AddToScheme(scheme); err != nil {
 		t.Fatal(err)
 	}
 	if err := platformv1alpha1.AddToScheme(scheme); err != nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"math"
+	"time"
 
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/domain"
 	"github.com/jackc/pgx/v5"
@@ -48,6 +49,15 @@ func (s *Store) CreateParameter(ctx context.Context, workspaceID, actorID int64,
 		return domain.Parameter{}, err
 	}
 	defer tx.Rollback(ctx)
+	if err = lockWorkspaceParameterPaths(ctx, tx, workspaceID); err != nil {
+		return domain.Parameter{}, err
+	}
+	if reserved, reserveErr := parameterPathReserved(ctx, tx, workspaceID, 0, path); reserveErr != nil || reserved {
+		if reserved {
+			return domain.Parameter{}, ErrNameConflict
+		}
+		return domain.Parameter{}, reserveErr
+	}
 	var parameterID int64
 	err = tx.QueryRow(ctx, `INSERT INTO parameters(public_id,workspace_id,path,kind,description)
 		SELECT $1,w.id,$3,$4,$5 FROM workspaces w WHERE w.id=$2
@@ -80,7 +90,7 @@ func (s *Store) CreateParameter(ctx context.Context, workspaceID, actorID int64,
 }
 
 func (s *Store) FindParameter(ctx context.Context, workspaceID int64, publicID string) (domain.Parameter, error) {
-	item, err := scanParameter(s.Pool.QueryRow(ctx, `SELECT `+parameterColumns+` FROM parameters p JOIN parameter_versions pv ON pv.parameter_id=p.id AND pv.version=p.current_version WHERE p.workspace_id=$1 AND p.public_id=$2 AND p.archived_at IS NULL`, workspaceID, publicID))
+	item, err := scanParameter(s.Pool.QueryRow(ctx, `SELECT `+parameterColumns+` FROM parameters p JOIN parameter_versions pv ON pv.parameter_id=p.id AND pv.version=p.current_version WHERE p.workspace_id=$1 AND p.public_id=$2 AND p.archived_at IS NULL AND p.value_state='Ready' AND pv.value_state='Ready'`, workspaceID, publicID))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.Parameter{}, ErrNotFound
 	}
@@ -91,7 +101,7 @@ func (s *Store) ListParameters(ctx context.Context, workspaceID, beforeID int64,
 	if beforeID <= 0 {
 		beforeID = math.MaxInt64
 	}
-	rows, err := s.Pool.Query(ctx, `SELECT `+parameterColumns+` FROM parameters p JOIN parameter_versions pv ON pv.parameter_id=p.id AND pv.version=p.current_version WHERE p.workspace_id=$1 AND p.id<$2 AND p.archived_at IS NULL ORDER BY p.id DESC LIMIT $3`, workspaceID, beforeID, limit+1)
+	rows, err := s.Pool.Query(ctx, `SELECT `+parameterColumns+` FROM parameters p JOIN parameter_versions pv ON pv.parameter_id=p.id AND pv.version=p.current_version WHERE p.workspace_id=$1 AND p.id<$2 AND p.archived_at IS NULL AND p.value_state='Ready' AND pv.value_state='Ready' ORDER BY p.id DESC LIMIT $3`, workspaceID, beforeID, limit+1)
 	if err != nil {
 		return nil, "", err
 	}
@@ -121,12 +131,21 @@ func (s *Store) ReplaceParameter(ctx context.Context, workspaceID, actorID int64
 		return domain.Parameter{}, err
 	}
 	defer tx.Rollback(ctx)
+	if err = lockWorkspaceParameterPaths(ctx, tx, workspaceID); err != nil {
+		return domain.Parameter{}, err
+	}
 	var parameterID, currentVersion int64
-	err = tx.QueryRow(ctx, `SELECT id,current_version FROM parameters WHERE workspace_id=$1 AND public_id=$2 AND version=$3 AND archived_at IS NULL FOR UPDATE`, workspaceID, publicID, resourceVersion).Scan(&parameterID, &currentVersion)
+	err = tx.QueryRow(ctx, `SELECT id,current_version FROM parameters p WHERE workspace_id=$1 AND public_id=$2 AND version=$3 AND archived_at IS NULL
+		AND NOT EXISTS(SELECT 1 FROM parameter_versions pv WHERE pv.parameter_id=p.id AND pv.value_state='Pending') FOR UPDATE`, workspaceID, publicID, resourceVersion).Scan(&parameterID, &currentVersion)
 	if errors.Is(err, pgx.ErrNoRows) {
-		var exists bool
-		if checkErr := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM parameters WHERE workspace_id=$1 AND public_id=$2 AND archived_at IS NULL)`, workspaceID, publicID).Scan(&exists); checkErr != nil {
+		var exists, pending bool
+		if checkErr := tx.QueryRow(ctx, `SELECT
+			EXISTS(SELECT 1 FROM parameters WHERE workspace_id=$1 AND public_id=$2 AND archived_at IS NULL),
+			EXISTS(SELECT 1 FROM parameters p JOIN parameter_versions pv ON pv.parameter_id=p.id WHERE p.workspace_id=$1 AND p.public_id=$2 AND p.archived_at IS NULL AND pv.value_state='Pending')`, workspaceID, publicID).Scan(&exists, &pending); checkErr != nil {
 			return domain.Parameter{}, checkErr
+		}
+		if pending {
+			return domain.Parameter{}, ErrConflict
 		}
 		if exists {
 			return domain.Parameter{}, ErrVersionConflict
@@ -135,6 +154,12 @@ func (s *Store) ReplaceParameter(ctx context.Context, workspaceID, actorID int64
 	}
 	if err != nil {
 		return domain.Parameter{}, err
+	}
+	if reserved, reserveErr := parameterPathReserved(ctx, tx, workspaceID, parameterID, path); reserveErr != nil || reserved {
+		if reserved {
+			return domain.Parameter{}, ErrNameConflict
+		}
+		return domain.Parameter{}, reserveErr
 	}
 	nextVersion := currentVersion + 1
 	plain, reference, backendVersion, fingerprint := parameterValueArguments(value)
@@ -157,28 +182,54 @@ func (s *Store) ReplaceParameter(ctx context.Context, workspaceID, actorID int64
 	return item, nil
 }
 
-func (s *Store) ArchiveParameter(ctx context.Context, workspaceID int64, publicID string, version int64) error {
-	tag, err := s.Pool.Exec(ctx, `UPDATE parameters SET archived_at=now(),version=version+1,updated_at=now() WHERE workspace_id=$1 AND public_id=$2 AND version=$3 AND archived_at IS NULL`, workspaceID, publicID, version)
+func (s *Store) ArchiveParameter(ctx context.Context, workspaceID int64, publicID string, version int64, retention time.Duration) error {
+	if retention < 0 {
+		return ErrConflict
+	}
+	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	if tag.RowsAffected() == 1 {
-		return nil
+	defer tx.Rollback(ctx)
+	var parameterID int64
+	err = tx.QueryRow(ctx, `SELECT id FROM parameters WHERE workspace_id=$1 AND public_id=$2 AND version=$3 AND archived_at IS NULL AND value_state='Ready' FOR UPDATE`, workspaceID, publicID, version).Scan(&parameterID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		var exists bool
+		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM parameters WHERE workspace_id=$1 AND public_id=$2 AND archived_at IS NULL)`, workspaceID, publicID).Scan(&exists); err != nil {
+			return err
+		}
+		if exists {
+			return ErrVersionConflict
+		}
+		return ErrNotFound
 	}
-	var exists bool
-	if err = s.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM parameters WHERE workspace_id=$1 AND public_id=$2 AND archived_at IS NULL)`, workspaceID, publicID).Scan(&exists); err != nil {
+	if err != nil {
 		return err
 	}
-	if exists {
-		return ErrVersionConflict
+	var pending bool
+	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM parameter_versions WHERE parameter_id=$1 AND value_state='Pending')`, parameterID).Scan(&pending); err != nil {
+		return err
 	}
-	return ErrNotFound
+	if pending {
+		return ErrConflict
+	}
+	inUse, err := parameterInUse(ctx, tx, parameterID)
+	if err != nil {
+		return err
+	}
+	if inUse {
+		return ErrParameterInUse
+	}
+	if _, err = tx.Exec(ctx, `UPDATE parameters SET archived_at=now(),purge_after=now()+$2::interval,version=version+1,updated_at=now() WHERE id=$1`, parameterID, retention.String()); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func (s *Store) ParameterSecretReference(ctx context.Context, workspaceID int64, publicID string) (string, int64, error) {
 	var reference string
 	var backendVersion int64
-	err := s.Pool.QueryRow(ctx, `SELECT pv.secret_reference,pv.secret_backend_version FROM parameters p JOIN parameter_versions pv ON pv.parameter_id=p.id AND pv.version=p.current_version WHERE p.workspace_id=$1 AND p.public_id=$2 AND p.kind='Secret' AND p.archived_at IS NULL`, workspaceID, publicID).Scan(&reference, &backendVersion)
+	err := s.Pool.QueryRow(ctx, `SELECT pv.secret_reference,pv.secret_backend_version FROM parameters p JOIN parameter_versions pv ON pv.parameter_id=p.id AND pv.version=p.current_version WHERE p.workspace_id=$1 AND p.public_id=$2 AND p.kind='Secret' AND p.archived_at IS NULL AND p.value_state='Ready' AND pv.value_state='Ready'`, workspaceID, publicID).Scan(&reference, &backendVersion)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", 0, ErrNotFound
 	}

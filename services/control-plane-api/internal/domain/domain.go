@@ -95,6 +95,27 @@ type ParameterValue struct {
 	Fingerprint          []byte
 }
 
+type SecretMutation struct {
+	ParameterID            int64
+	ParameterPublicID      string
+	WorkspaceID            int64
+	ParameterVersion       int64
+	ResourceVersion        int64
+	Reference              string
+	ExpectedBackendVersion int64
+	BackendVersion         int64
+	State                  string
+	CreatedAt              time.Time
+}
+
+type ParameterPurgeCandidate struct {
+	ParameterID       int64
+	ParameterPublicID string
+	WorkspaceID       int64
+	Kind              string
+	SecretReference   string
+}
+
 type ParameterBinding struct {
 	Name              string `json:"name"`
 	ParameterPublicID string `json:"parameterId"`

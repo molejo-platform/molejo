@@ -203,17 +203,35 @@ type Parameter struct {
 	ArchivedAt     pgtype.Timestamptz `json:"archived_at"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	ValueState     string             `json:"value_state"`
+	PurgeAfter     pgtype.Timestamptz `json:"purge_after"`
+	PurgedAt       pgtype.Timestamptz `json:"purged_at"`
+}
+
+type ParameterPathReservation struct {
+	WorkspaceID      int64              `json:"workspace_id"`
+	Path             string             `json:"path"`
+	ParameterID      int64              `json:"parameter_id"`
+	ParameterVersion int64              `json:"parameter_version"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 }
 
 type ParameterVersion struct {
-	ParameterID          int64              `json:"parameter_id"`
-	Version              int64              `json:"version"`
-	CreatedByActorID     int64              `json:"created_by_actor_id"`
-	PlaintextValue       pgtype.Text        `json:"plaintext_value"`
-	SecretReference      pgtype.Text        `json:"secret_reference"`
-	SecretBackendVersion pgtype.Int8        `json:"secret_backend_version"`
-	Fingerprint          []byte             `json:"fingerprint"`
-	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	ParameterID                  int64              `json:"parameter_id"`
+	Version                      int64              `json:"version"`
+	CreatedByActorID             int64              `json:"created_by_actor_id"`
+	PlaintextValue               pgtype.Text        `json:"plaintext_value"`
+	SecretReference              pgtype.Text        `json:"secret_reference"`
+	SecretBackendVersion         pgtype.Int8        `json:"secret_backend_version"`
+	Fingerprint                  []byte             `json:"fingerprint"`
+	CreatedAt                    pgtype.Timestamptz `json:"created_at"`
+	ValueState                   string             `json:"value_state"`
+	ExpectedSecretBackendVersion pgtype.Int8        `json:"expected_secret_backend_version"`
+	IdempotencyHash              []byte             `json:"idempotency_hash"`
+	PayloadHash                  []byte             `json:"payload_hash"`
+	RequestedPath                pgtype.Text        `json:"requested_path"`
+	RequestedDescription         pgtype.Text        `json:"requested_description"`
+	CompletedAt                  pgtype.Timestamptz `json:"completed_at"`
 }
 
 type Project struct {

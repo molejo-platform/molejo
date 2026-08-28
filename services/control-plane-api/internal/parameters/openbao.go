@@ -100,6 +100,22 @@ func (c *OpenBaoKV2) Get(ctx context.Context, reference string, version int64) (
 	return value, nil
 }
 
+func (c *OpenBaoKV2) CurrentVersion(ctx context.Context, reference string) (int64, error) {
+	var response struct {
+		Data struct {
+			CurrentVersion int64 `json:"current_version"`
+		} `json:"data"`
+	}
+	status, err := c.request(ctx, http.MethodGet, "/v1/"+c.mount+"/metadata/"+safeReference(reference), nil, &response, true)
+	if status == http.StatusNotFound {
+		return 0, nil
+	}
+	if err != nil || status < 200 || status >= 300 || response.Data.CurrentVersion < 0 {
+		return 0, ErrUnavailable
+	}
+	return response.Data.CurrentVersion, nil
+}
+
 func (c *OpenBaoKV2) Delete(ctx context.Context, reference string) error {
 	status, err := c.request(ctx, http.MethodDelete, "/v1/"+c.mount+"/metadata/"+safeReference(reference), nil, nil, true)
 	if err != nil || (status != http.StatusNoContent && (status < 200 || status >= 300)) {
