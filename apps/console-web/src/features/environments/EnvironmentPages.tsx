@@ -158,6 +158,8 @@ export function EnvironmentAppReleasesPage() {
 
 function TargetReleases({ target, params }: { target: AppEnvironment; params: EnvironmentParams }) {
   const releases = useQuery({ queryKey: workspaceScopeKeys.appReleases(params.workspaceId, params.projectId, target.appId), queryFn: () => listAppReleases(params.workspaceId, params.projectId, target.appId) });
+  const errorMessage = releases.error ? userFacingError(releases.error) : "";
+  if (errorMessage) return <section className="stack"><DeliveryNav params={params}/><Alert>{errorMessage}</Alert></section>;
   return <section className="stack"><DeliveryNav params={params}/><div><p className="eyebrow">Artefatos</p><h2>Releases</h2><p className="muted">Releases são imagens imutáveis produzidas por builds bem-sucedidos; só viram runtime quando uma implantação as seleciona.</p></div>{releases.error && <Alert>{userFacingError(releases.error)}</Alert>}{releases.isPending ? <p className="muted" role="status">Carregando releases…</p> : releases.data?.items.length ? <div className="data-list">{releases.data.items.map((release) => <div className="data-row" key={release.id}><span><strong className="mono">{shortSha(release.commitSha)}</strong><small>{release.branch} · build {release.buildId} · {formatDateTime(release.createdAt)}</small></span><span className="row-action">Disponível</span></div>)}</div> : <EmptyState title="Nenhuma release" description="Um build bem-sucedido criará o primeiro artefato implantável."/>}</section>;
 }
 
