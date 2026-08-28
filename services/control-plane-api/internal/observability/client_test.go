@@ -103,7 +103,7 @@ func TestClickHouseEventsUseKubernetesEventAttributesAndRuntimePrefix(t *testing
 	if !strings.Contains(query, "LogAttributes['k8s.namespace.name']") || !strings.Contains(query, "startsWith(LogAttributes['k8s.event.name'], {runtime:String})") {
 		t.Fatalf("event query does not use collector event attributes: %s", query)
 	}
-	if items[0].Source != "runtime" || items[0].Message != "Runtime container started." || items[0].Instance != "" {
+	if items[0].Source != "kubernetes" || items[0].Message != "Runtime container started." || items[0].Instance != "" {
 		t.Fatalf("event exposes an unstable Kubernetes detail: %#v", items[0])
 	}
 }

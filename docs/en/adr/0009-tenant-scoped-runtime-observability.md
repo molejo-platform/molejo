@@ -1,0 +1,41 @@
+# ADR-0009: Tenant-Scoped Runtime Observability
+
+Status: Draft
+
+## Context
+
+Users need runtime logs, basic metrics, and operational events without access to
+Kubernetes or storage backends. Queries cross Workspace, Project, App, and
+AppEnvironment boundaries, while telemetry backends are operational components
+whose availability and topology may change independently from managed workloads.
+
+## Decision
+
+The public API resolves the complete product hierarchy and injects the trusted
+Namespace and runtime identity into every query. Clients cannot provide tenant
+selectors. Historical queries are limited to 24 hours and bounded result sizes;
+live logs use authenticated SSE with per-actor concurrency and duration limits.
+Authorization is revalidated during the stream.
+
+OpenTelemetry Collectors form the portable ingestion boundary. A node agent
+collects container logs and kubelet metrics, while a cluster collector gathers
+Kubernetes events. A gateway enriches and exports signals. The laboratory
+deployment uses ClickHouse for short-lived logs/events and VictoriaMetrics for
+metrics, behind NetworkPolicies and internal Services. These are replaceable
+deployment adapters, not public product contracts. Application availability and
+control-plane readiness do not depend on telemetry storage availability.
+
+The Console keeps build diagnostics separate from runtime observability and
+provides an overview plus dedicated logs, metrics, and event views. Empty,
+loading, partial, and unavailable states are explicit. Runtime events expose
+stable, sanitized product messages rather than raw Kubernetes object names,
+UIDs, or messages. Traces, public dashboards, alerts, long retention, and backup
+remain outside this decision.
+
+## Consequences
+
+Workspace isolation is enforced centrally and can be tested independently of
+the storage engines. The ingestion and storage topology can scale or be replaced
+without changing the API or Console. The initial laboratory stack is single
+replica and pre-alpha; it does not claim HA, disaster recovery, long-term
+retention, or hostile multi-tenant isolation.

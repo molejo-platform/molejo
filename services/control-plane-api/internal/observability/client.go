@@ -212,7 +212,7 @@ ORDER BY Timestamp DESC LIMIT {limit:UInt32} FORMAT JSONEachRow`, c.database)
 					eventType = "Event"
 				}
 				reason := sanitizeLabel(row.Reason)
-				items = append(items, Event{Timestamp: timestamp, Source: "runtime", Type: eventType, Reason: reason, Message: runtimeEventMessage(reason)})
+				items = append(items, Event{Timestamp: timestamp, Source: "kubernetes", Type: eventType, Reason: reason, Message: runtimeEventMessage(reason)})
 			}
 		}
 		return scanner.Err()

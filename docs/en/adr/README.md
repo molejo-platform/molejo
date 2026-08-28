@@ -22,3 +22,5 @@
   — Draft
 - [ADR-0008: Exact Source Builds and Immutable Releases](0008-exact-source-builds-and-immutable-releases.md)
   — Draft
+- [ADR-0009: Tenant-Scoped Runtime Observability](0009-tenant-scoped-runtime-observability.md)
+  — Draft
