@@ -43,6 +43,9 @@ func TestClickHouseLogsAlwaysScopeQueriesToRuntime(t *testing.T) {
 			t.Fatalf("%s = %q, want %q", key, got, want)
 		}
 	}
+	if got := form.Get("param_from"); got != "2026-08-28 11:00:00.000000000" {
+		t.Fatalf("param_from = %q, want ClickHouse DateTime64 format", got)
+	}
 	query := form.Get("query")
 	if !strings.Contains(query, "k8s.namespace.name") || !strings.Contains(query, "k8s.deployment.name") {
 		t.Fatalf("query is not tenant and runtime scoped: %s", query)

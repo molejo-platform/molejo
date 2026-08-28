@@ -277,9 +277,13 @@ func scopeParams(scope Scope, from, to time.Time) url.Values {
 	return url.Values{
 		"param_namespace": {scope.Namespace},
 		"param_runtime":   {scope.RuntimeName},
-		"param_from":      {from.UTC().Format(time.RFC3339Nano)},
-		"param_to":        {to.UTC().Format(time.RFC3339Nano)},
+		"param_from":      {clickHouseDateTime(from)},
+		"param_to":        {clickHouseDateTime(to)},
 	}
+}
+
+func clickHouseDateTime(value time.Time) string {
+	return value.UTC().Format("2006-01-02 15:04:05.000000000")
 }
 
 type VictoriaMetricsClient struct {
