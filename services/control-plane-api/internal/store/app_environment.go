@@ -560,6 +560,28 @@ func (s *Store) GetOperationForActor(ctx context.Context, actorID int64, publicI
 	return item, err
 }
 
+func (s *Store) ListAppEnvironmentOperations(ctx context.Context, workspaceID, appEnvironmentID int64, from, to time.Time, limit int) ([]domain.Operation, error) {
+	rows, err := s.Pool.Query(ctx, `SELECT o.id,o.public_id,o.workspace_id,o.app_environment_id,ae.public_id,COALESCE(o.deployment_id,0),COALESCE(d.public_id,''),o.actor_id,o.kind,o.status,o.desired_version,o.attempts,o.error_code,o.error_message,o.created_at,o.updated_at
+		FROM operations o JOIN app_environments ae ON ae.id=o.app_environment_id LEFT JOIN deployments d ON d.id=o.deployment_id
+		WHERE o.workspace_id=$1 AND o.app_environment_id=$2 AND o.created_at >= $3 AND o.created_at <= $4
+		ORDER BY o.created_at DESC,o.id DESC LIMIT $5`, workspaceID, appEnvironmentID, from, to, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]domain.Operation, 0)
+	for rows.Next() {
+		var item domain.Operation
+		if err = rows.Scan(&item.ID, &item.PublicID, &item.WorkspaceID, &item.AppEnvironmentID, &item.AppEnvironmentPublicID,
+			&item.DeploymentID, &item.DeploymentPublicID, &item.ActorID, &item.Kind, &item.Status,
+			&item.DesiredVersion, &item.Attempts, &item.ErrorCode, &item.ErrorMessage, &item.CreatedAt, &item.UpdatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
 func (s *Store) ClaimNext(ctx context.Context, worker string, lease time.Duration) (domain.Operation, domain.AppEnvironment, domain.Deployment, bool, error) {
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {

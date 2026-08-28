@@ -20,6 +20,7 @@ import (
 	controlbuild "github.com/fruto-platform/fruto/services/control-plane-api/internal/build"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/domain"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/githubapp"
+	"github.com/fruto-platform/fruto/services/control-plane-api/internal/observability"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/parameters"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/runtime"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/store"
@@ -104,6 +105,20 @@ func run() error {
 	if cfg.ParameterMutationTimeout, err = durationEnv("FRUTO_PARAMETER_MUTATION_TIMEOUT", cfg.ParameterMutationTimeout); err != nil {
 		return err
 	}
+	if cfg.ObservabilityMaxWindow, err = durationEnv("FRUTO_OBSERVABILITY_MAX_WINDOW", cfg.ObservabilityMaxWindow); err != nil {
+		return err
+	}
+	if cfg.ObservabilityLiveTTL, err = durationEnv("FRUTO_OBSERVABILITY_LIVE_TTL", cfg.ObservabilityLiveTTL); err != nil {
+		return err
+	}
+	if cfg.ObservabilityLivePoll, err = durationEnv("FRUTO_OBSERVABILITY_LIVE_POLL", cfg.ObservabilityLivePoll); err != nil {
+		return err
+	}
+	livePerUser, err := int64Env("FRUTO_OBSERVABILITY_LIVE_PER_USER", int64(cfg.ObservabilityLivePerUser))
+	if err != nil {
+		return err
+	}
+	cfg.ObservabilityLivePerUser = int(livePerUser)
 	if err = cfg.Validate(); err != nil {
 		return fmt.Errorf("invalid HTTP configuration: %w", err)
 	}
@@ -138,6 +153,10 @@ func run() error {
 		}
 	}
 	server := api.NewServer(s, rt, cfg, slog.Default())
+	server.Observability, err = observabilityReader()
+	if err != nil {
+		return err
+	}
 	server.ParameterSecrets, server.SecretFingerprintKey, err = parameterSecretStore()
 	if err != nil {
 		return err
@@ -399,6 +418,32 @@ func githubService(cfg api.Config) (githubapp.Service, error) {
 		return nil, fmt.Errorf("configure GitHub App: %w", err)
 	}
 	return client, nil
+}
+
+func observabilityReader() (observability.Reader, error) {
+	combined := observability.CombinedReader{}
+	httpClient := &http.Client{Timeout: 12 * time.Second}
+	if endpoint := strings.TrimSpace(os.Getenv("FRUTO_CLICKHOUSE_URL")); endpoint != "" {
+		password, err := readSecretFile("FRUTO_CLICKHOUSE_PASSWORD_FILE")
+		if err != nil {
+			return nil, err
+		}
+		combined.Telemetry, err = observability.NewClickHouseClient(endpoint, env("FRUTO_CLICKHOUSE_DATABASE", "otel"), env("FRUTO_CLICKHOUSE_USERNAME", "molejo_reader"), password, httpClient)
+		if err != nil {
+			return nil, fmt.Errorf("configure ClickHouse observability: %w", err)
+		}
+	}
+	if endpoint := strings.TrimSpace(os.Getenv("FRUTO_VICTORIAMETRICS_URL")); endpoint != "" {
+		var err error
+		combined.MetricsDB, err = observability.NewVictoriaMetricsClient(endpoint, httpClient)
+		if err != nil {
+			return nil, fmt.Errorf("configure VictoriaMetrics observability: %w", err)
+		}
+	}
+	if combined.Telemetry == nil && combined.MetricsDB == nil {
+		return observability.UnavailableReader{}, nil
+	}
+	return combined, nil
 }
 
 func githubBuildService(httpTimeout time.Duration) (githubapp.Service, error) {

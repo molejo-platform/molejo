@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -310,6 +311,75 @@ func (e RuntimeConfigurationExposure) Valid() bool {
 	case Private:
 		return true
 	case Public:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RuntimeEventSource.
+const (
+	ControlPlane RuntimeEventSource = "control-plane"
+	Kubernetes   RuntimeEventSource = "kubernetes"
+)
+
+// Valid indicates whether the value is a known member of the RuntimeEventSource enum.
+func (e RuntimeEventSource) Valid() bool {
+	switch e {
+	case ControlPlane:
+		return true
+	case Kubernetes:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RuntimeMetricSeriesName.
+const (
+	Available RuntimeMetricSeriesName = "available"
+	Cpu       RuntimeMetricSeriesName = "cpu"
+	Desired   RuntimeMetricSeriesName = "desired"
+	Memory    RuntimeMetricSeriesName = "memory"
+	Restarts  RuntimeMetricSeriesName = "restarts"
+)
+
+// Valid indicates whether the value is a known member of the RuntimeMetricSeriesName enum.
+func (e RuntimeMetricSeriesName) Valid() bool {
+	switch e {
+	case Available:
+		return true
+	case Cpu:
+		return true
+	case Desired:
+		return true
+	case Memory:
+		return true
+	case Restarts:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RuntimeMetricSeriesUnit.
+const (
+	Bytes    RuntimeMetricSeriesUnit = "bytes"
+	Cores    RuntimeMetricSeriesUnit = "cores"
+	Count    RuntimeMetricSeriesUnit = "count"
+	Replicas RuntimeMetricSeriesUnit = "replicas"
+)
+
+// Valid indicates whether the value is a known member of the RuntimeMetricSeriesUnit enum.
+func (e RuntimeMetricSeriesUnit) Valid() bool {
+	switch e {
+	case Bytes:
+		return true
+	case Cores:
+		return true
+	case Count:
+		return true
+	case Replicas:
 		return true
 	default:
 		return false
@@ -683,6 +753,70 @@ type RuntimeConfiguration struct {
 // RuntimeConfigurationExposure defines model for RuntimeConfiguration.Exposure.
 type RuntimeConfigurationExposure string
 
+// RuntimeEvent defines model for RuntimeEvent.
+type RuntimeEvent struct {
+	Instance  *string            `json:"instance,omitempty"`
+	Message   string             `json:"message"`
+	Reason    string             `json:"reason"`
+	Source    RuntimeEventSource `json:"source"`
+	Timestamp time.Time          `json:"timestamp"`
+	Type      string             `json:"type"`
+}
+
+// RuntimeEventSource defines model for RuntimeEvent.Source.
+type RuntimeEventSource string
+
+// RuntimeEvents defines model for RuntimeEvents.
+type RuntimeEvents struct {
+	From  time.Time      `json:"from"`
+	Items []RuntimeEvent `json:"items"`
+	To    time.Time      `json:"to"`
+}
+
+// RuntimeLog defines model for RuntimeLog.
+type RuntimeLog struct {
+	Body      string    `json:"body"`
+	Container *string   `json:"container,omitempty"`
+	Instance  *string   `json:"instance,omitempty"`
+	Severity  string    `json:"severity"`
+	Timestamp time.Time `json:"timestamp"`
+}
+
+// RuntimeLogs defines model for RuntimeLogs.
+type RuntimeLogs struct {
+	From  time.Time    `json:"from"`
+	Items []RuntimeLog `json:"items"`
+	To    time.Time    `json:"to"`
+}
+
+// RuntimeMetricPoint defines model for RuntimeMetricPoint.
+type RuntimeMetricPoint struct {
+	Timestamp time.Time `json:"timestamp"`
+	Value     float32   `json:"value"`
+}
+
+// RuntimeMetricSeries defines model for RuntimeMetricSeries.
+type RuntimeMetricSeries struct {
+	Instance *string                 `json:"instance,omitempty"`
+	Name     RuntimeMetricSeriesName `json:"name"`
+	Points   []RuntimeMetricPoint    `json:"points"`
+	Unit     RuntimeMetricSeriesUnit `json:"unit"`
+}
+
+// RuntimeMetricSeriesName defines model for RuntimeMetricSeries.Name.
+type RuntimeMetricSeriesName string
+
+// RuntimeMetricSeriesUnit defines model for RuntimeMetricSeries.Unit.
+type RuntimeMetricSeriesUnit string
+
+// RuntimeMetrics defines model for RuntimeMetrics.
+type RuntimeMetrics struct {
+	From   time.Time             `json:"from"`
+	Series []RuntimeMetricSeries `json:"series"`
+	Step   string                `json:"step"`
+	To     time.Time             `json:"to"`
+}
+
 // Session defines model for Session.
 type Session struct {
 	Actor struct {
@@ -779,6 +913,9 @@ type MutationAccepted struct {
 
 // NotFound defines model for NotFound.
 type NotFound = Error
+
+// TooManyRequests defines model for TooManyRequests.
+type TooManyRequests = Error
 
 // Unauthorized defines model for Unauthorized.
 type Unauthorized = Error
@@ -916,6 +1053,35 @@ type ListAppEnvironmentDeploymentsParams struct {
 type CreateAppEnvironmentDeploymentParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 	IfMatch        IfMatch        `json:"If-Match"`
+}
+
+// ListAppEnvironmentRuntimeEventsParams defines parameters for ListAppEnvironmentRuntimeEvents.
+type ListAppEnvironmentRuntimeEventsParams struct {
+	From  *time.Time `form:"from,omitempty" json:"from,omitempty"`
+	To    *time.Time `form:"to,omitempty" json:"to,omitempty"`
+	Limit *int       `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// ListAppEnvironmentRuntimeLogsParams defines parameters for ListAppEnvironmentRuntimeLogs.
+type ListAppEnvironmentRuntimeLogsParams struct {
+	From     *time.Time `form:"from,omitempty" json:"from,omitempty"`
+	To       *time.Time `form:"to,omitempty" json:"to,omitempty"`
+	Search   *string    `form:"search,omitempty" json:"search,omitempty"`
+	Instance *string    `form:"instance,omitempty" json:"instance,omitempty"`
+	Limit    *int       `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// StreamAppEnvironmentRuntimeLogsParams defines parameters for StreamAppEnvironmentRuntimeLogs.
+type StreamAppEnvironmentRuntimeLogsParams struct {
+	Search   *string `form:"search,omitempty" json:"search,omitempty"`
+	Instance *string `form:"instance,omitempty" json:"instance,omitempty"`
+}
+
+// GetAppEnvironmentRuntimeMetricsParams defines parameters for GetAppEnvironmentRuntimeMetrics.
+type GetAppEnvironmentRuntimeMetricsParams struct {
+	From        *time.Time `form:"from,omitempty" json:"from,omitempty"`
+	To          *time.Time `form:"to,omitempty" json:"to,omitempty"`
+	StepSeconds *int       `form:"stepSeconds,omitempty" json:"stepSeconds,omitempty"`
 }
 
 // ListAppReleasesParams defines parameters for ListAppReleases.
@@ -1132,6 +1298,18 @@ type ServerInterface interface {
 
 	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/deployments/{deploymentId})
 	GetAppEnvironmentDeployment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId, deploymentId DeploymentId)
+
+	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/observability/events)
+	ListAppEnvironmentRuntimeEvents(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId, params ListAppEnvironmentRuntimeEventsParams)
+
+	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/observability/logs)
+	ListAppEnvironmentRuntimeLogs(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId, params ListAppEnvironmentRuntimeLogsParams)
+
+	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/observability/logs/live)
+	StreamAppEnvironmentRuntimeLogs(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId, params StreamAppEnvironmentRuntimeLogsParams)
+
+	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/observability/metrics)
+	GetAppEnvironmentRuntimeMetrics(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId, params GetAppEnvironmentRuntimeMetricsParams)
 
 	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/releases)
 	ListAppReleases(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, params ListAppReleasesParams)
@@ -1385,6 +1563,26 @@ func (_ Unimplemented) CreateAppEnvironmentDeployment(w http.ResponseWriter, r *
 
 // (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/deployments/{deploymentId})
 func (_ Unimplemented) GetAppEnvironmentDeployment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId, deploymentId DeploymentId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/observability/events)
+func (_ Unimplemented) ListAppEnvironmentRuntimeEvents(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId, params ListAppEnvironmentRuntimeEventsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/observability/logs)
+func (_ Unimplemented) ListAppEnvironmentRuntimeLogs(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId, params ListAppEnvironmentRuntimeLogsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/observability/logs/live)
+func (_ Unimplemented) StreamAppEnvironmentRuntimeLogs(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId, params StreamAppEnvironmentRuntimeLogsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/observability/metrics)
+func (_ Unimplemented) GetAppEnvironmentRuntimeMetrics(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId, params GetAppEnvironmentRuntimeMetricsParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -3743,6 +3941,399 @@ func (siw *ServerInterfaceWrapper) GetAppEnvironmentDeployment(w http.ResponseWr
 	handler.ServeHTTP(w, r)
 }
 
+// ListAppEnvironmentRuntimeEvents operation middleware
+func (siw *ServerInterfaceWrapper) ListAppEnvironmentRuntimeEvents(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appId" -------------
+	var appId AppId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appId", chi.URLParam(r, "appId"), &appId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appEnvironmentId" -------------
+	var appEnvironmentId AppEnvironmentId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appEnvironmentId", chi.URLParam(r, "appEnvironmentId"), &appEnvironmentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appEnvironmentId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAppEnvironmentRuntimeEventsParams
+
+	// ------------- Optional query parameter "from" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "from", r.URL.Query(), &params.From, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "from"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "to" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "to", r.URL.Query(), &params.To, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "to"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAppEnvironmentRuntimeEvents(w, r, workspaceId, projectId, appId, appEnvironmentId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListAppEnvironmentRuntimeLogs operation middleware
+func (siw *ServerInterfaceWrapper) ListAppEnvironmentRuntimeLogs(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appId" -------------
+	var appId AppId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appId", chi.URLParam(r, "appId"), &appId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appEnvironmentId" -------------
+	var appEnvironmentId AppEnvironmentId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appEnvironmentId", chi.URLParam(r, "appEnvironmentId"), &appEnvironmentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appEnvironmentId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAppEnvironmentRuntimeLogsParams
+
+	// ------------- Optional query parameter "from" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "from", r.URL.Query(), &params.From, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "from"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "to" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "to", r.URL.Query(), &params.To, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "to"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "search" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "search", r.URL.Query(), &params.Search, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "search"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "search", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "instance" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "instance", r.URL.Query(), &params.Instance, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "instance"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "instance", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAppEnvironmentRuntimeLogs(w, r, workspaceId, projectId, appId, appEnvironmentId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// StreamAppEnvironmentRuntimeLogs operation middleware
+func (siw *ServerInterfaceWrapper) StreamAppEnvironmentRuntimeLogs(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appId" -------------
+	var appId AppId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appId", chi.URLParam(r, "appId"), &appId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appEnvironmentId" -------------
+	var appEnvironmentId AppEnvironmentId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appEnvironmentId", chi.URLParam(r, "appEnvironmentId"), &appEnvironmentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appEnvironmentId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params StreamAppEnvironmentRuntimeLogsParams
+
+	// ------------- Optional query parameter "search" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "search", r.URL.Query(), &params.Search, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "search"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "search", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "instance" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "instance", r.URL.Query(), &params.Instance, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "instance"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "instance", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.StreamAppEnvironmentRuntimeLogs(w, r, workspaceId, projectId, appId, appEnvironmentId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAppEnvironmentRuntimeMetrics operation middleware
+func (siw *ServerInterfaceWrapper) GetAppEnvironmentRuntimeMetrics(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appId" -------------
+	var appId AppId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appId", chi.URLParam(r, "appId"), &appId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appEnvironmentId" -------------
+	var appEnvironmentId AppEnvironmentId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appEnvironmentId", chi.URLParam(r, "appEnvironmentId"), &appEnvironmentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appEnvironmentId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAppEnvironmentRuntimeMetricsParams
+
+	// ------------- Optional query parameter "from" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "from", r.URL.Query(), &params.From, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "from"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "to" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "to", r.URL.Query(), &params.To, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "to"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "stepSeconds" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "stepSeconds", r.URL.Query(), &params.StepSeconds, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "stepSeconds"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "stepSeconds", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAppEnvironmentRuntimeMetrics(w, r, workspaceId, projectId, appId, appEnvironmentId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListAppReleases operation middleware
 func (siw *ServerInterfaceWrapper) ListAppReleases(w http.ResponseWriter, r *http.Request) {
 
@@ -4591,6 +5182,18 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/configuration-versions", wrapper.ListAppEnvironmentConfigurationVersions)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/observability/logs", wrapper.ListAppEnvironmentRuntimeLogs)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/observability/logs/live", wrapper.StreamAppEnvironmentRuntimeLogs)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/observability/metrics", wrapper.GetAppEnvironmentRuntimeMetrics)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/observability/events", wrapper.ListAppEnvironmentRuntimeEvents)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/deployments/{deploymentId}", wrapper.GetAppEnvironmentDeployment)
 	})
 	r.Group(func(r chi.Router) {
@@ -4612,6 +5215,8 @@ type MutationAcceptedJSONResponse struct {
 }
 
 type NotFoundJSONResponse Error
+
+type TooManyRequestsJSONResponse Error
 
 type UnauthorizedJSONResponse Error
 
@@ -7062,6 +7667,321 @@ func (response GetAppEnvironmentDeployment404JSONResponse) VisitGetAppEnvironmen
 	return err
 }
 
+type ListAppEnvironmentRuntimeEventsRequestObject struct {
+	WorkspaceId      WorkspaceId      `json:"workspaceId"`
+	ProjectId        ProjectId        `json:"projectId"`
+	AppId            AppId            `json:"appId"`
+	AppEnvironmentId AppEnvironmentId `json:"appEnvironmentId"`
+	Params           ListAppEnvironmentRuntimeEventsParams
+}
+
+type ListAppEnvironmentRuntimeEventsResponseObject interface {
+	VisitListAppEnvironmentRuntimeEventsResponse(w http.ResponseWriter) error
+}
+
+type ListAppEnvironmentRuntimeEvents200JSONResponse RuntimeEvents
+
+func (response ListAppEnvironmentRuntimeEvents200JSONResponse) VisitListAppEnvironmentRuntimeEventsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAppEnvironmentRuntimeEvents400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response ListAppEnvironmentRuntimeEvents400JSONResponse) VisitListAppEnvironmentRuntimeEventsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAppEnvironmentRuntimeEvents404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ListAppEnvironmentRuntimeEvents404JSONResponse) VisitListAppEnvironmentRuntimeEventsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAppEnvironmentRuntimeEvents503JSONResponse struct{ UnavailableJSONResponse }
+
+func (response ListAppEnvironmentRuntimeEvents503JSONResponse) VisitListAppEnvironmentRuntimeEventsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAppEnvironmentRuntimeLogsRequestObject struct {
+	WorkspaceId      WorkspaceId      `json:"workspaceId"`
+	ProjectId        ProjectId        `json:"projectId"`
+	AppId            AppId            `json:"appId"`
+	AppEnvironmentId AppEnvironmentId `json:"appEnvironmentId"`
+	Params           ListAppEnvironmentRuntimeLogsParams
+}
+
+type ListAppEnvironmentRuntimeLogsResponseObject interface {
+	VisitListAppEnvironmentRuntimeLogsResponse(w http.ResponseWriter) error
+}
+
+type ListAppEnvironmentRuntimeLogs200JSONResponse RuntimeLogs
+
+func (response ListAppEnvironmentRuntimeLogs200JSONResponse) VisitListAppEnvironmentRuntimeLogsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAppEnvironmentRuntimeLogs400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response ListAppEnvironmentRuntimeLogs400JSONResponse) VisitListAppEnvironmentRuntimeLogsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAppEnvironmentRuntimeLogs404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ListAppEnvironmentRuntimeLogs404JSONResponse) VisitListAppEnvironmentRuntimeLogsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAppEnvironmentRuntimeLogs503JSONResponse struct{ UnavailableJSONResponse }
+
+func (response ListAppEnvironmentRuntimeLogs503JSONResponse) VisitListAppEnvironmentRuntimeLogsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StreamAppEnvironmentRuntimeLogsRequestObject struct {
+	WorkspaceId      WorkspaceId      `json:"workspaceId"`
+	ProjectId        ProjectId        `json:"projectId"`
+	AppId            AppId            `json:"appId"`
+	AppEnvironmentId AppEnvironmentId `json:"appEnvironmentId"`
+	Params           StreamAppEnvironmentRuntimeLogsParams
+}
+
+type StreamAppEnvironmentRuntimeLogsResponseObject interface {
+	VisitStreamAppEnvironmentRuntimeLogsResponse(w http.ResponseWriter) error
+}
+
+type StreamAppEnvironmentRuntimeLogs200TexteventStreamResponse struct {
+	Body          io.Reader
+	ContentLength int64
+}
+
+func (response StreamAppEnvironmentRuntimeLogs200TexteventStreamResponse) VisitStreamAppEnvironmentRuntimeLogsResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
+	w.WriteHeader(200)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		// If w doesn't support flushing, fall back to io.Copy.
+		_, err := io.Copy(w, response.Body)
+		return err
+	}
+	// text/event-stream messages are typically small; use a
+	// modest buffer and flush after each chunk so clients see
+	// events immediately instead of waiting on OS buffering.
+	buf := make([]byte, 4096)
+	for {
+		n, err := response.Body.Read(buf)
+		if n > 0 {
+			if _, writeErr := w.Write(buf[:n]); writeErr != nil {
+				return writeErr
+			}
+			flusher.Flush()
+		}
+		if err != nil {
+			if err == io.EOF {
+				return nil
+			}
+			return err
+		}
+	}
+}
+
+type StreamAppEnvironmentRuntimeLogs400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response StreamAppEnvironmentRuntimeLogs400JSONResponse) VisitStreamAppEnvironmentRuntimeLogsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StreamAppEnvironmentRuntimeLogs404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response StreamAppEnvironmentRuntimeLogs404JSONResponse) VisitStreamAppEnvironmentRuntimeLogsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StreamAppEnvironmentRuntimeLogs429JSONResponse struct{ TooManyRequestsJSONResponse }
+
+func (response StreamAppEnvironmentRuntimeLogs429JSONResponse) VisitStreamAppEnvironmentRuntimeLogsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StreamAppEnvironmentRuntimeLogs503JSONResponse struct{ UnavailableJSONResponse }
+
+func (response StreamAppEnvironmentRuntimeLogs503JSONResponse) VisitStreamAppEnvironmentRuntimeLogsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAppEnvironmentRuntimeMetricsRequestObject struct {
+	WorkspaceId      WorkspaceId      `json:"workspaceId"`
+	ProjectId        ProjectId        `json:"projectId"`
+	AppId            AppId            `json:"appId"`
+	AppEnvironmentId AppEnvironmentId `json:"appEnvironmentId"`
+	Params           GetAppEnvironmentRuntimeMetricsParams
+}
+
+type GetAppEnvironmentRuntimeMetricsResponseObject interface {
+	VisitGetAppEnvironmentRuntimeMetricsResponse(w http.ResponseWriter) error
+}
+
+type GetAppEnvironmentRuntimeMetrics200JSONResponse RuntimeMetrics
+
+func (response GetAppEnvironmentRuntimeMetrics200JSONResponse) VisitGetAppEnvironmentRuntimeMetricsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAppEnvironmentRuntimeMetrics400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response GetAppEnvironmentRuntimeMetrics400JSONResponse) VisitGetAppEnvironmentRuntimeMetricsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAppEnvironmentRuntimeMetrics404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response GetAppEnvironmentRuntimeMetrics404JSONResponse) VisitGetAppEnvironmentRuntimeMetricsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAppEnvironmentRuntimeMetrics503JSONResponse struct{ UnavailableJSONResponse }
+
+func (response GetAppEnvironmentRuntimeMetrics503JSONResponse) VisitGetAppEnvironmentRuntimeMetricsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListAppReleasesRequestObject struct {
 	WorkspaceId WorkspaceId `json:"workspaceId"`
 	ProjectId   ProjectId   `json:"projectId"`
@@ -7749,6 +8669,18 @@ type StrictServerInterface interface {
 
 	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/deployments/{deploymentId})
 	GetAppEnvironmentDeployment(ctx context.Context, request GetAppEnvironmentDeploymentRequestObject) (GetAppEnvironmentDeploymentResponseObject, error)
+
+	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/observability/events)
+	ListAppEnvironmentRuntimeEvents(ctx context.Context, request ListAppEnvironmentRuntimeEventsRequestObject) (ListAppEnvironmentRuntimeEventsResponseObject, error)
+
+	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/observability/logs)
+	ListAppEnvironmentRuntimeLogs(ctx context.Context, request ListAppEnvironmentRuntimeLogsRequestObject) (ListAppEnvironmentRuntimeLogsResponseObject, error)
+
+	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/observability/logs/live)
+	StreamAppEnvironmentRuntimeLogs(ctx context.Context, request StreamAppEnvironmentRuntimeLogsRequestObject) (StreamAppEnvironmentRuntimeLogsResponseObject, error)
+
+	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/observability/metrics)
+	GetAppEnvironmentRuntimeMetrics(ctx context.Context, request GetAppEnvironmentRuntimeMetricsRequestObject) (GetAppEnvironmentRuntimeMetricsResponseObject, error)
 
 	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/releases)
 	ListAppReleases(ctx context.Context, request ListAppReleasesRequestObject) (ListAppReleasesResponseObject, error)
@@ -9121,6 +10053,126 @@ func (sh *strictHandler) GetAppEnvironmentDeployment(w http.ResponseWriter, r *h
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetAppEnvironmentDeploymentResponseObject); ok {
 		if err := validResponse.VisitGetAppEnvironmentDeploymentResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListAppEnvironmentRuntimeEvents operation middleware
+func (sh *strictHandler) ListAppEnvironmentRuntimeEvents(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId, params ListAppEnvironmentRuntimeEventsParams) {
+	var request ListAppEnvironmentRuntimeEventsRequestObject
+
+	request.WorkspaceId = workspaceId
+	request.ProjectId = projectId
+	request.AppId = appId
+	request.AppEnvironmentId = appEnvironmentId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListAppEnvironmentRuntimeEvents(ctx, request.(ListAppEnvironmentRuntimeEventsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListAppEnvironmentRuntimeEvents")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListAppEnvironmentRuntimeEventsResponseObject); ok {
+		if err := validResponse.VisitListAppEnvironmentRuntimeEventsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListAppEnvironmentRuntimeLogs operation middleware
+func (sh *strictHandler) ListAppEnvironmentRuntimeLogs(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId, params ListAppEnvironmentRuntimeLogsParams) {
+	var request ListAppEnvironmentRuntimeLogsRequestObject
+
+	request.WorkspaceId = workspaceId
+	request.ProjectId = projectId
+	request.AppId = appId
+	request.AppEnvironmentId = appEnvironmentId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListAppEnvironmentRuntimeLogs(ctx, request.(ListAppEnvironmentRuntimeLogsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListAppEnvironmentRuntimeLogs")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListAppEnvironmentRuntimeLogsResponseObject); ok {
+		if err := validResponse.VisitListAppEnvironmentRuntimeLogsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// StreamAppEnvironmentRuntimeLogs operation middleware
+func (sh *strictHandler) StreamAppEnvironmentRuntimeLogs(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId, params StreamAppEnvironmentRuntimeLogsParams) {
+	var request StreamAppEnvironmentRuntimeLogsRequestObject
+
+	request.WorkspaceId = workspaceId
+	request.ProjectId = projectId
+	request.AppId = appId
+	request.AppEnvironmentId = appEnvironmentId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.StreamAppEnvironmentRuntimeLogs(ctx, request.(StreamAppEnvironmentRuntimeLogsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "StreamAppEnvironmentRuntimeLogs")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(StreamAppEnvironmentRuntimeLogsResponseObject); ok {
+		if err := validResponse.VisitStreamAppEnvironmentRuntimeLogsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAppEnvironmentRuntimeMetrics operation middleware
+func (sh *strictHandler) GetAppEnvironmentRuntimeMetrics(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId, params GetAppEnvironmentRuntimeMetricsParams) {
+	var request GetAppEnvironmentRuntimeMetricsRequestObject
+
+	request.WorkspaceId = workspaceId
+	request.ProjectId = projectId
+	request.AppId = appId
+	request.AppEnvironmentId = appEnvironmentId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAppEnvironmentRuntimeMetrics(ctx, request.(GetAppEnvironmentRuntimeMetricsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAppEnvironmentRuntimeMetrics")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAppEnvironmentRuntimeMetricsResponseObject); ok {
+		if err := validResponse.VisitGetAppEnvironmentRuntimeMetricsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

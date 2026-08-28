@@ -554,6 +554,90 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/observability/logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                projectId: components["parameters"]["ProjectId"];
+                appId: components["parameters"]["AppId"];
+                appEnvironmentId: components["parameters"]["AppEnvironmentId"];
+            };
+            cookie?: never;
+        };
+        get: operations["listAppEnvironmentRuntimeLogs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/observability/logs/live": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                projectId: components["parameters"]["ProjectId"];
+                appId: components["parameters"]["AppId"];
+                appEnvironmentId: components["parameters"]["AppEnvironmentId"];
+            };
+            cookie?: never;
+        };
+        get: operations["streamAppEnvironmentRuntimeLogs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/observability/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                projectId: components["parameters"]["ProjectId"];
+                appId: components["parameters"]["AppId"];
+                appEnvironmentId: components["parameters"]["AppEnvironmentId"];
+            };
+            cookie?: never;
+        };
+        get: operations["getAppEnvironmentRuntimeMetrics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/observability/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                projectId: components["parameters"]["ProjectId"];
+                appId: components["parameters"]["AppId"];
+                appEnvironmentId: components["parameters"]["AppEnvironmentId"];
+            };
+            cookie?: never;
+        };
+        get: operations["listAppEnvironmentRuntimeEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/deployments/{deploymentId}": {
         parameters: {
             query?: never;
@@ -878,6 +962,59 @@ export interface components {
             /** Format: date-time */
             updatedAt?: string;
         };
+        RuntimeLog: {
+            /** Format: date-time */
+            timestamp: string;
+            body: string;
+            severity: string;
+            instance?: string;
+            container?: string;
+        };
+        RuntimeLogs: {
+            /** Format: date-time */
+            from: string;
+            /** Format: date-time */
+            to: string;
+            items: components["schemas"]["RuntimeLog"][];
+        };
+        RuntimeMetricPoint: {
+            /** Format: date-time */
+            timestamp: string;
+            value: number;
+        };
+        RuntimeMetricSeries: {
+            /** @enum {string} */
+            name: "cpu" | "memory" | "restarts" | "available" | "desired";
+            /** @enum {string} */
+            unit: "cores" | "bytes" | "count" | "replicas";
+            instance?: string;
+            points: components["schemas"]["RuntimeMetricPoint"][];
+        };
+        RuntimeMetrics: {
+            /** Format: date-time */
+            from: string;
+            /** Format: date-time */
+            to: string;
+            step: string;
+            series: components["schemas"]["RuntimeMetricSeries"][];
+        };
+        RuntimeEvent: {
+            /** Format: date-time */
+            timestamp: string;
+            /** @enum {string} */
+            source: "control-plane" | "kubernetes";
+            type: string;
+            reason: string;
+            message: string;
+            instance?: string;
+        };
+        RuntimeEvents: {
+            /** Format: date-time */
+            from: string;
+            /** Format: date-time */
+            to: string;
+            items: components["schemas"]["RuntimeEvent"][];
+        };
         Error: {
             code: string;
             message: string;
@@ -932,6 +1069,15 @@ export interface components {
         };
         /** @description External integration is not configured or unavailable */
         Unavailable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description Concurrent request limit reached */
+        TooManyRequests: {
             headers: {
                 [name: string]: unknown;
             };
@@ -2459,6 +2605,136 @@ export interface operations {
             };
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    listAppEnvironmentRuntimeLogs: {
+        parameters: {
+            query?: {
+                from?: string;
+                to?: string;
+                search?: string;
+                instance?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                projectId: components["parameters"]["ProjectId"];
+                appId: components["parameters"]["AppId"];
+                appEnvironmentId: components["parameters"]["AppEnvironmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bounded sanitized runtime logs */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuntimeLogs"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    streamAppEnvironmentRuntimeLogs: {
+        parameters: {
+            query?: {
+                search?: string;
+                instance?: string;
+            };
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                projectId: components["parameters"]["ProjectId"];
+                appId: components["parameters"]["AppId"];
+                appEnvironmentId: components["parameters"]["AppEnvironmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bounded server-sent stream of sanitized runtime logs */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    getAppEnvironmentRuntimeMetrics: {
+        parameters: {
+            query?: {
+                from?: string;
+                to?: string;
+                stepSeconds?: number;
+            };
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                projectId: components["parameters"]["ProjectId"];
+                appId: components["parameters"]["AppId"];
+                appEnvironmentId: components["parameters"]["AppEnvironmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bounded aggregate and per-instance runtime metrics */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuntimeMetrics"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    listAppEnvironmentRuntimeEvents: {
+        parameters: {
+            query?: {
+                from?: string;
+                to?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                projectId: components["parameters"]["ProjectId"];
+                appId: components["parameters"]["AppId"];
+                appEnvironmentId: components["parameters"]["AppEnvironmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Durable control-plane and Kubernetes runtime events */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuntimeEvents"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
         };
     };
     getAppEnvironmentDeployment: {

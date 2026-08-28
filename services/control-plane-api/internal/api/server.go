@@ -17,6 +17,7 @@ import (
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/auth"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/domain"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/githubapp"
+	"github.com/fruto-platform/fruto/services/control-plane-api/internal/observability"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/parameters"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/runtime"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/store"
@@ -45,10 +46,14 @@ type Config struct {
 	WorkspaceNamespace       string
 	GitHubStateTTL           time.Duration
 	GitHubCookieName         string
+	ObservabilityMaxWindow   time.Duration
+	ObservabilityLiveTTL     time.Duration
+	ObservabilityLivePoll    time.Duration
+	ObservabilityLivePerUser int
 }
 
 func DefaultConfig() Config {
-	return Config{Mode: "development", PublicURL: "http://127.0.0.1:8080", CookieName: "fruto_session", AllowedOrigin: "http://127.0.0.1:8080", AllowedHosts: []string{"127.0.0.1:8080", "localhost:8080"}, AllowedRegistries: []string{"ghcr.io"}, MaxReplicas: 5, MaxCPU: 2000, MaxMemory: 2048, SessionTTL: 12 * time.Hour, OperationLease: 30 * time.Second, ParameterRetention: 7 * 24 * time.Hour, ParameterMutationTimeout: 5 * time.Minute, WorkspaceNamespace: "fruto-workspaces", GitHubStateTTL: 10 * time.Minute, GitHubCookieName: "molejo_github_state"}
+	return Config{Mode: "development", PublicURL: "http://127.0.0.1:8080", CookieName: "fruto_session", AllowedOrigin: "http://127.0.0.1:8080", AllowedHosts: []string{"127.0.0.1:8080", "localhost:8080"}, AllowedRegistries: []string{"ghcr.io"}, MaxReplicas: 5, MaxCPU: 2000, MaxMemory: 2048, SessionTTL: 12 * time.Hour, OperationLease: 30 * time.Second, ParameterRetention: 7 * 24 * time.Hour, ParameterMutationTimeout: 5 * time.Minute, WorkspaceNamespace: "fruto-workspaces", GitHubStateTTL: 10 * time.Minute, GitHubCookieName: "molejo_github_state", ObservabilityMaxWindow: 24 * time.Hour, ObservabilityLiveTTL: 10 * time.Minute, ObservabilityLivePoll: 2 * time.Second, ObservabilityLivePerUser: 3}
 }
 
 type Server struct {
@@ -60,7 +65,9 @@ type Server struct {
 	GitHub               githubapp.Service
 	ParameterSecrets     parameters.SecretValueStore
 	SecretFingerprintKey []byte
+	Observability        observability.Reader
 	limiter              *loginLimiter
+	liveLimiter          *concurrencyLimiter
 	token                func(int) (string, error)
 	deploymentID         func() (string, error)
 	parameterID          func() (string, error)
@@ -70,7 +77,7 @@ func NewServer(s *store.Store, r runtime.Client, cfg Config, logger *slog.Logger
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Server{Store: s, Runtime: r, Config: cfg, Logger: logger, Tracer: noop.NewTracerProvider().Tracer("github.com/fruto-platform/fruto/services/control-plane-api"), ParameterSecrets: parameters.UnavailableStore{}, limiter: &loginLimiter{entries: map[string]loginAttempt{}}, token: randomToken, deploymentID: func() (string, error) { return domain.NewPublicID("dpl") }, parameterID: func() (string, error) { return domain.NewPublicID("par") }}
+	return &Server{Store: s, Runtime: r, Config: cfg, Logger: logger, Tracer: noop.NewTracerProvider().Tracer("github.com/fruto-platform/fruto/services/control-plane-api"), ParameterSecrets: parameters.UnavailableStore{}, Observability: observability.UnavailableReader{}, limiter: &loginLimiter{entries: map[string]loginAttempt{}}, liveLimiter: &concurrencyLimiter{active: map[int64]int{}}, token: randomToken, deploymentID: func() (string, error) { return domain.NewPublicID("dpl") }, parameterID: func() (string, error) { return domain.NewPublicID("par") }}
 }
 
 func (s *Server) Handler() http.Handler {

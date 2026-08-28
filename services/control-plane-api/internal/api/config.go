@@ -10,6 +10,12 @@ import (
 )
 
 func (c Config) Validate() error {
+	if c.ObservabilityMaxWindow <= 0 || c.ObservabilityMaxWindow > 7*24*time.Hour {
+		return fmt.Errorf("observability max window must be positive and at most 7 days")
+	}
+	if c.ObservabilityLiveTTL <= 0 || c.ObservabilityLiveTTL > 30*time.Minute || c.ObservabilityLivePoll < time.Second || c.ObservabilityLivePerUser < 1 || c.ObservabilityLivePerUser > 10 {
+		return fmt.Errorf("observability live limits are invalid")
+	}
 	if c.GitHubStateTTL <= 0 || c.GitHubStateTTL > 30*time.Minute {
 		return fmt.Errorf("GitHub state TTL must be positive and at most 30 minutes")
 	}
