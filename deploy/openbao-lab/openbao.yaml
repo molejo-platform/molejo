@@ -151,7 +151,7 @@ spec:
           imagePullPolicy: IfNotPresent
           args: ["server", "-config=/openbao/config/openbao.hcl"]
           env:
-            - { name: BAO_ADDR, value: "https://127.0.0.1:8200" }
+            - { name: BAO_ADDR, value: "https://openbao.molejo-secrets.svc:8200" }
             - { name: BAO_CACERT, value: "/openbao/tls/ca.crt" }
           ports:
             - { name: api, containerPort: 8200 }

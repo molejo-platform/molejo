@@ -45,6 +45,10 @@ fi
 
 root_token="$(jq -r '.root_token' "$init_file")"
 bao() {
+  printf '%s\n' "$root_token" |
+    kubectl --context "$context" -n molejo-secrets exec -i openbao-0 -- sh -c 'read -r BAO_TOKEN; export BAO_TOKEN; exec bao "$@"' sh "$@"
+}
+bao_with_stdin() {
   { printf '%s\n' "$root_token"; cat; } |
     kubectl --context "$context" -n molejo-secrets exec -i openbao-0 -- sh -c 'read -r BAO_TOKEN; export BAO_TOKEN; exec bao "$@"' sh "$@"
 }
@@ -55,7 +59,7 @@ bao write auth/kubernetes/config \
   kubernetes_ca_cert=@/var/run/secrets/kubernetes.io/serviceaccount/ca.crt >/dev/null
 bao secrets enable -path=parameters -version=2 kv >/dev/null 2>&1 || true
 printf '%s\n' 'path "parameters/data/workspaces/*" { capabilities = ["create", "update"] }' |
-  bao policy write molejo-parameter-writer - >/dev/null
+  bao_with_stdin policy write molejo-parameter-writer - >/dev/null
 bao write auth/kubernetes/role/molejo-parameter-writer \
   bound_service_account_names=control-plane-api \
   bound_service_account_namespaces=fruto-control-plane \
