@@ -7,11 +7,16 @@ const workspaces = [
   { id: "ws-bbbbbbbbbbbbbbbbbbbb", name: "Beta", version: 1 },
 ];
 
+const mocks = vi.hoisted(() => ({
+  query: undefined as unknown as { data: { items: typeof workspaces; nextCursor: null }; isPending: boolean },
+}));
+
 vi.mock("./queries", () => ({
-  useWorkspaceQuery: () => ({ data: { items: workspaces, nextCursor: null }, isPending: false }),
+  useWorkspaceQuery: () => mocks.query,
 }));
 
 beforeEach(() => {
+  mocks.query = { data: { items: workspaces, nextCursor: null }, isPending: false };
   const storage = new Map<string, string>();
   Object.defineProperty(window, "localStorage", { configurable: true, value: { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => storage.set(key, value), clear: () => storage.clear() } });
 });
@@ -35,9 +40,15 @@ describe("Workspace selection integration", () => {
     expect(screen.getByRole("status").textContent).toBe("Alpha");
     expect(window.localStorage.getItem("molejo.workspace")).toBe("ws-aaaaaaaaaaaaaaaaaaaa");
   });
+
+  it("does not silently replace an unknown workspace from the URL", () => {
+    render(<WorkspaceProvider preferredWorkspaceId="ws-unknown"><WorkspaceProbe /></WorkspaceProvider>);
+
+    expect(screen.getByRole("status").textContent).toBe("Nenhum Workspace");
+  });
 });
 
 function WorkspaceProbe() {
   const { workspace, selectWorkspace } = useSelectedWorkspace();
-  return <><p role="status">{workspace?.name}</p><button onClick={() => selectWorkspace(workspaces[0].id)}>Selecionar Alpha</button><button onClick={() => selectWorkspace(workspaces[1].id)}>Selecionar Beta</button></>;
+  return <><p role="status">{workspace?.name ?? "Nenhum Workspace"}</p><button onClick={() => selectWorkspace(workspaces[0].id)}>Selecionar Alpha</button><button onClick={() => selectWorkspace(workspaces[1].id)}>Selecionar Beta</button></>;
 }

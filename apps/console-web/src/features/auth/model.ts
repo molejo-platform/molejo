@@ -1,9 +1,10 @@
 import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiRequestError } from "../../shared/api/errors";
+import { applySessionState, clearSessionState, publishSessionState, sessionQueryKey } from "../../shared/auth/session-state";
 import { getSession, login, logout, type LoginInput } from "./api";
 
-export const sessionQueryKey = ["session"] as const;
+export { sessionQueryKey };
 
 export function sessionQueryOptions() {
   return queryOptions({
@@ -12,7 +13,9 @@ export function sessionQueryOptions() {
       try {
         return await getSession();
       } catch (error) {
-        if (error instanceof ApiRequestError && error.status === 401) return null;
+        if (error instanceof ApiRequestError && error.status === 401) {
+          return null;
+        }
         throw error;
       }
     },
@@ -29,7 +32,10 @@ export function useLoginMutation() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: LoginInput) => login(input),
-    onSuccess: (session) => queryClient.setQueryData(sessionQueryKey, session),
+    onSuccess: (session) => {
+      applySessionState(queryClient, session, true);
+      publishSessionState(session);
+    },
   });
 }
 
@@ -37,6 +43,6 @@ export function useLogoutMutation() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: logout,
-    onSuccess: () => queryClient.setQueryData(sessionQueryKey, null),
+    onSuccess: () => clearSessionState(queryClient),
   });
 }

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useBlocker, useNavigate } from "@tanstack/react-router";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 
 import { ApiRequestError, userFacingError } from "../../shared/api/errors";
 import type { AppEnvironment, Parameter, RuntimeConfiguration } from "../../shared/api/types";
@@ -47,6 +47,7 @@ function ConfigurationEditor({ target, params, section, title, description, canM
   const [draft, setDraft] = useState(target.configuration);
   const [dirty, setDirty] = useState(false);
   const [valid, setValid] = useState(true);
+  useBlocker({ shouldBlockFn: () => !window.confirm("Descartar as alterações não salvas?"), enableBeforeUnload: dirty, disabled: !dirty });
   useEffect(() => {
     if (!dirty) {
       setBranch(target.branch);
@@ -86,9 +87,10 @@ export const EnvironmentVariablesPage = page("variables", "Variáveis", "Valores
 
 function VariablesEditor({ draft, setDraft, disabled, onValidityChange }: { draft: RuntimeConfiguration; setDraft: (value: RuntimeConfiguration) => void; disabled: boolean; onValidityChange: (valid: boolean) => void }) {
   const [text, setText] = useState(runtimeVariablesToText(draft.variables));
+  const localUpdate = useRef(false);
   const parsed = parseRuntimeVariables(text);
-  useEffect(() => { setText(runtimeVariablesToText(draft.variables)); }, [draft.variables]);
-  return <TextareaField label="Variáveis de ambiente" helper="Uma por linha no formato NOME=valor. Segredos devem usar Parameters do tipo Secret." error={parsed.error} value={text} onChange={(event) => { const value = event.target.value; setText(value); const next = parseRuntimeVariables(value); onValidityChange(!next.error); if (!next.error) setDraft({ ...draft, variables: next.items }); }} rows={10} disabled={disabled}/>;
+  useEffect(() => { if (localUpdate.current) { localUpdate.current = false; return; } setText(runtimeVariablesToText(draft.variables)); }, [draft.variables]);
+  return <TextareaField label="Variáveis de ambiente" helper="Uma por linha no formato NOME=valor. Segredos devem usar Parameters do tipo Secret." error={parsed.error} value={text} onChange={(event) => { const value = event.target.value; setText(value); const next = parseRuntimeVariables(value); onValidityChange(!next.error); if (!next.error) { localUpdate.current = true; setDraft({ ...draft, variables: next.items }); } }} rows={10} disabled={disabled}/>;
 }
 
 export const EnvironmentSecretsPage = page("secrets", "Parameters e segredos", "Vincule versões exatas de textos e segredos reutilizáveis. Valores Secret são write-only e nunca aparecem no Console.", (draft, setDraft, parameters, disabled) => <SecretsEditor draft={draft} setDraft={setDraft} parameters={parameters} disabled={disabled}/>);

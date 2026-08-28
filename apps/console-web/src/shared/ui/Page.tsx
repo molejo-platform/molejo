@@ -1,4 +1,4 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useMatchRoute } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
 import { Icon } from "./Icon";
@@ -17,6 +17,12 @@ export function EmptyState({ title, description, action }: { title: string; desc
   return <div className="empty-state"><span className="empty-symbol" aria-hidden="true"><Icon name="circle" /></span><h2>{title}</h2><p>{description}</p>{action && <div className="empty-action">{action}</div>}</div>;
 }
 
-export function TabNav({ label, items }: { label: string; items: Array<{ label: string; to: string; params: Record<string, string> }> }) {
-  return <nav className="tabs" aria-label={label}>{items.map((item) => <Link key={item.label} to={item.to} params={item.params} activeProps={{ "aria-current": "page" }}>{item.label}</Link>)}</nav>;
+type TabItem = { label: string; to: string; params: Record<string, string>; exact?: boolean; activeTo?: readonly string[] };
+
+export function TabNav({ label, items }: { label: string; items: TabItem[] }) {
+  const matchRoute = useMatchRoute();
+  return <nav className="tabs" aria-label={label}>{items.map((item) => {
+    const groupedActive = item.activeTo?.some((to) => Boolean(matchRoute({ to, params: item.params, fuzzy: true })));
+    return <Link key={item.label} to={item.to} params={item.params} activeOptions={{ exact: item.exact ?? true }} activeProps={{ "aria-current": "page" }} aria-current={groupedActive ? "page" : undefined}>{item.label}</Link>;
+  })}</nav>;
 }

@@ -8,6 +8,7 @@ const params = vi.hoisted(() => ({
   projectId: "prj-aaaaaaaaaaaaaaaaaaaa",
   environmentId: "env-aaaaaaaaaaaaaaaaaaaa",
   appEnvironmentId: "aev-aaaaaaaaaaaaaaaaaaaa",
+  buildId: "bld-aaaaaaaaaaaaaaaaaaaa",
 }));
 
 const target = vi.hoisted(() => ({
@@ -33,6 +34,9 @@ const mocks = vi.hoisted(() => ({
   createAppEnvironment: vi.fn(),
   createAppEnvironmentDeployment: vi.fn(),
   updateAppEnvironment: vi.fn(),
+  getAppBuild: vi.fn(),
+  listAppBuildLogs: vi.fn(),
+  useBlocker: vi.fn(),
   listEnvironmentApps: vi.fn().mockResolvedValue({ items: [target], nextCursor: null }),
   listApps: vi.fn().mockResolvedValue({ items: [{ id: target.appId, name: target.appName, version: 1 }, { id: "app-bbbbbbbbbbbbbbbbbbbb", name: "Worker", version: 1 }], nextCursor: null }),
 }));
@@ -40,6 +44,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@tanstack/react-router", () => ({
   useParams: () => params,
   useNavigate: () => mocks.navigate,
+  useBlocker: mocks.useBlocker,
+  useMatchRoute: () => () => false,
   Link: ({ children }: { children: React.ReactNode }) => <a href="#target">{children}</a>,
 }));
 vi.mock("../auth/model", () => ({ useSessionQuery: () => ({ data: { actor: { id: "actor", role: "owner" } } }) }));
@@ -56,8 +62,8 @@ vi.mock("../apps/api", () => ({
   createAppEnvironment: mocks.createAppEnvironment,
   createAppBuild: mocks.createAppBuild,
   createAppEnvironmentDeployment: mocks.createAppEnvironmentDeployment,
-  getAppBuild: vi.fn(),
-  listAppBuildLogs: vi.fn().mockResolvedValue({ items: [] }),
+  getAppBuild: mocks.getAppBuild,
+  listAppBuildLogs: mocks.listAppBuildLogs,
   updateAppEnvironment: mocks.updateAppEnvironment,
   deleteAppEnvironment: vi.fn(),
   getAppSource: vi.fn().mockResolvedValue({ source: { repository: { fullName: "molejo/api" } } }),
@@ -68,7 +74,7 @@ vi.mock("../apps/api", () => ({
   previewAppEnvironmentDeployment: vi.fn().mockResolvedValue({ target: { releaseId: "rel-aaaaaaaaaaaaaaaaaaaa", configurationVersion: 1 }, changes: ["InitialDeployment"], rolloutRequired: true }),
 }));
 
-import { EnvironmentAppBuildsPage, EnvironmentAppDeploymentsPage, EnvironmentAppOverviewPage, EnvironmentAppsPage } from "./EnvironmentPages";
+import { EnvironmentAppBuildsPage, EnvironmentAppDeploymentsPage, EnvironmentAppOverviewPage, EnvironmentAppsPage, EnvironmentBuildDetailPage } from "./EnvironmentPages";
 import { EnvironmentBuildConfigurationPage, EnvironmentVariablesPage } from "./EnvironmentConfigurationPages";
 import { ProjectEntryPage } from "./ProjectEntryPage";
 import { renderWithQueryClient } from "../../test/render";
@@ -81,6 +87,9 @@ afterEach(() => {
   mocks.createAppEnvironment.mockReset();
   mocks.createAppEnvironmentDeployment.mockReset();
   mocks.updateAppEnvironment.mockReset();
+  mocks.getAppBuild.mockReset();
+  mocks.listAppBuildLogs.mockReset();
+  mocks.useBlocker.mockReset();
 });
 
 describe("Environment-first project experience", () => {
@@ -161,5 +170,29 @@ describe("Environment-first project experience", () => {
 
     expect(await screen.findByText(/Suas edições foram preservadas/)).toBeTruthy();
     expect((screen.getByLabelText("Variáveis de ambiente") as HTMLTextAreaElement).value).toBe("LOG_LEVEL=debug");
+  });
+
+  it("allows variables to be entered one line at a time", async () => {
+    const user = userEvent.setup();
+    renderWithQueryClient(<EnvironmentVariablesPage/>);
+
+    const field = await screen.findByLabelText("Variáveis de ambiente");
+    await user.type(field, "FIRST=1{Enter}SECOND=2");
+
+    expect((field as HTMLTextAreaElement).value).toBe("FIRST=1\nSECOND=2");
+    const blocker = mocks.useBlocker.mock.calls.at(-1)?.[0];
+    expect(blocker.disabled).toBe(false);
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    expect(blocker.shouldBlockFn()).toBe(true);
+    expect(confirm).toHaveBeenCalledWith("Descartar as alterações não salvas?");
+  });
+
+  it("shows a build log request failure instead of an empty state", async () => {
+    mocks.getAppBuild.mockResolvedValue({ id: params.buildId, appEnvironmentId: target.id, repository: "molejo/api", branch: "main", commitSha: "5144c84100edfcc6a5447daca1d7f6a34a393364", platform: "linux/amd64", status: "Succeeded", attempts: 1, createdAt: target.createdAt, updatedAt: target.updatedAt });
+    mocks.listAppBuildLogs.mockRejectedValue(new ApiRequestError(503, { code: "logs_unavailable", message: "logs unavailable", requestId: "request" }));
+    renderWithQueryClient(<EnvironmentBuildDetailPage/>);
+
+    expect((await screen.findByRole("alert")).textContent).toContain("logs unavailable");
+    expect(screen.queryByText("Logs ainda indisponíveis")).toBeNull();
   });
 });

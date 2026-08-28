@@ -8,6 +8,8 @@ type WorkspaceContextValue = {
   workspaces: Workspace[];
   selectWorkspace: (workspaceId: string) => void;
   isPending: boolean;
+  error: unknown;
+  preferredWorkspaceMissing: boolean;
 };
 
 const WorkspaceContext = createContext<WorkspaceContextValue | undefined>(undefined);
@@ -17,7 +19,8 @@ export function WorkspaceProvider({ children, preferredWorkspaceId = "" }: { chi
   const query = useWorkspaceQuery();
   const [selectedID, setSelectedID] = useState(() => typeof window === "undefined" || !window.localStorage ? "" : window.localStorage.getItem(storageKey) ?? "");
   const workspaces = query.data?.items ?? [];
-  const workspace = workspaces.find((item) => item.id === preferredWorkspaceId) ?? workspaces.find((item) => item.id === selectedID) ?? workspaces[0];
+  const workspace = preferredWorkspaceId ? workspaces.find((item) => item.id === preferredWorkspaceId) : workspaces.find((item) => item.id === selectedID) ?? workspaces[0];
+  const preferredWorkspaceMissing = Boolean(preferredWorkspaceId && !query.isPending && !query.error && !workspace);
 
   useEffect(() => {
     if (workspace && workspace.id !== selectedID) setSelectedID(workspace.id);
@@ -27,7 +30,7 @@ export function WorkspaceProvider({ children, preferredWorkspaceId = "" }: { chi
     if (workspace && typeof window !== "undefined" && window.localStorage) window.localStorage.setItem(storageKey, workspace.id);
   }, [workspace]);
 
-  const value = useMemo(() => ({ workspace, workspaces, selectWorkspace: setSelectedID, isPending: query.isPending }), [query.isPending, workspace, workspaces]);
+  const value = useMemo(() => ({ workspace, workspaces, selectWorkspace: setSelectedID, isPending: query.isPending, error: query.error, preferredWorkspaceMissing }), [preferredWorkspaceMissing, query.error, query.isPending, workspace, workspaces]);
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
 }
 
