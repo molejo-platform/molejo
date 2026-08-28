@@ -211,6 +211,42 @@ func (e OperationStatus) Valid() bool {
 	}
 }
 
+// Defines values for ParameterType.
+const (
+	ParameterTypePlainText ParameterType = "PlainText"
+	ParameterTypeSecret    ParameterType = "Secret"
+)
+
+// Valid indicates whether the value is a known member of the ParameterType enum.
+func (e ParameterType) Valid() bool {
+	switch e {
+	case ParameterTypePlainText:
+		return true
+	case ParameterTypeSecret:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ParameterInputType.
+const (
+	ParameterInputTypePlainText ParameterInputType = "PlainText"
+	ParameterInputTypeSecret    ParameterInputType = "Secret"
+)
+
+// Valid indicates whether the value is a known member of the ParameterInputType enum.
+func (e ParameterInputType) Valid() bool {
+	switch e {
+	case ParameterInputTypePlainText:
+		return true
+	case ParameterInputTypeSecret:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ReleasePlatform.
 const (
 	ReleasePlatformLinuxamd64 ReleasePlatform = "linux/amd64"
@@ -479,6 +515,36 @@ type OperationKind string
 // OperationStatus defines model for Operation.Status.
 type OperationStatus string
 
+// Parameter defines model for Parameter.
+type Parameter struct {
+	Configured     bool          `json:"configured"`
+	CreatedAt      time.Time     `json:"createdAt"`
+	CurrentVersion int           `json:"currentVersion"`
+	Description    string        `json:"description"`
+	Id             string        `json:"id"`
+	Path           string        `json:"path"`
+	Type           ParameterType `json:"type"`
+	UpdatedAt      time.Time     `json:"updatedAt"`
+
+	// Value Present only for PlainText parameters.
+	Value   *string `json:"value,omitempty"`
+	Version int     `json:"version"`
+}
+
+// ParameterType defines model for Parameter.Type.
+type ParameterType string
+
+// ParameterInput defines model for ParameterInput.
+type ParameterInput struct {
+	Description *string            `json:"description,omitempty"`
+	Path        string             `json:"path"`
+	Type        ParameterInputType `json:"type"`
+	Value       string             `json:"value"`
+}
+
+// ParameterInputType defines model for ParameterInput.Type.
+type ParameterInputType string
+
 // Probe defines model for Probe.
 type Probe struct {
 	Path string `json:"path"`
@@ -600,6 +666,9 @@ type IncludeArchived = bool
 // Limit defines model for Limit.
 type Limit = int
 
+// ParameterId defines model for ParameterId.
+type ParameterId = string
+
 // ProjectId defines model for ProjectId.
 type ProjectId = string
 
@@ -658,6 +727,22 @@ type CreateWorkspaceParams struct {
 
 // UpdateWorkspaceParams defines parameters for UpdateWorkspace.
 type UpdateWorkspaceParams struct {
+	IfMatch IfMatch `json:"If-Match"`
+}
+
+// ListParametersParams defines parameters for ListParameters.
+type ListParametersParams struct {
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// ArchiveParameterParams defines parameters for ArchiveParameter.
+type ArchiveParameterParams struct {
+	IfMatch IfMatch `json:"If-Match"`
+}
+
+// ReplaceParameterParams defines parameters for ReplaceParameter.
+type ReplaceParameterParams struct {
 	IfMatch IfMatch `json:"If-Match"`
 }
 
@@ -772,6 +857,12 @@ type CreateWorkspaceJSONRequestBody = HierarchyInput
 // UpdateWorkspaceJSONRequestBody defines body for UpdateWorkspace for application/json ContentType.
 type UpdateWorkspaceJSONRequestBody = HierarchyInput
 
+// CreateParameterJSONRequestBody defines body for CreateParameter for application/json ContentType.
+type CreateParameterJSONRequestBody = ParameterInput
+
+// ReplaceParameterJSONRequestBody defines body for ReplaceParameter for application/json ContentType.
+type ReplaceParameterJSONRequestBody = ParameterInput
+
 // CreateProjectJSONRequestBody defines body for CreateProject for application/json ContentType.
 type CreateProjectJSONRequestBody = HierarchyInput
 
@@ -852,6 +943,21 @@ type ServerInterface interface {
 
 	// (GET /api/v1/workspaces/{workspaceId}/github/installations/{githubInstallationId}/repositories)
 	ListGitHubRepositories(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, githubInstallationId GitHubInstallationId)
+
+	// (GET /api/v1/workspaces/{workspaceId}/parameters)
+	ListParameters(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, params ListParametersParams)
+
+	// (POST /api/v1/workspaces/{workspaceId}/parameters)
+	CreateParameter(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId)
+
+	// (DELETE /api/v1/workspaces/{workspaceId}/parameters/{parameterId})
+	ArchiveParameter(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, parameterId ParameterId, params ArchiveParameterParams)
+
+	// (GET /api/v1/workspaces/{workspaceId}/parameters/{parameterId})
+	GetParameter(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, parameterId ParameterId)
+
+	// (PUT /api/v1/workspaces/{workspaceId}/parameters/{parameterId})
+	ReplaceParameter(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, parameterId ParameterId, params ReplaceParameterParams)
 
 	// (GET /api/v1/workspaces/{workspaceId}/projects)
 	ListProjects(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, params ListProjectsParams)
@@ -1026,6 +1132,31 @@ func (_ Unimplemented) DisconnectGitHubInstallation(w http.ResponseWriter, r *ht
 
 // (GET /api/v1/workspaces/{workspaceId}/github/installations/{githubInstallationId}/repositories)
 func (_ Unimplemented) ListGitHubRepositories(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, githubInstallationId GitHubInstallationId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /api/v1/workspaces/{workspaceId}/parameters)
+func (_ Unimplemented) ListParameters(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, params ListParametersParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /api/v1/workspaces/{workspaceId}/parameters)
+func (_ Unimplemented) CreateParameter(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (DELETE /api/v1/workspaces/{workspaceId}/parameters/{parameterId})
+func (_ Unimplemented) ArchiveParameter(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, parameterId ParameterId, params ArchiveParameterParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /api/v1/workspaces/{workspaceId}/parameters/{parameterId})
+func (_ Unimplemented) GetParameter(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, parameterId ParameterId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (PUT /api/v1/workspaces/{workspaceId}/parameters/{parameterId})
+func (_ Unimplemented) ReplaceParameter(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, parameterId ParameterId, params ReplaceParameterParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1656,6 +1787,248 @@ func (siw *ServerInterfaceWrapper) ListGitHubRepositories(w http.ResponseWriter,
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListGitHubRepositories(w, r, workspaceId, githubInstallationId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListParameters operation middleware
+func (siw *ServerInterfaceWrapper) ListParameters(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListParametersParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListParameters(w, r, workspaceId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateParameter operation middleware
+func (siw *ServerInterfaceWrapper) CreateParameter(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateParameter(w, r, workspaceId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ArchiveParameter operation middleware
+func (siw *ServerInterfaceWrapper) ArchiveParameter(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "parameterId" -------------
+	var parameterId ParameterId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "parameterId", chi.URLParam(r, "parameterId"), &parameterId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "parameterId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ArchiveParameterParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch IfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "integer", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ArchiveParameter(w, r, workspaceId, parameterId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetParameter operation middleware
+func (siw *ServerInterfaceWrapper) GetParameter(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "parameterId" -------------
+	var parameterId ParameterId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "parameterId", chi.URLParam(r, "parameterId"), &parameterId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "parameterId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetParameter(w, r, workspaceId, parameterId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ReplaceParameter operation middleware
+func (siw *ServerInterfaceWrapper) ReplaceParameter(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "parameterId" -------------
+	var parameterId ParameterId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "parameterId", chi.URLParam(r, "parameterId"), &parameterId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "parameterId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ReplaceParameterParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch IfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "integer", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReplaceParameter(w, r, workspaceId, parameterId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3767,6 +4140,21 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Put(options.BaseURL+"/api/v1/workspaces/{workspaceId}", wrapper.UpdateWorkspace)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/parameters", wrapper.ListParameters)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/workspaces/{workspaceId}/parameters", wrapper.CreateParameter)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/api/v1/workspaces/{workspaceId}/parameters/{parameterId}", wrapper.ArchiveParameter)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/parameters/{parameterId}", wrapper.GetParameter)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/api/v1/workspaces/{workspaceId}/parameters/{parameterId}", wrapper.ReplaceParameter)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects", wrapper.ListProjects)
 	})
 	r.Group(func(r chi.Router) {
@@ -4605,6 +4993,331 @@ func (response ListGitHubRepositories404JSONResponse) VisitListGitHubRepositorie
 type ListGitHubRepositories503JSONResponse struct{ UnavailableJSONResponse }
 
 func (response ListGitHubRepositories503JSONResponse) VisitListGitHubRepositoriesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListParametersRequestObject struct {
+	WorkspaceId WorkspaceId `json:"workspaceId"`
+	Params      ListParametersParams
+}
+
+type ListParametersResponseObject interface {
+	VisitListParametersResponse(w http.ResponseWriter) error
+}
+
+type ListParameters200JSONResponse struct {
+	Items      []Parameter `json:"items"`
+	NextCursor *string     `json:"nextCursor,omitempty"`
+}
+
+func (response ListParameters200JSONResponse) VisitListParametersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListParameters404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ListParameters404JSONResponse) VisitListParametersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateParameterRequestObject struct {
+	WorkspaceId WorkspaceId `json:"workspaceId"`
+	Body        *CreateParameterJSONRequestBody
+}
+
+type CreateParameterResponseObject interface {
+	VisitCreateParameterResponse(w http.ResponseWriter) error
+}
+
+type CreateParameter201JSONResponse Parameter
+
+func (response CreateParameter201JSONResponse) VisitCreateParameterResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateParameter400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response CreateParameter400JSONResponse) VisitCreateParameterResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateParameter403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response CreateParameter403JSONResponse) VisitCreateParameterResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateParameter404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response CreateParameter404JSONResponse) VisitCreateParameterResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateParameter409JSONResponse struct{ ConflictJSONResponse }
+
+func (response CreateParameter409JSONResponse) VisitCreateParameterResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateParameter503JSONResponse struct{ UnavailableJSONResponse }
+
+func (response CreateParameter503JSONResponse) VisitCreateParameterResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ArchiveParameterRequestObject struct {
+	WorkspaceId WorkspaceId `json:"workspaceId"`
+	ParameterId ParameterId `json:"parameterId"`
+	Params      ArchiveParameterParams
+}
+
+type ArchiveParameterResponseObject interface {
+	VisitArchiveParameterResponse(w http.ResponseWriter) error
+}
+
+type ArchiveParameter204Response struct {
+}
+
+func (response ArchiveParameter204Response) VisitArchiveParameterResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type ArchiveParameter403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response ArchiveParameter403JSONResponse) VisitArchiveParameterResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ArchiveParameter404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ArchiveParameter404JSONResponse) VisitArchiveParameterResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ArchiveParameter409JSONResponse struct{ ConflictJSONResponse }
+
+func (response ArchiveParameter409JSONResponse) VisitArchiveParameterResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetParameterRequestObject struct {
+	WorkspaceId WorkspaceId `json:"workspaceId"`
+	ParameterId ParameterId `json:"parameterId"`
+}
+
+type GetParameterResponseObject interface {
+	VisitGetParameterResponse(w http.ResponseWriter) error
+}
+
+type GetParameter200JSONResponse Parameter
+
+func (response GetParameter200JSONResponse) VisitGetParameterResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetParameter404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response GetParameter404JSONResponse) VisitGetParameterResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReplaceParameterRequestObject struct {
+	WorkspaceId WorkspaceId `json:"workspaceId"`
+	ParameterId ParameterId `json:"parameterId"`
+	Params      ReplaceParameterParams
+	Body        *ReplaceParameterJSONRequestBody
+}
+
+type ReplaceParameterResponseObject interface {
+	VisitReplaceParameterResponse(w http.ResponseWriter) error
+}
+
+type ReplaceParameter200JSONResponse Parameter
+
+func (response ReplaceParameter200JSONResponse) VisitReplaceParameterResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReplaceParameter400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response ReplaceParameter400JSONResponse) VisitReplaceParameterResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReplaceParameter403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response ReplaceParameter403JSONResponse) VisitReplaceParameterResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReplaceParameter404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ReplaceParameter404JSONResponse) VisitReplaceParameterResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReplaceParameter409JSONResponse struct{ ConflictJSONResponse }
+
+func (response ReplaceParameter409JSONResponse) VisitReplaceParameterResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReplaceParameter503JSONResponse struct{ UnavailableJSONResponse }
+
+func (response ReplaceParameter503JSONResponse) VisitReplaceParameterResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -6499,6 +7212,21 @@ type StrictServerInterface interface {
 	// (GET /api/v1/workspaces/{workspaceId}/github/installations/{githubInstallationId}/repositories)
 	ListGitHubRepositories(ctx context.Context, request ListGitHubRepositoriesRequestObject) (ListGitHubRepositoriesResponseObject, error)
 
+	// (GET /api/v1/workspaces/{workspaceId}/parameters)
+	ListParameters(ctx context.Context, request ListParametersRequestObject) (ListParametersResponseObject, error)
+
+	// (POST /api/v1/workspaces/{workspaceId}/parameters)
+	CreateParameter(ctx context.Context, request CreateParameterRequestObject) (CreateParameterResponseObject, error)
+
+	// (DELETE /api/v1/workspaces/{workspaceId}/parameters/{parameterId})
+	ArchiveParameter(ctx context.Context, request ArchiveParameterRequestObject) (ArchiveParameterResponseObject, error)
+
+	// (GET /api/v1/workspaces/{workspaceId}/parameters/{parameterId})
+	GetParameter(ctx context.Context, request GetParameterRequestObject) (GetParameterResponseObject, error)
+
+	// (PUT /api/v1/workspaces/{workspaceId}/parameters/{parameterId})
+	ReplaceParameter(ctx context.Context, request ReplaceParameterRequestObject) (ReplaceParameterResponseObject, error)
+
 	// (GET /api/v1/workspaces/{workspaceId}/projects)
 	ListProjects(ctx context.Context, request ListProjectsRequestObject) (ListProjectsResponseObject, error)
 
@@ -7034,6 +7762,156 @@ func (sh *strictHandler) ListGitHubRepositories(w http.ResponseWriter, r *http.R
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ListGitHubRepositoriesResponseObject); ok {
 		if err := validResponse.VisitListGitHubRepositoriesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListParameters operation middleware
+func (sh *strictHandler) ListParameters(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, params ListParametersParams) {
+	var request ListParametersRequestObject
+
+	request.WorkspaceId = workspaceId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListParameters(ctx, request.(ListParametersRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListParameters")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListParametersResponseObject); ok {
+		if err := validResponse.VisitListParametersResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateParameter operation middleware
+func (sh *strictHandler) CreateParameter(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId) {
+	var request CreateParameterRequestObject
+
+	request.WorkspaceId = workspaceId
+
+	var body CreateParameterJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateParameter(ctx, request.(CreateParameterRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateParameter")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateParameterResponseObject); ok {
+		if err := validResponse.VisitCreateParameterResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ArchiveParameter operation middleware
+func (sh *strictHandler) ArchiveParameter(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, parameterId ParameterId, params ArchiveParameterParams) {
+	var request ArchiveParameterRequestObject
+
+	request.WorkspaceId = workspaceId
+	request.ParameterId = parameterId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ArchiveParameter(ctx, request.(ArchiveParameterRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ArchiveParameter")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ArchiveParameterResponseObject); ok {
+		if err := validResponse.VisitArchiveParameterResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetParameter operation middleware
+func (sh *strictHandler) GetParameter(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, parameterId ParameterId) {
+	var request GetParameterRequestObject
+
+	request.WorkspaceId = workspaceId
+	request.ParameterId = parameterId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetParameter(ctx, request.(GetParameterRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetParameter")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetParameterResponseObject); ok {
+		if err := validResponse.VisitGetParameterResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ReplaceParameter operation middleware
+func (sh *strictHandler) ReplaceParameter(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, parameterId ParameterId, params ReplaceParameterParams) {
+	var request ReplaceParameterRequestObject
+
+	request.WorkspaceId = workspaceId
+	request.ParameterId = parameterId
+	request.Params = params
+
+	var body ReplaceParameterJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ReplaceParameter(ctx, request.(ReplaceParameterRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ReplaceParameter")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ReplaceParameterResponseObject); ok {
+		if err := validResponse.VisitReplaceParameterResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

@@ -114,6 +114,78 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/workspaces/{workspaceId}/parameters:
+    parameters: [{ $ref: '#/components/parameters/WorkspaceId' }]
+    get:
+      operationId: listParameters
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Workspace parameters
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Parameter' } }
+                  nextCursor: { type: [string, 'null'] }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      operationId: createParameter
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ParameterInput' } } }
+      responses:
+        '201':
+          description: Created parameter
+          content: { application/json: { schema: { $ref: '#/components/schemas/Parameter' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/v1/workspaces/{workspaceId}/parameters/{parameterId}:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ParameterId' }
+    get:
+      operationId: getParameter
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Parameter metadata and current PlainText value
+          content: { application/json: { schema: { $ref: '#/components/schemas/Parameter' } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      operationId: replaceParameter
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: '#/components/parameters/IfMatch' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ParameterInput' } } }
+      responses:
+        '200':
+          description: Replaced parameter and immutable value version
+          content: { application/json: { schema: { $ref: '#/components/schemas/Parameter' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+    delete:
+      operationId: archiveParameter
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: '#/components/parameters/IfMatch' }]
+      responses:
+        '204': { description: Parameter archived }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
   /api/v1/workspaces/{workspaceId}/projects:
     parameters: [{ $ref: '#/components/parameters/WorkspaceId' }]
     get:
@@ -790,6 +862,11 @@ components:
       in: path
       required: true
       schema: { type: string, pattern: '^aev-[a-z2-7]{20}$' }
+    ParameterId:
+      name: parameterId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^par-[a-z2-7]{20}$' }
     DeploymentId:
       name: deploymentId
       in: path
@@ -1007,6 +1084,30 @@ components:
       properties:
         name: { type: string, maxLength: 253, pattern: '^[A-Za-z_][A-Za-z0-9_]*$' }
         value: { type: string, maxLength: 4096 }
+    ParameterInput:
+      type: object
+      required: [path, type, value]
+      additionalProperties: false
+      properties:
+        path: { type: string, minLength: 2, maxLength: 255, pattern: '^/[a-zA-Z0-9._/-]+$' }
+        type: { type: string, enum: [PlainText, Secret] }
+        description: { type: string, maxLength: 500, default: '' }
+        value: { type: string, minLength: 1, maxLength: 65536 }
+    Parameter:
+      type: object
+      required: [id, path, type, description, currentVersion, version, configured, createdAt, updatedAt]
+      additionalProperties: false
+      properties:
+        id: { type: string, pattern: '^par-[a-z2-7]{20}$' }
+        path: { type: string, minLength: 2, maxLength: 255 }
+        type: { type: string, enum: [PlainText, Secret] }
+        description: { type: string, maxLength: 500 }
+        currentVersion: { type: integer, minimum: 1 }
+        version: { type: integer, minimum: 1 }
+        configured: { type: boolean }
+        value: { type: string, maxLength: 65536, description: Present only for PlainText parameters. }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
     RuntimeConfiguration:
       type: object
       required: [replicas, port, resources, probes, exposure, variables]

@@ -70,6 +70,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspaceId}/parameters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        get: operations["listParameters"];
+        put?: never;
+        post: operations["createParameter"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/parameters/{parameterId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                parameterId: components["parameters"]["ParameterId"];
+            };
+            cookie?: never;
+        };
+        get: operations["getParameter"];
+        put: operations["replaceParameter"];
+        post?: never;
+        delete: operations["archiveParameter"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspaceId}/projects": {
         parameters: {
             query?: never;
@@ -650,6 +687,30 @@ export interface components {
             name: string;
             value: string;
         };
+        ParameterInput: {
+            path: string;
+            /** @enum {string} */
+            type: "PlainText" | "Secret";
+            /** @default  */
+            description: string;
+            value: string;
+        };
+        Parameter: {
+            id: string;
+            path: string;
+            /** @enum {string} */
+            type: "PlainText" | "Secret";
+            description: string;
+            currentVersion: number;
+            version: number;
+            configured: boolean;
+            /** @description Present only for PlainText parameters. */
+            value?: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
         RuntimeConfiguration: {
             /** @default 1 */
             replicas: number;
@@ -825,6 +886,7 @@ export interface components {
         EnvironmentId: string;
         AppId: string;
         AppEnvironmentId: string;
+        ParameterId: string;
         DeploymentId: string;
         GitHubInstallationId: string;
         BuildId: string;
@@ -1031,6 +1093,150 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listParameters: {
+        parameters: {
+            query?: {
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Workspace parameters */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["Parameter"][];
+                        nextCursor?: string | null;
+                    };
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createParameter: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ParameterInput"];
+            };
+        };
+        responses: {
+            /** @description Created parameter */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Parameter"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    getParameter: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                parameterId: components["parameters"]["ParameterId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Parameter metadata and current PlainText value */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Parameter"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    replaceParameter: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                parameterId: components["parameters"]["ParameterId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ParameterInput"];
+            };
+        };
+        responses: {
+            /** @description Replaced parameter and immutable value version */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Parameter"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    archiveParameter: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                parameterId: components["parameters"]["ParameterId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Parameter archived */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];

@@ -8,6 +8,7 @@ import { EnvironmentAppBuildsPage, EnvironmentAppDeploymentsPage, EnvironmentApp
 import { ProjectEntryPage } from "../features/environments/ProjectEntryPage";
 import { sessionQueryOptions } from "../features/auth/model";
 import { OverviewPage } from "../features/overview/OverviewPage";
+import { ParametersPage } from "../features/parameters/ParametersPage";
 import { ProjectAppsPage, ProjectEnvironmentsPage, ProjectOverviewPage, ProjectsPage } from "../features/projects/ProjectPages";
 import { GitHubSettingsPage, NewWorkspacePage, WorkspaceSettingsPage } from "../features/settings/SettingsPages";
 import { LegacyDeploymentsEntryPage, LegacySettingsEntryPage, WorkspaceEntryPage } from "../features/workspace/WorkspaceEntryPage";
@@ -49,6 +50,7 @@ async function requireOwner(context: RouterContext, workspaceId?: string) {
 const workspaceEntryRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/", component: WorkspaceEntryPage });
 const overviewRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/$workspaceId/overview", component: OverviewPage });
 const projectsRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/$workspaceId/projects", component: ProjectsPage });
+const parametersRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/$workspaceId/parameters", component: ParametersPage });
 const projectEntryRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/$workspaceId/projects/$projectId", component: ProjectEntryPage });
 const projectOverviewRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/$workspaceId/projects/$projectId/settings", component: ProjectOverviewPage });
 const projectAppsRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/$workspaceId/projects/$projectId/settings/apps", component: ProjectAppsPage });
@@ -74,7 +76,7 @@ const legacyAdminRoute = createRoute({ getParentRoute: () => protectedRoute, pat
 
 const routeTree = rootRoute.addChildren([
   loginRoute,
-  protectedRoute.addChildren([workspaceEntryRoute, overviewRoute, projectsRoute, projectEntryRoute, projectOverviewRoute, projectAppsRoute, projectEnvironmentsRoute, environmentAppsRoute, environmentAppOverviewRoute, environmentAppBuildsRoute, environmentBuildDetailRoute, environmentAppDeploymentsRoute, environmentAppSettingsRoute, appOverviewRoute, appSourceRoute, retiredDeploymentsRoute, settingsRoute, githubSettingsRoute, newWorkspaceRoute, legacyDeploymentsRoute, legacyAdminRoute]),
+  protectedRoute.addChildren([workspaceEntryRoute, overviewRoute, projectsRoute, parametersRoute, projectEntryRoute, projectOverviewRoute, projectAppsRoute, projectEnvironmentsRoute, environmentAppsRoute, environmentAppOverviewRoute, environmentAppBuildsRoute, environmentBuildDetailRoute, environmentAppDeploymentsRoute, environmentAppSettingsRoute, appOverviewRoute, appSourceRoute, retiredDeploymentsRoute, settingsRoute, githubSettingsRoute, newWorkspaceRoute, legacyDeploymentsRoute, legacyAdminRoute]),
 ]);
 
 export function createAppRouter(queryClient: QueryClient, history: ReturnType<typeof createBrowserHistory> = createBrowserHistory()) {

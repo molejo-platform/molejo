@@ -183,6 +183,31 @@ type Operation struct {
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 }
 
+type Parameter struct {
+	ID             int64              `json:"id"`
+	PublicID       string             `json:"public_id"`
+	WorkspaceID    int64              `json:"workspace_id"`
+	Path           string             `json:"path"`
+	Kind           string             `json:"kind"`
+	Description    string             `json:"description"`
+	CurrentVersion int64              `json:"current_version"`
+	Version        int64              `json:"version"`
+	ArchivedAt     pgtype.Timestamptz `json:"archived_at"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ParameterVersion struct {
+	ParameterID          int64              `json:"parameter_id"`
+	Version              int64              `json:"version"`
+	CreatedByActorID     int64              `json:"created_by_actor_id"`
+	PlaintextValue       pgtype.Text        `json:"plaintext_value"`
+	SecretReference      pgtype.Text        `json:"secret_reference"`
+	SecretBackendVersion pgtype.Int8        `json:"secret_backend_version"`
+	Fingerprint          []byte             `json:"fingerprint"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+}
+
 type Project struct {
 	ID          int64              `json:"id"`
 	PublicID    string             `json:"public_id"`

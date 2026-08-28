@@ -33,15 +33,19 @@ const (
 	OperationEnsureWorkspace = "EnsureWorkspace"
 	OperationApplyDeployment = "ApplyDeployment"
 	OperationDeleteAppEnv    = "DeleteAppEnvironment"
+	ParameterPlainText       = "PlainText"
+	ParameterSecret          = "Secret"
 )
 
 var (
-	imagePattern        = regexp.MustCompile(`^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$`)
-	slugPattern         = regexp.MustCompile(`^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$`)
-	appIDPattern        = regexp.MustCompile(`^app-[a-z2-7]{20}$`)
-	envIDPattern        = regexp.MustCompile(`^env-[a-z2-7]{20}$`)
-	appEnvIDPattern     = regexp.MustCompile(`^aev-[a-z2-7]{20}$`)
-	variableNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+	imagePattern         = regexp.MustCompile(`^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$`)
+	slugPattern          = regexp.MustCompile(`^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$`)
+	appIDPattern         = regexp.MustCompile(`^app-[a-z2-7]{20}$`)
+	envIDPattern         = regexp.MustCompile(`^env-[a-z2-7]{20}$`)
+	appEnvIDPattern      = regexp.MustCompile(`^aev-[a-z2-7]{20}$`)
+	variableNamePattern  = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+	parameterIDPattern   = regexp.MustCompile(`^par-[a-z2-7]{20}$`)
+	parameterPathPattern = regexp.MustCompile(`^/[a-zA-Z0-9._/-]{1,254}$`)
 )
 
 type ResourceValues struct {
@@ -66,6 +70,29 @@ type Probes struct {
 type Variable struct {
 	Name  string `json:"name"`
 	Value string `json:"value"`
+}
+
+type Parameter struct {
+	ID             int64      `json:"-"`
+	PublicID       string     `json:"id"`
+	WorkspaceID    int64      `json:"-"`
+	Path           string     `json:"path"`
+	Kind           string     `json:"type"`
+	Description    string     `json:"description"`
+	CurrentVersion int64      `json:"currentVersion"`
+	Version        int64      `json:"version"`
+	Value          *string    `json:"value,omitempty"`
+	Configured     bool       `json:"configured"`
+	CreatedAt      time.Time  `json:"createdAt"`
+	UpdatedAt      time.Time  `json:"updatedAt"`
+	ArchivedAt     *time.Time `json:"-"`
+}
+
+type ParameterValue struct {
+	PlainTextValue       *string
+	SecretReference      string
+	SecretBackendVersion int64
+	Fingerprint          []byte
 }
 
 type RuntimeConfig struct {
@@ -240,6 +267,34 @@ func NewPublicID(prefix string) (string, error) {
 	}
 	encoded := base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(b)
 	return prefix + "-" + strings.ToLower(encoded), nil
+}
+
+func NormalizeParameterPath(value string) (string, error) {
+	path := strings.TrimSpace(value)
+	if len(path) < 2 || len(path) > 255 || !parameterPathPattern.MatchString(path) || strings.Contains(path, "//") || strings.HasSuffix(path, "/") {
+		return "", errors.New("path must start with / and contain only letters, numbers, dot, underscore, slash, or hyphen")
+	}
+	return path, nil
+}
+
+func ValidateParameter(kind, description, value string) error {
+	if kind != ParameterPlainText && kind != ParameterSecret {
+		return errors.New("type must be PlainText or Secret")
+	}
+	if utf8.RuneCountInString(description) > 500 || strings.IndexFunc(description, unicode.IsControl) >= 0 {
+		return errors.New("description must contain at most 500 characters without control characters")
+	}
+	if len(value) == 0 || len(value) > 64<<10 || strings.ContainsRune(value, '\x00') {
+		return errors.New("value must contain between 1 byte and 64 KiB without null bytes")
+	}
+	return nil
+}
+
+func ValidateParameterID(value string) error {
+	if !parameterIDPattern.MatchString(value) {
+		return errors.New("parameterId must be an opaque Parameter identifier")
+	}
+	return nil
 }
 
 func NormalizeHierarchyName(value string) (string, string, error) {

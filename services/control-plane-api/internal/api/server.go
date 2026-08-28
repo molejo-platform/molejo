@@ -17,11 +17,14 @@ import (
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/auth"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/domain"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/githubapp"
+	"github.com/fruto-platform/fruto/services/control-plane-api/internal/parameters"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/runtime"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/store"
 	"go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/otel/trace/noop"
 )
+
+const maxRequestBody = 128 << 10
 
 type Config struct {
 	Mode               string
@@ -47,22 +50,25 @@ func DefaultConfig() Config {
 }
 
 type Server struct {
-	Store        *store.Store
-	Runtime      runtime.Client
-	Config       Config
-	Logger       *slog.Logger
-	Tracer       trace.Tracer
-	GitHub       githubapp.Service
-	limiter      *loginLimiter
-	token        func(int) (string, error)
-	deploymentID func() (string, error)
+	Store                *store.Store
+	Runtime              runtime.Client
+	Config               Config
+	Logger               *slog.Logger
+	Tracer               trace.Tracer
+	GitHub               githubapp.Service
+	ParameterSecrets     parameters.SecretValueStore
+	SecretFingerprintKey []byte
+	limiter              *loginLimiter
+	token                func(int) (string, error)
+	deploymentID         func() (string, error)
+	parameterID          func() (string, error)
 }
 
 func NewServer(s *store.Store, r runtime.Client, cfg Config, logger *slog.Logger) *Server {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Server{Store: s, Runtime: r, Config: cfg, Logger: logger, Tracer: noop.NewTracerProvider().Tracer("github.com/fruto-platform/fruto/services/control-plane-api"), limiter: &loginLimiter{entries: map[string]loginAttempt{}}, token: randomToken, deploymentID: func() (string, error) { return domain.NewPublicID("dpl") }}
+	return &Server{Store: s, Runtime: r, Config: cfg, Logger: logger, Tracer: noop.NewTracerProvider().Tracer("github.com/fruto-platform/fruto/services/control-plane-api"), ParameterSecrets: parameters.UnavailableStore{}, limiter: &loginLimiter{entries: map[string]loginAttempt{}}, token: randomToken, deploymentID: func() (string, error) { return domain.NewPublicID("dpl") }, parameterID: func() (string, error) { return domain.NewPublicID("par") }}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -193,11 +199,11 @@ func securityMiddleware(s *Server, next http.Handler) http.Handler {
 			writeError(w, http.StatusMisdirectedRequest, "host_not_allowed", "request host is not allowed", r)
 			return
 		}
-		if r.ContentLength > 64<<10 {
+		if r.ContentLength > maxRequestBody {
 			writeError(w, http.StatusRequestEntityTooLarge, "request_too_large", "request body is too large", r)
 			return
 		}
-		r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
+		r.Body = http.MaxBytesReader(w, r.Body, maxRequestBody)
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
@@ -259,7 +265,7 @@ func (s *Server) hostAllowed(host string) bool {
 	return false
 }
 func decodeJSON(r *http.Request, target any) error {
-	r.Body = io.NopCloser(io.LimitReader(r.Body, 64<<10))
+	r.Body = io.NopCloser(io.LimitReader(r.Body, maxRequestBody))
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(target); err != nil {
@@ -277,7 +283,7 @@ func idempotency(r *http.Request) (string, []byte, bool) {
 		return "", nil, false
 	}
 	var body map[string]any
-	raw, err := io.ReadAll(io.LimitReader(r.Body, 64<<10))
+	raw, err := io.ReadAll(io.LimitReader(r.Body, maxRequestBody))
 	if err != nil {
 		return "", nil, false
 	}

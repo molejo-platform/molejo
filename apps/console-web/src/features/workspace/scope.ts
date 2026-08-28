@@ -1,4 +1,5 @@
 export const workspaceScopeKeys = {
+  parameters: (workspaceId: string) => ["workspaces", workspaceId, "parameters", "list"] as const,
   projects: (workspaceId: string) => ["workspaces", workspaceId, "projects", "list"] as const,
   project: (workspaceId: string, projectId: string) => ["workspaces", workspaceId, "projects", "detail", projectId] as const,
   environments: (workspaceId: string, projectId: string) => ["workspaces", workspaceId, "projects", projectId, "environments", "list"] as const,
