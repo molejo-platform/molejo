@@ -17,6 +17,6 @@ kubectl --context "$context" -n molejo-observability rollout status statefulset/
 kubectl --context "$context" -n molejo-observability rollout status statefulset/victoria-metrics --timeout=300s
 kubectl --context "$context" -n molejo-observability rollout status deployment/otel-gateway --timeout=300s
 kubectl --context "$context" -n molejo-observability rollout status deployment/otel-cluster --timeout=300s
-kubectl --context "$context" -n molejo-observability rollout status daemonset/otel-agent --timeout=300s
+kubectl --context "$context" -n molejo-observability-agents rollout status daemonset/otel-agent --timeout=300s
 
 printf 'observability stack applied to context %s\n' "$context"

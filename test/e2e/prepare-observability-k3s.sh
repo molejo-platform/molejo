@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-for command in kubectl openssl mkdir chmod cat; do
+for command in kubectl openssl mkdir chmod cat tr; do
   command -v "$command" >/dev/null 2>&1 || { echo "$command is required" >&2; exit 2; }
 done
 
@@ -24,8 +24,12 @@ mkdir -p "$credential_dir"
 ingest_password="$credential_dir/ingest-password"
 reader_password="$credential_dir/reader-password"
 users_xml="$credential_dir/users.xml"
-[[ -s "$ingest_password" ]] || openssl rand -hex 32 >"$ingest_password"
-[[ -s "$reader_password" ]] || openssl rand -hex 32 >"$reader_password"
+[[ -s "$ingest_password" ]] || { openssl rand -hex 32 | tr -d '\r\n' >"$ingest_password"; }
+[[ -s "$reader_password" ]] || { openssl rand -hex 32 | tr -d '\r\n' >"$reader_password"; }
+ingest_value="$(tr -d '\r\n' <"$ingest_password")"
+reader_value="$(tr -d '\r\n' <"$reader_password")"
+printf '%s' "$ingest_value" >"$ingest_password"
+printf '%s' "$reader_value" >"$reader_password"
 ingest_hash="$(openssl dgst -sha256 -r "$ingest_password")"
 ingest_hash="${ingest_hash%% *}"
 reader_hash="$(openssl dgst -sha256 -r "$reader_password")"

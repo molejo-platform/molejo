@@ -79,6 +79,43 @@ func TestVictoriaMetricsAlwaysScopesEveryMetricQuery(t *testing.T) {
 	}
 }
 
+func TestClickHouseEventsUseKubernetesEventAttributesAndRuntimePrefix(t *testing.T) {
+	t.Parallel()
+
+	var form url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			t.Fatal(err)
+		}
+		form = r.Form
+		_, _ = w.Write([]byte(`{"timestamp":"2026-08-28T12:00:00Z","type":"Normal","reason":"Started"}` + "\n"))
+	}))
+	defer server.Close()
+	client, err := NewClickHouseClient(server.URL, "otel", "reader", "secret", server.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+	items, err := client.Events(context.Background(), Scope{Namespace: "workspace-a", RuntimeName: "runtime-a"}, EventQuery{From: time.Now().Add(-time.Hour), To: time.Now(), Limit: 25})
+	if err != nil || len(items) != 1 {
+		t.Fatalf("items=%#v err=%v", items, err)
+	}
+	query := form.Get("query")
+	if !strings.Contains(query, "LogAttributes['k8s.namespace.name']") || !strings.Contains(query, "startsWith(LogAttributes['k8s.event.name'], {runtime:String})") {
+		t.Fatalf("event query does not use collector event attributes: %s", query)
+	}
+	if items[0].Source != "runtime" || items[0].Message != "Runtime container started." || items[0].Instance != "" {
+		t.Fatalf("event exposes an unstable Kubernetes detail: %#v", items[0])
+	}
+}
+
+func TestRuntimeEventMessageNeverReturnsRawInfrastructureText(t *testing.T) {
+	t.Parallel()
+
+	if got := runtimeEventMessage("UnknownProviderReason"); got != "Runtime event recorded." {
+		t.Fatalf("got %q", got)
+	}
+}
+
 func TestSanitizeTextBoundsAndRemovesControlCharacters(t *testing.T) {
 	t.Parallel()
 

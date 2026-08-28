@@ -186,7 +186,7 @@ apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   name: otel-agent
-  namespace: molejo-observability
+  namespace: molejo-observability-agents
 spec:
   selector:
     matchLabels: { app.kubernetes.io/name: otel-agent }
@@ -197,6 +197,11 @@ spec:
         app.kubernetes.io/part-of: molejo-observability
     spec:
       serviceAccountName: otel-agent
+      tolerations:
+        - key: fruto.cleidsonoliveira.dev/workload
+          operator: Equal
+          value: data
+          effect: NoSchedule
       securityContext:
         runAsUser: 0
         runAsGroup: 0

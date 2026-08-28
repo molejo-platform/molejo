@@ -8,6 +8,11 @@ spec:
     spec:
       nodeSelector:
         fruto.cleidsonoliveira.dev/role: data
+      tolerations:
+        - key: fruto.cleidsonoliveira.dev/workload
+          operator: Equal
+          value: data
+          effect: NoSchedule
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -19,3 +24,8 @@ spec:
     spec:
       nodeSelector:
         fruto.cleidsonoliveira.dev/role: data
+      tolerations:
+        - key: fruto.cleidsonoliveira.dev/workload
+          operator: Equal
+          value: data
+          effect: NoSchedule

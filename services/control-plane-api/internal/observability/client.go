@@ -183,12 +183,12 @@ ORDER BY Timestamp DESC LIMIT {limit:UInt32} FORMAT JSONEachRow`, c.database)
 }
 
 func (c *ClickHouseClient) Events(ctx context.Context, scope Scope, query EventQuery) ([]Event, error) {
-	sql := fmt.Sprintf(`SELECT formatDateTime(Timestamp, '%%Y-%%m-%%dT%%H:%%i:%%SZ', 'UTC') AS timestamp, ResourceAttributes['k8s.event.type'] AS type, ResourceAttributes['k8s.event.reason'] AS reason, Body AS message, ResourceAttributes['k8s.pod.name'] AS instance
+	sql := fmt.Sprintf(`SELECT formatDateTime(Timestamp, '%%Y-%%m-%%dT%%H:%%i:%%SZ', 'UTC') AS timestamp, SeverityText AS type, LogAttributes['k8s.event.reason'] AS reason
 FROM %s.otel_logs
 WHERE Timestamp >= {from:DateTime64(9)} AND Timestamp <= {to:DateTime64(9)}
-  AND ResourceAttributes['k8s.namespace.name'] = {namespace:String}
-  AND (ResourceAttributes['k8s.deployment.name'] = {runtime:String} OR ResourceAttributes['k8s.object.name'] = {runtime:String})
-  AND ResourceAttributes['k8s.event.reason'] != ''
+  AND LogAttributes['k8s.namespace.name'] = {namespace:String}
+  AND startsWith(LogAttributes['k8s.event.name'], {runtime:String})
+  AND LogAttributes['k8s.event.reason'] != ''
 ORDER BY Timestamp DESC LIMIT {limit:UInt32} FORMAT JSONEachRow`, c.database)
 	params := scopeParams(scope, query.From, query.To)
 	params.Set("param_limit", strconv.Itoa(query.Limit))
@@ -201,20 +201,46 @@ ORDER BY Timestamp DESC LIMIT {limit:UInt32} FORMAT JSONEachRow`, c.database)
 				Timestamp string `json:"timestamp"`
 				Type      string `json:"type"`
 				Reason    string `json:"reason"`
-				Message   string `json:"message"`
-				Instance  string `json:"instance"`
 			}
 			if err := json.Unmarshal(scanner.Bytes(), &row); err != nil {
 				return err
 			}
 			timestamp, err := time.Parse(time.RFC3339Nano, row.Timestamp)
 			if err == nil {
-				items = append(items, Event{Timestamp: timestamp, Source: "kubernetes", Type: sanitizeLabel(row.Type), Reason: sanitizeLabel(row.Reason), Message: sanitizeText(row.Message), Instance: sanitizeLabel(row.Instance)})
+				eventType := sanitizeLabel(row.Type)
+				if eventType == "" {
+					eventType = "Event"
+				}
+				reason := sanitizeLabel(row.Reason)
+				items = append(items, Event{Timestamp: timestamp, Source: "runtime", Type: eventType, Reason: reason, Message: runtimeEventMessage(reason)})
 			}
 		}
 		return scanner.Err()
 	})
 	return items, err
+}
+
+func runtimeEventMessage(reason string) string {
+	switch reason {
+	case "Scheduled":
+		return "Runtime scheduled for execution."
+	case "Pulling":
+		return "Runtime image download started."
+	case "Pulled":
+		return "Runtime image is available."
+	case "Created":
+		return "Runtime container created."
+	case "Started":
+		return "Runtime container started."
+	case "Killing":
+		return "Runtime container is stopping."
+	case "FailedScheduling":
+		return "Runtime could not be scheduled."
+	case "Failed", "BackOff":
+		return "Runtime operation failed."
+	default:
+		return "Runtime event recorded."
+	}
 }
 
 func (c *ClickHouseClient) query(ctx context.Context, sql string, params url.Values, decode func(io.Reader) error) error {
@@ -268,8 +294,8 @@ type metricDefinition struct {
 }
 
 var metricDefinitions = []metricDefinition{
-	{Name: "cpu", Unit: "cores", Query: `sum by (k8s_pod_name) (rate(k8s_container_cpu_usage_seconds_total{%s}[2m]))`},
-	{Name: "memory", Unit: "bytes", Query: `sum by (k8s_pod_name) (k8s_container_memory_working_set_bytes{%s})`},
+	{Name: "cpu", Unit: "cores", Query: `sum by (k8s_pod_name) (k8s_pod_cpu_usage{%s})`},
+	{Name: "memory", Unit: "bytes", Query: `sum by (k8s_pod_name) (k8s_pod_memory_working_set_bytes{%s})`},
 	{Name: "restarts", Unit: "count", Query: `sum by (k8s_pod_name) (k8s_container_restarts{%s})`},
 	{Name: "available", Unit: "replicas", Query: `max(k8s_deployment_available{%s})`},
 	{Name: "desired", Unit: "replicas", Query: `max(k8s_deployment_desired{%s})`},
