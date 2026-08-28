@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"io"
 	"log/slog"
@@ -18,6 +20,7 @@ import (
 	controlbuild "github.com/fruto-platform/fruto/services/control-plane-api/internal/build"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/domain"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/githubapp"
+	"github.com/fruto-platform/fruto/services/control-plane-api/internal/parameters"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/runtime"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/store"
 )
@@ -125,6 +128,10 @@ func run() error {
 		}
 	}
 	server := api.NewServer(s, rt, cfg, slog.Default())
+	server.ParameterSecrets, server.SecretFingerprintKey, err = parameterSecretStore()
+	if err != nil {
+		return err
+	}
 	server.GitHub, err = githubService(cfg)
 	if err != nil {
 		return err
@@ -153,6 +160,45 @@ func run() error {
 		return fmt.Errorf("worker shutdown timed out")
 	}
 	return nil
+}
+
+func parameterSecretStore() (parameters.SecretValueStore, []byte, error) {
+	address := strings.TrimSpace(os.Getenv("FRUTO_OPENBAO_ADDR"))
+	if address == "" {
+		return parameters.UnavailableStore{}, nil, nil
+	}
+	fingerprintKey, err := readSecretFile("FRUTO_PARAMETER_FINGERPRINT_KEY_FILE")
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(fingerprintKey) < 32 {
+		return nil, nil, fmt.Errorf("FRUTO_PARAMETER_FINGERPRINT_KEY_FILE must contain at least 32 bytes")
+	}
+	caPath := strings.TrimSpace(os.Getenv("FRUTO_OPENBAO_CA_FILE"))
+	if caPath == "" {
+		return nil, nil, fmt.Errorf("FRUTO_OPENBAO_CA_FILE is required")
+	}
+	caPEM, err := os.ReadFile(caPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("read OpenBao CA: %w", err)
+	}
+	roots := x509.NewCertPool()
+	if !roots.AppendCertsFromPEM(caPEM) {
+		return nil, nil, fmt.Errorf("OpenBao CA is invalid")
+	}
+	client := &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots}}}
+	backend, err := parameters.NewOpenBaoKV2(parameters.OpenBaoConfig{
+		Address:                 address,
+		KubernetesAuthMount:     env("FRUTO_OPENBAO_KUBERNETES_AUTH_MOUNT", "kubernetes"),
+		KubernetesRole:          env("FRUTO_OPENBAO_ROLE", "molejo-control-plane"),
+		ServiceAccountTokenFile: env("FRUTO_OPENBAO_SERVICE_ACCOUNT_TOKEN_FILE", "/var/run/secrets/kubernetes.io/serviceaccount/token"),
+		Mount:                   env("FRUTO_OPENBAO_KV_MOUNT", "parameters"),
+		HTTPClient:              client,
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	return backend, []byte(fingerprintKey), nil
 }
 
 func runBuildWorker() error {

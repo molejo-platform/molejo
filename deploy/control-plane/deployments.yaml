@@ -47,9 +47,19 @@ spec:
               value: /var/run/secrets/molejo/github-app/client-secret
             - name: GITHUB_APP_PRIVATE_KEY_FILE
               value: /var/run/secrets/molejo/github-app/private-key.pem
+            - name: FRUTO_OPENBAO_CA_FILE
+              value: /var/run/secrets/molejo/openbao/ca.crt
+            - name: FRUTO_PARAMETER_FINGERPRINT_KEY_FILE
+              value: /var/run/secrets/molejo/parameter-fingerprint/key
           volumeMounts:
             - name: github-app
               mountPath: /var/run/secrets/molejo/github-app
+              readOnly: true
+            - name: openbao-ca
+              mountPath: /var/run/secrets/molejo/openbao
+              readOnly: true
+            - name: parameter-fingerprint
+              mountPath: /var/run/secrets/molejo/parameter-fingerprint
               readOnly: true
           ports: [{ name: http, containerPort: 8080, protocol: TCP }]
           readinessProbe:
@@ -77,6 +87,12 @@ spec:
             items:
               - { key: client-secret, path: client-secret }
               - { key: private-key.pem, path: private-key.pem }
+        - name: openbao-ca
+          configMap:
+            name: openbao-ca
+        - name: parameter-fingerprint
+          secret:
+            secretName: fruto-parameter-fingerprint
 ---
 apiVersion: apps/v1
 kind: Deployment

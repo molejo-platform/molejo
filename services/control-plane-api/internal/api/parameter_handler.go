@@ -140,11 +140,6 @@ func (h *generatedHandler) ArchiveParameter(w http.ResponseWriter, r *http.Reque
 		writeParameterError(w, r, err)
 		return
 	}
-	if item.Kind == domain.ParameterSecret && h.server.ParameterSecrets != nil {
-		if deleteErr := h.server.ParameterSecrets.Delete(r.Context(), secretReference(workspace.PublicID, item.PublicID)); deleteErr != nil {
-			h.server.logger().Warn("parameter secret retention pending", "request_id", requestID(r), "workspace_id", workspace.PublicID, "parameter_id", item.PublicID)
-		}
-	}
 	h.server.logger().Info("parameter archived", "request_id", requestID(r), "workspace_id", workspace.PublicID, "parameter_id", item.PublicID, "parameter_type", item.Kind)
 	w.WriteHeader(http.StatusNoContent)
 }

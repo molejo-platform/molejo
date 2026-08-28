@@ -118,6 +118,15 @@ func (s *recordingSecretStore) Put(_ context.Context, reference, value string, e
 	return s.versions[reference], nil
 }
 
+func (s *recordingSecretStore) Get(_ context.Context, reference string, version int64) (string, error) {
+	s.Lock()
+	defer s.Unlock()
+	if s.fail != nil || s.versions[reference] != version {
+		return "", parameters.ErrUnavailable
+	}
+	return s.values[reference], nil
+}
+
 func (s *recordingSecretStore) Delete(_ context.Context, reference string) error {
 	s.Lock()
 	defer s.Unlock()

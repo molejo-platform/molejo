@@ -1,0 +1,216 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: molejo-secrets
+  labels:
+    app.kubernetes.io/part-of: fruto-platform
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: openbao-selfsigned
+  namespace: molejo-secrets
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: openbao-ca
+  namespace: molejo-secrets
+spec:
+  isCA: true
+  commonName: Molejo OpenBao Lab CA
+  secretName: openbao-ca
+  duration: 87600h
+  renewBefore: 720h
+  issuerRef:
+    kind: Issuer
+    name: openbao-selfsigned
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: openbao-ca
+  namespace: molejo-secrets
+spec:
+  ca:
+    secretName: openbao-ca
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: openbao-server
+  namespace: molejo-secrets
+spec:
+  secretName: openbao-server-tls
+  duration: 2160h
+  renewBefore: 360h
+  dnsNames:
+    - openbao
+    - openbao.molejo-secrets
+    - openbao.molejo-secrets.svc
+    - openbao.molejo-secrets.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: openbao-ca
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: openbao
+  namespace: molejo-secrets
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: openbao-token-reviewer
+subjects:
+  - kind: ServiceAccount
+    name: openbao
+    namespace: molejo-secrets
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openbao-config
+  namespace: molejo-secrets
+data:
+  openbao.hcl: |
+    ui = false
+    disable_mlock = true
+    api_addr = "https://openbao.molejo-secrets.svc:8200"
+    cluster_addr = "https://openbao-0.openbao-internal.molejo-secrets.svc:8201"
+    storage "raft" {
+      path = "/openbao/data"
+      node_id = "openbao-0"
+    }
+    listener "tcp" {
+      address = "0.0.0.0:8200"
+      cluster_address = "0.0.0.0:8201"
+      tls_cert_file = "/openbao/tls/tls.crt"
+      tls_key_file = "/openbao/tls/tls.key"
+      tls_min_version = "tls12"
+    }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openbao
+  namespace: molejo-secrets
+spec:
+  selector:
+    app.kubernetes.io/name: openbao
+  ports:
+    - { name: api, port: 8200, targetPort: api }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openbao-internal
+  namespace: molejo-secrets
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app.kubernetes.io/name: openbao
+  ports:
+    - { name: cluster, port: 8201, targetPort: cluster }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: openbao
+  namespace: molejo-secrets
+spec:
+  serviceName: openbao-internal
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: openbao
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: openbao
+        app.kubernetes.io/part-of: fruto-platform
+    spec:
+      serviceAccountName: openbao
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 100
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: openbao
+          image: ghcr.io/openbao/openbao@sha256:15e90b578c970ae57b596ed51295380cd54f93860fe36758f05b455d71aae0e0
+          imagePullPolicy: IfNotPresent
+          args: ["server", "-config=/openbao/config/openbao.hcl"]
+          env:
+            - { name: BAO_ADDR, value: "https://127.0.0.1:8200" }
+            - { name: BAO_CACERT, value: "/openbao/tls/ca.crt" }
+          ports:
+            - { name: api, containerPort: 8200 }
+            - { name: cluster, containerPort: 8201 }
+          readinessProbe:
+            httpGet:
+              scheme: HTTPS
+              path: /v1/sys/health?standbyok=true&sealedcode=204&uninitcode=204
+              port: api
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              scheme: HTTPS
+              path: /v1/sys/health?standbyok=true&sealedcode=204&uninitcode=204
+              port: api
+            initialDelaySeconds: 15
+            periodSeconds: 15
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - { name: config, mountPath: /openbao/config, readOnly: true }
+            - { name: tls, mountPath: /openbao/tls, readOnly: true }
+            - { name: data, mountPath: /openbao/data }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: config
+          configMap: { name: openbao-config }
+        - name: tls
+          secret: { secretName: openbao-server-tls }
+        - name: tmp
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests: { storage: 2Gi }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: openbao-ingress
+  namespace: molejo-secrets
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: openbao
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: fruto-control-plane
+      ports:
+        - { protocol: TCP, port: 8200 }
