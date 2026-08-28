@@ -233,31 +233,33 @@ type GitHubSource struct {
 }
 
 type AppEnvironment struct {
-	ID                        int64         `json:"-"`
-	PublicID                  string        `json:"id"`
-	WorkspaceID               int64         `json:"-"`
-	ProjectID                 int64         `json:"-"`
-	AppID                     int64         `json:"-"`
-	EnvironmentID             int64         `json:"-"`
-	ProjectPublicID           string        `json:"projectId"`
-	AppPublicID               string        `json:"appId"`
-	AppName                   string        `json:"appName"`
-	EnvironmentPublicID       string        `json:"environmentId"`
-	EnvironmentName           string        `json:"environmentName"`
-	SourceBranch              string        `json:"branch"`
-	RuntimeName               string        `json:"-"`
-	Configuration             RuntimeConfig `json:"configuration"`
-	ConfigurationVersion      int64         `json:"configurationVersion"`
-	Version                   int64         `json:"version"`
-	DesiredDeploymentPublicID string        `json:"desiredDeploymentId,omitempty"`
-	CurrentDeploymentPublicID string        `json:"currentDeploymentId,omitempty"`
-	CurrentReleasePublicID    string        `json:"currentReleaseId,omitempty"`
-	State                     string        `json:"state"`
-	Message                   string        `json:"message,omitempty"`
-	CreatedAt                 time.Time     `json:"createdAt"`
-	UpdatedAt                 time.Time     `json:"updatedAt"`
-	DeletionRequestedAt       *time.Time    `json:"-"`
-	ArchivedAt                *time.Time    `json:"-"`
+	ID                          int64         `json:"-"`
+	PublicID                    string        `json:"id"`
+	WorkspaceID                 int64         `json:"-"`
+	ProjectID                   int64         `json:"-"`
+	AppID                       int64         `json:"-"`
+	EnvironmentID               int64         `json:"-"`
+	ProjectPublicID             string        `json:"projectId"`
+	AppPublicID                 string        `json:"appId"`
+	AppName                     string        `json:"appName"`
+	EnvironmentPublicID         string        `json:"environmentId"`
+	EnvironmentName             string        `json:"environmentName"`
+	SourceBranch                string        `json:"branch"`
+	RuntimeName                 string        `json:"-"`
+	Configuration               RuntimeConfig `json:"configuration"`
+	ConfigurationVersion        int64         `json:"configurationVersion"`
+	Version                     int64         `json:"version"`
+	DesiredDeploymentPublicID   string        `json:"desiredDeploymentId,omitempty"`
+	CurrentDeploymentPublicID   string        `json:"currentDeploymentId,omitempty"`
+	CurrentReleasePublicID      string        `json:"currentReleaseId,omitempty"`
+	DesiredConfigurationVersion int64         `json:"desiredConfigurationVersion,omitempty"`
+	CurrentConfigurationVersion int64         `json:"currentConfigurationVersion,omitempty"`
+	State                       string        `json:"state"`
+	Message                     string        `json:"message,omitempty"`
+	CreatedAt                   time.Time     `json:"createdAt"`
+	UpdatedAt                   time.Time     `json:"updatedAt"`
+	DeletionRequestedAt         *time.Time    `json:"-"`
+	ArchivedAt                  *time.Time    `json:"-"`
 }
 
 type Deployment struct {
@@ -271,6 +273,7 @@ type Deployment struct {
 	Image                  string        `json:"-"`
 	ConfigurationVersion   int64         `json:"configurationVersion"`
 	Configuration          RuntimeConfig `json:"configuration"`
+	RequestedBy            string        `json:"requestedBy"`
 	State                  string        `json:"state"`
 	Message                string        `json:"message,omitempty"`
 	ObservedRelease        string        `json:"-"`

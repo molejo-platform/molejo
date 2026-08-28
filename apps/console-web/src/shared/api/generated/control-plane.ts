@@ -512,6 +512,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/deployment-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                projectId: components["parameters"]["ProjectId"];
+                appId: components["parameters"]["AppId"];
+                appEnvironmentId: components["parameters"]["AppEnvironmentId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["previewAppEnvironmentDeployment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/configuration-versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                projectId: components["parameters"]["ProjectId"];
+                appId: components["parameters"]["AppId"];
+                appEnvironmentId: components["parameters"]["AppEnvironmentId"];
+            };
+            cookie?: never;
+        };
+        get: operations["listAppEnvironmentConfigurationVersions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/deployments/{deploymentId}": {
         parameters: {
             query?: never;
@@ -760,6 +802,8 @@ export interface components {
             desiredDeploymentId?: string;
             currentDeploymentId?: string;
             currentReleaseId?: string;
+            desiredConfigurationVersion?: number;
+            currentConfigurationVersion?: number;
             /** @enum {string} */
             state: "Pending" | "Progressing" | "Ready" | "Degraded" | "Unknown";
             message?: string;
@@ -770,6 +814,30 @@ export interface components {
         };
         DeploymentInput: {
             releaseId: string;
+            configurationVersion: number;
+            currentDeploymentId: string | null;
+        };
+        DeploymentPreviewInput: {
+            releaseId: string;
+            configurationVersion: number;
+        };
+        DeploymentTarget: {
+            releaseId: string;
+            configurationVersion: number;
+        };
+        DeploymentPreview: {
+            current?: components["schemas"]["DeploymentTarget"];
+            target: components["schemas"]["DeploymentTarget"];
+            changes: ("InitialDeployment" | "Release" | "Scale" | "Network" | "HealthChecks" | "Resources" | "Variables" | "Secrets")[];
+            rolloutRequired: boolean;
+        };
+        ConfigurationRevision: {
+            appEnvironmentId: string;
+            version: number;
+            configuration: components["schemas"]["RuntimeConfiguration"];
+            createdBy: string;
+            /** Format: date-time */
+            createdAt: string;
         };
         ResourceValues: {
             cpuMillis: number;
@@ -784,6 +852,7 @@ export interface components {
             releaseId: string;
             configurationVersion: number;
             configuration: components["schemas"]["RuntimeConfiguration"];
+            requestedBy: string;
             /** @enum {string} */
             state: "Pending" | "Progressing" | "Ready" | "Degraded";
             message?: string;
@@ -2304,6 +2373,7 @@ export interface operations {
             query?: never;
             header: {
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                "If-Match": components["parameters"]["IfMatch"];
             };
             path: {
                 workspaceId: components["parameters"]["WorkspaceId"];
@@ -2324,6 +2394,71 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    previewAppEnvironmentDeployment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                projectId: components["parameters"]["ProjectId"];
+                appId: components["parameters"]["AppId"];
+                appEnvironmentId: components["parameters"]["AppEnvironmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeploymentPreviewInput"];
+            };
+        };
+        responses: {
+            /** @description Semantic impact of the selected immutable target */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentPreview"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listAppEnvironmentConfigurationVersions: {
+        parameters: {
+            query?: {
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                projectId: components["parameters"]["ProjectId"];
+                appId: components["parameters"]["AppId"];
+                appEnvironmentId: components["parameters"]["AppEnvironmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Immutable runtime configuration history */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["ConfigurationRevision"][];
+                        nextCursor?: string | null;
+                    };
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     getAppEnvironmentDeployment: {

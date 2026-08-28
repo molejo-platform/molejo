@@ -106,6 +106,42 @@ func (e DeploymentState) Valid() bool {
 	}
 }
 
+// Defines values for DeploymentPreviewChanges.
+const (
+	DeploymentPreviewChangesHealthChecks      DeploymentPreviewChanges = "HealthChecks"
+	DeploymentPreviewChangesInitialDeployment DeploymentPreviewChanges = "InitialDeployment"
+	DeploymentPreviewChangesNetwork           DeploymentPreviewChanges = "Network"
+	DeploymentPreviewChangesRelease           DeploymentPreviewChanges = "Release"
+	DeploymentPreviewChangesResources         DeploymentPreviewChanges = "Resources"
+	DeploymentPreviewChangesScale             DeploymentPreviewChanges = "Scale"
+	DeploymentPreviewChangesSecrets           DeploymentPreviewChanges = "Secrets"
+	DeploymentPreviewChangesVariables         DeploymentPreviewChanges = "Variables"
+)
+
+// Valid indicates whether the value is a known member of the DeploymentPreviewChanges enum.
+func (e DeploymentPreviewChanges) Valid() bool {
+	switch e {
+	case DeploymentPreviewChangesHealthChecks:
+		return true
+	case DeploymentPreviewChangesInitialDeployment:
+		return true
+	case DeploymentPreviewChangesNetwork:
+		return true
+	case DeploymentPreviewChangesRelease:
+		return true
+	case DeploymentPreviewChangesResources:
+		return true
+	case DeploymentPreviewChangesScale:
+		return true
+	case DeploymentPreviewChangesSecrets:
+		return true
+	case DeploymentPreviewChangesVariables:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for GitHubInstallationAccountType.
 const (
 	Enterprise   GitHubInstallationAccountType = "Enterprise"
@@ -334,23 +370,25 @@ type App struct {
 
 // AppEnvironment defines model for AppEnvironment.
 type AppEnvironment struct {
-	AppId                string               `json:"appId"`
-	AppName              string               `json:"appName"`
-	Branch               string               `json:"branch"`
-	Configuration        RuntimeConfiguration `json:"configuration"`
-	ConfigurationVersion int                  `json:"configurationVersion"`
-	CreatedAt            time.Time            `json:"createdAt"`
-	CurrentDeploymentId  *string              `json:"currentDeploymentId,omitempty"`
-	CurrentReleaseId     *string              `json:"currentReleaseId,omitempty"`
-	DesiredDeploymentId  *string              `json:"desiredDeploymentId,omitempty"`
-	EnvironmentId        string               `json:"environmentId"`
-	EnvironmentName      string               `json:"environmentName"`
-	Id                   string               `json:"id"`
-	Message              *string              `json:"message,omitempty"`
-	ProjectId            string               `json:"projectId"`
-	State                AppEnvironmentState  `json:"state"`
-	UpdatedAt            time.Time            `json:"updatedAt"`
-	Version              int                  `json:"version"`
+	AppId                       string               `json:"appId"`
+	AppName                     string               `json:"appName"`
+	Branch                      string               `json:"branch"`
+	Configuration               RuntimeConfiguration `json:"configuration"`
+	ConfigurationVersion        int                  `json:"configurationVersion"`
+	CreatedAt                   time.Time            `json:"createdAt"`
+	CurrentConfigurationVersion *int                 `json:"currentConfigurationVersion,omitempty"`
+	CurrentDeploymentId         *string              `json:"currentDeploymentId,omitempty"`
+	CurrentReleaseId            *string              `json:"currentReleaseId,omitempty"`
+	DesiredConfigurationVersion *int                 `json:"desiredConfigurationVersion,omitempty"`
+	DesiredDeploymentId         *string              `json:"desiredDeploymentId,omitempty"`
+	EnvironmentId               string               `json:"environmentId"`
+	EnvironmentName             string               `json:"environmentName"`
+	Id                          string               `json:"id"`
+	Message                     *string              `json:"message,omitempty"`
+	ProjectId                   string               `json:"projectId"`
+	State                       AppEnvironmentState  `json:"state"`
+	UpdatedAt                   time.Time            `json:"updatedAt"`
+	Version                     int                  `json:"version"`
 }
 
 // AppEnvironmentState defines model for AppEnvironment.State.
@@ -405,6 +443,15 @@ type BuildLog struct {
 	Sequence  int       `json:"sequence"`
 }
 
+// ConfigurationRevision defines model for ConfigurationRevision.
+type ConfigurationRevision struct {
+	AppEnvironmentId string               `json:"appEnvironmentId"`
+	Configuration    RuntimeConfiguration `json:"configuration"`
+	CreatedAt        time.Time            `json:"createdAt"`
+	CreatedBy        string               `json:"createdBy"`
+	Version          int                  `json:"version"`
+}
+
 // Deployment defines model for Deployment.
 type Deployment struct {
 	AppEnvironmentId     string               `json:"appEnvironmentId"`
@@ -414,6 +461,7 @@ type Deployment struct {
 	Id                   string               `json:"id"`
 	Message              *string              `json:"message,omitempty"`
 	ReleaseId            string               `json:"releaseId"`
+	RequestedBy          string               `json:"requestedBy"`
 	State                DeploymentState      `json:"state"`
 	UpdatedAt            time.Time            `json:"updatedAt"`
 }
@@ -423,7 +471,32 @@ type DeploymentState string
 
 // DeploymentInput defines model for DeploymentInput.
 type DeploymentInput struct {
-	ReleaseId string `json:"releaseId"`
+	ConfigurationVersion int     `json:"configurationVersion"`
+	CurrentDeploymentId  *string `json:"currentDeploymentId"`
+	ReleaseId            string  `json:"releaseId"`
+}
+
+// DeploymentPreview defines model for DeploymentPreview.
+type DeploymentPreview struct {
+	Changes         []DeploymentPreviewChanges `json:"changes"`
+	Current         *DeploymentTarget          `json:"current,omitempty"`
+	RolloutRequired bool                       `json:"rolloutRequired"`
+	Target          DeploymentTarget           `json:"target"`
+}
+
+// DeploymentPreviewChanges defines model for DeploymentPreview.Changes.
+type DeploymentPreviewChanges string
+
+// DeploymentPreviewInput defines model for DeploymentPreviewInput.
+type DeploymentPreviewInput struct {
+	ConfigurationVersion int    `json:"configurationVersion"`
+	ReleaseId            string `json:"releaseId"`
+}
+
+// DeploymentTarget defines model for DeploymentTarget.
+type DeploymentTarget struct {
+	ConfigurationVersion int    `json:"configurationVersion"`
+	ReleaseId            string `json:"releaseId"`
 }
 
 // Environment defines model for Environment.
@@ -827,6 +900,12 @@ type UpdateAppEnvironmentParams struct {
 	IfMatch IfMatch `json:"If-Match"`
 }
 
+// ListAppEnvironmentConfigurationVersionsParams defines parameters for ListAppEnvironmentConfigurationVersions.
+type ListAppEnvironmentConfigurationVersionsParams struct {
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
 // ListAppEnvironmentDeploymentsParams defines parameters for ListAppEnvironmentDeployments.
 type ListAppEnvironmentDeploymentsParams struct {
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
@@ -836,6 +915,7 @@ type ListAppEnvironmentDeploymentsParams struct {
 // CreateAppEnvironmentDeploymentParams defines parameters for CreateAppEnvironmentDeployment.
 type CreateAppEnvironmentDeploymentParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+	IfMatch        IfMatch        `json:"If-Match"`
 }
 
 // ListAppReleasesParams defines parameters for ListAppReleases.
@@ -902,6 +982,9 @@ type CreateAppEnvironmentJSONRequestBody = AppEnvironmentCreateInput
 
 // UpdateAppEnvironmentJSONRequestBody defines body for UpdateAppEnvironment for application/json ContentType.
 type UpdateAppEnvironmentJSONRequestBody = AppEnvironmentInput
+
+// PreviewAppEnvironmentDeploymentJSONRequestBody defines body for PreviewAppEnvironmentDeployment for application/json ContentType.
+type PreviewAppEnvironmentDeploymentJSONRequestBody = DeploymentPreviewInput
 
 // CreateAppEnvironmentDeploymentJSONRequestBody defines body for CreateAppEnvironmentDeployment for application/json ContentType.
 type CreateAppEnvironmentDeploymentJSONRequestBody = DeploymentInput
@@ -1034,6 +1117,12 @@ type ServerInterface interface {
 
 	// (PUT /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId})
 	UpdateAppEnvironment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId, params UpdateAppEnvironmentParams)
+
+	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/configuration-versions)
+	ListAppEnvironmentConfigurationVersions(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId, params ListAppEnvironmentConfigurationVersionsParams)
+
+	// (POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/deployment-preview)
+	PreviewAppEnvironmentDeployment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId)
 
 	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/deployments)
 	ListAppEnvironmentDeployments(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId, params ListAppEnvironmentDeploymentsParams)
@@ -1271,6 +1360,16 @@ func (_ Unimplemented) GetAppEnvironment(w http.ResponseWriter, r *http.Request,
 
 // (PUT /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId})
 func (_ Unimplemented) UpdateAppEnvironment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId, params UpdateAppEnvironmentParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/configuration-versions)
+func (_ Unimplemented) ListAppEnvironmentConfigurationVersions(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId, params ListAppEnvironmentConfigurationVersionsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/deployment-preview)
+func (_ Unimplemented) PreviewAppEnvironmentDeployment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -3261,6 +3360,141 @@ func (siw *ServerInterfaceWrapper) UpdateAppEnvironment(w http.ResponseWriter, r
 	handler.ServeHTTP(w, r)
 }
 
+// ListAppEnvironmentConfigurationVersions operation middleware
+func (siw *ServerInterfaceWrapper) ListAppEnvironmentConfigurationVersions(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appId" -------------
+	var appId AppId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appId", chi.URLParam(r, "appId"), &appId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appEnvironmentId" -------------
+	var appEnvironmentId AppEnvironmentId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appEnvironmentId", chi.URLParam(r, "appEnvironmentId"), &appEnvironmentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appEnvironmentId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAppEnvironmentConfigurationVersionsParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAppEnvironmentConfigurationVersions(w, r, workspaceId, projectId, appId, appEnvironmentId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PreviewAppEnvironmentDeployment operation middleware
+func (siw *ServerInterfaceWrapper) PreviewAppEnvironmentDeployment(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appId" -------------
+	var appId AppId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appId", chi.URLParam(r, "appId"), &appId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appEnvironmentId" -------------
+	var appEnvironmentId AppEnvironmentId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appEnvironmentId", chi.URLParam(r, "appEnvironmentId"), &appEnvironmentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appEnvironmentId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PreviewAppEnvironmentDeployment(w, r, workspaceId, projectId, appId, appEnvironmentId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListAppEnvironmentDeployments operation middleware
 func (siw *ServerInterfaceWrapper) ListAppEnvironmentDeployments(w http.ResponseWriter, r *http.Request) {
 
@@ -3410,6 +3644,29 @@ func (siw *ServerInterfaceWrapper) CreateAppEnvironmentDeployment(w http.Respons
 	} else {
 		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
 		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch IfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "integer", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
 		return
 	}
 
@@ -4326,6 +4583,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/deployments", wrapper.CreateAppEnvironmentDeployment)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/deployment-preview", wrapper.PreviewAppEnvironmentDeployment)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/configuration-versions", wrapper.ListAppEnvironmentConfigurationVersions)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/deployments/{deploymentId}", wrapper.GetAppEnvironmentDeployment)
@@ -6508,6 +6771,131 @@ func (response UpdateAppEnvironment409JSONResponse) VisitUpdateAppEnvironmentRes
 	return err
 }
 
+type ListAppEnvironmentConfigurationVersionsRequestObject struct {
+	WorkspaceId      WorkspaceId      `json:"workspaceId"`
+	ProjectId        ProjectId        `json:"projectId"`
+	AppId            AppId            `json:"appId"`
+	AppEnvironmentId AppEnvironmentId `json:"appEnvironmentId"`
+	Params           ListAppEnvironmentConfigurationVersionsParams
+}
+
+type ListAppEnvironmentConfigurationVersionsResponseObject interface {
+	VisitListAppEnvironmentConfigurationVersionsResponse(w http.ResponseWriter) error
+}
+
+type ListAppEnvironmentConfigurationVersions200JSONResponse struct {
+	Items      []ConfigurationRevision `json:"items"`
+	NextCursor *string                 `json:"nextCursor,omitempty"`
+}
+
+func (response ListAppEnvironmentConfigurationVersions200JSONResponse) VisitListAppEnvironmentConfigurationVersionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAppEnvironmentConfigurationVersions403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response ListAppEnvironmentConfigurationVersions403JSONResponse) VisitListAppEnvironmentConfigurationVersionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAppEnvironmentConfigurationVersions404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ListAppEnvironmentConfigurationVersions404JSONResponse) VisitListAppEnvironmentConfigurationVersionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PreviewAppEnvironmentDeploymentRequestObject struct {
+	WorkspaceId      WorkspaceId      `json:"workspaceId"`
+	ProjectId        ProjectId        `json:"projectId"`
+	AppId            AppId            `json:"appId"`
+	AppEnvironmentId AppEnvironmentId `json:"appEnvironmentId"`
+	Body             *PreviewAppEnvironmentDeploymentJSONRequestBody
+}
+
+type PreviewAppEnvironmentDeploymentResponseObject interface {
+	VisitPreviewAppEnvironmentDeploymentResponse(w http.ResponseWriter) error
+}
+
+type PreviewAppEnvironmentDeployment200JSONResponse DeploymentPreview
+
+func (response PreviewAppEnvironmentDeployment200JSONResponse) VisitPreviewAppEnvironmentDeploymentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PreviewAppEnvironmentDeployment400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response PreviewAppEnvironmentDeployment400JSONResponse) VisitPreviewAppEnvironmentDeploymentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PreviewAppEnvironmentDeployment403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response PreviewAppEnvironmentDeployment403JSONResponse) VisitPreviewAppEnvironmentDeploymentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PreviewAppEnvironmentDeployment404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response PreviewAppEnvironmentDeployment404JSONResponse) VisitPreviewAppEnvironmentDeploymentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListAppEnvironmentDeploymentsRequestObject struct {
 	WorkspaceId      WorkspaceId      `json:"workspaceId"`
 	ProjectId        ProjectId        `json:"projectId"`
@@ -7346,6 +7734,12 @@ type StrictServerInterface interface {
 
 	// (PUT /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId})
 	UpdateAppEnvironment(ctx context.Context, request UpdateAppEnvironmentRequestObject) (UpdateAppEnvironmentResponseObject, error)
+
+	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/configuration-versions)
+	ListAppEnvironmentConfigurationVersions(ctx context.Context, request ListAppEnvironmentConfigurationVersionsRequestObject) (ListAppEnvironmentConfigurationVersionsResponseObject, error)
+
+	// (POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/deployment-preview)
+	PreviewAppEnvironmentDeployment(ctx context.Context, request PreviewAppEnvironmentDeploymentRequestObject) (PreviewAppEnvironmentDeploymentResponseObject, error)
 
 	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/deployments)
 	ListAppEnvironmentDeployments(ctx context.Context, request ListAppEnvironmentDeploymentsRequestObject) (ListAppEnvironmentDeploymentsResponseObject, error)
@@ -8564,6 +8958,72 @@ func (sh *strictHandler) UpdateAppEnvironment(w http.ResponseWriter, r *http.Req
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateAppEnvironmentResponseObject); ok {
 		if err := validResponse.VisitUpdateAppEnvironmentResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListAppEnvironmentConfigurationVersions operation middleware
+func (sh *strictHandler) ListAppEnvironmentConfigurationVersions(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId, params ListAppEnvironmentConfigurationVersionsParams) {
+	var request ListAppEnvironmentConfigurationVersionsRequestObject
+
+	request.WorkspaceId = workspaceId
+	request.ProjectId = projectId
+	request.AppId = appId
+	request.AppEnvironmentId = appEnvironmentId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListAppEnvironmentConfigurationVersions(ctx, request.(ListAppEnvironmentConfigurationVersionsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListAppEnvironmentConfigurationVersions")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListAppEnvironmentConfigurationVersionsResponseObject); ok {
+		if err := validResponse.VisitListAppEnvironmentConfigurationVersionsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PreviewAppEnvironmentDeployment operation middleware
+func (sh *strictHandler) PreviewAppEnvironmentDeployment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId) {
+	var request PreviewAppEnvironmentDeploymentRequestObject
+
+	request.WorkspaceId = workspaceId
+	request.ProjectId = projectId
+	request.AppId = appId
+	request.AppEnvironmentId = appEnvironmentId
+
+	var body PreviewAppEnvironmentDeploymentJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PreviewAppEnvironmentDeployment(ctx, request.(PreviewAppEnvironmentDeploymentRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PreviewAppEnvironmentDeployment")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PreviewAppEnvironmentDeploymentResponseObject); ok {
+		if err := validResponse.VisitPreviewAppEnvironmentDeploymentResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

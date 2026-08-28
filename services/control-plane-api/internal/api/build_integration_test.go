@@ -29,7 +29,7 @@ func TestBuildAPIUsesTheAppEnvironmentBranchAndDeploysAReleaseSnapshot(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	target, err := storage.CreateAppEnvironment(ctx, workspaceID, mustAPIID(t, "aev"), project.PublicID, app.PublicID, environment.PublicID, "develop", apiRuntimeConfiguration("api-production"))
+	target, err := storage.CreateAppEnvironment(ctx, workspaceID, ownerID, mustAPIID(t, "aev"), project.PublicID, app.PublicID, environment.PublicID, "develop", apiRuntimeConfiguration("api-production"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +81,15 @@ func TestBuildAPIUsesTheAppEnvironmentBranchAndDeploysAReleaseSnapshot(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	response = hierarchyRequest(t, server, owner, http.MethodPost, base+"/environments/"+target.PublicID+"/deployments", `{"releaseId":"`+release.PublicID+`"}`, map[string]string{"Idempotency-Key": "deploy-release"})
+	response = hierarchyRequest(t, server, owner, http.MethodGet, base+"/environments/"+target.PublicID+"/configuration-versions", "", nil)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"version":1`) {
+		t.Fatalf("configuration versions status=%d body=%s", response.Code, response.Body.String())
+	}
+	response = hierarchyRequest(t, server, owner, http.MethodPost, base+"/environments/"+target.PublicID+"/deployment-preview", `{"releaseId":"`+release.PublicID+`","configurationVersion":1}`, nil)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"InitialDeployment"`) {
+		t.Fatalf("deployment preview status=%d body=%s", response.Code, response.Body.String())
+	}
+	response = hierarchyRequest(t, server, owner, http.MethodPost, base+"/environments/"+target.PublicID+"/deployments", `{"releaseId":"`+release.PublicID+`","configurationVersion":1,"currentDeploymentId":null}`, map[string]string{"Idempotency-Key": "deploy-release", "If-Match": "1"})
 	if response.Code != http.StatusAccepted {
 		t.Fatalf("release deployment status=%d body=%s", response.Code, response.Body.String())
 	}

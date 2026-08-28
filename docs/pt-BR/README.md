@@ -40,8 +40,10 @@ Workspace → Project → App + Environment
 `App` e `Environment` são irmãos sob o mesmo Project. Um `App` é a identidade
 lógica da aplicação. Um `AppEnvironment` controla branch e configuração de
 runtime para um App em um Environment. Um `Deployment` é o registro imutável da
-Release e revisão de configuração aplicadas nesse alvo. O `AppDeployment`
-Kubernetes é uma projeção interna de runtime.
+Release e revisão de configuração aplicadas nesse alvo. A revisão é criada
+somente quando a configuração de runtime muda e é selecionada explicitamente
+junto da Release após um preview de impacto. O `AppDeployment` Kubernetes é uma
+projeção interna de runtime.
 
 A plataforma permanece como fonte confiável da identidade, ownership e autorização
 do produto. Nomes, namespaces, labels e annotations Kubernetes são projeções de

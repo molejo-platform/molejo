@@ -4,7 +4,8 @@ import type { QueryClient } from "@tanstack/react-query";
 import { AppOverviewPage } from "../features/apps/AppOverviewPage";
 import { AppSourcePage } from "../features/apps/AppSourcePage";
 import { LoginPage } from "../features/auth/LoginPage";
-import { EnvironmentAppBuildsPage, EnvironmentAppDeploymentsPage, EnvironmentAppOverviewPage, EnvironmentAppSettingsPage, EnvironmentAppsPage, EnvironmentBuildDetailPage } from "../features/environments/EnvironmentPages";
+import { EnvironmentAppBuildsPage, EnvironmentAppDeploymentsPage, EnvironmentAppObservabilityPage, EnvironmentAppOverviewPage, EnvironmentAppReleasesPage, EnvironmentAppsPage, EnvironmentBuildDetailPage } from "../features/environments/EnvironmentPages";
+import { EnvironmentBuildConfigurationPage, EnvironmentConfigurationVersionsPage, EnvironmentHealthPage, EnvironmentNetworkPage, EnvironmentResourcesPage, EnvironmentSecretsPage, EnvironmentVariablesPage } from "../features/environments/EnvironmentConfigurationPages";
 import { ProjectEntryPage } from "../features/environments/ProjectEntryPage";
 import { sessionQueryOptions } from "../features/auth/model";
 import { OverviewPage } from "../features/overview/OverviewPage";
@@ -60,7 +61,15 @@ const environmentAppOverviewRoute = createRoute({ getParentRoute: () => protecte
 const environmentAppBuildsRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/$workspaceId/projects/$projectId/environments/$environmentId/apps/$appEnvironmentId/builds", component: EnvironmentAppBuildsPage });
 const environmentBuildDetailRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/$workspaceId/projects/$projectId/environments/$environmentId/apps/$appEnvironmentId/builds/$buildId", component: EnvironmentBuildDetailPage });
 const environmentAppDeploymentsRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/$workspaceId/projects/$projectId/environments/$environmentId/apps/$appEnvironmentId/deployments", component: EnvironmentAppDeploymentsPage });
-const environmentAppSettingsRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/$workspaceId/projects/$projectId/environments/$environmentId/apps/$appEnvironmentId/settings", component: EnvironmentAppSettingsPage });
+const environmentAppReleasesRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/$workspaceId/projects/$projectId/environments/$environmentId/apps/$appEnvironmentId/releases", component: EnvironmentAppReleasesPage });
+const environmentAppObservabilityRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/$workspaceId/projects/$projectId/environments/$environmentId/apps/$appEnvironmentId/observability", component: EnvironmentAppObservabilityPage });
+const environmentAppSettingsRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/$workspaceId/projects/$projectId/environments/$environmentId/apps/$appEnvironmentId/settings", component: EnvironmentVariablesPage });
+const environmentAppBuildSettingsRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/$workspaceId/projects/$projectId/environments/$environmentId/apps/$appEnvironmentId/settings/build", component: EnvironmentBuildConfigurationPage });
+const environmentAppSecretSettingsRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/$workspaceId/projects/$projectId/environments/$environmentId/apps/$appEnvironmentId/settings/secrets", component: EnvironmentSecretsPage });
+const environmentAppNetworkSettingsRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/$workspaceId/projects/$projectId/environments/$environmentId/apps/$appEnvironmentId/settings/network", component: EnvironmentNetworkPage });
+const environmentAppHealthSettingsRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/$workspaceId/projects/$projectId/environments/$environmentId/apps/$appEnvironmentId/settings/health", component: EnvironmentHealthPage });
+const environmentAppResourceSettingsRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/$workspaceId/projects/$projectId/environments/$environmentId/apps/$appEnvironmentId/settings/resources", component: EnvironmentResourcesPage });
+const environmentAppVersionSettingsRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/$workspaceId/projects/$projectId/environments/$environmentId/apps/$appEnvironmentId/settings/versions", component: EnvironmentConfigurationVersionsPage });
 const appOverviewRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/$workspaceId/projects/$projectId/apps/$appId", component: AppOverviewPage });
 const appSourceRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/$workspaceId/projects/$projectId/apps/$appId/source", component: AppSourcePage });
 const settingsRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/$workspaceId/settings", component: WorkspaceSettingsPage });
@@ -69,7 +78,7 @@ const newWorkspaceRoute = createRoute({ getParentRoute: () => protectedRoute, pa
 
 const routeTree = rootRoute.addChildren([
   loginRoute,
-  protectedRoute.addChildren([workspaceEntryRoute, overviewRoute, projectsRoute, parametersRoute, projectEntryRoute, projectOverviewRoute, projectAppsRoute, projectEnvironmentsRoute, environmentAppsRoute, environmentAppOverviewRoute, environmentAppBuildsRoute, environmentBuildDetailRoute, environmentAppDeploymentsRoute, environmentAppSettingsRoute, appOverviewRoute, appSourceRoute, settingsRoute, githubSettingsRoute, newWorkspaceRoute]),
+  protectedRoute.addChildren([workspaceEntryRoute, overviewRoute, projectsRoute, parametersRoute, projectEntryRoute, projectOverviewRoute, projectAppsRoute, projectEnvironmentsRoute, environmentAppsRoute, environmentAppOverviewRoute, environmentAppBuildsRoute, environmentBuildDetailRoute, environmentAppDeploymentsRoute, environmentAppReleasesRoute, environmentAppObservabilityRoute, environmentAppSettingsRoute, environmentAppBuildSettingsRoute, environmentAppSecretSettingsRoute, environmentAppNetworkSettingsRoute, environmentAppHealthSettingsRoute, environmentAppResourceSettingsRoute, environmentAppVersionSettingsRoute, appOverviewRoute, appSourceRoute, settingsRoute, githubSettingsRoute, newWorkspaceRoute]),
 ]);
 
 export function createAppRouter(queryClient: QueryClient, history: ReturnType<typeof createBrowserHistory> = createBrowserHistory()) {

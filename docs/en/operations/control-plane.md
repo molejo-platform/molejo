@@ -26,7 +26,10 @@ local CA in the developer trust store. The HTTP equivalents are
 The Console creates Workspaces, Projects, Environments, and Apps exclusively
 through the authenticated REST API. An AppEnvironment requires an App and
 Environment from the same Project and owns branch and runtime configuration.
-Each Deployment is an immutable Release plus configuration snapshot. The API returns `404` for resources outside the Actor membership
+Runtime changes create immutable configuration revisions, while branch-only
+changes do not. Creating a Deployment requires an exact Release and revision,
+the current AppEnvironment version, and the reviewed current Deployment. The
+preview reports semantic impact without secret values. The API returns `404` for resources outside the Actor membership
 boundary and `403` when a tester attempts a mutation.
 
 Migration 011 replaces the experimental mutable deployment model with

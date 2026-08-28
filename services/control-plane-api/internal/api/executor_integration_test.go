@@ -34,11 +34,11 @@ func TestWorkerAppliesAnImmutableDeploymentAndCorrelatesItsLogs(t *testing.T) {
 	}
 	configuration := target.Configuration
 	configuration.Parameters = []domain.ParameterBinding{{Name: "INTERNAL_URL", ParameterPublicID: plain.PublicID, ParameterVersion: 1}, {Name: "RUNTIME_TOKEN", ParameterPublicID: secret.PublicID, ParameterVersion: 1}}
-	target, err = s.UpdateAppEnvironment(ctx, workspaceID, target.PublicID, target.SourceBranch, configuration, target.Version)
+	target, err = s.UpdateAppEnvironment(ctx, workspaceID, actorID, target.PublicID, target.SourceBranch, configuration, target.Version)
 	if err != nil {
 		t.Fatal(err)
 	}
-	deployment, operation, _, err := s.CreateDeployment(ctx, workspaceID, actorID, target.PublicID, mustAPIID(t, "dpl"), releaseID, domain.SHA256([]byte("worker-apply")), domain.SHA256([]byte("worker-apply-payload")))
+	deployment, operation, _, err := s.CreateDeployment(ctx, workspaceID, actorID, target.PublicID, mustAPIID(t, "dpl"), releaseID, target.ConfigurationVersion, target.Version, "", domain.SHA256([]byte("worker-apply")), domain.SHA256([]byte("worker-apply-payload")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -215,7 +215,7 @@ func createExecutorTargetAndRelease(t *testing.T, s *store.Store, workspaceID, a
 	if err != nil {
 		t.Fatal(err)
 	}
-	target, err := s.CreateAppEnvironment(ctx, workspaceID, mustAPIID(t, "aev"), project.PublicID, app.PublicID, environment.PublicID, "main", apiRuntimeConfiguration("executor-api"))
+	target, err := s.CreateAppEnvironment(ctx, workspaceID, actorID, mustAPIID(t, "aev"), project.PublicID, app.PublicID, environment.PublicID, "main", apiRuntimeConfiguration("executor-api"))
 	if err != nil {
 		t.Fatal(err)
 	}

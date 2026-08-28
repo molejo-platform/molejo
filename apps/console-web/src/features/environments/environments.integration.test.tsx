@@ -1,6 +1,7 @@
 import { cleanup, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ApiRequestError } from "../../shared/api/errors";
 
 const params = vi.hoisted(() => ({
   workspaceId: "ws-aaaaaaaaaaaaaaaaaaaa",
@@ -31,6 +32,7 @@ const mocks = vi.hoisted(() => ({
   createAppBuild: vi.fn(),
   createAppEnvironment: vi.fn(),
   createAppEnvironmentDeployment: vi.fn(),
+  updateAppEnvironment: vi.fn(),
   listEnvironmentApps: vi.fn().mockResolvedValue({ items: [target], nextCursor: null }),
   listApps: vi.fn().mockResolvedValue({ items: [{ id: target.appId, name: target.appName, version: 1 }, { id: "app-bbbbbbbbbbbbbbbbbbbb", name: "Worker", version: 1 }], nextCursor: null }),
 }));
@@ -56,15 +58,18 @@ vi.mock("../apps/api", () => ({
   createAppEnvironmentDeployment: mocks.createAppEnvironmentDeployment,
   getAppBuild: vi.fn(),
   listAppBuildLogs: vi.fn().mockResolvedValue({ items: [] }),
-  updateAppEnvironment: vi.fn(),
+  updateAppEnvironment: mocks.updateAppEnvironment,
   deleteAppEnvironment: vi.fn(),
   getAppSource: vi.fn().mockResolvedValue({ source: { repository: { fullName: "molejo/api" } } }),
   listAppBuilds: vi.fn().mockResolvedValue({ items: [], nextCursor: null }),
   listAppReleases: vi.fn().mockResolvedValue({ items: [{ id: "rel-aaaaaaaaaaaaaaaaaaaa", branch: "main", commitSha: "5144c84100edfcc6a5447daca1d7f6a34a393364" }], nextCursor: null }),
   listAppEnvironmentDeployments: vi.fn().mockResolvedValue({ items: [], nextCursor: null }),
+  listAppEnvironmentConfigurationVersions: vi.fn().mockResolvedValue({ items: [{ appEnvironmentId: target.id, version: 1, configuration: target.configuration, createdBy: "owner", createdAt: "2026-08-27T00:00:00Z" }] }),
+  previewAppEnvironmentDeployment: vi.fn().mockResolvedValue({ target: { releaseId: "rel-aaaaaaaaaaaaaaaaaaaa", configurationVersion: 1 }, changes: ["InitialDeployment"], rolloutRequired: true }),
 }));
 
-import { EnvironmentAppBuildsPage, EnvironmentAppDeploymentsPage, EnvironmentAppOverviewPage, EnvironmentAppSettingsPage, EnvironmentAppsPage } from "./EnvironmentPages";
+import { EnvironmentAppBuildsPage, EnvironmentAppDeploymentsPage, EnvironmentAppOverviewPage, EnvironmentAppsPage } from "./EnvironmentPages";
+import { EnvironmentBuildConfigurationPage, EnvironmentVariablesPage } from "./EnvironmentConfigurationPages";
 import { ProjectEntryPage } from "./ProjectEntryPage";
 import { renderWithQueryClient } from "../../test/render";
 
@@ -75,6 +80,7 @@ afterEach(() => {
   mocks.createAppBuild.mockReset();
   mocks.createAppEnvironment.mockReset();
   mocks.createAppEnvironmentDeployment.mockReset();
+  mocks.updateAppEnvironment.mockReset();
 });
 
 describe("Environment-first project experience", () => {
@@ -122,8 +128,8 @@ describe("Environment-first project experience", () => {
     expect(screen.queryByLabelText("Branch")).toBeNull();
     unmount();
 
-    renderWithQueryClient(<EnvironmentAppSettingsPage/>);
-    expect((await screen.findByLabelText("Branch") as HTMLInputElement).value).toBe("main");
+    renderWithQueryClient(<EnvironmentBuildConfigurationPage/>);
+    expect((await screen.findByLabelText("Branch principal deste Environment") as HTMLInputElement).value).toBe("main");
   });
 
   it("builds and deploys only in the selected App Environment", async () => {
@@ -136,8 +142,24 @@ describe("Environment-first project experience", () => {
     unmount();
 
     renderWithQueryClient(<EnvironmentAppDeploymentsPage/>);
-    await user.click(await screen.findByRole("button", { name: "Implantar release" }));
-    await waitFor(() => expect(mocks.createAppEnvironmentDeployment).toHaveBeenCalledWith(params.workspaceId, params.projectId, target.appId, target.id, { releaseId: "rel-aaaaaaaaaaaaaaaaaaaa" }));
-    expect(await screen.findByText("Deployment solicitado.")).toBeTruthy();
+    await screen.findByText("Revisão antes de implantar");
+    const deployButton = screen.getByRole("button", { name: "Confirmar implantação" }) as HTMLButtonElement;
+    await waitFor(() => expect(deployButton.disabled).toBe(false));
+    await user.click(deployButton);
+    await waitFor(() => expect(mocks.createAppEnvironmentDeployment).toHaveBeenCalledWith(params.workspaceId, params.projectId, target.appId, target.id, target.version, { releaseId: "rel-aaaaaaaaaaaaaaaaaaaa", configurationVersion: 1, currentDeploymentId: null }));
+    expect(await screen.findByText(/Implantação solicitada/)).toBeTruthy();
+  });
+
+  it("preserves local configuration edits after an optimistic concurrency conflict", async () => {
+    mocks.updateAppEnvironment.mockRejectedValue(new ApiRequestError(409, { code: "version_conflict", message: "changed", requestId: "request" }));
+    const user = userEvent.setup();
+    renderWithQueryClient(<EnvironmentVariablesPage/>);
+
+    const field = await screen.findByLabelText("Variáveis de ambiente");
+    await user.type(field, "LOG_LEVEL=debug");
+    await user.click(screen.getByRole("button", { name: "Salvar estado desejado" }));
+
+    expect(await screen.findByText(/Suas edições foram preservadas/)).toBeTruthy();
+    expect((screen.getByLabelText("Variáveis de ambiente") as HTMLTextAreaElement).value).toBe("LOG_LEVEL=debug");
   });
 });

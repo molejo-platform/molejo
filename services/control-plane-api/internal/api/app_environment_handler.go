@@ -55,7 +55,7 @@ func (h *generatedHandler) ListEnvironmentApps(w http.ResponseWriter, r *http.Re
 }
 
 func (h *generatedHandler) CreateAppEnvironment(w http.ResponseWriter, r *http.Request, workspaceID generated.WorkspaceId, projectID generated.ProjectId, appID generated.AppId) {
-	_, workspace, ok := h.authorizeWorkspace(w, r, string(workspaceID), true)
+	actor, workspace, ok := h.authorizeWorkspace(w, r, string(workspaceID), true)
 	if !ok {
 		return
 	}
@@ -68,7 +68,7 @@ func (h *generatedHandler) CreateAppEnvironment(w http.ResponseWriter, r *http.R
 		if err != nil {
 			break
 		}
-		item, err := h.server.Store.CreateAppEnvironment(r.Context(), workspace.ID, publicID, string(projectID), string(appID), input.EnvironmentID, input.Branch, input.Configuration)
+		item, err := h.server.Store.CreateAppEnvironment(r.Context(), workspace.ID, actor.ID, publicID, string(projectID), string(appID), input.EnvironmentID, input.Branch, input.Configuration)
 		if errors.Is(err, store.ErrPublicIDCollision) {
 			continue
 		}
@@ -105,7 +105,7 @@ func (h *generatedHandler) GetAppEnvironment(w http.ResponseWriter, r *http.Requ
 }
 
 func (h *generatedHandler) UpdateAppEnvironment(w http.ResponseWriter, r *http.Request, workspaceID generated.WorkspaceId, projectID generated.ProjectId, appID generated.AppId, appEnvironmentID generated.AppEnvironmentId, params generated.UpdateAppEnvironmentParams) {
-	_, workspace, ok := h.authorizeWorkspace(w, r, string(workspaceID), true)
+	actor, workspace, ok := h.authorizeWorkspace(w, r, string(workspaceID), true)
 	if !ok {
 		return
 	}
@@ -116,7 +116,7 @@ func (h *generatedHandler) UpdateAppEnvironment(w http.ResponseWriter, r *http.R
 	if !ok {
 		return
 	}
-	item, err := h.server.Store.UpdateAppEnvironment(r.Context(), workspace.ID, string(appEnvironmentID), input.Branch, input.Configuration, int64(params.IfMatch))
+	item, err := h.server.Store.UpdateAppEnvironment(r.Context(), workspace.ID, actor.ID, string(appEnvironmentID), input.Branch, input.Configuration, int64(params.IfMatch))
 	if err != nil {
 		writeAppEnvironmentError(w, r, err)
 		return
@@ -167,7 +167,7 @@ func (h *generatedHandler) ListAppEnvironmentDeployments(w http.ResponseWriter, 
 	writeHierarchyList(w, items, nextCursor)
 }
 
-func (h *generatedHandler) CreateAppEnvironmentDeployment(w http.ResponseWriter, r *http.Request, workspaceID generated.WorkspaceId, projectID generated.ProjectId, appID generated.AppId, appEnvironmentID generated.AppEnvironmentId, _ generated.CreateAppEnvironmentDeploymentParams) {
+func (h *generatedHandler) CreateAppEnvironmentDeployment(w http.ResponseWriter, r *http.Request, workspaceID generated.WorkspaceId, projectID generated.ProjectId, appID generated.AppId, appEnvironmentID generated.AppEnvironmentId, params generated.CreateAppEnvironmentDeploymentParams) {
 	actor, workspace, ok := h.authorizeWorkspace(w, r, string(workspaceID), true)
 	if !ok {
 		return
@@ -181,18 +181,24 @@ func (h *generatedHandler) CreateAppEnvironmentDeployment(w http.ResponseWriter,
 		return
 	}
 	var input struct {
-		ReleaseID string `json:"releaseId"`
+		ReleaseID            string  `json:"releaseId"`
+		ConfigurationVersion int64   `json:"configurationVersion"`
+		CurrentDeploymentID  *string `json:"currentDeploymentId"`
 	}
 	if err := decodeJSON(r, &input); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_json", "request body is invalid", r)
 		return
+	}
+	expectedCurrentDeploymentID := ""
+	if input.CurrentDeploymentID != nil {
+		expectedCurrentDeploymentID = *input.CurrentDeploymentID
 	}
 	for range 3 {
 		deploymentID, err := h.server.deploymentID()
 		if err != nil {
 			break
 		}
-		deployment, operation, _, err := h.server.Store.CreateDeployment(r.Context(), workspace.ID, actor.ID, string(appEnvironmentID), deploymentID, input.ReleaseID, auth.HashToken(idempotencyKey), scopedBuildPayloadHash(r, payloadHash))
+		deployment, operation, _, err := h.server.Store.CreateDeployment(r.Context(), workspace.ID, actor.ID, string(appEnvironmentID), deploymentID, input.ReleaseID, input.ConfigurationVersion, int64(params.IfMatch), expectedCurrentDeploymentID, auth.HashToken(idempotencyKey), scopedBuildPayloadHash(r, payloadHash))
 		if errors.Is(err, store.ErrPublicIDCollision) {
 			continue
 		}
@@ -205,6 +211,52 @@ func (h *generatedHandler) CreateAppEnvironmentDeployment(w http.ResponseWriter,
 		return
 	}
 	writeError(w, http.StatusServiceUnavailable, "id_generation_failed", "could not allocate a Deployment identifier", r)
+}
+
+func (h *generatedHandler) PreviewAppEnvironmentDeployment(w http.ResponseWriter, r *http.Request, workspaceID generated.WorkspaceId, projectID generated.ProjectId, appID generated.AppId, appEnvironmentID generated.AppEnvironmentId) {
+	_, workspace, ok := h.authorizeWorkspace(w, r, string(workspaceID), false)
+	if !ok {
+		return
+	}
+	target, ok := h.appEnvironment(w, r, workspace.ID, string(projectID), string(appID), string(appEnvironmentID))
+	if !ok {
+		return
+	}
+	var input struct {
+		ReleaseID            string `json:"releaseId"`
+		ConfigurationVersion int64  `json:"configurationVersion"`
+	}
+	if err := decodeJSON(r, &input); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_json", "request body is invalid", r)
+		return
+	}
+	preview, err := h.server.Store.PreviewDeployment(r.Context(), workspace.ID, target.ID, input.ReleaseID, input.ConfigurationVersion)
+	if err != nil {
+		writeAppEnvironmentError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, preview)
+}
+
+func (h *generatedHandler) ListAppEnvironmentConfigurationVersions(w http.ResponseWriter, r *http.Request, workspaceID generated.WorkspaceId, projectID generated.ProjectId, appID generated.AppId, appEnvironmentID generated.AppEnvironmentId, params generated.ListAppEnvironmentConfigurationVersionsParams) {
+	_, workspace, ok := h.authorizeWorkspace(w, r, string(workspaceID), false)
+	if !ok {
+		return
+	}
+	target, ok := h.appEnvironment(w, r, workspace.ID, string(projectID), string(appID), string(appEnvironmentID))
+	if !ok {
+		return
+	}
+	beforeVersion, limit, ok := hierarchyPage(w, r, params.Cursor, params.Limit)
+	if !ok {
+		return
+	}
+	items, nextCursor, err := h.server.Store.ListConfigurationRevisions(r.Context(), workspace.ID, target.ID, beforeVersion, limit)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "storage_failed", "could not list configuration versions", r)
+		return
+	}
+	writeHierarchyList(w, items, nextCursor)
 }
 
 func (h *generatedHandler) GetAppEnvironmentDeployment(w http.ResponseWriter, r *http.Request, workspaceID generated.WorkspaceId, projectID generated.ProjectId, appID generated.AppId, appEnvironmentID generated.AppEnvironmentId, deploymentID generated.DeploymentId) {

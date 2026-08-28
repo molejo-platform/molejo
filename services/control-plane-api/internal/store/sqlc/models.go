@@ -51,6 +51,14 @@ type AppEnvironment struct {
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 }
 
+type AppEnvironmentConfigurationRevision struct {
+	AppEnvironmentID  int64              `json:"app_environment_id"`
+	Version           int64              `json:"version"`
+	ConfigurationJson []byte             `json:"configuration_json"`
+	CreatedByActorID  pgtype.Int8        `json:"created_by_actor_id"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+}
+
 type AppEnvironmentParameterBinding struct {
 	AppEnvironmentID int64              `json:"app_environment_id"`
 	EnvironmentName  string             `json:"environment_name"`

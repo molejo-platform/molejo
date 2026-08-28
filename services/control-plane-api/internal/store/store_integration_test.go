@@ -81,17 +81,17 @@ func TestSchemaReadyAcceptsTheAppEnvironmentMigration(t *testing.T) {
 }
 
 func TestAppEnvironmentOwnsBranchConfigurationAndUniquePair(t *testing.T) {
-	storage, workspaceID, _ := newIntegrationFixture(t)
+	storage, workspaceID, actorID := newIntegrationFixture(t)
 	project, app, environment := createHierarchy(t, storage, workspaceID)
 	configuration := integrationConfiguration("testkit-dev")
-	item, err := storage.CreateAppEnvironment(context.Background(), workspaceID, newID(t, "aev"), project.PublicID, app.PublicID, environment.PublicID, "develop", configuration)
+	item, err := storage.CreateAppEnvironment(context.Background(), workspaceID, actorID, newID(t, "aev"), project.PublicID, app.PublicID, environment.PublicID, "develop", configuration)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if item.SourceBranch != "develop" || item.Configuration.Slug != "testkit-dev" || item.ConfigurationVersion != 1 {
 		t.Fatalf("App Environment did not preserve its configuration: %+v", item)
 	}
-	_, err = storage.CreateAppEnvironment(context.Background(), workspaceID, newID(t, "aev"), project.PublicID, app.PublicID, environment.PublicID, "main", integrationConfiguration("other"))
+	_, err = storage.CreateAppEnvironment(context.Background(), workspaceID, actorID, newID(t, "aev"), project.PublicID, app.PublicID, environment.PublicID, "main", integrationConfiguration("other"))
 	if !errors.Is(err, ErrConflict) {
 		t.Fatalf("duplicate App + Environment error = %v, want conflict", err)
 	}
@@ -99,17 +99,17 @@ func TestAppEnvironmentOwnsBranchConfigurationAndUniquePair(t *testing.T) {
 
 func TestListEnvironmentAppsReturnsOnlyTargetsFromThatEnvironment(t *testing.T) {
 	ctx := context.Background()
-	storage, workspaceID, _ := newIntegrationFixture(t)
+	storage, workspaceID, actorID := newIntegrationFixture(t)
 	project, app, environment := createHierarchy(t, storage, workspaceID)
 	otherEnvironment, err := storage.CreateEnvironment(ctx, workspaceID, project.PublicID, newID(t, "env"), "Production", "production")
 	if err != nil {
 		t.Fatal(err)
 	}
-	target, err := storage.CreateAppEnvironment(ctx, workspaceID, newID(t, "aev"), project.PublicID, app.PublicID, environment.PublicID, "develop", integrationConfiguration("testkit-dev"))
+	target, err := storage.CreateAppEnvironment(ctx, workspaceID, actorID, newID(t, "aev"), project.PublicID, app.PublicID, environment.PublicID, "develop", integrationConfiguration("testkit-dev"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = storage.CreateAppEnvironment(ctx, workspaceID, newID(t, "aev"), project.PublicID, app.PublicID, otherEnvironment.PublicID, "main", integrationConfiguration("testkit-prod")); err != nil {
+	if _, err = storage.CreateAppEnvironment(ctx, workspaceID, actorID, newID(t, "aev"), project.PublicID, app.PublicID, otherEnvironment.PublicID, "main", integrationConfiguration("testkit-prod")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -126,12 +126,12 @@ func TestDeploymentsAreImmutableConfigurationSnapshots(t *testing.T) {
 	ctx := context.Background()
 	storage, workspaceID, actorID := newIntegrationFixture(t)
 	project, app, environment := createHierarchy(t, storage, workspaceID)
-	appEnvironment, err := storage.CreateAppEnvironment(ctx, workspaceID, newID(t, "aev"), project.PublicID, app.PublicID, environment.PublicID, "develop", integrationConfiguration("testkit-dev"))
+	appEnvironment, err := storage.CreateAppEnvironment(ctx, workspaceID, actorID, newID(t, "aev"), project.PublicID, app.PublicID, environment.PublicID, "develop", integrationConfiguration("testkit-dev"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	releaseID, image := createRelease(t, storage, workspaceID, actorID, project, app, appEnvironment)
-	first, _, _, err := storage.CreateDeployment(ctx, workspaceID, actorID, appEnvironment.PublicID, newID(t, "dpl"), releaseID, domain.SHA256([]byte("deploy-1")), domain.SHA256([]byte("payload-1")))
+	first, _, _, err := storage.CreateDeployment(ctx, workspaceID, actorID, appEnvironment.PublicID, newID(t, "dpl"), releaseID, 1, appEnvironment.Version, "", domain.SHA256([]byte("deploy-1")), domain.SHA256([]byte("payload-1")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,14 +145,14 @@ func TestDeploymentsAreImmutableConfigurationSnapshots(t *testing.T) {
 
 	updatedConfiguration := integrationConfiguration("testkit-dev")
 	updatedConfiguration.Replicas = 2
-	updated, err := storage.UpdateAppEnvironment(ctx, workspaceID, appEnvironment.PublicID, "main", updatedConfiguration, appEnvironment.Version+1)
+	updated, err := storage.UpdateAppEnvironment(ctx, workspaceID, actorID, appEnvironment.PublicID, "main", updatedConfiguration, appEnvironment.Version+1)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if updated.ConfigurationVersion != 2 || updated.SourceBranch != "main" {
 		t.Fatalf("updated App Environment = %+v", updated)
 	}
-	second, _, _, err := storage.CreateDeployment(ctx, workspaceID, actorID, appEnvironment.PublicID, newID(t, "dpl"), releaseID, domain.SHA256([]byte("deploy-2")), domain.SHA256([]byte("payload-2")))
+	second, _, _, err := storage.CreateDeployment(ctx, workspaceID, actorID, appEnvironment.PublicID, newID(t, "dpl"), releaseID, 2, updated.Version, first.PublicID, domain.SHA256([]byte("deploy-2")), domain.SHA256([]byte("payload-2")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,6 +162,75 @@ func TestDeploymentsAreImmutableConfigurationSnapshots(t *testing.T) {
 	items, _, err := storage.ListDeployments(ctx, workspaceID, appEnvironment.ID, 0, 10)
 	if err != nil || len(items) != 2 {
 		t.Fatalf("deployment history = %+v, err=%v", items, err)
+	}
+}
+
+func TestConfigurationRevisionsChangeOnlyWithRuntimeConfiguration(t *testing.T) {
+	ctx := context.Background()
+	storage, workspaceID, actorID := newIntegrationFixture(t)
+	project, app, environment := createHierarchy(t, storage, workspaceID)
+	target, err := storage.CreateAppEnvironment(ctx, workspaceID, actorID, newID(t, "aev"), project.PublicID, app.PublicID, environment.PublicID, "main", integrationConfiguration("revision-target"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	branchOnly, err := storage.UpdateAppEnvironment(ctx, workspaceID, actorID, target.PublicID, "develop", target.Configuration, target.Version)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if branchOnly.ConfigurationVersion != 1 || branchOnly.Version != 2 {
+		t.Fatalf("branch-only update = %+v, want resource v2 and configuration v1", branchOnly)
+	}
+	changed := branchOnly.Configuration
+	changed.Replicas = 2
+	configured, err := storage.UpdateAppEnvironment(ctx, workspaceID, actorID, target.PublicID, branchOnly.SourceBranch, changed, branchOnly.Version)
+	if err != nil {
+		t.Fatal(err)
+	}
+	revisions, nextCursor, err := storage.ListConfigurationRevisions(ctx, workspaceID, target.ID, 0, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if configured.ConfigurationVersion != 2 || nextCursor != "" || len(revisions) != 2 || revisions[0].Version != 2 || revisions[1].Version != 1 || revisions[0].CreatedBy == "" {
+		t.Fatalf("configuration revisions = %+v, target=%+v", revisions, configured)
+	}
+}
+
+func TestDeploymentUsesTheReviewedConfigurationRevisionAndCurrentState(t *testing.T) {
+	ctx := context.Background()
+	storage, workspaceID, actorID := newIntegrationFixture(t)
+	project, app, environment := createHierarchy(t, storage, workspaceID)
+	target, err := storage.CreateAppEnvironment(ctx, workspaceID, actorID, newID(t, "aev"), project.PublicID, app.PublicID, environment.PublicID, "main", integrationConfiguration("reviewed-target"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	releaseID, image := createRelease(t, storage, workspaceID, actorID, project, app, target)
+	changed := target.Configuration
+	changed.Replicas = 3
+	target, err = storage.UpdateAppEnvironment(ctx, workspaceID, actorID, target.PublicID, target.SourceBranch, changed, target.Version)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deployment, _, _, err := storage.CreateDeployment(ctx, workspaceID, actorID, target.PublicID, newID(t, "dpl"), releaseID, 1, target.Version, "", domain.SHA256([]byte("reviewed-v1")), domain.SHA256([]byte("reviewed-v1-payload")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deployment.ConfigurationVersion != 1 || deployment.Configuration.Replicas != 1 {
+		t.Fatalf("deployment did not use reviewed revision: %+v", deployment)
+	}
+	operation, _, _, ok, err := storage.ClaimNext(ctx, "worker-reviewed", time.Minute)
+	if err != nil || !ok {
+		t.Fatalf("claim: ok=%v err=%v", ok, err)
+	}
+	if err = storage.CompleteDeployment(ctx, operation, "ready", image); err != nil {
+		t.Fatal(err)
+	}
+	target, err = storage.FindAppEnvironment(ctx, workspaceID, target.PublicID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, _, err = storage.CreateDeployment(ctx, workspaceID, actorID, target.PublicID, newID(t, "dpl"), releaseID, 2, target.Version, "", domain.SHA256([]byte("stale-current")), domain.SHA256([]byte("stale-current-payload")))
+	if !errors.Is(err, ErrVersionConflict) {
+		t.Fatalf("stale current deployment error = %v, want version conflict", err)
 	}
 }
 
@@ -176,7 +245,7 @@ func TestAppEnvironmentBindsAnExactWorkspaceParameterVersion(t *testing.T) {
 	}
 	configuration := integrationConfiguration("parameter-binding")
 	configuration.Parameters = []domain.ParameterBinding{{Name: "DATABASE_URL", ParameterPublicID: parameter.PublicID, ParameterVersion: 1}}
-	target, err := storage.CreateAppEnvironment(ctx, workspaceID, newID(t, "aev"), project.PublicID, app.PublicID, environment.PublicID, "main", configuration)
+	target, err := storage.CreateAppEnvironment(ctx, workspaceID, actorID, newID(t, "aev"), project.PublicID, app.PublicID, environment.PublicID, "main", configuration)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -193,7 +262,7 @@ func TestAppEnvironmentBindsAnExactWorkspaceParameterVersion(t *testing.T) {
 	if _, err = storage.CreateParameter(ctx, otherWorkspaceID, actorID, configuration.Parameters[0].ParameterPublicID, "/other/database-url", domain.ParameterPlainText, "", domain.ParameterValue{PlainTextValue: &otherValue}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = storage.UpdateAppEnvironment(ctx, workspaceID, target.PublicID, "main", configuration, target.Version); !errors.Is(err, ErrParameterBinding) {
+	if _, err = storage.UpdateAppEnvironment(ctx, workspaceID, actorID, target.PublicID, "main", configuration, target.Version); !errors.Is(err, ErrParameterBinding) {
 		t.Fatalf("cross-workspace binding error = %v, want invalid binding", err)
 	}
 }
@@ -202,7 +271,7 @@ func TestDeploymentRejectsAReleaseFromAnotherApp(t *testing.T) {
 	ctx := context.Background()
 	storage, workspaceID, actorID := newIntegrationFixture(t)
 	project, app, environment := createHierarchy(t, storage, workspaceID)
-	target, err := storage.CreateAppEnvironment(ctx, workspaceID, newID(t, "aev"), project.PublicID, app.PublicID, environment.PublicID, "main", integrationConfiguration("target"))
+	target, err := storage.CreateAppEnvironment(ctx, workspaceID, actorID, newID(t, "aev"), project.PublicID, app.PublicID, environment.PublicID, "main", integrationConfiguration("target"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -210,12 +279,12 @@ func TestDeploymentRejectsAReleaseFromAnotherApp(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	otherTarget, err := storage.CreateAppEnvironment(ctx, workspaceID, newID(t, "aev"), project.PublicID, otherApp.PublicID, environment.PublicID, "main", integrationConfiguration("other"))
+	otherTarget, err := storage.CreateAppEnvironment(ctx, workspaceID, actorID, newID(t, "aev"), project.PublicID, otherApp.PublicID, environment.PublicID, "main", integrationConfiguration("other"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	releaseID, _ := createRelease(t, storage, workspaceID, actorID, project, otherApp, otherTarget)
-	_, _, _, err = storage.CreateDeployment(ctx, workspaceID, actorID, target.PublicID, newID(t, "dpl"), releaseID, domain.SHA256([]byte("cross-app")), domain.SHA256([]byte("cross-app-payload")))
+	_, _, _, err = storage.CreateDeployment(ctx, workspaceID, actorID, target.PublicID, newID(t, "dpl"), releaseID, target.ConfigurationVersion, target.Version, "", domain.SHA256([]byte("cross-app")), domain.SHA256([]byte("cross-app-payload")))
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("cross-App release error = %v, want not found", err)
 	}

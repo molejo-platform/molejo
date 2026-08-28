@@ -14,7 +14,7 @@ func TestBuildFailureNeverPromotesAReleaseAndRetryCompletesImmutably(t *testing.
 	ctx := context.Background()
 	storage, workspaceID, actorID := newIntegrationFixture(t)
 	project, app, environment := createHierarchy(t, storage, workspaceID)
-	target, err := storage.CreateAppEnvironment(ctx, workspaceID, newID(t, "aev"), project.PublicID, app.PublicID, environment.PublicID, "develop", integrationConfiguration("build-target"))
+	target, err := storage.CreateAppEnvironment(ctx, workspaceID, actorID, newID(t, "aev"), project.PublicID, app.PublicID, environment.PublicID, "develop", integrationConfiguration("build-target"))
 	if err != nil {
 		t.Fatal(err)
 	}

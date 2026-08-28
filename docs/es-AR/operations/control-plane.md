@@ -28,7 +28,10 @@ store. Los equivalentes HTTP son `just dev-api-http` y
 La Consola crea Workspaces, Projects, Environments y Apps exclusivamente mediante
 la API REST autenticada. Un AppEnvironment exige App y Environment del mismo
 Project y controla branch y configuración de runtime. Cada Deployment es un
-snapshot inmutable de Release y configuración. La API devuelve `404` para recursos fuera de la
+snapshot inmutable de Release y configuración. Los cambios de runtime crean
+revisiones inmutables; los cambios solamente de branch no. Un Deployment exige
+Release y revisión exactas, la versión actual del AppEnvironment y el Deployment
+actual revisado. El preview informa el impacto sin valores secretos. La API devuelve `404` para recursos fuera de la
 membership del Actor y `403` cuando un tester intenta una mutación.
 
 La migration 011 reemplaza el modelo experimental de deployment mutable por

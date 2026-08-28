@@ -782,6 +782,7 @@ paths:
       security: [{ sessionCookie: [] }]
       parameters:
         - { $ref: '#/components/parameters/IdempotencyKey' }
+        - { $ref: '#/components/parameters/IfMatch' }
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/DeploymentInput' } } }
@@ -791,6 +792,50 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/deployment-preview:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/AppId' }
+      - { $ref: '#/components/parameters/AppEnvironmentId' }
+    post:
+      operationId: previewAppEnvironmentDeployment
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/DeploymentPreviewInput' } } }
+      responses:
+        '200':
+          description: Semantic impact of the selected immutable target
+          content: { application/json: { schema: { $ref: '#/components/schemas/DeploymentPreview' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/configuration-versions:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/AppId' }
+      - { $ref: '#/components/parameters/AppEnvironmentId' }
+    get:
+      operationId: listAppEnvironmentConfigurationVersions
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Immutable runtime configuration history
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/ConfigurationRevision' } }
+                  nextCursor: { type: [string, 'null'] }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/deployments/{deploymentId}:
     parameters:
       - { $ref: '#/components/parameters/WorkspaceId' }
@@ -1189,16 +1234,60 @@ components:
         desiredDeploymentId: { type: string, pattern: '^dpl-[a-z2-7]{20}$' }
         currentDeploymentId: { type: string, pattern: '^dpl-[a-z2-7]{20}$' }
         currentReleaseId: { type: string, pattern: '^rel-[a-z2-7]{20}$' }
+        desiredConfigurationVersion: { type: integer, minimum: 1 }
+        currentConfigurationVersion: { type: integer, minimum: 1 }
         state: { type: string, enum: [Pending, Progressing, Ready, Degraded, Unknown] }
         message: { type: string }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
     DeploymentInput:
       type: object
-      required: [releaseId]
+      required: [releaseId, configurationVersion, currentDeploymentId]
       additionalProperties: false
       properties:
         releaseId: { type: string, pattern: '^rel-[a-z2-7]{20}$' }
+        configurationVersion: { type: integer, minimum: 1 }
+        currentDeploymentId:
+          type: [string, 'null']
+          pattern: '^dpl-[a-z2-7]{20}$'
+    DeploymentPreviewInput:
+      type: object
+      required: [releaseId, configurationVersion]
+      additionalProperties: false
+      properties:
+        releaseId: { type: string, pattern: '^rel-[a-z2-7]{20}$' }
+        configurationVersion: { type: integer, minimum: 1 }
+    DeploymentTarget:
+      type: object
+      required: [releaseId, configurationVersion]
+      additionalProperties: false
+      properties:
+        releaseId: { type: string, pattern: '^rel-[a-z2-7]{20}$' }
+        configurationVersion: { type: integer, minimum: 1 }
+    DeploymentPreview:
+      type: object
+      required: [target, changes, rolloutRequired]
+      additionalProperties: false
+      properties:
+        current: { $ref: '#/components/schemas/DeploymentTarget' }
+        target: { $ref: '#/components/schemas/DeploymentTarget' }
+        changes:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            enum: [InitialDeployment, Release, Scale, Network, HealthChecks, Resources, Variables, Secrets]
+        rolloutRequired: { type: boolean }
+    ConfigurationRevision:
+      type: object
+      required: [appEnvironmentId, version, configuration, createdBy, createdAt]
+      additionalProperties: false
+      properties:
+        appEnvironmentId: { type: string, pattern: '^aev-[a-z2-7]{20}$' }
+        version: { type: integer, minimum: 1 }
+        configuration: { $ref: '#/components/schemas/RuntimeConfiguration' }
+        createdBy: { type: string, minLength: 1 }
+        createdAt: { type: string, format: date-time }
     ResourceValues:
       type: object
       required: [cpuMillis, memoryMiB]
@@ -1214,7 +1303,7 @@ components:
         path: { type: string, maxLength: 2048, pattern: '^/' }
     Deployment:
       type: object
-      required: [id, appEnvironmentId, releaseId, configurationVersion, configuration, state, createdAt, updatedAt]
+      required: [id, appEnvironmentId, releaseId, configurationVersion, configuration, requestedBy, state, createdAt, updatedAt]
       additionalProperties: false
       properties:
         id: { type: string, pattern: '^dpl-[a-z2-7]{20}$' }
@@ -1222,6 +1311,7 @@ components:
         releaseId: { type: string, pattern: '^rel-[a-z2-7]{20}$' }
         configurationVersion: { type: integer, minimum: 1 }
         configuration: { $ref: '#/components/schemas/RuntimeConfiguration' }
+        requestedBy: { type: string, minLength: 1 }
         state: { type: string, enum: [Pending, Progressing, Ready, Degraded] }
         message: { type: string }
         createdAt: { type: string, format: date-time }
