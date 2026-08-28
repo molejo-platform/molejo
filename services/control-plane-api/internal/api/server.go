@@ -408,6 +408,9 @@ func (s *Server) RunOnce(ctx context.Context, workerID string) (bool, error) {
 		if obs.Exists {
 			return true, s.failOperation(ctx, op, "runtime_deletion_pending", "runtime removal is not yet observed", true)
 		}
+		if err = s.Runtime.GarbageCollectConfiguration(ctx, workspace.Namespace, appEnvironment.RuntimeName); err != nil {
+			return true, s.failOperation(ctx, op, "configuration_cleanup_failed", "runtime configuration cleanup failed", true)
+		}
 		return true, s.Store.CompleteAppEnvironmentDeletion(ctx, op, obs.Message)
 	}
 	intent := domain.IntentFromConfiguration(deployment.Image, deployment.Configuration)
@@ -439,6 +442,9 @@ func (s *Server) RunOnce(ctx context.Context, workerID string) (bool, error) {
 	}
 	if obs.State != domain.Ready || !obs.Exists || obs.ObservedRelease != deployment.Image {
 		return true, s.failOperation(ctx, op, "runtime_not_ready", "runtime has not observed the requested release", true)
+	}
+	if err = s.Runtime.GarbageCollectConfiguration(ctx, workspace.Namespace, appEnvironment.RuntimeName); err != nil {
+		return true, s.failOperation(ctx, op, "configuration_cleanup_failed", "runtime configuration cleanup failed", true)
 	}
 	return true, s.Store.CompleteDeployment(ctx, op, obs.Message, obs.ObservedRelease)
 }

@@ -25,6 +25,8 @@ import (
 
 const controlPlaneOwnerAnnotation = "platform.fruto.calouro.tech/control-plane-owner"
 const workspaceOwnerValue = "fruto-control-plane"
+const managedByLabel = "app.kubernetes.io/managed-by"
+const configurationVersionLabel = "platform.fruto.calouro.tech/configuration-version"
 
 var ErrOwnershipConflict = errors.New("runtime object is not owned by the control plane")
 
@@ -42,6 +44,7 @@ type Client interface {
 	ApplyDeployment(context.Context, string, string, domain.Intent) error
 	ObserveDeployment(context.Context, string, string) (Observation, error)
 	DeleteDeployment(context.Context, string, string) error
+	GarbageCollectConfiguration(context.Context, string, string) error
 }
 
 type KubernetesClient struct {
@@ -205,7 +208,7 @@ func (k *KubernetesClient) ApplyDeployment(ctx context.Context, namespace, name 
 
 func (k *KubernetesClient) materializeConfiguration(ctx context.Context, namespace, owner string, version int64, plain, secret []domain.Variable) (string, string, error) {
 	immutable := true
-	labels := map[string]string{"app.kubernetes.io/managed-by": workspaceOwnerValue, "platform.fruto.calouro.tech/configuration-version": strconv.FormatInt(version, 10)}
+	labels := map[string]string{managedByLabel: workspaceOwnerValue, configurationVersionLabel: strconv.FormatInt(version, 10)}
 	annotations := map[string]string{controlPlaneOwnerAnnotation: owner}
 	configMapName := fmt.Sprintf("%s-c%d", owner, version)
 	plainData := make(map[string]string, len(plain))
@@ -273,6 +276,72 @@ func (k *KubernetesClient) createOrVerifySecret(ctx context.Context, desired *co
 		return fmt.Errorf("%w: Secret %s/%s differs from the immutable configuration", ErrOwnershipConflict, desired.Namespace, desired.Name)
 	}
 	return nil
+}
+
+func (k *KubernetesClient) GarbageCollectConfiguration(ctx context.Context, namespace, owner string) error {
+	gcCtx, cancel := context.WithTimeout(ctx, k.applyTimeout)
+	defer cancel()
+	keep := map[string]struct{}{}
+	root := &platformv1alpha1.AppDeployment{}
+	err := k.client.Get(gcCtx, types.NamespacedName{Namespace: namespace, Name: owner}, root)
+	if err == nil {
+		if root.Annotations[controlPlaneOwnerAnnotation] != owner {
+			return fmt.Errorf("%w: AppDeployment %s/%s", ErrOwnershipConflict, namespace, owner)
+		}
+		if root.Spec.ConfigMapRef != "" {
+			keep[root.Spec.ConfigMapRef] = struct{}{}
+		}
+		if root.Spec.SecretRef != "" {
+			keep[root.Spec.SecretRef] = struct{}{}
+		}
+	} else if !apierrors.IsNotFound(err) {
+		return fmt.Errorf("read AppDeployment before configuration garbage collection: %w", err)
+	}
+
+	var configMaps corev1.ConfigMapList
+	if err = k.client.List(gcCtx, &configMaps, client.InNamespace(namespace), client.MatchingLabels{managedByLabel: workspaceOwnerValue}); err != nil {
+		return fmt.Errorf("list configuration ConfigMaps: %w", err)
+	}
+	for i := range configMaps.Items {
+		item := &configMaps.Items[i]
+		if _, current := keep[item.Name]; current || !ownedConfigurationObject(item, owner, false) {
+			continue
+		}
+		if err = k.client.Delete(gcCtx, item); err != nil && !apierrors.IsNotFound(err) {
+			return fmt.Errorf("delete stale configuration ConfigMap: %w", err)
+		}
+	}
+
+	var secrets corev1.SecretList
+	if err = k.client.List(gcCtx, &secrets, client.InNamespace(namespace), client.MatchingLabels{managedByLabel: workspaceOwnerValue}); err != nil {
+		return fmt.Errorf("list configuration Secrets: %w", err)
+	}
+	for i := range secrets.Items {
+		item := &secrets.Items[i]
+		if _, current := keep[item.Name]; current || !ownedConfigurationObject(item, owner, true) {
+			continue
+		}
+		if err = k.client.Delete(gcCtx, item); err != nil && !apierrors.IsNotFound(err) {
+			return fmt.Errorf("delete stale configuration Secret: %w", err)
+		}
+	}
+	return nil
+}
+
+func ownedConfigurationObject(object metav1.Object, owner string, secret bool) bool {
+	if object.GetAnnotations()[controlPlaneOwnerAnnotation] != owner || object.GetLabels()[managedByLabel] != workspaceOwnerValue {
+		return false
+	}
+	version := object.GetLabels()[configurationVersionLabel]
+	parsed, err := strconv.ParseInt(version, 10, 64)
+	if err != nil || parsed < 1 {
+		return false
+	}
+	expected := fmt.Sprintf("%s-c%d", owner, parsed)
+	if secret {
+		expected += "-secret"
+	}
+	return object.GetName() == expected
 }
 
 func (k *KubernetesClient) ObserveDeployment(ctx context.Context, namespace, name string) (Observation, error) {

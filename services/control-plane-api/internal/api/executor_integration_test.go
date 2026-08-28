@@ -60,6 +60,9 @@ func TestWorkerAppliesAnImmutableDeploymentAndCorrelatesItsLogs(t *testing.T) {
 	if runtimeClient.intent.ConfigurationVersion != target.ConfigurationVersion || len(runtimeClient.intent.SecretVariables) != 1 || runtimeClient.intent.SecretVariables[0].Value != "secret-runtime-value" || !containsVariable(runtimeClient.intent.Variables, "INTERNAL_URL", plainValue) {
 		t.Fatalf("materialized intent=%+v", runtimeClient.intent)
 	}
+	if runtimeClient.garbageCollections != 1 {
+		t.Fatalf("configuration garbage collections = %d, want 1", runtimeClient.garbageCollections)
+	}
 	for _, expected := range []string{`"operation_id":"` + operation.PublicID + `"`, `"app_environment_id":"` + target.PublicID + `"`, `"deployment_id":"` + deployment.PublicID + `"`, `"worker_id":"worker-correlation"`} {
 		if !strings.Contains(output.String(), expected) {
 			t.Errorf("worker log is missing %s: %s", expected, output.String())
@@ -106,6 +109,9 @@ func TestWorkerRetriesAppEnvironmentDeletionUntilRuntimeAbsenceIsObserved(t *tes
 	}
 	if _, err = s.FindAppEnvironment(ctx, workspaceID, target.PublicID); err != store.ErrNotFound {
 		t.Fatalf("deleted target error=%v, want not found", err)
+	}
+	if runtimeClient.garbageCollections != 1 {
+		t.Fatalf("configuration garbage collections = %d, want 1", runtimeClient.garbageCollections)
 	}
 }
 
@@ -165,9 +171,10 @@ func TestLogoutDoesNotClaimSuccessWhenRevocationFails(t *testing.T) {
 }
 
 type recordingRuntime struct {
-	name   string
-	intent domain.Intent
-	exists bool
+	name               string
+	intent             domain.Intent
+	exists             bool
+	garbageCollections int
 }
 
 func (r *recordingRuntime) EnsureWorkspace(context.Context, string) error { return nil }
@@ -187,6 +194,11 @@ func (r *recordingRuntime) ObserveDeployment(context.Context, string, string) (c
 }
 
 func (r *recordingRuntime) DeleteDeployment(context.Context, string, string) error { return nil }
+
+func (r *recordingRuntime) GarbageCollectConfiguration(context.Context, string, string) error {
+	r.garbageCollections++
+	return nil
+}
 
 func createExecutorTargetAndRelease(t *testing.T, s *store.Store, workspaceID, actorID int64) (domain.AppEnvironment, string, string) {
 	t.Helper()

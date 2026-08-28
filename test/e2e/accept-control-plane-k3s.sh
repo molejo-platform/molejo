@@ -34,6 +34,10 @@ worker_identity="system:serviceaccount:fruto-control-plane:control-plane-runtime
 [[ "$(kubectl --context "$context" auth can-i patch appdeployments.platform.fruto.calouro.tech --as="$worker_identity" -n fruto-workspaces)" == yes ]]
 [[ "$(kubectl --context "$context" auth can-i update appdeployments.platform.fruto.calouro.tech/status --as="$worker_identity" -n fruto-workspaces)" == no ]]
 [[ "$(kubectl --context "$context" auth can-i create secrets --as="$worker_identity" -n fruto-workspaces)" == yes ]]
+[[ "$(kubectl --context "$context" auth can-i list configmaps --as="$worker_identity" -n fruto-workspaces)" == yes ]]
+[[ "$(kubectl --context "$context" auth can-i delete configmaps --as="$worker_identity" -n fruto-workspaces)" == yes ]]
+[[ "$(kubectl --context "$context" auth can-i list secrets --as="$worker_identity" -n fruto-workspaces)" == yes ]]
+[[ "$(kubectl --context "$context" auth can-i delete secrets --as="$worker_identity" -n fruto-workspaces)" == yes ]]
 [[ "$(kubectl --context "$context" auth can-i get secrets --as="$worker_identity" -n fruto-control-plane)" == no ]]
 [[ "$(kubectl --context "$context" auth can-i get deployments.apps --as="$worker_identity" -n fruto-workspaces)" == no ]]
 

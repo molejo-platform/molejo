@@ -12,6 +12,7 @@ import (
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/domain"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/clientcmd"
@@ -125,6 +126,111 @@ func TestApplyDeploymentKeepsTheRuntimeNameStableAcrossIntentUpdates(t *testing.
 	}
 	if len(list.Items) != 1 {
 		t.Fatalf("expected one AppDeployment for the stable runtime name, got %d", len(list.Items))
+	}
+}
+
+func TestGarbageCollectConfigurationKeepsOnlyCurrentOwnedObjects(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	if err := platformv1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	owner := "ap-deployment-id"
+	namespace := "fruto-workspaces"
+	managed := func(name, version string) metav1.ObjectMeta {
+		return metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+			Labels: map[string]string{
+				"app.kubernetes.io/managed-by":                      workspaceOwnerValue,
+				"platform.fruto.calouro.tech/configuration-version": version,
+			},
+			Annotations: map[string]string{controlPlaneOwnerAnnotation: owner},
+		}
+	}
+	objects := []client.Object{
+		&platformv1alpha1.AppDeployment{
+			ObjectMeta: metav1.ObjectMeta{Name: owner, Namespace: namespace, Annotations: map[string]string{controlPlaneOwnerAnnotation: owner}},
+			Spec:       platformv1alpha1.AppDeploymentSpec{ConfigMapRef: owner + "-c2", SecretRef: owner + "-c2-secret"},
+		},
+		&corev1.ConfigMap{ObjectMeta: managed(owner+"-c1", "1")},
+		&corev1.ConfigMap{ObjectMeta: managed(owner+"-c2", "2")},
+		&corev1.Secret{ObjectMeta: managed(owner+"-c1-secret", "1")},
+		&corev1.Secret{ObjectMeta: managed(owner+"-c2-secret", "2")},
+		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: owner + "-c3", Namespace: namespace}},
+	}
+	kubernetesClient := &KubernetesClient{
+		client:       fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build(),
+		fieldManager: "test-control-plane",
+		applyTimeout: time.Second,
+	}
+
+	if err := kubernetesClient.GarbageCollectConfiguration(context.Background(), namespace, owner); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, name := range []string{owner + "-c2", owner + "-c3"} {
+		if err := kubernetesClient.client.Get(context.Background(), client.ObjectKey{Namespace: namespace, Name: name}, &corev1.ConfigMap{}); err != nil {
+			t.Fatalf("kept ConfigMap %s: %v", name, err)
+		}
+	}
+	if err := kubernetesClient.client.Get(context.Background(), client.ObjectKey{Namespace: namespace, Name: owner + "-c2-secret"}, &corev1.Secret{}); err != nil {
+		t.Fatalf("kept Secret: %v", err)
+	}
+	for _, object := range []client.Object{
+		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: owner + "-c1", Namespace: namespace}},
+		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: owner + "-c1-secret", Namespace: namespace}},
+	} {
+		if err := kubernetesClient.client.Get(context.Background(), client.ObjectKeyFromObject(object), object); !apierrors.IsNotFound(err) {
+			t.Fatalf("stale configuration %T/%s was not deleted: %v", object, object.GetName(), err)
+		}
+	}
+}
+
+func TestGarbageCollectConfigurationRemovesAllOwnedObjectsAfterRootDeletion(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	if err := platformv1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	owner := "ap-deployment-id"
+	namespace := "fruto-workspaces"
+	metadata := metav1.ObjectMeta{
+		Name:      owner + "-c1",
+		Namespace: namespace,
+		Labels: map[string]string{
+			"app.kubernetes.io/managed-by":                      workspaceOwnerValue,
+			"platform.fruto.calouro.tech/configuration-version": "1",
+		},
+		Annotations: map[string]string{controlPlaneOwnerAnnotation: owner},
+	}
+	kubernetesClient := &KubernetesClient{
+		client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(
+			&corev1.ConfigMap{ObjectMeta: metadata},
+			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+				Name: owner + "-c1-secret", Namespace: namespace, Labels: metadata.Labels, Annotations: metadata.Annotations,
+			}},
+		).Build(),
+		applyTimeout: time.Second,
+	}
+
+	if err := kubernetesClient.GarbageCollectConfiguration(context.Background(), namespace, owner); err != nil {
+		t.Fatal(err)
+	}
+	var configMaps corev1.ConfigMapList
+	if err := kubernetesClient.client.List(context.Background(), &configMaps, client.InNamespace(namespace)); err != nil {
+		t.Fatal(err)
+	}
+	var secrets corev1.SecretList
+	if err := kubernetesClient.client.List(context.Background(), &secrets, client.InNamespace(namespace)); err != nil {
+		t.Fatal(err)
+	}
+	if len(configMaps.Items) != 0 || len(secrets.Items) != 0 {
+		t.Fatalf("configuration was not collected: ConfigMaps=%d Secrets=%d", len(configMaps.Items), len(secrets.Items))
 	}
 }
 

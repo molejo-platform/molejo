@@ -170,6 +170,30 @@ egress hacia PostgreSQL no restringe destino porque la instalación portátil a�
 no tiene un contrato de destino de la base. No la instales tal como está:
 primero definí el destino de la base y el CNI y después validá la política.
 
+## Parámetros de runtime de la Fase 9
+
+Los parámetros se catalogan por Workspace como valores `PlainText` o `Secret`
+write-only. Un AppEnvironment vincula el nombre de una variable de entorno a una
+versión inmutable del parámetro; cada Deployment captura esos vínculos y su
+`configurationVersion`. El runtime worker resuelve el snapshot, guarda valores
+comunes en un ConfigMap inmutable, materializa secrets de OpenBao en un Secret
+inmutable de Kubernetes y proyecta en AppDeployment solamente los nombres de
+esos objetos.
+
+Después de observar la nueva generación como `Ready`, el worker elimina objetos
+de configuración anteriores que tengan la annotation exacta de owner del
+control plane, la label managed-by, el nombre determinístico y la label de
+versión. Al eliminar un AppEnvironment se recolectan todos sus objetos de
+configuración restantes. La Role del Workspace permite que solo ese worker liste
+y elimine ConfigMaps y Secrets en ese Namespace; la ServiceAccount de la API
+pública no puede leerlos.
+
+La instalación OpenBao incluida es una fixture de laboratorio de un nodo con
+unseal manual. Ejecutá `just openbao-prepare-k3s` con el contexto aprobado
+`fruto-lab` y mantené el material de inicialización y fingerprint fuera de Git.
+Esta fixture no es un servicio de secrets de alta disponibilidad ni listo para
+producción.
+
 ## Build plane de la Fase 8
 
 Un owner inicia un Build para un AppEnvironment cuyo App tiene fuente GitHub. La

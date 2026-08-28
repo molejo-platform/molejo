@@ -164,6 +164,27 @@ PostgreSQL egress is intentionally not destination-scoped because the portable
 installation has no database destination contract yet. Do not install it as-is;
 select the database destination and CNI first, then validate the resulting policy.
 
+## Phase 9 runtime parameters
+
+Parameters are catalogued per Workspace as `PlainText` or write-only `Secret`
+values. An AppEnvironment binds an environment variable name to one immutable
+parameter version; every Deployment snapshots those bindings and its
+`configurationVersion`. The runtime worker resolves the snapshot, stores common
+values in an immutable ConfigMap, materializes secrets from OpenBao into an
+immutable Kubernetes Secret, and projects only their names into AppDeployment.
+
+After the new generation is observed as `Ready`, the worker removes older
+configuration objects that carry the exact control-plane owner annotation,
+managed-by label, deterministic name, and version label. Removing an
+AppEnvironment collects all of its remaining owned configuration objects. The
+Workspace Role permits this worker to list and delete ConfigMaps and Secrets in
+that Namespace only; the public API ServiceAccount cannot read them.
+
+The included OpenBao installation is a single-node, manually unsealed lab
+fixture. Run `just openbao-prepare-k3s` with the approved `fruto-lab` context and
+keep initialization and fingerprint material outside Git. This fixture is not a
+high-availability or production secret service.
+
 ## Phase 8 build plane
 
 An owner starts a Build for an AppEnvironment whose App has a connected GitHub

@@ -166,6 +166,28 @@ para PostgreSQL não restringe destino porque a instalação portátil ainda nã
 possui um contrato de destino do banco. Não a instale como está: primeiro defina
 o destino do banco e o CNI e depois valide a política resultante.
 
+## Parâmetros de runtime da Fase 9
+
+Parâmetros são catalogados por Workspace como valores `PlainText` ou `Secret`
+write-only. Um AppEnvironment vincula o nome de uma variável de ambiente a uma
+versão imutável do parâmetro; cada Deployment captura esses vínculos e sua
+`configurationVersion`. O runtime worker resolve o snapshot, armazena valores
+comuns em um ConfigMap imutável, materializa secrets do OpenBao em um Secret
+Kubernetes imutável e projeta no AppDeployment somente os nomes desses objetos.
+
+Depois que a nova geração é observada como `Ready`, o worker remove objetos de
+configuração antigos que tenham a annotation exata de owner do control plane, a
+label managed-by, o nome determinístico e a label de versão. A remoção de um
+AppEnvironment coleta todos os objetos de configuração restantes sob seu
+ownership. A Role do Workspace permite que somente esse worker liste e remova
+ConfigMaps e Secrets naquele Namespace; a ServiceAccount da API pública não pode
+lê-los.
+
+A instalação OpenBao incluída é uma fixture de laboratório com um nó e unseal
+manual. Execute `just openbao-prepare-k3s` com o contexto aprovado `fruto-lab` e
+mantenha o material de inicialização e fingerprint fora do Git. Essa fixture não
+é um serviço de secrets de alta disponibilidade ou pronto para produção.
+
 ## Build plane da Fase 8
 
 Um owner inicia um Build para um AppEnvironment cujo App possui fonte GitHub. A
