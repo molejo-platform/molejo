@@ -112,6 +112,8 @@ spec:
         app.kubernetes.io/part-of: fruto-platform
     spec:
       serviceAccountName: control-plane-runtime-worker
+      imagePullSecrets:
+        - name: registry-pull
       securityContext:
         runAsNonRoot: true
         seccompProfile: { type: RuntimeDefault }
