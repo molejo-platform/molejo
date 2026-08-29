@@ -20,6 +20,8 @@ export class RuntimeLogStore {
   private readonly maxBytes: number;
   private readonly listeners = new Set<() => void>();
   private snapshot = defaultSnapshot;
+  private ids = new Set<string>();
+  private retainedBytes = 0;
   private pending: RuntimeLog[] = [];
   private timer: ReturnType<typeof setTimeout> | undefined;
 
@@ -40,11 +42,13 @@ export class RuntimeLogStore {
     this.pending = [];
     this.cancelFlush();
     this.snapshot = defaultSnapshot;
-    this.publish(items, 0);
+    this.ids.clear();
+    this.retainedBytes = 0;
+    this.merge(items, 0);
   }
 
   mergeHistory(items: RuntimeLog[]) {
-    this.publish([...this.snapshot.items, ...items], this.snapshot.discardedCount);
+    this.merge(items, this.snapshot.discardedCount);
   }
 
   appendBatch(items: RuntimeLog[]) {
@@ -59,7 +63,7 @@ export class RuntimeLogStore {
     if (!this.pending.length) return;
     const pending = this.pending;
     this.pending = [];
-    this.publish([...this.snapshot.items, ...pending], this.snapshot.discardedCount);
+    this.merge(pending, this.snapshot.discardedCount);
   }
 
   dispose() {
@@ -68,21 +72,26 @@ export class RuntimeLogStore {
     this.listeners.clear();
   }
 
-  private publish(items: RuntimeLog[], discardedCount: number) {
-    const previousIDs = new Set(this.snapshot.items.map((item) => item.id));
+  private merge(items: RuntimeLog[], discardedCount: number) {
     const byID = new Map<string, RuntimeLog>();
-    for (const item of items) byID.set(item.id, item);
-    const ordered = [...byID.values()].sort(compareLogs);
-    let bytes = ordered.reduce((total, item) => total + estimatedBytes(item), 0);
+    for (const item of items) {
+      if (!this.ids.has(item.id)) byID.set(item.id, item);
+    }
+    const incoming = [...byID.values()].sort(compareLogs);
+    const ordered = mergeOrdered(this.snapshot.items, incoming);
+    for (const item of incoming) {
+      this.ids.add(item.id);
+      this.retainedBytes += estimatedBytes(item);
+    }
     let discarded = discardedCount;
-    while (ordered.length > this.maxItems || (bytes > this.maxBytes && ordered.length > 1)) {
+    while (ordered.length > this.maxItems || (this.retainedBytes > this.maxBytes && ordered.length > 1)) {
       const removed = ordered.shift();
       if (!removed) break;
-      bytes -= estimatedBytes(removed);
+      this.ids.delete(removed.id);
+      this.retainedBytes -= estimatedBytes(removed);
       discarded += 1;
     }
-    const added = [...byID.keys()].filter((id) => !previousIDs.has(id)).length;
-    this.snapshot = { items: ordered, discardedCount: discarded, receivedCount: this.snapshot.receivedCount + added };
+    this.snapshot = { items: ordered, discardedCount: discarded, receivedCount: this.snapshot.receivedCount + incoming.length };
     this.listeners.forEach((listener) => listener());
   }
 
@@ -92,10 +101,21 @@ export class RuntimeLogStore {
   }
 }
 
+function mergeOrdered(current: readonly RuntimeLog[], incoming: readonly RuntimeLog[]) {
+  const merged: RuntimeLog[] = [];
+  let left = 0;
+  let right = 0;
+  while (left < current.length && right < incoming.length) {
+    if (compareLogs(current[left], incoming[right]) <= 0) merged.push(current[left++]);
+    else merged.push(incoming[right++]);
+  }
+  return merged.concat(current.slice(left), incoming.slice(right));
+}
+
 function compareLogs(left: RuntimeLog, right: RuntimeLog) {
   return left.timestamp.localeCompare(right.timestamp) || left.id.localeCompare(right.id);
 }
 
 function estimatedBytes(item: RuntimeLog) {
-  return 96 + 2 * (item.id.length + item.timestamp.length + item.body.length + item.severity.length + (item.instance?.length ?? 0) + (item.container?.length ?? 0));
+  return 96 + 2 * (item.id.length + item.timestamp.length + item.body.length + item.severity.length);
 }

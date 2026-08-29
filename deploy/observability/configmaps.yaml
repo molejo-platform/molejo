@@ -62,6 +62,14 @@ data:
             - key: platform.fruto.calouro.tech/app-deployment
               tag_name: molejo.app_environment.runtime
               from: pod
+      filter/runtime:
+        error_mode: ignore
+        logs:
+          log_record:
+            - 'resource.attributes["molejo.app_environment.runtime"] == nil'
+        metrics:
+          datapoint:
+            - 'resource.attributes["molejo.app_environment.runtime"] == nil'
       batch:
         send_batch_size: 512
         timeout: 2s
@@ -77,11 +85,11 @@ data:
       pipelines:
         logs:
           receivers: [filelog]
-          processors: [memory_limiter, k8sattributes, batch]
+          processors: [memory_limiter, k8sattributes, filter/runtime, batch]
           exporters: [otlp]
         metrics:
           receivers: [kubeletstats]
-          processors: [memory_limiter, k8sattributes, batch]
+          processors: [memory_limiter, k8sattributes, filter/runtime, batch]
           exporters: [otlp]
 ---
 apiVersion: v1
@@ -104,11 +112,28 @@ data:
             enabled: true
       k8s_events:
         auth_type: serviceAccount
+      prometheus/platform:
+        config:
+          scrape_configs:
+            - job_name: otel-collectors
+              scrape_interval: 30s
+              static_configs:
+                - targets:
+                    - 127.0.0.1:8888
+                    - otel-gateway.molejo-observability.svc:8888
     processors:
       memory_limiter:
         check_interval: 5s
         limit_mib: 192
         spike_limit_mib: 48
+      filter/runtime:
+        error_mode: ignore
+        logs:
+          log_record:
+            - 'attributes["k8s.namespace.name"] != "fruto-workspaces"'
+        metrics:
+          datapoint:
+            - 'resource.attributes["k8s.namespace.name"] != "fruto-workspaces"'
       batch:
         send_batch_size: 512
         timeout: 2s
@@ -121,13 +146,27 @@ data:
     service:
       telemetry:
         logs: { level: info }
+        metrics:
+          level: normal
+          readers:
+            - pull:
+                exporter:
+                  prometheus:
+                    host: 0.0.0.0
+                    port: 8888
+                    without_type_suffix: true
+                    without_units: true
       pipelines:
         metrics:
           receivers: [k8s_cluster]
-          processors: [memory_limiter, batch]
+          processors: [memory_limiter, filter/runtime, batch]
           exporters: [otlp]
         logs:
           receivers: [k8s_events]
+          processors: [memory_limiter, filter/runtime, batch]
+          exporters: [otlp]
+        metrics/platform:
+          receivers: [prometheus/platform]
           processors: [memory_limiter, batch]
           exporters: [otlp]
 ---
@@ -170,6 +209,16 @@ data:
     service:
       telemetry:
         logs: { level: info }
+        metrics:
+          level: normal
+          readers:
+            - pull:
+                exporter:
+                  prometheus:
+                    host: 0.0.0.0
+                    port: 8888
+                    without_type_suffix: true
+                    without_units: true
       pipelines:
         logs:
           receivers: [otlp]

@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -51,7 +52,7 @@ func TestClickHouseLogsAlwaysScopeQueriesToRuntime(t *testing.T) {
 		t.Fatalf("param_from = %q, want ClickHouse DateTime64 format", got)
 	}
 	query := form.Get("query")
-	if !strings.Contains(query, "k8s.namespace.name") || !strings.Contains(query, "k8s.deployment.name") || !strings.Contains(query, "MolejoLogId") || !strings.Contains(query, "MolejoIngestedAt") || !strings.Contains(query, "toUnixTimestamp64Nano") {
+	if !strings.Contains(query, "MolejoNamespace") || !strings.Contains(query, "MolejoRuntime") || !strings.Contains(query, "MolejoLogId") || !strings.Contains(query, "MolejoIngestedAt") || !strings.Contains(query, "toUnixTimestamp64Nano") {
 		t.Fatalf("query is not tenant and runtime scoped: %s", query)
 	}
 }
@@ -60,8 +61,11 @@ func TestVictoriaMetricsAlwaysScopesEveryMetricQuery(t *testing.T) {
 	t.Parallel()
 
 	var queries []string
+	var queriesMu sync.Mutex
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		queriesMu.Lock()
 		queries = append(queries, r.URL.Query().Get("query"))
+		queriesMu.Unlock()
 		_ = json.NewEncoder(w).Encode(map[string]any{"status": "success", "data": map[string]any{"resultType": "matrix", "result": []any{}}})
 	}))
 	defer server.Close()
@@ -83,6 +87,9 @@ func TestVictoriaMetricsAlwaysScopesEveryMetricQuery(t *testing.T) {
 		if !strings.Contains(query, `k8s_namespace_name="workspace-a"`) || !strings.Contains(query, `k8s_deployment_name="runtime-a"`) {
 			t.Fatalf("metric query is not tenant and runtime scoped: %s", query)
 		}
+		if strings.Contains(query, "k8s_pod_name") {
+			t.Fatalf("metric query exposes Kubernetes pod identity: %s", query)
+		}
 	}
 }
 
@@ -90,9 +97,12 @@ func TestVictoriaMetricsCurrentMetricsUsesInstantScopedQueries(t *testing.T) {
 	t.Parallel()
 
 	var paths, queries []string
+	var queriesMu sync.Mutex
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		queriesMu.Lock()
 		paths = append(paths, r.URL.Path)
 		queries = append(queries, r.URL.Query().Get("query"))
+		queriesMu.Unlock()
 		_ = json.NewEncoder(w).Encode(map[string]any{"status": "success", "data": map[string]any{"resultType": "vector", "result": []any{
 			map[string]any{"metric": map[string]string{"k8s_pod_name": "pod-a"}, "value": []any{1_787_918_400, "1.5"}},
 		}}})
@@ -118,8 +128,32 @@ func TestVictoriaMetricsCurrentMetricsUsesInstantScopedQueries(t *testing.T) {
 			t.Fatalf("metric query is not tenant and runtime scoped: %s", queries[index])
 		}
 	}
-	if snapshot.Samples[0].Name != "cpu" || snapshot.Samples[0].Instance != "pod-a" || snapshot.Samples[0].Value != 1.5 {
+	if snapshot.Samples[0].Name != "cpu" || snapshot.Samples[0].Value != 1.5 {
 		t.Fatalf("unexpected sample: %#v", snapshot.Samples[0])
+	}
+}
+
+func TestVictoriaMetricsReturnsExplicitPartialResults(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Query().Get("query"), "memory") {
+			http.Error(w, "unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"status": "success", "data": map[string]any{"resultType": "matrix", "result": []any{}}})
+	}))
+	defer server.Close()
+	client, err := NewVictoriaMetricsClient(server.URL, server.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+	metrics, err := client.Metrics(context.Background(), Scope{Namespace: "workspace-a", RuntimeName: "runtime-a"}, MetricQuery{From: time.Now().Add(-time.Hour), To: time.Now(), Step: time.Minute})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !metrics.Partial || len(metrics.Unavailable) != 1 || metrics.Unavailable[0] != "memory" || len(metrics.Series) != len(metricDefinitions) {
+		t.Fatalf("unexpected partial response: %#v", metrics)
 	}
 }
 
@@ -147,7 +181,7 @@ func TestClickHouseEventsUseKubernetesEventAttributesAndRuntimePrefix(t *testing
 	if !strings.Contains(query, "LogAttributes['k8s.namespace.name']") || !strings.Contains(query, "startsWith(LogAttributes['k8s.event.name'], {runtime:String})") {
 		t.Fatalf("event query does not use collector event attributes: %s", query)
 	}
-	if items[0].Source != "kubernetes" || items[0].Message != "Runtime container started." || items[0].Instance != "" {
+	if items[0].Source != "kubernetes" || items[0].Message != "Runtime container started." {
 		t.Fatalf("event exposes an unstable Kubernetes detail: %#v", items[0])
 	}
 }

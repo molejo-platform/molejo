@@ -849,7 +849,6 @@ paths:
         - { name: from, in: query, schema: { type: string, format: date-time } }
         - { name: to, in: query, schema: { type: string, format: date-time } }
         - { name: search, in: query, schema: { type: string, maxLength: 200 } }
-        - { name: instance, in: query, schema: { type: string, maxLength: 253 } }
         - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 1000, default: 200 } }
         - { name: cursor, in: query, description: Opaque keyset cursor returned by the previous page, schema: { type: string, maxLength: 1024 } }
       responses:
@@ -870,7 +869,6 @@ paths:
       security: [{ sessionCookie: [] }]
       parameters:
         - { name: search, in: query, schema: { type: string, maxLength: 200 } }
-        - { name: instance, in: query, schema: { type: string, maxLength: 253 } }
         - { name: cursor, in: query, description: Opaque live cursor returned with the historical snapshot, schema: { type: string, maxLength: 1024 } }
       responses:
         '200':
@@ -892,10 +890,9 @@ paths:
       parameters:
         - { name: from, in: query, schema: { type: string, format: date-time } }
         - { name: to, in: query, schema: { type: string, format: date-time } }
-        - { name: stepSeconds, in: query, schema: { type: integer, minimum: 15, maximum: 300, default: 60 } }
       responses:
         '200':
-          description: Bounded aggregate and per-instance runtime metrics
+          description: Bounded aggregate runtime metrics with a server-selected resolution
           content: { application/json: { schema: { $ref: '#/components/schemas/RuntimeMetrics' } } }
         '400': { $ref: '#/components/responses/BadRequest' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -1443,8 +1440,6 @@ components:
         timestamp: { type: string, format: date-time }
         body: { type: string, maxLength: 65536 }
         severity: { type: string, maxLength: 253 }
-        instance: { type: string, maxLength: 253 }
-        container: { type: string, maxLength: 253 }
     RuntimeLogs:
       type: object
       required: [from, to, liveCursor, items]
@@ -1476,16 +1471,18 @@ components:
       properties:
         name: { type: string, enum: [cpu, memory, restarts, available, desired] }
         unit: { type: string, enum: [cores, bytes, count, replicas] }
-        instance: { type: string, maxLength: 253 }
         points: { type: array, items: { $ref: '#/components/schemas/RuntimeMetricPoint' } }
     RuntimeMetrics:
       type: object
-      required: [from, to, step, series]
+      required: [from, to, step, resolutionSeconds, partial, unavailable, series]
       additionalProperties: false
       properties:
         from: { type: string, format: date-time }
         to: { type: string, format: date-time }
         step: { type: string }
+        resolutionSeconds: { type: integer, minimum: 15, maximum: 3600 }
+        partial: { type: boolean }
+        unavailable: { type: array, items: { type: string, enum: [cpu, memory, restarts, available, desired] } }
         series: { type: array, items: { $ref: '#/components/schemas/RuntimeMetricSeries' } }
     RuntimeMetricSample:
       type: object
@@ -1494,15 +1491,16 @@ components:
       properties:
         name: { type: string, enum: [cpu, memory, restarts, available, desired] }
         unit: { type: string, enum: [cores, bytes, count, replicas] }
-        instance: { type: string, maxLength: 253 }
         timestamp: { type: string, format: date-time }
         value: { type: number }
     RuntimeMetricSnapshot:
       type: object
-      required: [observedAt, samples]
+      required: [observedAt, partial, unavailable, samples]
       additionalProperties: false
       properties:
         observedAt: { type: string, format: date-time }
+        partial: { type: boolean }
+        unavailable: { type: array, items: { type: string, enum: [cpu, memory, restarts, available, desired] } }
         samples: { type: array, items: { $ref: '#/components/schemas/RuntimeMetricSample' } }
     RuntimeEvent:
       type: object
@@ -1514,7 +1512,6 @@ components:
         type: { type: string, maxLength: 253 }
         reason: { type: string, maxLength: 253 }
         message: { type: string, maxLength: 65536 }
-        instance: { type: string, maxLength: 253 }
     RuntimeEvents:
       type: object
       required: [from, to, items]

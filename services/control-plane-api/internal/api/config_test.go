@@ -1,6 +1,25 @@
 package api
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
+
+func TestConfigUsesSignalSpecificObservabilityWindows(t *testing.T) {
+	config := DefaultConfig()
+	config.ObservabilityLogMaxWindow = 24 * time.Hour
+	config.ObservabilityMetricMaxWindow = 30 * 24 * time.Hour
+	config.ObservabilityEventMaxWindow = 7 * 24 * time.Hour
+
+	if err := config.Validate(); err != nil {
+		t.Fatalf("valid observability windows were rejected: %v", err)
+	}
+
+	config.ObservabilityMetricMaxWindow = 30*24*time.Hour + time.Second
+	if err := config.Validate(); err == nil {
+		t.Fatal("metric retention beyond 30 days was accepted")
+	}
+}
 
 func TestConfigRejectsInsecurePublicOrigins(t *testing.T) {
 	config := DefaultConfig()

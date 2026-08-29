@@ -85,9 +85,15 @@ spec:
           imagePullPolicy: IfNotPresent
           args:
             - -storageDataPath=/storage
-            - -retentionPeriod=30d
+            - -retentionPeriod=35d
             - -httpListenAddr=:8428
             - -opentelemetry.usePrometheusNaming
+            - -search.maxConcurrentRequests=4
+            - -search.maxPointsPerTimeseries=1000
+            - -search.maxQueryDuration=10s
+            - -search.maxQueueDuration=5s
+            - -search.maxResponseSeries=100
+            - -search.maxUniqueTimeseries=10000
           ports: [{ name: http, containerPort: 8428 }]
           startupProbe: { httpGet: { path: /health, port: http }, periodSeconds: 5, failureThreshold: 30 }
           readinessProbe: { httpGet: { path: /health, port: http }, periodSeconds: 10 }
@@ -137,6 +143,7 @@ spec:
           ports:
             - { name: otlp-grpc, containerPort: 4317 }
             - { name: otlp-http, containerPort: 4318 }
+            - { name: telemetry, containerPort: 8888 }
           resources:
             requests: { cpu: 50m, memory: 128Mi }
             limits: { cpu: 500m, memory: 512Mi }

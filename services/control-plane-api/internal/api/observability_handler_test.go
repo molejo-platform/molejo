@@ -13,6 +13,26 @@ import (
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/observability"
 )
 
+func TestObservabilityMetricStepBoundsPointCount(t *testing.T) {
+	tests := []struct {
+		window time.Duration
+		want   time.Duration
+	}{
+		{15 * time.Minute, 15 * time.Second},
+		{24 * time.Hour, 5 * time.Minute},
+		{7 * 24 * time.Hour, 15 * time.Minute},
+		{30 * 24 * time.Hour, time.Hour},
+	}
+	for _, test := range tests {
+		if got := observabilityMetricStep(test.window); got != test.want {
+			t.Errorf("window %s: got step %s, want %s", test.window, got, test.want)
+		}
+		if points := int(test.window/test.want) + 1; points > 1_000 {
+			t.Errorf("window %s produces %d points", test.window, points)
+		}
+	}
+}
+
 type recordingObservabilityReader struct {
 	scope observability.Scope
 }

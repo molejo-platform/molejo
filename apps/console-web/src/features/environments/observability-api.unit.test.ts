@@ -10,8 +10,8 @@ describe("runtime observability API", () => {
     vi.stubGlobal("fetch", fetchMock);
     const scope = ["ws/a", "project a", "app#a", "target?a"] as const;
 
-    await listRuntimeLogs(...scope, { from: "2026-08-28T10:00:00Z", to: "2026-08-28T11:00:00Z", search: "ready & healthy", instance: "pod/1", limit: 50 });
-    await getRuntimeMetrics(...scope, { from: "2026-08-28T10:00:00Z", to: "2026-08-28T11:00:00Z", stepSeconds: 60 });
+    await listRuntimeLogs(...scope, { from: "2026-08-28T10:00:00Z", to: "2026-08-28T11:00:00Z", search: "ready & healthy", limit: 50 });
+    await getRuntimeMetrics(...scope, { from: "2026-08-28T10:00:00Z", to: "2026-08-28T11:00:00Z" });
     await listRuntimeEvents(...scope, { from: "2026-08-28T10:00:00Z", to: "2026-08-28T11:00:00Z", limit: 25 });
 
     const logURL = String(fetchMock.mock.calls[0][0]);
@@ -22,9 +22,9 @@ describe("runtime observability API", () => {
   });
 
   it("does not leak historical query fields into the live stream URL", () => {
-    const url = runtimeLogStreamURL("ws", "project", "app", "target", { search: "error", instance: "pod-a" });
+    const url = runtimeLogStreamURL("ws", "project", "app", "target", { search: "error" });
     const parsed = new URL(url, "https://cloud.molejo.dev");
-    expect([...parsed.searchParams.keys()]).toEqual(["search", "instance"]);
+    expect([...parsed.searchParams.keys()]).toEqual(["search"]);
     expect(runtimeMetricStreamURL("ws", "project", "app", "target")).toBe("/api/v1/workspaces/ws/projects/project/apps/app/environments/target/observability/metrics/live");
   });
 });

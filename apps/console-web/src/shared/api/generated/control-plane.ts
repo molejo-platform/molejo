@@ -989,8 +989,6 @@ export interface components {
             timestamp: string;
             body: string;
             severity: string;
-            instance?: string;
-            container?: string;
         };
         RuntimeLogs: {
             /** Format: date-time */
@@ -1015,7 +1013,6 @@ export interface components {
             name: "cpu" | "memory" | "restarts" | "available" | "desired";
             /** @enum {string} */
             unit: "cores" | "bytes" | "count" | "replicas";
-            instance?: string;
             points: components["schemas"]["RuntimeMetricPoint"][];
         };
         RuntimeMetrics: {
@@ -1024,6 +1021,9 @@ export interface components {
             /** Format: date-time */
             to: string;
             step: string;
+            resolutionSeconds: number;
+            partial: boolean;
+            unavailable: ("cpu" | "memory" | "restarts" | "available" | "desired")[];
             series: components["schemas"]["RuntimeMetricSeries"][];
         };
         RuntimeMetricSample: {
@@ -1031,7 +1031,6 @@ export interface components {
             name: "cpu" | "memory" | "restarts" | "available" | "desired";
             /** @enum {string} */
             unit: "cores" | "bytes" | "count" | "replicas";
-            instance?: string;
             /** Format: date-time */
             timestamp: string;
             value: number;
@@ -1039,6 +1038,8 @@ export interface components {
         RuntimeMetricSnapshot: {
             /** Format: date-time */
             observedAt: string;
+            partial: boolean;
+            unavailable: ("cpu" | "memory" | "restarts" | "available" | "desired")[];
             samples: components["schemas"]["RuntimeMetricSample"][];
         };
         RuntimeEvent: {
@@ -1049,7 +1050,6 @@ export interface components {
             type: string;
             reason: string;
             message: string;
-            instance?: string;
         };
         RuntimeEvents: {
             /** Format: date-time */
@@ -2656,7 +2656,6 @@ export interface operations {
                 from?: string;
                 to?: string;
                 search?: string;
-                instance?: string;
                 limit?: number;
                 /** @description Opaque keyset cursor returned by the previous page */
                 cursor?: string;
@@ -2690,7 +2689,6 @@ export interface operations {
         parameters: {
             query?: {
                 search?: string;
-                instance?: string;
                 /** @description Opaque live cursor returned with the historical snapshot */
                 cursor?: string;
             };
@@ -2725,7 +2723,6 @@ export interface operations {
             query?: {
                 from?: string;
                 to?: string;
-                stepSeconds?: number;
             };
             header?: never;
             path: {
@@ -2738,7 +2735,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Bounded aggregate and per-instance runtime metrics */
+            /** @description Bounded aggregate runtime metrics with a server-selected resolution */
             200: {
                 headers: {
                     [name: string]: unknown;

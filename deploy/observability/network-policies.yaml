@@ -35,7 +35,9 @@ spec:
         - podSelector: { matchLabels: { app.kubernetes.io/name: otel-cluster } }
         - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: molejo-observability-agents } }
           podSelector: { matchLabels: { app.kubernetes.io/name: otel-agent } }
-      ports: [{ protocol: TCP, port: 4317 }]
+      ports:
+        - { protocol: TCP, port: 4317 }
+        - { protocol: TCP, port: 8888 }
   egress:
     - to: [{ podSelector: { matchLabels: { app.kubernetes.io/name: clickhouse } } }]
       ports: [{ protocol: TCP, port: 9000 }]
@@ -52,7 +54,9 @@ spec:
   policyTypes: [Egress]
   egress:
     - to: [{ podSelector: { matchLabels: { app.kubernetes.io/name: otel-gateway } } }]
-      ports: [{ protocol: TCP, port: 4317 }]
+      ports:
+        - { protocol: TCP, port: 4317 }
+        - { protocol: TCP, port: 8888 }
     - ports:
         - { protocol: TCP, port: 443 }
         - { protocol: TCP, port: 6443 }

@@ -105,7 +105,13 @@ func run() error {
 	if cfg.ParameterMutationTimeout, err = durationEnv("FRUTO_PARAMETER_MUTATION_TIMEOUT", cfg.ParameterMutationTimeout); err != nil {
 		return err
 	}
-	if cfg.ObservabilityMaxWindow, err = durationEnv("FRUTO_OBSERVABILITY_MAX_WINDOW", cfg.ObservabilityMaxWindow); err != nil {
+	if cfg.ObservabilityLogMaxWindow, err = durationEnv("FRUTO_OBSERVABILITY_LOG_MAX_WINDOW", cfg.ObservabilityLogMaxWindow); err != nil {
+		return err
+	}
+	if cfg.ObservabilityMetricMaxWindow, err = durationEnv("FRUTO_OBSERVABILITY_METRIC_MAX_WINDOW", cfg.ObservabilityMetricMaxWindow); err != nil {
+		return err
+	}
+	if cfg.ObservabilityEventMaxWindow, err = durationEnv("FRUTO_OBSERVABILITY_EVENT_MAX_WINDOW", cfg.ObservabilityEventMaxWindow); err != nil {
 		return err
 	}
 	if cfg.ObservabilityLiveTTL, err = durationEnv("FRUTO_OBSERVABILITY_LIVE_TTL", cfg.ObservabilityLiveTTL); err != nil {

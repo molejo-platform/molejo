@@ -47,7 +47,7 @@ func (h *generatedHandler) ListAppEnvironmentRuntimeLogs(w http.ResponseWriter, 
 	if !ok {
 		return
 	}
-	from, to, ok := observabilityRange(w, r, params.From, params.To, h.server.Config.ObservabilityMaxWindow)
+	from, to, ok := observabilityRange(w, r, params.From, params.To, h.server.Config.ObservabilityLogMaxWindow)
 	if !ok {
 		return
 	}
@@ -57,9 +57,6 @@ func (h *generatedHandler) ListAppEnvironmentRuntimeLogs(w http.ResponseWriter, 
 	}
 	if params.Search != nil {
 		query.Search = strings.TrimSpace(*params.Search)
-	}
-	if params.Instance != nil {
-		query.Instance = strings.TrimSpace(*params.Instance)
 	}
 	if params.Cursor != nil {
 		snapshot, before, err := decodeHistoricalLogCursor(*params.Cursor)
@@ -94,14 +91,11 @@ func (h *generatedHandler) GetAppEnvironmentRuntimeMetrics(w http.ResponseWriter
 	if !ok {
 		return
 	}
-	from, to, ok := observabilityRange(w, r, params.From, params.To, h.server.Config.ObservabilityMaxWindow)
+	from, to, ok := observabilityRange(w, r, params.From, params.To, h.server.Config.ObservabilityMetricMaxWindow)
 	if !ok {
 		return
 	}
-	step := time.Minute
-	if params.StepSeconds != nil {
-		step = time.Duration(*params.StepSeconds) * time.Second
-	}
+	step := observabilityMetricStep(to.Sub(from))
 	metrics, err := h.server.Observability.Metrics(r.Context(), runtimeScope(workspace, appEnvironment), observability.MetricQuery{From: from, To: to, Step: step})
 	if err != nil {
 		h.writeObservabilityError(w, r, err)
@@ -115,7 +109,7 @@ func (h *generatedHandler) ListAppEnvironmentRuntimeEvents(w http.ResponseWriter
 	if !ok {
 		return
 	}
-	from, to, ok := observabilityRange(w, r, params.From, params.To, h.server.Config.ObservabilityMaxWindow)
+	from, to, ok := observabilityRange(w, r, params.From, params.To, h.server.Config.ObservabilityEventMaxWindow)
 	if !ok {
 		return
 	}
@@ -152,12 +146,9 @@ func (h *generatedHandler) StreamAppEnvironmentRuntimeLogs(w http.ResponseWriter
 		return
 	}
 	defer h.server.logLiveLimiter.release(actor.ID)
-	search, instance := "", ""
+	search := ""
 	if params.Search != nil {
 		search = strings.TrimSpace(*params.Search)
-	}
-	if params.Instance != nil {
-		instance = strings.TrimSpace(*params.Instance)
 	}
 	encodedCursor := strings.TrimSpace(r.Header.Get("Last-Event-ID"))
 	if params.Cursor != nil && encodedCursor == "" {
@@ -188,7 +179,7 @@ func (h *generatedHandler) StreamAppEnvironmentRuntimeLogs(w http.ResponseWriter
 		return
 	}
 	scope := runtimeScope(workspace, appEnvironment)
-	if next, healthy := h.drainLiveLogs(r.Context(), w, flusher, scope, cursor, search, instance); !healthy {
+	if next, healthy := h.drainLiveLogs(r.Context(), w, flusher, scope, cursor, search); !healthy {
 		return
 	} else {
 		cursor = next
@@ -220,7 +211,7 @@ func (h *generatedHandler) StreamAppEnvironmentRuntimeLogs(w http.ResponseWriter
 				return
 			}
 		case <-ticker.C:
-			next, healthy := h.drainLiveLogs(r.Context(), w, flusher, scope, cursor, search, instance)
+			next, healthy := h.drainLiveLogs(r.Context(), w, flusher, scope, cursor, search)
 			if !healthy {
 				return
 			}
@@ -229,13 +220,13 @@ func (h *generatedHandler) StreamAppEnvironmentRuntimeLogs(w http.ResponseWriter
 	}
 }
 
-func (h *generatedHandler) drainLiveLogs(ctx context.Context, w http.ResponseWriter, flusher http.Flusher, scope observability.Scope, cursor observability.LogCursor, search, instance string) (observability.LogCursor, bool) {
+func (h *generatedHandler) drainLiveLogs(ctx context.Context, w http.ResponseWriter, flusher http.Flusher, scope observability.Scope, cursor observability.LogCursor, search string) (observability.LogCursor, bool) {
 	const (
 		batchSize    = 500
 		maximumPages = 20
 	)
 	for page := 0; page < maximumPages; page++ {
-		batch, err := h.server.Observability.LiveLogs(ctx, scope, observability.LiveLogQuery{After: cursor, Search: search, Instance: instance, Limit: batchSize})
+		batch, err := h.server.Observability.LiveLogs(ctx, scope, observability.LiveLogQuery{After: cursor, Search: search, Limit: batchSize})
 		if err != nil {
 			_ = writeSSE(w, flusher, "event: telemetry-error\ndata: {\"code\":\"observability_unavailable\"}\n\n")
 			return cursor, false
@@ -265,7 +256,8 @@ func (h *generatedHandler) StreamAppEnvironmentRuntimeMetrics(w http.ResponseWri
 	}
 	defer h.server.metricsLiveLimiter.release(actor.ID)
 
-	snapshot, err := h.server.Observability.CurrentMetrics(r.Context(), runtimeScope(workspace, appEnvironment), time.Now().UTC())
+	scope := runtimeScope(workspace, appEnvironment)
+	snapshot, err := h.server.currentMetrics(r.Context(), scope, time.Now().UTC())
 	if err != nil {
 		h.writeObservabilityError(w, r, err)
 		return
@@ -314,7 +306,7 @@ func (h *generatedHandler) StreamAppEnvironmentRuntimeMetrics(w http.ResponseWri
 				return
 			}
 		case now := <-poll.C:
-			next, queryErr := h.server.Observability.CurrentMetrics(r.Context(), runtimeScope(workspace, appEnvironment), now.UTC())
+			next, queryErr := h.server.currentMetrics(r.Context(), scope, now.UTC())
 			if queryErr != nil {
 				_ = writeSSE(w, flusher, "event: telemetry-error\ndata: {\"code\":\"observability_unavailable\"}\n\n")
 				return
@@ -324,6 +316,15 @@ func (h *generatedHandler) StreamAppEnvironmentRuntimeMetrics(w http.ResponseWri
 			}
 		}
 	}
+}
+
+func observabilityMetricStep(window time.Duration) time.Duration {
+	for _, step := range []time.Duration{15 * time.Second, 30 * time.Second, time.Minute, 5 * time.Minute, 15 * time.Minute, time.Hour} {
+		if window/step < 1_000 {
+			return step
+		}
+	}
+	return time.Hour
 }
 
 type observabilityLogsResponse struct {

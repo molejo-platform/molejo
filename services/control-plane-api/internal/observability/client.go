@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -39,17 +40,15 @@ type LogQuery struct {
 	From     time.Time
 	To       time.Time
 	Search   string
-	Instance string
 	Limit    int
 	Snapshot LogCursor
 	Before   *LogPosition
 }
 
 type LiveLogQuery struct {
-	After    LogCursor
-	Search   string
-	Instance string
-	Limit    int
+	After  LogCursor
+	Search string
+	Limit  int
 }
 
 type LogCursor struct {
@@ -98,8 +97,6 @@ type LogEntry struct {
 	Timestamp time.Time `json:"timestamp"`
 	Body      string    `json:"body"`
 	Severity  string    `json:"severity"`
-	Instance  string    `json:"instance,omitempty"`
-	Container string    `json:"container,omitempty"`
 	cursor    LogCursor
 }
 
@@ -109,30 +106,33 @@ type MetricPoint struct {
 }
 
 type MetricSeries struct {
-	Name     string        `json:"name"`
-	Unit     string        `json:"unit"`
-	Instance string        `json:"instance,omitempty"`
-	Points   []MetricPoint `json:"points"`
+	Name   string        `json:"name"`
+	Unit   string        `json:"unit"`
+	Points []MetricPoint `json:"points"`
 }
 
 type Metrics struct {
-	From   time.Time      `json:"from"`
-	To     time.Time      `json:"to"`
-	Step   string         `json:"step"`
-	Series []MetricSeries `json:"series"`
+	From              time.Time      `json:"from"`
+	To                time.Time      `json:"to"`
+	Step              string         `json:"step"`
+	ResolutionSeconds int            `json:"resolutionSeconds"`
+	Partial           bool           `json:"partial"`
+	Unavailable       []string       `json:"unavailable"`
+	Series            []MetricSeries `json:"series"`
 }
 
 type MetricSample struct {
 	Name      string    `json:"name"`
 	Unit      string    `json:"unit"`
-	Instance  string    `json:"instance,omitempty"`
 	Timestamp time.Time `json:"timestamp"`
 	Value     float64   `json:"value"`
 }
 
 type MetricSnapshot struct {
-	ObservedAt time.Time      `json:"observedAt"`
-	Samples    []MetricSample `json:"samples"`
+	ObservedAt  time.Time      `json:"observedAt"`
+	Partial     bool           `json:"partial"`
+	Unavailable []string       `json:"unavailable"`
+	Samples     []MetricSample `json:"samples"`
 }
 
 type Event struct {
@@ -141,16 +141,27 @@ type Event struct {
 	Type      string    `json:"type"`
 	Reason    string    `json:"reason"`
 	Message   string    `json:"message"`
-	Instance  string    `json:"instance,omitempty"`
 }
 
-type Reader interface {
+type LogReader interface {
 	LogWatermark(context.Context) (LogCursor, error)
 	Logs(context.Context, Scope, LogQuery) (LogPage, error)
 	LiveLogs(context.Context, Scope, LiveLogQuery) (LogBatch, error)
+}
+
+type MetricReader interface {
 	Metrics(context.Context, Scope, MetricQuery) (Metrics, error)
 	CurrentMetrics(context.Context, Scope, time.Time) (MetricSnapshot, error)
+}
+
+type EventReader interface {
 	Events(context.Context, Scope, EventQuery) ([]Event, error)
+}
+
+type Reader interface {
+	LogReader
+	MetricReader
+	EventReader
 }
 
 type UnavailableReader struct{}
@@ -227,18 +238,16 @@ func (c *ClickHouseClient) LogWatermark(ctx context.Context) (LogCursor, error) 
 }
 
 func (c *ClickHouseClient) Logs(ctx context.Context, scope Scope, query LogQuery) (LogPage, error) {
-	sql := fmt.Sprintf(`SELECT toString(MolejoLogId) AS id, toUnixTimestamp64Nano(Timestamp) AS timestamp_ns, toUnixTimestamp64Nano(MolejoIngestedAt) AS ingested_at_ns, Body AS body, SeverityText AS severity, ResourceAttributes['k8s.pod.name'] AS instance, ResourceAttributes['k8s.container.name'] AS container
+	sql := fmt.Sprintf(`SELECT toString(MolejoLogId) AS id, toUnixTimestamp64Nano(Timestamp) AS timestamp_ns, toUnixTimestamp64Nano(MolejoIngestedAt) AS ingested_at_ns, Body AS body, SeverityText AS severity
 FROM %s.otel_logs
 WHERE Timestamp >= {from:DateTime64(9)} AND Timestamp <= {to:DateTime64(9)}
   AND (MolejoIngestedAt, MolejoLogId) <= ({snapshot_at:DateTime64(9)}, {snapshot_id:UUID})
-  AND ResourceAttributes['k8s.namespace.name'] = {namespace:String}
-  AND ResourceAttributes['k8s.deployment.name'] = {runtime:String}
-  AND ({instance:String} = '' OR ResourceAttributes['k8s.pod.name'] = {instance:String})
+  AND MolejoNamespace = {namespace:String}
+  AND MolejoRuntime = {runtime:String}
   AND ({search:String} = '' OR positionCaseInsensitive(Body, {search:String}) > 0)
   AND ({has_before:UInt8} = 0 OR (Timestamp, MolejoLogId) < ({before_at:DateTime64(9)}, {before_id:UUID}))
 ORDER BY Timestamp DESC, MolejoLogId DESC LIMIT {limit:UInt32} FORMAT JSONEachRow`, c.database)
 	params := scopeParams(scope, query.From, query.To)
-	params.Set("param_instance", query.Instance)
 	params.Set("param_search", query.Search)
 	params.Set("param_limit", strconv.Itoa(query.Limit+1))
 	params.Set("param_snapshot_at", clickHouseDateTime(query.Snapshot.IngestedAt))
@@ -266,18 +275,16 @@ ORDER BY Timestamp DESC, MolejoLogId DESC LIMIT {limit:UInt32} FORMAT JSONEachRo
 }
 
 func (c *ClickHouseClient) LiveLogs(ctx context.Context, scope Scope, query LiveLogQuery) (LogBatch, error) {
-	sql := fmt.Sprintf(`SELECT toString(MolejoLogId) AS id, toUnixTimestamp64Nano(Timestamp) AS timestamp_ns, toUnixTimestamp64Nano(MolejoIngestedAt) AS ingested_at_ns, Body AS body, SeverityText AS severity, ResourceAttributes['k8s.pod.name'] AS instance, ResourceAttributes['k8s.container.name'] AS container
+	sql := fmt.Sprintf(`SELECT toString(MolejoLogId) AS id, toUnixTimestamp64Nano(Timestamp) AS timestamp_ns, toUnixTimestamp64Nano(MolejoIngestedAt) AS ingested_at_ns, Body AS body, SeverityText AS severity
 FROM %s.otel_logs
 WHERE (MolejoIngestedAt, MolejoLogId) > ({after_at:DateTime64(9)}, {after_id:UUID})
-  AND ResourceAttributes['k8s.namespace.name'] = {namespace:String}
-  AND ResourceAttributes['k8s.deployment.name'] = {runtime:String}
-  AND ({instance:String} = '' OR ResourceAttributes['k8s.pod.name'] = {instance:String})
+  AND MolejoNamespace = {namespace:String}
+  AND MolejoRuntime = {runtime:String}
   AND ({search:String} = '' OR positionCaseInsensitive(Body, {search:String}) > 0)
 ORDER BY MolejoIngestedAt ASC, MolejoLogId ASC LIMIT {limit:UInt32} FORMAT JSONEachRow`, c.database)
 	params := scopeParams(scope, time.Time{}, time.Time{})
 	params.Set("param_after_at", clickHouseDateTime(query.After.IngestedAt))
 	params.Set("param_after_id", query.After.ID)
-	params.Set("param_instance", query.Instance)
 	params.Set("param_search", query.Search)
 	params.Set("param_limit", strconv.Itoa(query.Limit))
 	items, err := c.queryLogEntries(ctx, sql, params)
@@ -303,8 +310,6 @@ func (c *ClickHouseClient) queryLogEntries(ctx context.Context, sql string, para
 				IngestedAtNS int64  `json:"ingested_at_ns"`
 				Body         string `json:"body"`
 				Severity     string `json:"severity"`
-				Instance     string `json:"instance"`
-				Container    string `json:"container"`
 			}
 			if err := json.Unmarshal(scanner.Bytes(), &row); err != nil {
 				return err
@@ -312,7 +317,7 @@ func (c *ClickHouseClient) queryLogEntries(ctx context.Context, sql string, para
 			if row.TimestampNS <= 0 || row.IngestedAtNS <= 0 || !logUUIDRE.MatchString(row.ID) {
 				continue
 			}
-			items = append(items, LogEntry{ID: publicLogID(row.ID), Timestamp: time.Unix(0, row.TimestampNS).UTC(), Body: sanitizeText(row.Body), Severity: sanitizeLabel(row.Severity), Instance: sanitizeLabel(row.Instance), Container: sanitizeLabel(row.Container), cursor: LogCursor{IngestedAt: time.Unix(0, row.IngestedAtNS).UTC(), ID: strings.ToLower(row.ID)}})
+			items = append(items, LogEntry{ID: publicLogID(row.ID), Timestamp: time.Unix(0, row.TimestampNS).UTC(), Body: sanitizeText(row.Body), Severity: sanitizeLabel(row.Severity), cursor: LogCursor{IngestedAt: time.Unix(0, row.IngestedAtNS).UTC(), ID: strings.ToLower(row.ID)}})
 		}
 		return scanner.Err()
 	}); err != nil {
@@ -437,9 +442,9 @@ type metricDefinition struct {
 }
 
 var metricDefinitions = []metricDefinition{
-	{Name: "cpu", Unit: "cores", Query: `sum by (k8s_pod_name) (k8s_pod_cpu_usage{%s})`},
-	{Name: "memory", Unit: "bytes", Query: `sum by (k8s_pod_name) (k8s_pod_memory_working_set_bytes{%s})`},
-	{Name: "restarts", Unit: "count", Query: `sum by (k8s_pod_name) (k8s_container_restarts{%s})`},
+	{Name: "cpu", Unit: "cores", Query: `sum(k8s_pod_cpu_usage{%s})`},
+	{Name: "memory", Unit: "bytes", Query: `sum(k8s_pod_memory_working_set_bytes{%s})`},
+	{Name: "restarts", Unit: "count", Query: `sum(k8s_container_restarts{%s})`},
 	{Name: "available", Unit: "replicas", Query: `max(k8s_deployment_available{%s})`},
 	{Name: "desired", Unit: "replicas", Query: `max(k8s_deployment_desired{%s})`},
 }
@@ -456,13 +461,32 @@ func NewVictoriaMetricsClient(endpoint string, httpClient *http.Client) (*Victor
 }
 
 func (c *VictoriaMetricsClient) Metrics(ctx context.Context, scope Scope, query MetricQuery) (Metrics, error) {
-	result := Metrics{From: query.From, To: query.To, Step: query.Step.String(), Series: make([]MetricSeries, 0, len(metricDefinitions))}
+	result := Metrics{From: query.From, To: query.To, Step: query.Step.String(), ResolutionSeconds: int(query.Step.Seconds()), Unavailable: []string{}, Series: make([]MetricSeries, 0, len(metricDefinitions))}
 	selector := fmt.Sprintf(`k8s_namespace_name=%q,k8s_deployment_name=%q`, scope.Namespace, scope.RuntimeName)
-	for _, definition := range metricDefinitions {
-		series, err := c.queryRange(ctx, fmt.Sprintf(definition.Query, selector), query)
+	type metricResult struct {
+		series []MetricSeries
+		err    error
+	}
+	results := make([]metricResult, len(metricDefinitions))
+	var group sync.WaitGroup
+	for index, definition := range metricDefinitions {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			results[index].series, results[index].err = c.queryRange(ctx, fmt.Sprintf(definition.Query, selector), query)
+		}()
+	}
+	group.Wait()
+	succeeded := 0
+	for index, definition := range metricDefinitions {
+		series, err := results[index].series, results[index].err
 		if err != nil {
-			return Metrics{}, err
+			result.Partial = true
+			result.Unavailable = append(result.Unavailable, definition.Name)
+			result.Series = append(result.Series, MetricSeries{Name: definition.Name, Unit: definition.Unit, Points: []MetricPoint{}})
+			continue
 		}
+		succeeded++
 		if len(series) == 0 {
 			result.Series = append(result.Series, MetricSeries{Name: definition.Name, Unit: definition.Unit, Points: []MetricPoint{}})
 			continue
@@ -473,22 +497,46 @@ func (c *VictoriaMetricsClient) Metrics(ctx context.Context, scope Scope, query 
 			result.Series = append(result.Series, item)
 		}
 	}
+	if succeeded == 0 {
+		return Metrics{}, ErrUnavailable
+	}
 	return result, nil
 }
 
 func (c *VictoriaMetricsClient) CurrentMetrics(ctx context.Context, scope Scope, at time.Time) (MetricSnapshot, error) {
-	result := MetricSnapshot{ObservedAt: at.UTC(), Samples: make([]MetricSample, 0, len(metricDefinitions))}
+	result := MetricSnapshot{ObservedAt: at.UTC(), Unavailable: []string{}, Samples: make([]MetricSample, 0, len(metricDefinitions))}
 	selector := fmt.Sprintf(`k8s_namespace_name=%q,k8s_deployment_name=%q`, scope.Namespace, scope.RuntimeName)
-	for _, definition := range metricDefinitions {
-		samples, err := c.queryInstant(ctx, fmt.Sprintf(definition.Query, selector), at)
+	type sampleResult struct {
+		samples []MetricSample
+		err     error
+	}
+	results := make([]sampleResult, len(metricDefinitions))
+	var group sync.WaitGroup
+	for index, definition := range metricDefinitions {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			results[index].samples, results[index].err = c.queryInstant(ctx, fmt.Sprintf(definition.Query, selector), at)
+		}()
+	}
+	group.Wait()
+	succeeded := 0
+	for index, definition := range metricDefinitions {
+		samples, err := results[index].samples, results[index].err
 		if err != nil {
-			return MetricSnapshot{}, err
+			result.Partial = true
+			result.Unavailable = append(result.Unavailable, definition.Name)
+			continue
 		}
+		succeeded++
 		for _, sample := range samples {
 			sample.Name = definition.Name
 			sample.Unit = definition.Unit
 			result.Samples = append(result.Samples, sample)
 		}
+	}
+	if succeeded == 0 {
+		return MetricSnapshot{}, ErrUnavailable
 	}
 	return result, nil
 }
@@ -537,7 +585,7 @@ func (c *VictoriaMetricsClient) queryInstant(ctx context.Context, expression str
 		}
 		number, parseErr := strconv.ParseFloat(encoded, 64)
 		if parseErr == nil {
-			samples = append(samples, MetricSample{Instance: sanitizeLabel(row.Metric["k8s_pod_name"]), Timestamp: time.Unix(0, int64(timestamp*float64(time.Second))).UTC(), Value: number})
+			samples = append(samples, MetricSample{Timestamp: time.Unix(0, int64(timestamp*float64(time.Second))).UTC(), Value: number})
 		}
 	}
 	return samples, nil
@@ -579,7 +627,7 @@ func (c *VictoriaMetricsClient) queryRange(ctx context.Context, expression strin
 	}
 	series := make([]MetricSeries, 0, len(payload.Data.Result))
 	for _, row := range payload.Data.Result {
-		item := MetricSeries{Instance: sanitizeLabel(row.Metric["k8s_pod_name"]), Points: make([]MetricPoint, 0, len(row.Values))}
+		item := MetricSeries{Points: make([]MetricPoint, 0, len(row.Values))}
 		for _, value := range row.Values {
 			if len(value) != 2 {
 				continue

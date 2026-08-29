@@ -437,6 +437,60 @@ func (e RuntimeMetricSeriesUnit) Valid() bool {
 	}
 }
 
+// Defines values for RuntimeMetricSnapshotUnavailable.
+const (
+	RuntimeMetricSnapshotUnavailableAvailable RuntimeMetricSnapshotUnavailable = "available"
+	RuntimeMetricSnapshotUnavailableCpu       RuntimeMetricSnapshotUnavailable = "cpu"
+	RuntimeMetricSnapshotUnavailableDesired   RuntimeMetricSnapshotUnavailable = "desired"
+	RuntimeMetricSnapshotUnavailableMemory    RuntimeMetricSnapshotUnavailable = "memory"
+	RuntimeMetricSnapshotUnavailableRestarts  RuntimeMetricSnapshotUnavailable = "restarts"
+)
+
+// Valid indicates whether the value is a known member of the RuntimeMetricSnapshotUnavailable enum.
+func (e RuntimeMetricSnapshotUnavailable) Valid() bool {
+	switch e {
+	case RuntimeMetricSnapshotUnavailableAvailable:
+		return true
+	case RuntimeMetricSnapshotUnavailableCpu:
+		return true
+	case RuntimeMetricSnapshotUnavailableDesired:
+		return true
+	case RuntimeMetricSnapshotUnavailableMemory:
+		return true
+	case RuntimeMetricSnapshotUnavailableRestarts:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RuntimeMetricsUnavailable.
+const (
+	RuntimeMetricsUnavailableAvailable RuntimeMetricsUnavailable = "available"
+	RuntimeMetricsUnavailableCpu       RuntimeMetricsUnavailable = "cpu"
+	RuntimeMetricsUnavailableDesired   RuntimeMetricsUnavailable = "desired"
+	RuntimeMetricsUnavailableMemory    RuntimeMetricsUnavailable = "memory"
+	RuntimeMetricsUnavailableRestarts  RuntimeMetricsUnavailable = "restarts"
+)
+
+// Valid indicates whether the value is a known member of the RuntimeMetricsUnavailable enum.
+func (e RuntimeMetricsUnavailable) Valid() bool {
+	switch e {
+	case RuntimeMetricsUnavailableAvailable:
+		return true
+	case RuntimeMetricsUnavailableCpu:
+		return true
+	case RuntimeMetricsUnavailableDesired:
+		return true
+	case RuntimeMetricsUnavailableMemory:
+		return true
+	case RuntimeMetricsUnavailableRestarts:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SessionActorRole.
 const (
 	SessionActorRoleOwner  SessionActorRole = "owner"
@@ -806,7 +860,6 @@ type RuntimeConfigurationExposure string
 
 // RuntimeEvent defines model for RuntimeEvent.
 type RuntimeEvent struct {
-	Instance  *string            `json:"instance,omitempty"`
 	Message   string             `json:"message"`
 	Reason    string             `json:"reason"`
 	Source    RuntimeEventSource `json:"source"`
@@ -827,9 +880,7 @@ type RuntimeEvents struct {
 // RuntimeLog defines model for RuntimeLog.
 type RuntimeLog struct {
 	Body      string    `json:"body"`
-	Container *string   `json:"container,omitempty"`
 	Id        string    `json:"id"`
-	Instance  *string   `json:"instance,omitempty"`
 	Severity  string    `json:"severity"`
 	Timestamp time.Time `json:"timestamp"`
 }
@@ -857,7 +908,6 @@ type RuntimeMetricPoint struct {
 
 // RuntimeMetricSample defines model for RuntimeMetricSample.
 type RuntimeMetricSample struct {
-	Instance  *string                 `json:"instance,omitempty"`
 	Name      RuntimeMetricSampleName `json:"name"`
 	Timestamp time.Time               `json:"timestamp"`
 	Unit      RuntimeMetricSampleUnit `json:"unit"`
@@ -872,10 +922,9 @@ type RuntimeMetricSampleUnit string
 
 // RuntimeMetricSeries defines model for RuntimeMetricSeries.
 type RuntimeMetricSeries struct {
-	Instance *string                 `json:"instance,omitempty"`
-	Name     RuntimeMetricSeriesName `json:"name"`
-	Points   []RuntimeMetricPoint    `json:"points"`
-	Unit     RuntimeMetricSeriesUnit `json:"unit"`
+	Name   RuntimeMetricSeriesName `json:"name"`
+	Points []RuntimeMetricPoint    `json:"points"`
+	Unit   RuntimeMetricSeriesUnit `json:"unit"`
 }
 
 // RuntimeMetricSeriesName defines model for RuntimeMetricSeries.Name.
@@ -886,17 +935,28 @@ type RuntimeMetricSeriesUnit string
 
 // RuntimeMetricSnapshot defines model for RuntimeMetricSnapshot.
 type RuntimeMetricSnapshot struct {
-	ObservedAt time.Time             `json:"observedAt"`
-	Samples    []RuntimeMetricSample `json:"samples"`
+	ObservedAt  time.Time                          `json:"observedAt"`
+	Partial     bool                               `json:"partial"`
+	Samples     []RuntimeMetricSample              `json:"samples"`
+	Unavailable []RuntimeMetricSnapshotUnavailable `json:"unavailable"`
 }
+
+// RuntimeMetricSnapshotUnavailable defines model for RuntimeMetricSnapshot.Unavailable.
+type RuntimeMetricSnapshotUnavailable string
 
 // RuntimeMetrics defines model for RuntimeMetrics.
 type RuntimeMetrics struct {
-	From   time.Time             `json:"from"`
-	Series []RuntimeMetricSeries `json:"series"`
-	Step   string                `json:"step"`
-	To     time.Time             `json:"to"`
+	From              time.Time                   `json:"from"`
+	Partial           bool                        `json:"partial"`
+	ResolutionSeconds int                         `json:"resolutionSeconds"`
+	Series            []RuntimeMetricSeries       `json:"series"`
+	Step              string                      `json:"step"`
+	To                time.Time                   `json:"to"`
+	Unavailable       []RuntimeMetricsUnavailable `json:"unavailable"`
 }
+
+// RuntimeMetricsUnavailable defines model for RuntimeMetrics.Unavailable.
+type RuntimeMetricsUnavailable string
 
 // Session defines model for Session.
 type Session struct {
@@ -1145,11 +1205,10 @@ type ListAppEnvironmentRuntimeEventsParams struct {
 
 // ListAppEnvironmentRuntimeLogsParams defines parameters for ListAppEnvironmentRuntimeLogs.
 type ListAppEnvironmentRuntimeLogsParams struct {
-	From     *time.Time `form:"from,omitempty" json:"from,omitempty"`
-	To       *time.Time `form:"to,omitempty" json:"to,omitempty"`
-	Search   *string    `form:"search,omitempty" json:"search,omitempty"`
-	Instance *string    `form:"instance,omitempty" json:"instance,omitempty"`
-	Limit    *int       `form:"limit,omitempty" json:"limit,omitempty"`
+	From   *time.Time `form:"from,omitempty" json:"from,omitempty"`
+	To     *time.Time `form:"to,omitempty" json:"to,omitempty"`
+	Search *string    `form:"search,omitempty" json:"search,omitempty"`
+	Limit  *int       `form:"limit,omitempty" json:"limit,omitempty"`
 
 	// Cursor Opaque keyset cursor returned by the previous page
 	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
@@ -1157,8 +1216,7 @@ type ListAppEnvironmentRuntimeLogsParams struct {
 
 // StreamAppEnvironmentRuntimeLogsParams defines parameters for StreamAppEnvironmentRuntimeLogs.
 type StreamAppEnvironmentRuntimeLogsParams struct {
-	Search   *string `form:"search,omitempty" json:"search,omitempty"`
-	Instance *string `form:"instance,omitempty" json:"instance,omitempty"`
+	Search *string `form:"search,omitempty" json:"search,omitempty"`
 
 	// Cursor Opaque live cursor returned with the historical snapshot
 	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
@@ -1166,9 +1224,8 @@ type StreamAppEnvironmentRuntimeLogsParams struct {
 
 // GetAppEnvironmentRuntimeMetricsParams defines parameters for GetAppEnvironmentRuntimeMetrics.
 type GetAppEnvironmentRuntimeMetricsParams struct {
-	From        *time.Time `form:"from,omitempty" json:"from,omitempty"`
-	To          *time.Time `form:"to,omitempty" json:"to,omitempty"`
-	StepSeconds *int       `form:"stepSeconds,omitempty" json:"stepSeconds,omitempty"`
+	From *time.Time `form:"from,omitempty" json:"from,omitempty"`
+	To   *time.Time `form:"to,omitempty" json:"to,omitempty"`
 }
 
 // ListAppReleasesParams defines parameters for ListAppReleases.
@@ -4215,19 +4272,6 @@ func (siw *ServerInterfaceWrapper) ListAppEnvironmentRuntimeLogs(w http.Response
 		return
 	}
 
-	// ------------- Optional query parameter "instance" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "instance", r.URL.Query(), &params.Instance, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "instance"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "instance", Err: err})
-		}
-		return
-	}
-
 	// ------------- Optional query parameter "limit" -------------
 
 	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
@@ -4323,19 +4367,6 @@ func (siw *ServerInterfaceWrapper) StreamAppEnvironmentRuntimeLogs(w http.Respon
 		return
 	}
 
-	// ------------- Optional query parameter "instance" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "instance", r.URL.Query(), &params.Instance, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "instance"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "instance", Err: err})
-		}
-		return
-	}
-
 	// ------------- Optional query parameter "cursor" -------------
 
 	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
@@ -4427,19 +4458,6 @@ func (siw *ServerInterfaceWrapper) GetAppEnvironmentRuntimeMetrics(w http.Respon
 			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "to"})
 		} else {
 			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "stepSeconds" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "stepSeconds", r.URL.Query(), &params.StepSeconds, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "stepSeconds"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "stepSeconds", Err: err})
 		}
 		return
 	}

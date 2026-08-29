@@ -37,11 +37,11 @@ describe("runtime metrics stream", () => {
     expect(FakeEventSource.instances).toHaveLength(1);
     expect(screen.getByText("— / 3")).toBeTruthy();
 
-    const snapshot: RuntimeMetricSnapshot = { observedAt: "2026-08-28T12:00:00Z", samples: [
+  const snapshot: RuntimeMetricSnapshot = { observedAt: "2026-08-28T12:00:00Z", partial: false, unavailable: [], samples: [
       { name: "available", unit: "replicas", timestamp: new Date().toISOString(), value: 2 },
       { name: "desired", unit: "replicas", timestamp: new Date().toISOString(), value: 3 },
-      { name: "cpu", unit: "cores", instance: "pod-a", timestamp: new Date().toISOString(), value: 0.12 },
-      { name: "memory", unit: "bytes", instance: "pod-a", timestamp: new Date().toISOString(), value: 64 * 1024 * 1024 },
+    { name: "cpu", unit: "cores", timestamp: new Date().toISOString(), value: 0.12 },
+    { name: "memory", unit: "bytes", timestamp: new Date().toISOString(), value: 64 * 1024 * 1024 },
     ] };
     act(() => FakeEventSource.instances[0].emit("metrics", snapshot));
     expect(screen.getByText("2 / 3")).toBeTruthy();

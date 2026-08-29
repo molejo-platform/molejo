@@ -121,7 +121,7 @@ export function RuntimeStatusStrip({ target }: { target: AppEnvironment }) {
   const restarts = sum(samples, "restarts");
   const replicas = target.configuration.replicas;
   const configurationSynced = target.currentConfigurationVersion === target.configurationVersion;
-  const connectionLabel = stale ? "Dados desatualizados" : ({ connecting: "Conectando à telemetria", connected: "Atualização automática ativa", reconnecting: "Atualização temporariamente interrompida", paused: "Atualização pausada", unavailable: "Telemetria indisponível" } as const)[state];
+  const connectionLabel = stale ? "Dados desatualizados" : snapshot?.partial ? "Telemetria parcial" : ({ connecting: "Conectando à telemetria", connected: "Atualização automática ativa", reconnecting: "Atualização temporariamente interrompida", paused: "Atualização pausada", unavailable: "Telemetria indisponível" } as const)[state];
   const freshness = latestTimestamp > 0 ? formatFreshness(now - latestTimestamp) : "Aguardando primeira amostra";
 
   return <section className="runtime-scoreboard" aria-label="Saúde operacional">

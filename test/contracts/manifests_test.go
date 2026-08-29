@@ -130,6 +130,39 @@ func TestObservabilityPlaneIsInternalBoundedAndDigestPinned(t *testing.T) {
 	}
 }
 
+func TestObservabilityIngestionIsRuntimeScopedAndQueriesAreBounded(t *testing.T) {
+	config, err := os.ReadFile(filepath.Join("..", "..", "deploy/observability/configmaps.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(config)
+	for _, required := range []string{
+		"filter/runtime",
+		`resource.attributes["molejo.app_environment.runtime"] == nil`,
+		"processors: [memory_limiter, k8sattributes, filter/runtime, batch]",
+	} {
+		if !strings.Contains(text, required) {
+			t.Fatalf("observability collector config is missing %q", required)
+		}
+	}
+
+	workloads, err := os.ReadFile(filepath.Join("..", "..", "deploy/observability/workloads.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text = string(workloads)
+	for _, required := range []string{
+		"- -retentionPeriod=35d",
+		"- -search.maxQueryDuration=10s",
+		"- -search.maxResponseSeries=100",
+		"- -search.maxPointsPerTimeseries=1000",
+	} {
+		if !strings.Contains(text, required) {
+			t.Fatalf("VictoriaMetrics workload is missing %q", required)
+		}
+	}
+}
+
 func findObject(t *testing.T, relativePath, kind, name string) *unstructured.Unstructured {
 	t.Helper()
 	path := filepath.Join("..", "..", relativePath)

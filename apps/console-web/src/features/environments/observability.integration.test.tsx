@@ -12,7 +12,7 @@ vi.mock("./observability-api", async (importOriginal) => {
   return { ...original, listRuntimeLogs: mocks.listRuntimeLogs };
 });
 
-import { MetricCard, RuntimeLogsPage } from "./ObservabilityPages";
+import { MetricCard, RuntimeLogsPage, RuntimeMetricsPage } from "./ObservabilityPages";
 import { renderWithQueryClient } from "../../test/render";
 
 const target = {
@@ -50,9 +50,14 @@ describe("runtime observability", () => {
   });
 
   it("provides a textual range for each metric chart", () => {
-    renderWithQueryClient(<MetricCard series={{ name: "memory", unit: "bytes", instance: "pod-a", points: [{ timestamp: "2026-08-28T10:00:00Z", value: 1048576 }, { timestamp: "2026-08-28T10:01:00Z", value: 2097152 }] }}/>);
+    renderWithQueryClient(<MetricCard series={{ name: "memory", unit: "bytes", points: [{ timestamp: "2026-08-28T10:00:00Z", value: 1048576 }, { timestamp: "2026-08-28T10:01:00Z", value: 2097152 }] }}/>);
     expect(screen.getByRole("img", { name: "Memória: de 1 MiB a 2 MiB" })).toBeTruthy();
     expect(screen.getAllByText("2 MiB")).toHaveLength(2);
+  });
+
+  it("offers a 30 day historical metric window", () => {
+    renderWithQueryClient(<RuntimeMetricsPage target={target} params={params}/>);
+    expect(screen.getByRole("option", { name: "Últimos 30 dias" })).toBeTruthy();
   });
 
   it("keeps live logs enabled while EventSource reconnects", async () => {
