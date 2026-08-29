@@ -13,11 +13,12 @@ import { listGitHubInstallations, listGitHubRepositories } from "../settings/git
 import { useSessionQuery } from "../auth/model";
 import { workspaceScopeKeys } from "../workspace/scope";
 import { AppLayout } from "./AppLayout";
+import { canEditWorkspace } from "../../shared/auth/permissions";
 
 export function AppSourcePage() {
   const { workspaceId, projectId, appId } = useParams({ strict: false }) as { workspaceId: string; projectId: string; appId: string };
   const session = useSessionQuery();
-  const canMutate = session.data?.actor.role === "owner";
+  const canMutate = canEditWorkspace(session.data, workspaceId);
   const queryClient = useQueryClient();
   const [installationId, setInstallationId] = useState("");
   const [repositoryId, setRepositoryId] = useState("");

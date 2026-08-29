@@ -17,6 +17,138 @@ import (
 	"github.com/oapi-codegen/runtime"
 )
 
+// Defines values for AccessGrantRelation.
+const (
+	AccessGrantRelationDeployer AccessGrantRelation = "Deployer"
+	AccessGrantRelationEditor   AccessGrantRelation = "Editor"
+	AccessGrantRelationManager  AccessGrantRelation = "Manager"
+	AccessGrantRelationViewer   AccessGrantRelation = "Viewer"
+)
+
+// Valid indicates whether the value is a known member of the AccessGrantRelation enum.
+func (e AccessGrantRelation) Valid() bool {
+	switch e {
+	case AccessGrantRelationDeployer:
+		return true
+	case AccessGrantRelationEditor:
+		return true
+	case AccessGrantRelationManager:
+		return true
+	case AccessGrantRelationViewer:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AccessGrantResourceType.
+const (
+	AccessGrantResourceTypeApp            AccessGrantResourceType = "App"
+	AccessGrantResourceTypeAppEnvironment AccessGrantResourceType = "AppEnvironment"
+	AccessGrantResourceTypeProject        AccessGrantResourceType = "Project"
+	AccessGrantResourceTypeWorkspace      AccessGrantResourceType = "Workspace"
+)
+
+// Valid indicates whether the value is a known member of the AccessGrantResourceType enum.
+func (e AccessGrantResourceType) Valid() bool {
+	switch e {
+	case AccessGrantResourceTypeApp:
+		return true
+	case AccessGrantResourceTypeAppEnvironment:
+		return true
+	case AccessGrantResourceTypeProject:
+		return true
+	case AccessGrantResourceTypeWorkspace:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AccessGrantSubjectType.
+const (
+	AccessGrantSubjectTypeGroup AccessGrantSubjectType = "Group"
+	AccessGrantSubjectTypeUser  AccessGrantSubjectType = "User"
+)
+
+// Valid indicates whether the value is a known member of the AccessGrantSubjectType enum.
+func (e AccessGrantSubjectType) Valid() bool {
+	switch e {
+	case AccessGrantSubjectTypeGroup:
+		return true
+	case AccessGrantSubjectTypeUser:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AccessGrantInputRelation.
+const (
+	AccessGrantInputRelationDeployer AccessGrantInputRelation = "Deployer"
+	AccessGrantInputRelationEditor   AccessGrantInputRelation = "Editor"
+	AccessGrantInputRelationManager  AccessGrantInputRelation = "Manager"
+	AccessGrantInputRelationViewer   AccessGrantInputRelation = "Viewer"
+)
+
+// Valid indicates whether the value is a known member of the AccessGrantInputRelation enum.
+func (e AccessGrantInputRelation) Valid() bool {
+	switch e {
+	case AccessGrantInputRelationDeployer:
+		return true
+	case AccessGrantInputRelationEditor:
+		return true
+	case AccessGrantInputRelationManager:
+		return true
+	case AccessGrantInputRelationViewer:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AccessGrantInputResourceType.
+const (
+	AccessGrantInputResourceTypeApp            AccessGrantInputResourceType = "App"
+	AccessGrantInputResourceTypeAppEnvironment AccessGrantInputResourceType = "AppEnvironment"
+	AccessGrantInputResourceTypeProject        AccessGrantInputResourceType = "Project"
+	AccessGrantInputResourceTypeWorkspace      AccessGrantInputResourceType = "Workspace"
+)
+
+// Valid indicates whether the value is a known member of the AccessGrantInputResourceType enum.
+func (e AccessGrantInputResourceType) Valid() bool {
+	switch e {
+	case AccessGrantInputResourceTypeApp:
+		return true
+	case AccessGrantInputResourceTypeAppEnvironment:
+		return true
+	case AccessGrantInputResourceTypeProject:
+		return true
+	case AccessGrantInputResourceTypeWorkspace:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AccessGrantInputSubjectType.
+const (
+	AccessGrantInputSubjectTypeGroup AccessGrantInputSubjectType = "Group"
+	AccessGrantInputSubjectTypeUser  AccessGrantInputSubjectType = "User"
+)
+
+// Valid indicates whether the value is a known member of the AccessGrantInputSubjectType enum.
+func (e AccessGrantInputSubjectType) Valid() bool {
+	switch e {
+	case AccessGrantInputSubjectTypeGroup:
+		return true
+	case AccessGrantInputSubjectTypeUser:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AppEnvironmentState.
 const (
 	AppEnvironmentStateDegraded    AppEnvironmentState = "Degraded"
@@ -38,6 +170,27 @@ func (e AppEnvironmentState) Valid() bool {
 	case AppEnvironmentStateReady:
 		return true
 	case AppEnvironmentStateUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AuditEventOutcome.
+const (
+	AuditEventOutcomeDenied    AuditEventOutcome = "Denied"
+	AuditEventOutcomeFailed    AuditEventOutcome = "Failed"
+	AuditEventOutcomeSucceeded AuditEventOutcome = "Succeeded"
+)
+
+// Valid indicates whether the value is a known member of the AuditEventOutcome enum.
+func (e AuditEventOutcome) Valid() bool {
+	switch e {
+	case AuditEventOutcomeDenied:
+		return true
+	case AuditEventOutcomeFailed:
+		return true
+	case AuditEventOutcomeSucceeded:
 		return true
 	default:
 		return false
@@ -172,19 +325,19 @@ func (e DeploymentPreviewChanges) Valid() bool {
 
 // Defines values for GitHubInstallationAccountType.
 const (
-	Enterprise   GitHubInstallationAccountType = "Enterprise"
-	Organization GitHubInstallationAccountType = "Organization"
-	User         GitHubInstallationAccountType = "User"
+	GitHubInstallationAccountTypeEnterprise   GitHubInstallationAccountType = "Enterprise"
+	GitHubInstallationAccountTypeOrganization GitHubInstallationAccountType = "Organization"
+	GitHubInstallationAccountTypeUser         GitHubInstallationAccountType = "User"
 )
 
 // Valid indicates whether the value is a known member of the GitHubInstallationAccountType enum.
 func (e GitHubInstallationAccountType) Valid() bool {
 	switch e {
-	case Enterprise:
+	case GitHubInstallationAccountTypeEnterprise:
 		return true
-	case Organization:
+	case GitHubInstallationAccountTypeOrganization:
 		return true
-	case User:
+	case GitHubInstallationAccountTypeUser:
 		return true
 	default:
 		return false
@@ -209,21 +362,30 @@ func (e GitHubInstallationRepositorySelection) Valid() bool {
 	}
 }
 
-// Defines values for LoginRequestActor.
+// Defines values for MFAChallengeMethod.
 const (
-	LoginRequestActorOwner   LoginRequestActor = "owner"
-	LoginRequestActorTester1 LoginRequestActor = "tester-1"
-	LoginRequestActorTester2 LoginRequestActor = "tester-2"
+	TOTP MFAChallengeMethod = "TOTP"
 )
 
-// Valid indicates whether the value is a known member of the LoginRequestActor enum.
-func (e LoginRequestActor) Valid() bool {
+// Valid indicates whether the value is a known member of the MFAChallengeMethod enum.
+func (e MFAChallengeMethod) Valid() bool {
 	switch e {
-	case LoginRequestActorOwner:
+	case TOTP:
 		return true
-	case LoginRequestActorTester1:
-		return true
-	case LoginRequestActorTester2:
+	default:
+		return false
+	}
+}
+
+// Defines values for MFAChallengeMfaRequired.
+const (
+	True MFAChallengeMfaRequired = true
+)
+
+// Valid indicates whether the value is a known member of the MFAChallengeMfaRequired enum.
+func (e MFAChallengeMfaRequired) Valid() bool {
+	switch e {
+	case True:
 		return true
 	default:
 		return false
@@ -557,18 +719,99 @@ func (e RuntimeMetricsUnavailable) Valid() bool {
 	}
 }
 
-// Defines values for SessionActorRole.
+// Defines values for SessionAssuranceLevel.
 const (
-	SessionActorRoleOwner  SessionActorRole = "owner"
-	SessionActorRoleTester SessionActorRole = "tester"
+	SessionAssuranceLevelAAL1 SessionAssuranceLevel = "AAL1"
+	SessionAssuranceLevelAAL2 SessionAssuranceLevel = "AAL2"
 )
 
-// Valid indicates whether the value is a known member of the SessionActorRole enum.
-func (e SessionActorRole) Valid() bool {
+// Valid indicates whether the value is a known member of the SessionAssuranceLevel enum.
+func (e SessionAssuranceLevel) Valid() bool {
 	switch e {
-	case SessionActorRoleOwner:
+	case SessionAssuranceLevelAAL1:
 		return true
-	case SessionActorRoleTester:
+	case SessionAssuranceLevelAAL2:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SessionWorkspaceMembershipsRole.
+const (
+	SessionWorkspaceMembershipsRoleMember SessionWorkspaceMembershipsRole = "Member"
+	SessionWorkspaceMembershipsRoleOwner  SessionWorkspaceMembershipsRole = "Owner"
+	SessionWorkspaceMembershipsRoleViewer SessionWorkspaceMembershipsRole = "Viewer"
+)
+
+// Valid indicates whether the value is a known member of the SessionWorkspaceMembershipsRole enum.
+func (e SessionWorkspaceMembershipsRole) Valid() bool {
+	switch e {
+	case SessionWorkspaceMembershipsRoleMember:
+		return true
+	case SessionWorkspaceMembershipsRoleOwner:
+		return true
+	case SessionWorkspaceMembershipsRoleViewer:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UserStatus.
+const (
+	UserStatusActive   UserStatus = "Active"
+	UserStatusDisabled UserStatus = "Disabled"
+	UserStatusLocked   UserStatus = "Locked"
+)
+
+// Valid indicates whether the value is a known member of the UserStatus enum.
+func (e UserStatus) Valid() bool {
+	switch e {
+	case UserStatusActive:
+		return true
+	case UserStatusDisabled:
+		return true
+	case UserStatusLocked:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UserSessionAssuranceLevel.
+const (
+	UserSessionAssuranceLevelAAL1 UserSessionAssuranceLevel = "AAL1"
+	UserSessionAssuranceLevelAAL2 UserSessionAssuranceLevel = "AAL2"
+)
+
+// Valid indicates whether the value is a known member of the UserSessionAssuranceLevel enum.
+func (e UserSessionAssuranceLevel) Valid() bool {
+	switch e {
+	case UserSessionAssuranceLevelAAL1:
+		return true
+	case UserSessionAssuranceLevelAAL2:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UserStatusInputStatus.
+const (
+	UserStatusInputStatusActive   UserStatusInputStatus = "Active"
+	UserStatusInputStatusDisabled UserStatusInputStatus = "Disabled"
+	UserStatusInputStatusLocked   UserStatusInputStatus = "Locked"
+)
+
+// Valid indicates whether the value is a known member of the UserStatusInputStatus enum.
+func (e UserStatusInputStatus) Valid() bool {
+	switch e {
+	case UserStatusInputStatusActive:
+		return true
+	case UserStatusInputStatusDisabled:
+		return true
+	case UserStatusInputStatusLocked:
 		return true
 	default:
 		return false
@@ -598,6 +841,162 @@ func (e WorkspaceState) Valid() bool {
 		return false
 	}
 }
+
+// Defines values for WorkspaceMemberCreateInputRole.
+const (
+	WorkspaceMemberCreateInputRoleMember WorkspaceMemberCreateInputRole = "Member"
+	WorkspaceMemberCreateInputRoleOwner  WorkspaceMemberCreateInputRole = "Owner"
+	WorkspaceMemberCreateInputRoleViewer WorkspaceMemberCreateInputRole = "Viewer"
+)
+
+// Valid indicates whether the value is a known member of the WorkspaceMemberCreateInputRole enum.
+func (e WorkspaceMemberCreateInputRole) Valid() bool {
+	switch e {
+	case WorkspaceMemberCreateInputRoleMember:
+		return true
+	case WorkspaceMemberCreateInputRoleOwner:
+		return true
+	case WorkspaceMemberCreateInputRoleViewer:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WorkspaceMemberCreateInputStatus.
+const (
+	WorkspaceMemberCreateInputStatusActive    WorkspaceMemberCreateInputStatus = "Active"
+	WorkspaceMemberCreateInputStatusSuspended WorkspaceMemberCreateInputStatus = "Suspended"
+)
+
+// Valid indicates whether the value is a known member of the WorkspaceMemberCreateInputStatus enum.
+func (e WorkspaceMemberCreateInputStatus) Valid() bool {
+	switch e {
+	case WorkspaceMemberCreateInputStatusActive:
+		return true
+	case WorkspaceMemberCreateInputStatusSuspended:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WorkspaceMembershipRole.
+const (
+	WorkspaceMembershipRoleMember WorkspaceMembershipRole = "Member"
+	WorkspaceMembershipRoleOwner  WorkspaceMembershipRole = "Owner"
+	WorkspaceMembershipRoleViewer WorkspaceMembershipRole = "Viewer"
+)
+
+// Valid indicates whether the value is a known member of the WorkspaceMembershipRole enum.
+func (e WorkspaceMembershipRole) Valid() bool {
+	switch e {
+	case WorkspaceMembershipRoleMember:
+		return true
+	case WorkspaceMembershipRoleOwner:
+		return true
+	case WorkspaceMembershipRoleViewer:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WorkspaceMembershipStatus.
+const (
+	WorkspaceMembershipStatusActive    WorkspaceMembershipStatus = "Active"
+	WorkspaceMembershipStatusSuspended WorkspaceMembershipStatus = "Suspended"
+)
+
+// Valid indicates whether the value is a known member of the WorkspaceMembershipStatus enum.
+func (e WorkspaceMembershipStatus) Valid() bool {
+	switch e {
+	case WorkspaceMembershipStatusActive:
+		return true
+	case WorkspaceMembershipStatusSuspended:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WorkspaceMembershipInputRole.
+const (
+	WorkspaceMembershipInputRoleMember WorkspaceMembershipInputRole = "Member"
+	WorkspaceMembershipInputRoleOwner  WorkspaceMembershipInputRole = "Owner"
+	WorkspaceMembershipInputRoleViewer WorkspaceMembershipInputRole = "Viewer"
+)
+
+// Valid indicates whether the value is a known member of the WorkspaceMembershipInputRole enum.
+func (e WorkspaceMembershipInputRole) Valid() bool {
+	switch e {
+	case WorkspaceMembershipInputRoleMember:
+		return true
+	case WorkspaceMembershipInputRoleOwner:
+		return true
+	case WorkspaceMembershipInputRoleViewer:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WorkspaceMembershipInputStatus.
+const (
+	WorkspaceMembershipInputStatusActive    WorkspaceMembershipInputStatus = "Active"
+	WorkspaceMembershipInputStatusSuspended WorkspaceMembershipInputStatus = "Suspended"
+)
+
+// Valid indicates whether the value is a known member of the WorkspaceMembershipInputStatus enum.
+func (e WorkspaceMembershipInputStatus) Valid() bool {
+	switch e {
+	case WorkspaceMembershipInputStatusActive:
+		return true
+	case WorkspaceMembershipInputStatusSuspended:
+		return true
+	default:
+		return false
+	}
+}
+
+// AccessGrant defines model for AccessGrant.
+type AccessGrant struct {
+	CreatedAt    time.Time               `json:"createdAt"`
+	Id           string                  `json:"id"`
+	Relation     AccessGrantRelation     `json:"relation"`
+	ResourceId   string                  `json:"resourceId"`
+	ResourceType AccessGrantResourceType `json:"resourceType"`
+	SubjectId    string                  `json:"subjectId"`
+	SubjectName  string                  `json:"subjectName"`
+	SubjectType  AccessGrantSubjectType  `json:"subjectType"`
+}
+
+// AccessGrantRelation defines model for AccessGrant.Relation.
+type AccessGrantRelation string
+
+// AccessGrantResourceType defines model for AccessGrant.ResourceType.
+type AccessGrantResourceType string
+
+// AccessGrantSubjectType defines model for AccessGrant.SubjectType.
+type AccessGrantSubjectType string
+
+// AccessGrantInput defines model for AccessGrantInput.
+type AccessGrantInput struct {
+	Relation     AccessGrantInputRelation     `json:"relation"`
+	ResourceId   string                       `json:"resourceId"`
+	ResourceType AccessGrantInputResourceType `json:"resourceType"`
+	SubjectId    string                       `json:"subjectId"`
+	SubjectType  AccessGrantInputSubjectType  `json:"subjectType"`
+}
+
+// AccessGrantInputRelation defines model for AccessGrantInput.Relation.
+type AccessGrantInputRelation string
+
+// AccessGrantInputResourceType defines model for AccessGrantInput.ResourceType.
+type AccessGrantInputResourceType string
+
+// AccessGrantInputSubjectType defines model for AccessGrantInput.SubjectType.
+type AccessGrantInputSubjectType string
 
 // App defines model for App.
 type App struct {
@@ -646,6 +1045,30 @@ type AppEnvironmentCreateInput struct {
 type AppEnvironmentInput struct {
 	Branch        string               `json:"branch"`
 	Configuration RuntimeConfiguration `json:"configuration"`
+}
+
+// AuditEvent defines model for AuditEvent.
+type AuditEvent struct {
+	Action      string                 `json:"action"`
+	ActorUserId *string                `json:"actorUserId,omitempty"`
+	Id          string                 `json:"id"`
+	Metadata    map[string]interface{} `json:"metadata"`
+	OccurredAt  time.Time              `json:"occurredAt"`
+	Outcome     AuditEventOutcome      `json:"outcome"`
+	Reason      *string                `json:"reason,omitempty"`
+	RequestId   *string                `json:"requestId,omitempty"`
+	TargetId    *string                `json:"targetId,omitempty"`
+	TargetType  string                 `json:"targetType"`
+}
+
+// AuditEventOutcome defines model for AuditEvent.Outcome.
+type AuditEventOutcome string
+
+// AuthenticationCapabilities defines model for AuthenticationCapabilities.
+type AuthenticationCapabilities struct {
+	Passkey  bool `json:"passkey"`
+	Password bool `json:"password"`
+	Totp     bool `json:"totp"`
 }
 
 // Build defines model for Build.
@@ -827,12 +1250,33 @@ type HierarchyInput struct {
 
 // LoginRequest defines model for LoginRequest.
 type LoginRequest struct {
-	Actor    LoginRequestActor `json:"actor"`
-	Password *string           `json:"password,omitempty"`
+	Password *string `json:"password,omitempty"`
+	Username string  `json:"username"`
 }
 
-// LoginRequestActor defines model for LoginRequest.Actor.
-type LoginRequestActor string
+// MFAChallenge defines model for MFAChallenge.
+type MFAChallenge struct {
+	ChallengeToken *string                 `json:"challengeToken,omitempty"`
+	Method         MFAChallengeMethod      `json:"method"`
+	MfaRequired    MFAChallengeMfaRequired `json:"mfaRequired"`
+}
+
+// MFAChallengeMethod defines model for MFAChallenge.Method.
+type MFAChallengeMethod string
+
+// MFAChallengeMfaRequired defines model for MFAChallenge.MfaRequired.
+type MFAChallengeMfaRequired bool
+
+// MFARecoveryCodes defines model for MFARecoveryCodes.
+type MFARecoveryCodes struct {
+	RecoveryCodes []string `json:"recoveryCodes"`
+}
+
+// MFAStatus defines model for MFAStatus.
+type MFAStatus struct {
+	PasskeyCount int  `json:"passkeyCount"`
+	TotpEnabled  bool `json:"totpEnabled"`
+}
 
 // Operation defines model for Operation.
 type Operation struct {
@@ -892,9 +1336,54 @@ type ParameterInput struct {
 // ParameterInputType defines model for ParameterInput.Type.
 type ParameterInputType string
 
+// PasswordChangeInput defines model for PasswordChangeInput.
+type PasswordChangeInput struct {
+	CurrentPassword *string `json:"currentPassword,omitempty"`
+	NewPassword     *string `json:"newPassword,omitempty"`
+}
+
+// PasswordConfirmation defines model for PasswordConfirmation.
+type PasswordConfirmation struct {
+	Password *string `json:"password,omitempty"`
+}
+
+// PasswordResetCompletion defines model for PasswordResetCompletion.
+type PasswordResetCompletion struct {
+	NewPassword *string `json:"newPassword,omitempty"`
+	Ticket      *string `json:"ticket,omitempty"`
+	Username    string  `json:"username"`
+}
+
+// PasswordResetGrant defines model for PasswordResetGrant.
+type PasswordResetGrant struct {
+	Code      *string   `json:"code,omitempty"`
+	ExpiresAt time.Time `json:"expiresAt"`
+}
+
+// PasswordResetRequest defines model for PasswordResetRequest.
+type PasswordResetRequest struct {
+	Username string `json:"username"`
+}
+
+// PasswordResetTicket defines model for PasswordResetTicket.
+type PasswordResetTicket struct {
+	Ticket *string `json:"ticket,omitempty"`
+}
+
+// PasswordResetVerification defines model for PasswordResetVerification.
+type PasswordResetVerification struct {
+	Code     *string `json:"code,omitempty"`
+	Username string  `json:"username"`
+}
+
 // Probe defines model for Probe.
 type Probe struct {
 	Path string `json:"path"`
+}
+
+// ProfileInput defines model for ProfileInput.
+type ProfileInput struct {
+	DisplayName string `json:"displayName"`
 }
 
 // Project defines model for Project.
@@ -1066,15 +1555,85 @@ type RuntimeMetricsUnavailable string
 
 // Session defines model for Session.
 type Session struct {
-	Actor struct {
-		Id   string           `json:"id"`
-		Role SessionActorRole `json:"role"`
-	} `json:"actor"`
-	CsrfToken *string `json:"csrfToken,omitempty"`
+	AssuranceLevel           SessionAssuranceLevel `json:"assuranceLevel"`
+	CsrfToken                *string               `json:"csrfToken,omitempty"`
+	InstallationCapabilities struct {
+		CreateWorkspace bool `json:"createWorkspace"`
+		ManageUsers     bool `json:"manageUsers"`
+	} `json:"installationCapabilities"`
+	User                 User `json:"user"`
+	WorkspaceMemberships []struct {
+		Role        SessionWorkspaceMembershipsRole `json:"role"`
+		WorkspaceId string                          `json:"workspaceId"`
+	} `json:"workspaceMemberships"`
 }
 
-// SessionActorRole defines model for Session.Actor.Role.
-type SessionActorRole string
+// SessionAssuranceLevel defines model for Session.AssuranceLevel.
+type SessionAssuranceLevel string
+
+// SessionWorkspaceMembershipsRole defines model for Session.WorkspaceMemberships.Role.
+type SessionWorkspaceMembershipsRole string
+
+// TOTPChallengeInput defines model for TOTPChallengeInput.
+type TOTPChallengeInput struct {
+	ChallengeToken *string `json:"challengeToken,omitempty"`
+	Code           *string `json:"code,omitempty"`
+}
+
+// TOTPEnrollment defines model for TOTPEnrollment.
+type TOTPEnrollment struct {
+	ChallengeToken *string `json:"challengeToken,omitempty"`
+	OtpAuthUrl     *string `json:"otpAuthUrl,omitempty"`
+	Secret         *string `json:"secret,omitempty"`
+}
+
+// TOTPEnrollmentConfirmation defines model for TOTPEnrollmentConfirmation.
+type TOTPEnrollmentConfirmation struct {
+	ChallengeToken *string `json:"challengeToken,omitempty"`
+	Code           *string `json:"code,omitempty"`
+}
+
+// User defines model for User.
+type User struct {
+	CreatedAt   time.Time  `json:"createdAt"`
+	DisplayName string     `json:"displayName"`
+	Id          string     `json:"id"`
+	Status      UserStatus `json:"status"`
+	UpdatedAt   time.Time  `json:"updatedAt"`
+	Username    string     `json:"username"`
+	Version     int        `json:"version"`
+}
+
+// UserStatus defines model for User.Status.
+type UserStatus string
+
+// UserCreateInput defines model for UserCreateInput.
+type UserCreateInput struct {
+	DisplayName               string  `json:"displayName"`
+	InstallationAdministrator *bool   `json:"installationAdministrator,omitempty"`
+	Password                  *string `json:"password,omitempty"`
+	Username                  string  `json:"username"`
+}
+
+// UserSession defines model for UserSession.
+type UserSession struct {
+	AssuranceLevel UserSessionAssuranceLevel `json:"assuranceLevel"`
+	Current        bool                      `json:"current"`
+	ExpiresAt      time.Time                 `json:"expiresAt"`
+	Id             string                    `json:"id"`
+	LastSeenAt     time.Time                 `json:"lastSeenAt"`
+}
+
+// UserSessionAssuranceLevel defines model for UserSession.AssuranceLevel.
+type UserSessionAssuranceLevel string
+
+// UserStatusInput defines model for UserStatusInput.
+type UserStatusInput struct {
+	Status UserStatusInputStatus `json:"status"`
+}
+
+// UserStatusInputStatus defines model for UserStatusInput.Status.
+type UserStatusInputStatus string
 
 // Variable defines model for Variable.
 type Variable struct {
@@ -1094,6 +1653,68 @@ type Workspace struct {
 
 // WorkspaceState defines model for Workspace.State.
 type WorkspaceState string
+
+// WorkspaceGroup defines model for WorkspaceGroup.
+type WorkspaceGroup struct {
+	CreatedAt   time.Time `json:"createdAt"`
+	Id          string    `json:"id"`
+	MemberCount int       `json:"memberCount"`
+	Name        string    `json:"name"`
+	UpdatedAt   time.Time `json:"updatedAt"`
+	Version     int       `json:"version"`
+}
+
+// WorkspaceGroupInput defines model for WorkspaceGroupInput.
+type WorkspaceGroupInput struct {
+	Name string `json:"name"`
+}
+
+// WorkspaceMemberCreateInput defines model for WorkspaceMemberCreateInput.
+type WorkspaceMemberCreateInput struct {
+	Role     WorkspaceMemberCreateInputRole   `json:"role"`
+	Status   WorkspaceMemberCreateInputStatus `json:"status"`
+	Username string                           `json:"username"`
+}
+
+// WorkspaceMemberCreateInputRole defines model for WorkspaceMemberCreateInput.Role.
+type WorkspaceMemberCreateInputRole string
+
+// WorkspaceMemberCreateInputStatus defines model for WorkspaceMemberCreateInput.Status.
+type WorkspaceMemberCreateInputStatus string
+
+// WorkspaceMembership defines model for WorkspaceMembership.
+type WorkspaceMembership struct {
+	CreatedAt   time.Time                 `json:"createdAt"`
+	DisplayName string                    `json:"displayName"`
+	Role        WorkspaceMembershipRole   `json:"role"`
+	Status      WorkspaceMembershipStatus `json:"status"`
+	UpdatedAt   time.Time                 `json:"updatedAt"`
+	UserId      string                    `json:"userId"`
+	Username    string                    `json:"username"`
+	Version     int                       `json:"version"`
+	WorkspaceId string                    `json:"workspaceId"`
+}
+
+// WorkspaceMembershipRole defines model for WorkspaceMembership.Role.
+type WorkspaceMembershipRole string
+
+// WorkspaceMembershipStatus defines model for WorkspaceMembership.Status.
+type WorkspaceMembershipStatus string
+
+// WorkspaceMembershipInput defines model for WorkspaceMembershipInput.
+type WorkspaceMembershipInput struct {
+	Role   WorkspaceMembershipInputRole   `json:"role"`
+	Status WorkspaceMembershipInputStatus `json:"status"`
+}
+
+// WorkspaceMembershipInputRole defines model for WorkspaceMembershipInput.Role.
+type WorkspaceMembershipInputRole string
+
+// WorkspaceMembershipInputStatus defines model for WorkspaceMembershipInput.Status.
+type WorkspaceMembershipInputStatus string
+
+// AccessGrantId defines model for AccessGrantId.
+type AccessGrantId = string
 
 // AppEnvironmentId defines model for AppEnvironmentId.
 type AppEnvironmentId = string
@@ -1119,6 +1740,9 @@ type EnvironmentId = string
 // GitHubInstallationId defines model for GitHubInstallationId.
 type GitHubInstallationId = string
 
+// GroupId defines model for GroupId.
+type GroupId = string
+
 // IdempotencyKey defines model for IdempotencyKey.
 type IdempotencyKey = string
 
@@ -1134,6 +1758,9 @@ type Limit = int
 // OptionalIdempotencyKey defines model for OptionalIdempotencyKey.
 type OptionalIdempotencyKey = string
 
+// OptionalIfMatch defines model for OptionalIfMatch.
+type OptionalIfMatch = int
+
 // ParameterId defines model for ParameterId.
 type ParameterId = string
 
@@ -1142,6 +1769,12 @@ type ProjectId = string
 
 // ReleaseId defines model for ReleaseId.
 type ReleaseId = string
+
+// UserId defines model for UserId.
+type UserId = string
+
+// UserSessionId defines model for UserSessionId.
+type UserSessionId = string
 
 // WorkspaceId defines model for WorkspaceId.
 type WorkspaceId = string
@@ -1173,6 +1806,17 @@ type Unauthorized = Error
 // Unavailable defines model for Unavailable.
 type Unavailable = Error
 
+// ListUsersParams defines parameters for ListUsers.
+type ListUsersParams struct {
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// UpdateUserStatusParams defines parameters for UpdateUserStatus.
+type UpdateUserStatusParams struct {
+	IfMatch IfMatch `json:"If-Match"`
+}
+
 // CompleteGitHubAuthorizationParams defines parameters for CompleteGitHubAuthorization.
 type CompleteGitHubAuthorizationParams struct {
 	Code  string `form:"code" json:"code"`
@@ -1183,6 +1827,11 @@ type CompleteGitHubAuthorizationParams struct {
 type CompleteGitHubInstallationParams struct {
 	InstallationId int64  `form:"installation_id" json:"installation_id"`
 	State          string `form:"state" json:"state"`
+}
+
+// UpdateOwnProfileParams defines parameters for UpdateOwnProfile.
+type UpdateOwnProfileParams struct {
+	IfMatch IfMatch `json:"If-Match"`
 }
 
 // ListWorkspacesParams defines parameters for ListWorkspaces.
@@ -1200,6 +1849,17 @@ type CreateWorkspaceParams struct {
 // UpdateWorkspaceParams defines parameters for UpdateWorkspace.
 type UpdateWorkspaceParams struct {
 	IfMatch IfMatch `json:"If-Match"`
+}
+
+// ListAuditEventsParams defines parameters for ListAuditEvents.
+type ListAuditEventsParams struct {
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// PutWorkspaceMemberParams defines parameters for PutWorkspaceMember.
+type PutWorkspaceMemberParams struct {
+	IfMatch *OptionalIfMatch `json:"If-Match,omitempty"`
 }
 
 // ListParametersParams defines parameters for ListParameters.
@@ -1371,14 +2031,59 @@ type ListEnvironmentAppsParams struct {
 	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
+// CreateUserJSONRequestBody defines body for CreateUser for application/json ContentType.
+type CreateUserJSONRequestBody = UserCreateInput
+
+// UpdateUserStatusJSONRequestBody defines body for UpdateUserStatus for application/json ContentType.
+type UpdateUserStatusJSONRequestBody = UserStatusInput
+
+// CompletePasswordResetJSONRequestBody defines body for CompletePasswordReset for application/json ContentType.
+type CompletePasswordResetJSONRequestBody = PasswordResetCompletion
+
+// RequestPasswordResetJSONRequestBody defines body for RequestPasswordReset for application/json ContentType.
+type RequestPasswordResetJSONRequestBody = PasswordResetRequest
+
+// VerifyPasswordResetJSONRequestBody defines body for VerifyPasswordReset for application/json ContentType.
+type VerifyPasswordResetJSONRequestBody = PasswordResetVerification
+
 // LoginJSONRequestBody defines body for Login for application/json ContentType.
 type LoginJSONRequestBody = LoginRequest
+
+// CompleteTOTPLoginJSONRequestBody defines body for CompleteTOTPLogin for application/json ContentType.
+type CompleteTOTPLoginJSONRequestBody = TOTPChallengeInput
+
+// UpdateOwnProfileJSONRequestBody defines body for UpdateOwnProfile for application/json ContentType.
+type UpdateOwnProfileJSONRequestBody = ProfileInput
+
+// DisableOwnTOTPJSONRequestBody defines body for DisableOwnTOTP for application/json ContentType.
+type DisableOwnTOTPJSONRequestBody = PasswordConfirmation
+
+// BeginTOTPEnrollmentJSONRequestBody defines body for BeginTOTPEnrollment for application/json ContentType.
+type BeginTOTPEnrollmentJSONRequestBody = PasswordConfirmation
+
+// ConfirmTOTPEnrollmentJSONRequestBody defines body for ConfirmTOTPEnrollment for application/json ContentType.
+type ConfirmTOTPEnrollmentJSONRequestBody = TOTPEnrollmentConfirmation
+
+// ChangeOwnPasswordJSONRequestBody defines body for ChangeOwnPassword for application/json ContentType.
+type ChangeOwnPasswordJSONRequestBody = PasswordChangeInput
 
 // CreateWorkspaceJSONRequestBody defines body for CreateWorkspace for application/json ContentType.
 type CreateWorkspaceJSONRequestBody = HierarchyInput
 
 // UpdateWorkspaceJSONRequestBody defines body for UpdateWorkspace for application/json ContentType.
 type UpdateWorkspaceJSONRequestBody = HierarchyInput
+
+// CreateWorkspaceAccessGrantJSONRequestBody defines body for CreateWorkspaceAccessGrant for application/json ContentType.
+type CreateWorkspaceAccessGrantJSONRequestBody = AccessGrantInput
+
+// CreateWorkspaceGroupJSONRequestBody defines body for CreateWorkspaceGroup for application/json ContentType.
+type CreateWorkspaceGroupJSONRequestBody = WorkspaceGroupInput
+
+// CreateWorkspaceMemberJSONRequestBody defines body for CreateWorkspaceMember for application/json ContentType.
+type CreateWorkspaceMemberJSONRequestBody = WorkspaceMemberCreateInput
+
+// PutWorkspaceMemberJSONRequestBody defines body for PutWorkspaceMember for application/json ContentType.
+type PutWorkspaceMemberJSONRequestBody = WorkspaceMembershipInput
 
 // CreateParameterJSONRequestBody defines body for CreateParameter for application/json ContentType.
 type CreateParameterJSONRequestBody = ParameterInput
@@ -1428,6 +2133,21 @@ type UpdateEnvironmentJSONRequestBody = HierarchyInput
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 
+	// (GET /api/v1/admin/users)
+	ListUsers(w http.ResponseWriter, r *http.Request, params ListUsersParams)
+
+	// (POST /api/v1/admin/users)
+	CreateUser(w http.ResponseWriter, r *http.Request)
+
+	// (PUT /api/v1/admin/users/{userId})
+	UpdateUserStatus(w http.ResponseWriter, r *http.Request, userId UserId, params UpdateUserStatusParams)
+
+	// (POST /api/v1/admin/users/{userId}/password-reset)
+	CreatePasswordResetGrant(w http.ResponseWriter, r *http.Request, userId UserId)
+
+	// (GET /api/v1/auth/capabilities)
+	GetAuthenticationCapabilities(w http.ResponseWriter, r *http.Request)
+
 	// (GET /api/v1/github/callback)
 	CompleteGitHubAuthorization(w http.ResponseWriter, r *http.Request, params CompleteGitHubAuthorizationParams)
 
@@ -1440,6 +2160,15 @@ type ServerInterface interface {
 	// (GET /api/v1/operations/{operationId})
 	GetOperation(w http.ResponseWriter, r *http.Request, operationId string)
 
+	// (PUT /api/v1/password-resets/complete)
+	CompletePasswordReset(w http.ResponseWriter, r *http.Request)
+
+	// (POST /api/v1/password-resets/request)
+	RequestPasswordReset(w http.ResponseWriter, r *http.Request)
+
+	// (POST /api/v1/password-resets/verify)
+	VerifyPasswordReset(w http.ResponseWriter, r *http.Request)
+
 	// (DELETE /api/v1/session)
 	Logout(w http.ResponseWriter, r *http.Request)
 
@@ -1448,6 +2177,36 @@ type ServerInterface interface {
 
 	// (POST /api/v1/session)
 	Login(w http.ResponseWriter, r *http.Request)
+
+	// (POST /api/v1/session/mfa/totp)
+	CompleteTOTPLogin(w http.ResponseWriter, r *http.Request)
+
+	// (GET /api/v1/users/me)
+	GetOwnProfile(w http.ResponseWriter, r *http.Request)
+
+	// (PUT /api/v1/users/me)
+	UpdateOwnProfile(w http.ResponseWriter, r *http.Request, params UpdateOwnProfileParams)
+
+	// (GET /api/v1/users/me/mfa)
+	GetOwnMFA(w http.ResponseWriter, r *http.Request)
+
+	// (DELETE /api/v1/users/me/mfa/totp/enrollment)
+	DisableOwnTOTP(w http.ResponseWriter, r *http.Request)
+
+	// (POST /api/v1/users/me/mfa/totp/enrollment)
+	BeginTOTPEnrollment(w http.ResponseWriter, r *http.Request)
+
+	// (PUT /api/v1/users/me/mfa/totp/enrollment)
+	ConfirmTOTPEnrollment(w http.ResponseWriter, r *http.Request)
+
+	// (PUT /api/v1/users/me/password)
+	ChangeOwnPassword(w http.ResponseWriter, r *http.Request)
+
+	// (GET /api/v1/users/me/sessions)
+	ListOwnSessions(w http.ResponseWriter, r *http.Request)
+
+	// (DELETE /api/v1/users/me/sessions/{userSessionId})
+	RevokeOwnSession(w http.ResponseWriter, r *http.Request, userSessionId UserSessionId)
 
 	// (GET /api/v1/workspaces)
 	ListWorkspaces(w http.ResponseWriter, r *http.Request, params ListWorkspacesParams)
@@ -1464,6 +2223,18 @@ type ServerInterface interface {
 	// (PUT /api/v1/workspaces/{workspaceId})
 	UpdateWorkspace(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, params UpdateWorkspaceParams)
 
+	// (GET /api/v1/workspaces/{workspaceId}/access-grants)
+	ListWorkspaceAccessGrants(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId)
+
+	// (POST /api/v1/workspaces/{workspaceId}/access-grants)
+	CreateWorkspaceAccessGrant(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId)
+
+	// (DELETE /api/v1/workspaces/{workspaceId}/access-grants/{accessGrantId})
+	DeleteWorkspaceAccessGrant(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, accessGrantId AccessGrantId)
+
+	// (GET /api/v1/workspaces/{workspaceId}/audit-events)
+	ListAuditEvents(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, params ListAuditEventsParams)
+
 	// (GET /api/v1/workspaces/{workspaceId}/github/installations)
 	ListGitHubInstallations(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId)
 
@@ -1475,6 +2246,33 @@ type ServerInterface interface {
 
 	// (GET /api/v1/workspaces/{workspaceId}/github/installations/{githubInstallationId}/repositories)
 	ListGitHubRepositories(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, githubInstallationId GitHubInstallationId)
+
+	// (GET /api/v1/workspaces/{workspaceId}/groups)
+	ListWorkspaceGroups(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId)
+
+	// (POST /api/v1/workspaces/{workspaceId}/groups)
+	CreateWorkspaceGroup(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId)
+
+	// (GET /api/v1/workspaces/{workspaceId}/groups/{groupId}/members)
+	ListWorkspaceGroupMembers(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, groupId GroupId)
+
+	// (DELETE /api/v1/workspaces/{workspaceId}/groups/{groupId}/members/{userId})
+	RemoveWorkspaceGroupMember(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, groupId GroupId, userId UserId)
+
+	// (PUT /api/v1/workspaces/{workspaceId}/groups/{groupId}/members/{userId})
+	AddWorkspaceGroupMember(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, groupId GroupId, userId UserId)
+
+	// (GET /api/v1/workspaces/{workspaceId}/members)
+	ListWorkspaceMembers(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId)
+
+	// (POST /api/v1/workspaces/{workspaceId}/members)
+	CreateWorkspaceMember(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId)
+
+	// (DELETE /api/v1/workspaces/{workspaceId}/members/{userId})
+	DeleteWorkspaceMember(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, userId UserId)
+
+	// (PUT /api/v1/workspaces/{workspaceId}/members/{userId})
+	PutWorkspaceMember(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, userId UserId, params PutWorkspaceMemberParams)
 
 	// (GET /api/v1/workspaces/{workspaceId}/parameters)
 	ListParameters(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, params ListParametersParams)
@@ -1619,6 +2417,31 @@ type ServerInterface interface {
 
 type Unimplemented struct{}
 
+// (GET /api/v1/admin/users)
+func (_ Unimplemented) ListUsers(w http.ResponseWriter, r *http.Request, params ListUsersParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /api/v1/admin/users)
+func (_ Unimplemented) CreateUser(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (PUT /api/v1/admin/users/{userId})
+func (_ Unimplemented) UpdateUserStatus(w http.ResponseWriter, r *http.Request, userId UserId, params UpdateUserStatusParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /api/v1/admin/users/{userId}/password-reset)
+func (_ Unimplemented) CreatePasswordResetGrant(w http.ResponseWriter, r *http.Request, userId UserId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /api/v1/auth/capabilities)
+func (_ Unimplemented) GetAuthenticationCapabilities(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // (GET /api/v1/github/callback)
 func (_ Unimplemented) CompleteGitHubAuthorization(w http.ResponseWriter, r *http.Request, params CompleteGitHubAuthorizationParams) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -1639,6 +2462,21 @@ func (_ Unimplemented) GetOperation(w http.ResponseWriter, r *http.Request, oper
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// (PUT /api/v1/password-resets/complete)
+func (_ Unimplemented) CompletePasswordReset(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /api/v1/password-resets/request)
+func (_ Unimplemented) RequestPasswordReset(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /api/v1/password-resets/verify)
+func (_ Unimplemented) VerifyPasswordReset(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // (DELETE /api/v1/session)
 func (_ Unimplemented) Logout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -1651,6 +2489,56 @@ func (_ Unimplemented) GetSession(w http.ResponseWriter, r *http.Request) {
 
 // (POST /api/v1/session)
 func (_ Unimplemented) Login(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /api/v1/session/mfa/totp)
+func (_ Unimplemented) CompleteTOTPLogin(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /api/v1/users/me)
+func (_ Unimplemented) GetOwnProfile(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (PUT /api/v1/users/me)
+func (_ Unimplemented) UpdateOwnProfile(w http.ResponseWriter, r *http.Request, params UpdateOwnProfileParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /api/v1/users/me/mfa)
+func (_ Unimplemented) GetOwnMFA(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (DELETE /api/v1/users/me/mfa/totp/enrollment)
+func (_ Unimplemented) DisableOwnTOTP(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /api/v1/users/me/mfa/totp/enrollment)
+func (_ Unimplemented) BeginTOTPEnrollment(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (PUT /api/v1/users/me/mfa/totp/enrollment)
+func (_ Unimplemented) ConfirmTOTPEnrollment(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (PUT /api/v1/users/me/password)
+func (_ Unimplemented) ChangeOwnPassword(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /api/v1/users/me/sessions)
+func (_ Unimplemented) ListOwnSessions(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (DELETE /api/v1/users/me/sessions/{userSessionId})
+func (_ Unimplemented) RevokeOwnSession(w http.ResponseWriter, r *http.Request, userSessionId UserSessionId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1679,6 +2567,26 @@ func (_ Unimplemented) UpdateWorkspace(w http.ResponseWriter, r *http.Request, w
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// (GET /api/v1/workspaces/{workspaceId}/access-grants)
+func (_ Unimplemented) ListWorkspaceAccessGrants(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /api/v1/workspaces/{workspaceId}/access-grants)
+func (_ Unimplemented) CreateWorkspaceAccessGrant(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (DELETE /api/v1/workspaces/{workspaceId}/access-grants/{accessGrantId})
+func (_ Unimplemented) DeleteWorkspaceAccessGrant(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, accessGrantId AccessGrantId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /api/v1/workspaces/{workspaceId}/audit-events)
+func (_ Unimplemented) ListAuditEvents(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, params ListAuditEventsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // (GET /api/v1/workspaces/{workspaceId}/github/installations)
 func (_ Unimplemented) ListGitHubInstallations(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -1696,6 +2604,51 @@ func (_ Unimplemented) DisconnectGitHubInstallation(w http.ResponseWriter, r *ht
 
 // (GET /api/v1/workspaces/{workspaceId}/github/installations/{githubInstallationId}/repositories)
 func (_ Unimplemented) ListGitHubRepositories(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, githubInstallationId GitHubInstallationId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /api/v1/workspaces/{workspaceId}/groups)
+func (_ Unimplemented) ListWorkspaceGroups(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /api/v1/workspaces/{workspaceId}/groups)
+func (_ Unimplemented) CreateWorkspaceGroup(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /api/v1/workspaces/{workspaceId}/groups/{groupId}/members)
+func (_ Unimplemented) ListWorkspaceGroupMembers(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, groupId GroupId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (DELETE /api/v1/workspaces/{workspaceId}/groups/{groupId}/members/{userId})
+func (_ Unimplemented) RemoveWorkspaceGroupMember(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, groupId GroupId, userId UserId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (PUT /api/v1/workspaces/{workspaceId}/groups/{groupId}/members/{userId})
+func (_ Unimplemented) AddWorkspaceGroupMember(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, groupId GroupId, userId UserId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /api/v1/workspaces/{workspaceId}/members)
+func (_ Unimplemented) ListWorkspaceMembers(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /api/v1/workspaces/{workspaceId}/members)
+func (_ Unimplemented) CreateWorkspaceMember(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (DELETE /api/v1/workspaces/{workspaceId}/members/{userId})
+func (_ Unimplemented) DeleteWorkspaceMember(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, userId UserId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (PUT /api/v1/workspaces/{workspaceId}/members/{userId})
+func (_ Unimplemented) PutWorkspaceMember(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, userId UserId, params PutWorkspaceMemberParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1938,6 +2891,160 @@ type ServerInterfaceWrapper struct {
 
 type MiddlewareFunc func(http.Handler) http.Handler
 
+// ListUsers operation middleware
+func (siw *ServerInterfaceWrapper) ListUsers(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListUsersParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListUsers(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateUser operation middleware
+func (siw *ServerInterfaceWrapper) CreateUser(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateUser(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateUserStatus operation middleware
+func (siw *ServerInterfaceWrapper) UpdateUserStatus(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "userId" -------------
+	var userId UserId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "userId", chi.URLParam(r, "userId"), &userId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "userId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdateUserStatusParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch IfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "integer", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateUserStatus(w, r, userId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreatePasswordResetGrant operation middleware
+func (siw *ServerInterfaceWrapper) CreatePasswordResetGrant(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "userId" -------------
+	var userId UserId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "userId", chi.URLParam(r, "userId"), &userId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "userId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreatePasswordResetGrant(w, r, userId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAuthenticationCapabilities operation middleware
+func (siw *ServerInterfaceWrapper) GetAuthenticationCapabilities(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAuthenticationCapabilities(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // CompleteGitHubAuthorization operation middleware
 func (siw *ServerInterfaceWrapper) CompleteGitHubAuthorization(w http.ResponseWriter, r *http.Request) {
 
@@ -2070,6 +3177,48 @@ func (siw *ServerInterfaceWrapper) GetOperation(w http.ResponseWriter, r *http.R
 	handler.ServeHTTP(w, r)
 }
 
+// CompletePasswordReset operation middleware
+func (siw *ServerInterfaceWrapper) CompletePasswordReset(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CompletePasswordReset(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RequestPasswordReset operation middleware
+func (siw *ServerInterfaceWrapper) RequestPasswordReset(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RequestPasswordReset(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// VerifyPasswordReset operation middleware
+func (siw *ServerInterfaceWrapper) VerifyPasswordReset(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.VerifyPasswordReset(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // Logout operation middleware
 func (siw *ServerInterfaceWrapper) Logout(w http.ResponseWriter, r *http.Request) {
 
@@ -2103,6 +3252,189 @@ func (siw *ServerInterfaceWrapper) Login(w http.ResponseWriter, r *http.Request)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.Login(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CompleteTOTPLogin operation middleware
+func (siw *ServerInterfaceWrapper) CompleteTOTPLogin(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CompleteTOTPLogin(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetOwnProfile operation middleware
+func (siw *ServerInterfaceWrapper) GetOwnProfile(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetOwnProfile(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateOwnProfile operation middleware
+func (siw *ServerInterfaceWrapper) UpdateOwnProfile(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdateOwnProfileParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch IfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "integer", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateOwnProfile(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetOwnMFA operation middleware
+func (siw *ServerInterfaceWrapper) GetOwnMFA(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetOwnMFA(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DisableOwnTOTP operation middleware
+func (siw *ServerInterfaceWrapper) DisableOwnTOTP(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DisableOwnTOTP(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// BeginTOTPEnrollment operation middleware
+func (siw *ServerInterfaceWrapper) BeginTOTPEnrollment(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.BeginTOTPEnrollment(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ConfirmTOTPEnrollment operation middleware
+func (siw *ServerInterfaceWrapper) ConfirmTOTPEnrollment(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ConfirmTOTPEnrollment(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ChangeOwnPassword operation middleware
+func (siw *ServerInterfaceWrapper) ChangeOwnPassword(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ChangeOwnPassword(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListOwnSessions operation middleware
+func (siw *ServerInterfaceWrapper) ListOwnSessions(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListOwnSessions(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RevokeOwnSession operation middleware
+func (siw *ServerInterfaceWrapper) RevokeOwnSession(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "userSessionId" -------------
+	var userSessionId UserSessionId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "userSessionId", chi.URLParam(r, "userSessionId"), &userSessionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "userSessionId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RevokeOwnSession(w, r, userSessionId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2293,6 +3625,148 @@ func (siw *ServerInterfaceWrapper) UpdateWorkspace(w http.ResponseWriter, r *htt
 	handler.ServeHTTP(w, r)
 }
 
+// ListWorkspaceAccessGrants operation middleware
+func (siw *ServerInterfaceWrapper) ListWorkspaceAccessGrants(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListWorkspaceAccessGrants(w, r, workspaceId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateWorkspaceAccessGrant operation middleware
+func (siw *ServerInterfaceWrapper) CreateWorkspaceAccessGrant(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateWorkspaceAccessGrant(w, r, workspaceId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteWorkspaceAccessGrant operation middleware
+func (siw *ServerInterfaceWrapper) DeleteWorkspaceAccessGrant(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "accessGrantId" -------------
+	var accessGrantId AccessGrantId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "accessGrantId", chi.URLParam(r, "accessGrantId"), &accessGrantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "accessGrantId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteWorkspaceAccessGrant(w, r, workspaceId, accessGrantId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListAuditEvents operation middleware
+func (siw *ServerInterfaceWrapper) ListAuditEvents(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAuditEventsParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAuditEvents(w, r, workspaceId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListGitHubInstallations operation middleware
 func (siw *ServerInterfaceWrapper) ListGitHubInstallations(w http.ResponseWriter, r *http.Request) {
 
@@ -2406,6 +3880,327 @@ func (siw *ServerInterfaceWrapper) ListGitHubRepositories(w http.ResponseWriter,
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListGitHubRepositories(w, r, workspaceId, githubInstallationId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListWorkspaceGroups operation middleware
+func (siw *ServerInterfaceWrapper) ListWorkspaceGroups(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListWorkspaceGroups(w, r, workspaceId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateWorkspaceGroup operation middleware
+func (siw *ServerInterfaceWrapper) CreateWorkspaceGroup(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateWorkspaceGroup(w, r, workspaceId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListWorkspaceGroupMembers operation middleware
+func (siw *ServerInterfaceWrapper) ListWorkspaceGroupMembers(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "groupId" -------------
+	var groupId GroupId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "groupId", chi.URLParam(r, "groupId"), &groupId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "groupId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListWorkspaceGroupMembers(w, r, workspaceId, groupId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RemoveWorkspaceGroupMember operation middleware
+func (siw *ServerInterfaceWrapper) RemoveWorkspaceGroupMember(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "groupId" -------------
+	var groupId GroupId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "groupId", chi.URLParam(r, "groupId"), &groupId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "groupId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "userId" -------------
+	var userId UserId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "userId", chi.URLParam(r, "userId"), &userId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "userId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RemoveWorkspaceGroupMember(w, r, workspaceId, groupId, userId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AddWorkspaceGroupMember operation middleware
+func (siw *ServerInterfaceWrapper) AddWorkspaceGroupMember(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "groupId" -------------
+	var groupId GroupId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "groupId", chi.URLParam(r, "groupId"), &groupId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "groupId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "userId" -------------
+	var userId UserId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "userId", chi.URLParam(r, "userId"), &userId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "userId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AddWorkspaceGroupMember(w, r, workspaceId, groupId, userId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListWorkspaceMembers operation middleware
+func (siw *ServerInterfaceWrapper) ListWorkspaceMembers(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListWorkspaceMembers(w, r, workspaceId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateWorkspaceMember operation middleware
+func (siw *ServerInterfaceWrapper) CreateWorkspaceMember(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateWorkspaceMember(w, r, workspaceId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteWorkspaceMember operation middleware
+func (siw *ServerInterfaceWrapper) DeleteWorkspaceMember(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "userId" -------------
+	var userId UserId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "userId", chi.URLParam(r, "userId"), &userId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "userId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteWorkspaceMember(w, r, workspaceId, userId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PutWorkspaceMember operation middleware
+func (siw *ServerInterfaceWrapper) PutWorkspaceMember(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "userId" -------------
+	var userId UserId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "userId", chi.URLParam(r, "userId"), &userId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "userId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PutWorkspaceMemberParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch OptionalIfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "integer", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = &IfMatch
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PutWorkspaceMember(w, r, workspaceId, userId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -5516,6 +7311,99 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/api/v1/session", wrapper.Login)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/auth/capabilities", wrapper.GetAuthenticationCapabilities)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/session/mfa/totp", wrapper.CompleteTOTPLogin)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/users/me", wrapper.GetOwnProfile)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/api/v1/users/me", wrapper.UpdateOwnProfile)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/api/v1/users/me/password", wrapper.ChangeOwnPassword)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/users/me/sessions", wrapper.ListOwnSessions)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/api/v1/users/me/sessions/{userSessionId}", wrapper.RevokeOwnSession)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/users/me/mfa", wrapper.GetOwnMFA)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/api/v1/users/me/mfa/totp/enrollment", wrapper.DisableOwnTOTP)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/users/me/mfa/totp/enrollment", wrapper.BeginTOTPEnrollment)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/api/v1/users/me/mfa/totp/enrollment", wrapper.ConfirmTOTPEnrollment)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/password-resets/request", wrapper.RequestPasswordReset)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/password-resets/verify", wrapper.VerifyPasswordReset)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/api/v1/password-resets/complete", wrapper.CompletePasswordReset)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/admin/users", wrapper.ListUsers)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/admin/users", wrapper.CreateUser)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/api/v1/admin/users/{userId}", wrapper.UpdateUserStatus)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/admin/users/{userId}/password-reset", wrapper.CreatePasswordResetGrant)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/members", wrapper.ListWorkspaceMembers)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/workspaces/{workspaceId}/members", wrapper.CreateWorkspaceMember)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/api/v1/workspaces/{workspaceId}/members/{userId}", wrapper.DeleteWorkspaceMember)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/api/v1/workspaces/{workspaceId}/members/{userId}", wrapper.PutWorkspaceMember)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/groups", wrapper.ListWorkspaceGroups)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/workspaces/{workspaceId}/groups", wrapper.CreateWorkspaceGroup)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/api/v1/workspaces/{workspaceId}/groups/{groupId}/members/{userId}", wrapper.RemoveWorkspaceGroupMember)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/api/v1/workspaces/{workspaceId}/groups/{groupId}/members/{userId}", wrapper.AddWorkspaceGroupMember)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/groups/{groupId}/members", wrapper.ListWorkspaceGroupMembers)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/audit-events", wrapper.ListAuditEvents)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/access-grants", wrapper.ListWorkspaceAccessGrants)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/workspaces/{workspaceId}/access-grants", wrapper.CreateWorkspaceAccessGrant)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/api/v1/workspaces/{workspaceId}/access-grants/{accessGrantId}", wrapper.DeleteWorkspaceAccessGrant)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/workspaces/current", wrapper.GetCurrentWorkspace)
 	})
 	r.Group(func(r chi.Router) {
@@ -5714,6 +7602,218 @@ type TooManyRequestsJSONResponse Error
 type UnauthorizedJSONResponse Error
 
 type UnavailableJSONResponse Error
+
+type ListUsersRequestObject struct {
+	Params ListUsersParams
+}
+
+type ListUsersResponseObject interface {
+	VisitListUsersResponse(w http.ResponseWriter) error
+}
+
+type ListUsers200JSONResponse struct {
+	Items      []User  `json:"items"`
+	NextCursor *string `json:"nextCursor,omitempty"`
+}
+
+func (response ListUsers200JSONResponse) VisitListUsersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListUsers403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response ListUsers403JSONResponse) VisitListUsersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateUserRequestObject struct {
+	Body *CreateUserJSONRequestBody
+}
+
+type CreateUserResponseObject interface {
+	VisitCreateUserResponse(w http.ResponseWriter) error
+}
+
+type CreateUser201JSONResponse User
+
+func (response CreateUser201JSONResponse) VisitCreateUserResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateUser403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response CreateUser403JSONResponse) VisitCreateUserResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateUser409JSONResponse struct{ ConflictJSONResponse }
+
+func (response CreateUser409JSONResponse) VisitCreateUserResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateUserStatusRequestObject struct {
+	UserId UserId `json:"userId"`
+	Params UpdateUserStatusParams
+	Body   *UpdateUserStatusJSONRequestBody
+}
+
+type UpdateUserStatusResponseObject interface {
+	VisitUpdateUserStatusResponse(w http.ResponseWriter) error
+}
+
+type UpdateUserStatus200JSONResponse User
+
+func (response UpdateUserStatus200JSONResponse) VisitUpdateUserStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateUserStatus403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response UpdateUserStatus403JSONResponse) VisitUpdateUserStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateUserStatus409JSONResponse struct{ ConflictJSONResponse }
+
+func (response UpdateUserStatus409JSONResponse) VisitUpdateUserStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreatePasswordResetGrantRequestObject struct {
+	UserId UserId `json:"userId"`
+}
+
+type CreatePasswordResetGrantResponseObject interface {
+	VisitCreatePasswordResetGrantResponse(w http.ResponseWriter) error
+}
+
+type CreatePasswordResetGrant201JSONResponse PasswordResetGrant
+
+func (response CreatePasswordResetGrant201JSONResponse) VisitCreatePasswordResetGrantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreatePasswordResetGrant403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response CreatePasswordResetGrant403JSONResponse) VisitCreatePasswordResetGrantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreatePasswordResetGrant404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response CreatePasswordResetGrant404JSONResponse) VisitCreatePasswordResetGrantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAuthenticationCapabilitiesRequestObject struct {
+}
+
+type GetAuthenticationCapabilitiesResponseObject interface {
+	VisitGetAuthenticationCapabilitiesResponse(w http.ResponseWriter) error
+}
+
+type GetAuthenticationCapabilities200JSONResponse AuthenticationCapabilities
+
+func (response GetAuthenticationCapabilities200JSONResponse) VisitGetAuthenticationCapabilitiesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
 
 type CompleteGitHubAuthorizationRequestObject struct {
 	Params CompleteGitHubAuthorizationParams
@@ -5954,6 +8054,88 @@ func (response GetOperation200JSONResponse) VisitGetOperationResponse(w http.Res
 	return err
 }
 
+type CompletePasswordResetRequestObject struct {
+	Body *CompletePasswordResetJSONRequestBody
+}
+
+type CompletePasswordResetResponseObject interface {
+	VisitCompletePasswordResetResponse(w http.ResponseWriter) error
+}
+
+type CompletePasswordReset204Response struct {
+}
+
+func (response CompletePasswordReset204Response) VisitCompletePasswordResetResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type CompletePasswordReset400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response CompletePasswordReset400JSONResponse) VisitCompletePasswordResetResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RequestPasswordResetRequestObject struct {
+	Body *RequestPasswordResetJSONRequestBody
+}
+
+type RequestPasswordResetResponseObject interface {
+	VisitRequestPasswordResetResponse(w http.ResponseWriter) error
+}
+
+type RequestPasswordReset202Response struct {
+}
+
+func (response RequestPasswordReset202Response) VisitRequestPasswordResetResponse(w http.ResponseWriter) error {
+	w.WriteHeader(202)
+	return nil
+}
+
+type VerifyPasswordResetRequestObject struct {
+	Body *VerifyPasswordResetJSONRequestBody
+}
+
+type VerifyPasswordResetResponseObject interface {
+	VisitVerifyPasswordResetResponse(w http.ResponseWriter) error
+}
+
+type VerifyPasswordReset200JSONResponse PasswordResetTicket
+
+func (response VerifyPasswordReset200JSONResponse) VisitVerifyPasswordResetResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VerifyPasswordReset400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response VerifyPasswordReset400JSONResponse) VisitVerifyPasswordResetResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type LogoutRequestObject struct {
 }
 
@@ -6026,6 +8208,20 @@ func (response Login200JSONResponse) VisitLoginResponse(w http.ResponseWriter) e
 	return err
 }
 
+type Login202JSONResponse MFAChallenge
+
+func (response Login202JSONResponse) VisitLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(202)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type Login401JSONResponse struct{ UnauthorizedJSONResponse }
 
 func (response Login401JSONResponse) VisitLoginResponse(w http.ResponseWriter) error {
@@ -6036,6 +8232,334 @@ func (response Login401JSONResponse) VisitLoginResponse(w http.ResponseWriter) e
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteTOTPLoginRequestObject struct {
+	Body *CompleteTOTPLoginJSONRequestBody
+}
+
+type CompleteTOTPLoginResponseObject interface {
+	VisitCompleteTOTPLoginResponse(w http.ResponseWriter) error
+}
+
+type CompleteTOTPLogin200JSONResponse Session
+
+func (response CompleteTOTPLogin200JSONResponse) VisitCompleteTOTPLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteTOTPLogin400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response CompleteTOTPLogin400JSONResponse) VisitCompleteTOTPLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetOwnProfileRequestObject struct {
+}
+
+type GetOwnProfileResponseObject interface {
+	VisitGetOwnProfileResponse(w http.ResponseWriter) error
+}
+
+type GetOwnProfile200JSONResponse User
+
+func (response GetOwnProfile200JSONResponse) VisitGetOwnProfileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetOwnProfile401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response GetOwnProfile401JSONResponse) VisitGetOwnProfileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateOwnProfileRequestObject struct {
+	Params UpdateOwnProfileParams
+	Body   *UpdateOwnProfileJSONRequestBody
+}
+
+type UpdateOwnProfileResponseObject interface {
+	VisitUpdateOwnProfileResponse(w http.ResponseWriter) error
+}
+
+type UpdateOwnProfile200JSONResponse User
+
+func (response UpdateOwnProfile200JSONResponse) VisitUpdateOwnProfileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateOwnProfile409JSONResponse struct{ ConflictJSONResponse }
+
+func (response UpdateOwnProfile409JSONResponse) VisitUpdateOwnProfileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetOwnMFARequestObject struct {
+}
+
+type GetOwnMFAResponseObject interface {
+	VisitGetOwnMFAResponse(w http.ResponseWriter) error
+}
+
+type GetOwnMFA200JSONResponse MFAStatus
+
+func (response GetOwnMFA200JSONResponse) VisitGetOwnMFAResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DisableOwnTOTPRequestObject struct {
+	Body *DisableOwnTOTPJSONRequestBody
+}
+
+type DisableOwnTOTPResponseObject interface {
+	VisitDisableOwnTOTPResponse(w http.ResponseWriter) error
+}
+
+type DisableOwnTOTP204Response struct {
+}
+
+func (response DisableOwnTOTP204Response) VisitDisableOwnTOTPResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DisableOwnTOTP401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response DisableOwnTOTP401JSONResponse) VisitDisableOwnTOTPResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type BeginTOTPEnrollmentRequestObject struct {
+	Body *BeginTOTPEnrollmentJSONRequestBody
+}
+
+type BeginTOTPEnrollmentResponseObject interface {
+	VisitBeginTOTPEnrollmentResponse(w http.ResponseWriter) error
+}
+
+type BeginTOTPEnrollment201JSONResponse TOTPEnrollment
+
+func (response BeginTOTPEnrollment201JSONResponse) VisitBeginTOTPEnrollmentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type BeginTOTPEnrollment503JSONResponse struct{ UnavailableJSONResponse }
+
+func (response BeginTOTPEnrollment503JSONResponse) VisitBeginTOTPEnrollmentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ConfirmTOTPEnrollmentRequestObject struct {
+	Body *ConfirmTOTPEnrollmentJSONRequestBody
+}
+
+type ConfirmTOTPEnrollmentResponseObject interface {
+	VisitConfirmTOTPEnrollmentResponse(w http.ResponseWriter) error
+}
+
+type ConfirmTOTPEnrollment200JSONResponse MFARecoveryCodes
+
+func (response ConfirmTOTPEnrollment200JSONResponse) VisitConfirmTOTPEnrollmentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ConfirmTOTPEnrollment400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response ConfirmTOTPEnrollment400JSONResponse) VisitConfirmTOTPEnrollmentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ChangeOwnPasswordRequestObject struct {
+	Body *ChangeOwnPasswordJSONRequestBody
+}
+
+type ChangeOwnPasswordResponseObject interface {
+	VisitChangeOwnPasswordResponse(w http.ResponseWriter) error
+}
+
+type ChangeOwnPassword204Response struct {
+}
+
+func (response ChangeOwnPassword204Response) VisitChangeOwnPasswordResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type ChangeOwnPassword400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response ChangeOwnPassword400JSONResponse) VisitChangeOwnPasswordResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ChangeOwnPassword401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response ChangeOwnPassword401JSONResponse) VisitChangeOwnPasswordResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListOwnSessionsRequestObject struct {
+}
+
+type ListOwnSessionsResponseObject interface {
+	VisitListOwnSessionsResponse(w http.ResponseWriter) error
+}
+
+type ListOwnSessions200JSONResponse struct {
+	Items []UserSession `json:"items"`
+}
+
+func (response ListOwnSessions200JSONResponse) VisitListOwnSessionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeOwnSessionRequestObject struct {
+	UserSessionId UserSessionId `json:"userSessionId"`
+}
+
+type RevokeOwnSessionResponseObject interface {
+	VisitRevokeOwnSessionResponse(w http.ResponseWriter) error
+}
+
+type RevokeOwnSession204Response struct {
+}
+
+func (response RevokeOwnSession204Response) VisitRevokeOwnSessionResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type RevokeOwnSession404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response RevokeOwnSession404JSONResponse) VisitRevokeOwnSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -6284,6 +8808,194 @@ func (response UpdateWorkspace409JSONResponse) VisitUpdateWorkspaceResponse(w ht
 	return err
 }
 
+type ListWorkspaceAccessGrantsRequestObject struct {
+	WorkspaceId WorkspaceId `json:"workspaceId"`
+}
+
+type ListWorkspaceAccessGrantsResponseObject interface {
+	VisitListWorkspaceAccessGrantsResponse(w http.ResponseWriter) error
+}
+
+type ListWorkspaceAccessGrants200JSONResponse struct {
+	Items []AccessGrant `json:"items"`
+}
+
+func (response ListWorkspaceAccessGrants200JSONResponse) VisitListWorkspaceAccessGrantsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListWorkspaceAccessGrants403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response ListWorkspaceAccessGrants403JSONResponse) VisitListWorkspaceAccessGrantsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateWorkspaceAccessGrantRequestObject struct {
+	WorkspaceId WorkspaceId `json:"workspaceId"`
+	Body        *CreateWorkspaceAccessGrantJSONRequestBody
+}
+
+type CreateWorkspaceAccessGrantResponseObject interface {
+	VisitCreateWorkspaceAccessGrantResponse(w http.ResponseWriter) error
+}
+
+type CreateWorkspaceAccessGrant201JSONResponse AccessGrant
+
+func (response CreateWorkspaceAccessGrant201JSONResponse) VisitCreateWorkspaceAccessGrantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateWorkspaceAccessGrant403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response CreateWorkspaceAccessGrant403JSONResponse) VisitCreateWorkspaceAccessGrantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateWorkspaceAccessGrant404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response CreateWorkspaceAccessGrant404JSONResponse) VisitCreateWorkspaceAccessGrantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateWorkspaceAccessGrant409JSONResponse struct{ ConflictJSONResponse }
+
+func (response CreateWorkspaceAccessGrant409JSONResponse) VisitCreateWorkspaceAccessGrantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteWorkspaceAccessGrantRequestObject struct {
+	WorkspaceId   WorkspaceId   `json:"workspaceId"`
+	AccessGrantId AccessGrantId `json:"accessGrantId"`
+}
+
+type DeleteWorkspaceAccessGrantResponseObject interface {
+	VisitDeleteWorkspaceAccessGrantResponse(w http.ResponseWriter) error
+}
+
+type DeleteWorkspaceAccessGrant204Response struct {
+}
+
+func (response DeleteWorkspaceAccessGrant204Response) VisitDeleteWorkspaceAccessGrantResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteWorkspaceAccessGrant403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response DeleteWorkspaceAccessGrant403JSONResponse) VisitDeleteWorkspaceAccessGrantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteWorkspaceAccessGrant404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response DeleteWorkspaceAccessGrant404JSONResponse) VisitDeleteWorkspaceAccessGrantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAuditEventsRequestObject struct {
+	WorkspaceId WorkspaceId `json:"workspaceId"`
+	Params      ListAuditEventsParams
+}
+
+type ListAuditEventsResponseObject interface {
+	VisitListAuditEventsResponse(w http.ResponseWriter) error
+}
+
+type ListAuditEvents200JSONResponse struct {
+	Items      []AuditEvent `json:"items"`
+	NextCursor *string      `json:"nextCursor,omitempty"`
+}
+
+func (response ListAuditEvents200JSONResponse) VisitListAuditEventsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAuditEvents403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response ListAuditEvents403JSONResponse) VisitListAuditEventsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListGitHubInstallationsRequestObject struct {
 	WorkspaceId WorkspaceId `json:"workspaceId"`
 }
@@ -6510,6 +9222,427 @@ func (response ListGitHubRepositories503JSONResponse) VisitListGitHubRepositorie
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListWorkspaceGroupsRequestObject struct {
+	WorkspaceId WorkspaceId `json:"workspaceId"`
+}
+
+type ListWorkspaceGroupsResponseObject interface {
+	VisitListWorkspaceGroupsResponse(w http.ResponseWriter) error
+}
+
+type ListWorkspaceGroups200JSONResponse struct {
+	Items []WorkspaceGroup `json:"items"`
+}
+
+func (response ListWorkspaceGroups200JSONResponse) VisitListWorkspaceGroupsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateWorkspaceGroupRequestObject struct {
+	WorkspaceId WorkspaceId `json:"workspaceId"`
+	Body        *CreateWorkspaceGroupJSONRequestBody
+}
+
+type CreateWorkspaceGroupResponseObject interface {
+	VisitCreateWorkspaceGroupResponse(w http.ResponseWriter) error
+}
+
+type CreateWorkspaceGroup201JSONResponse WorkspaceGroup
+
+func (response CreateWorkspaceGroup201JSONResponse) VisitCreateWorkspaceGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateWorkspaceGroup403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response CreateWorkspaceGroup403JSONResponse) VisitCreateWorkspaceGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateWorkspaceGroup409JSONResponse struct{ ConflictJSONResponse }
+
+func (response CreateWorkspaceGroup409JSONResponse) VisitCreateWorkspaceGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListWorkspaceGroupMembersRequestObject struct {
+	WorkspaceId WorkspaceId `json:"workspaceId"`
+	GroupId     GroupId     `json:"groupId"`
+}
+
+type ListWorkspaceGroupMembersResponseObject interface {
+	VisitListWorkspaceGroupMembersResponse(w http.ResponseWriter) error
+}
+
+type ListWorkspaceGroupMembers200JSONResponse struct {
+	Items []WorkspaceMembership `json:"items"`
+}
+
+func (response ListWorkspaceGroupMembers200JSONResponse) VisitListWorkspaceGroupMembersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListWorkspaceGroupMembers403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response ListWorkspaceGroupMembers403JSONResponse) VisitListWorkspaceGroupMembersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListWorkspaceGroupMembers404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ListWorkspaceGroupMembers404JSONResponse) VisitListWorkspaceGroupMembersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveWorkspaceGroupMemberRequestObject struct {
+	WorkspaceId WorkspaceId `json:"workspaceId"`
+	GroupId     GroupId     `json:"groupId"`
+	UserId      UserId      `json:"userId"`
+}
+
+type RemoveWorkspaceGroupMemberResponseObject interface {
+	VisitRemoveWorkspaceGroupMemberResponse(w http.ResponseWriter) error
+}
+
+type RemoveWorkspaceGroupMember204Response struct {
+}
+
+func (response RemoveWorkspaceGroupMember204Response) VisitRemoveWorkspaceGroupMemberResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type RemoveWorkspaceGroupMember403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response RemoveWorkspaceGroupMember403JSONResponse) VisitRemoveWorkspaceGroupMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveWorkspaceGroupMember404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response RemoveWorkspaceGroupMember404JSONResponse) VisitRemoveWorkspaceGroupMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddWorkspaceGroupMemberRequestObject struct {
+	WorkspaceId WorkspaceId `json:"workspaceId"`
+	GroupId     GroupId     `json:"groupId"`
+	UserId      UserId      `json:"userId"`
+}
+
+type AddWorkspaceGroupMemberResponseObject interface {
+	VisitAddWorkspaceGroupMemberResponse(w http.ResponseWriter) error
+}
+
+type AddWorkspaceGroupMember204Response struct {
+}
+
+func (response AddWorkspaceGroupMember204Response) VisitAddWorkspaceGroupMemberResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type AddWorkspaceGroupMember403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response AddWorkspaceGroupMember403JSONResponse) VisitAddWorkspaceGroupMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddWorkspaceGroupMember409JSONResponse struct{ ConflictJSONResponse }
+
+func (response AddWorkspaceGroupMember409JSONResponse) VisitAddWorkspaceGroupMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListWorkspaceMembersRequestObject struct {
+	WorkspaceId WorkspaceId `json:"workspaceId"`
+}
+
+type ListWorkspaceMembersResponseObject interface {
+	VisitListWorkspaceMembersResponse(w http.ResponseWriter) error
+}
+
+type ListWorkspaceMembers200JSONResponse struct {
+	Items []WorkspaceMembership `json:"items"`
+}
+
+func (response ListWorkspaceMembers200JSONResponse) VisitListWorkspaceMembersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListWorkspaceMembers403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response ListWorkspaceMembers403JSONResponse) VisitListWorkspaceMembersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateWorkspaceMemberRequestObject struct {
+	WorkspaceId WorkspaceId `json:"workspaceId"`
+	Body        *CreateWorkspaceMemberJSONRequestBody
+}
+
+type CreateWorkspaceMemberResponseObject interface {
+	VisitCreateWorkspaceMemberResponse(w http.ResponseWriter) error
+}
+
+type CreateWorkspaceMember201JSONResponse WorkspaceMembership
+
+func (response CreateWorkspaceMember201JSONResponse) VisitCreateWorkspaceMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateWorkspaceMember403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response CreateWorkspaceMember403JSONResponse) VisitCreateWorkspaceMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateWorkspaceMember404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response CreateWorkspaceMember404JSONResponse) VisitCreateWorkspaceMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateWorkspaceMember409JSONResponse struct{ ConflictJSONResponse }
+
+func (response CreateWorkspaceMember409JSONResponse) VisitCreateWorkspaceMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteWorkspaceMemberRequestObject struct {
+	WorkspaceId WorkspaceId `json:"workspaceId"`
+	UserId      UserId      `json:"userId"`
+}
+
+type DeleteWorkspaceMemberResponseObject interface {
+	VisitDeleteWorkspaceMemberResponse(w http.ResponseWriter) error
+}
+
+type DeleteWorkspaceMember204Response struct {
+}
+
+func (response DeleteWorkspaceMember204Response) VisitDeleteWorkspaceMemberResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteWorkspaceMember403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response DeleteWorkspaceMember403JSONResponse) VisitDeleteWorkspaceMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteWorkspaceMember404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response DeleteWorkspaceMember404JSONResponse) VisitDeleteWorkspaceMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutWorkspaceMemberRequestObject struct {
+	WorkspaceId WorkspaceId `json:"workspaceId"`
+	UserId      UserId      `json:"userId"`
+	Params      PutWorkspaceMemberParams
+	Body        *PutWorkspaceMemberJSONRequestBody
+}
+
+type PutWorkspaceMemberResponseObject interface {
+	VisitPutWorkspaceMemberResponse(w http.ResponseWriter) error
+}
+
+type PutWorkspaceMember200JSONResponse WorkspaceMembership
+
+func (response PutWorkspaceMember200JSONResponse) VisitPutWorkspaceMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutWorkspaceMember403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response PutWorkspaceMember403JSONResponse) VisitPutWorkspaceMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutWorkspaceMember409JSONResponse struct{ ConflictJSONResponse }
+
+func (response PutWorkspaceMember409JSONResponse) VisitPutWorkspaceMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -9350,6 +12483,21 @@ func (response ListEnvironmentApps404JSONResponse) VisitListEnvironmentAppsRespo
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 
+	// (GET /api/v1/admin/users)
+	ListUsers(ctx context.Context, request ListUsersRequestObject) (ListUsersResponseObject, error)
+
+	// (POST /api/v1/admin/users)
+	CreateUser(ctx context.Context, request CreateUserRequestObject) (CreateUserResponseObject, error)
+
+	// (PUT /api/v1/admin/users/{userId})
+	UpdateUserStatus(ctx context.Context, request UpdateUserStatusRequestObject) (UpdateUserStatusResponseObject, error)
+
+	// (POST /api/v1/admin/users/{userId}/password-reset)
+	CreatePasswordResetGrant(ctx context.Context, request CreatePasswordResetGrantRequestObject) (CreatePasswordResetGrantResponseObject, error)
+
+	// (GET /api/v1/auth/capabilities)
+	GetAuthenticationCapabilities(ctx context.Context, request GetAuthenticationCapabilitiesRequestObject) (GetAuthenticationCapabilitiesResponseObject, error)
+
 	// (GET /api/v1/github/callback)
 	CompleteGitHubAuthorization(ctx context.Context, request CompleteGitHubAuthorizationRequestObject) (CompleteGitHubAuthorizationResponseObject, error)
 
@@ -9362,6 +12510,15 @@ type StrictServerInterface interface {
 	// (GET /api/v1/operations/{operationId})
 	GetOperation(ctx context.Context, request GetOperationRequestObject) (GetOperationResponseObject, error)
 
+	// (PUT /api/v1/password-resets/complete)
+	CompletePasswordReset(ctx context.Context, request CompletePasswordResetRequestObject) (CompletePasswordResetResponseObject, error)
+
+	// (POST /api/v1/password-resets/request)
+	RequestPasswordReset(ctx context.Context, request RequestPasswordResetRequestObject) (RequestPasswordResetResponseObject, error)
+
+	// (POST /api/v1/password-resets/verify)
+	VerifyPasswordReset(ctx context.Context, request VerifyPasswordResetRequestObject) (VerifyPasswordResetResponseObject, error)
+
 	// (DELETE /api/v1/session)
 	Logout(ctx context.Context, request LogoutRequestObject) (LogoutResponseObject, error)
 
@@ -9370,6 +12527,36 @@ type StrictServerInterface interface {
 
 	// (POST /api/v1/session)
 	Login(ctx context.Context, request LoginRequestObject) (LoginResponseObject, error)
+
+	// (POST /api/v1/session/mfa/totp)
+	CompleteTOTPLogin(ctx context.Context, request CompleteTOTPLoginRequestObject) (CompleteTOTPLoginResponseObject, error)
+
+	// (GET /api/v1/users/me)
+	GetOwnProfile(ctx context.Context, request GetOwnProfileRequestObject) (GetOwnProfileResponseObject, error)
+
+	// (PUT /api/v1/users/me)
+	UpdateOwnProfile(ctx context.Context, request UpdateOwnProfileRequestObject) (UpdateOwnProfileResponseObject, error)
+
+	// (GET /api/v1/users/me/mfa)
+	GetOwnMFA(ctx context.Context, request GetOwnMFARequestObject) (GetOwnMFAResponseObject, error)
+
+	// (DELETE /api/v1/users/me/mfa/totp/enrollment)
+	DisableOwnTOTP(ctx context.Context, request DisableOwnTOTPRequestObject) (DisableOwnTOTPResponseObject, error)
+
+	// (POST /api/v1/users/me/mfa/totp/enrollment)
+	BeginTOTPEnrollment(ctx context.Context, request BeginTOTPEnrollmentRequestObject) (BeginTOTPEnrollmentResponseObject, error)
+
+	// (PUT /api/v1/users/me/mfa/totp/enrollment)
+	ConfirmTOTPEnrollment(ctx context.Context, request ConfirmTOTPEnrollmentRequestObject) (ConfirmTOTPEnrollmentResponseObject, error)
+
+	// (PUT /api/v1/users/me/password)
+	ChangeOwnPassword(ctx context.Context, request ChangeOwnPasswordRequestObject) (ChangeOwnPasswordResponseObject, error)
+
+	// (GET /api/v1/users/me/sessions)
+	ListOwnSessions(ctx context.Context, request ListOwnSessionsRequestObject) (ListOwnSessionsResponseObject, error)
+
+	// (DELETE /api/v1/users/me/sessions/{userSessionId})
+	RevokeOwnSession(ctx context.Context, request RevokeOwnSessionRequestObject) (RevokeOwnSessionResponseObject, error)
 
 	// (GET /api/v1/workspaces)
 	ListWorkspaces(ctx context.Context, request ListWorkspacesRequestObject) (ListWorkspacesResponseObject, error)
@@ -9386,6 +12573,18 @@ type StrictServerInterface interface {
 	// (PUT /api/v1/workspaces/{workspaceId})
 	UpdateWorkspace(ctx context.Context, request UpdateWorkspaceRequestObject) (UpdateWorkspaceResponseObject, error)
 
+	// (GET /api/v1/workspaces/{workspaceId}/access-grants)
+	ListWorkspaceAccessGrants(ctx context.Context, request ListWorkspaceAccessGrantsRequestObject) (ListWorkspaceAccessGrantsResponseObject, error)
+
+	// (POST /api/v1/workspaces/{workspaceId}/access-grants)
+	CreateWorkspaceAccessGrant(ctx context.Context, request CreateWorkspaceAccessGrantRequestObject) (CreateWorkspaceAccessGrantResponseObject, error)
+
+	// (DELETE /api/v1/workspaces/{workspaceId}/access-grants/{accessGrantId})
+	DeleteWorkspaceAccessGrant(ctx context.Context, request DeleteWorkspaceAccessGrantRequestObject) (DeleteWorkspaceAccessGrantResponseObject, error)
+
+	// (GET /api/v1/workspaces/{workspaceId}/audit-events)
+	ListAuditEvents(ctx context.Context, request ListAuditEventsRequestObject) (ListAuditEventsResponseObject, error)
+
 	// (GET /api/v1/workspaces/{workspaceId}/github/installations)
 	ListGitHubInstallations(ctx context.Context, request ListGitHubInstallationsRequestObject) (ListGitHubInstallationsResponseObject, error)
 
@@ -9397,6 +12596,33 @@ type StrictServerInterface interface {
 
 	// (GET /api/v1/workspaces/{workspaceId}/github/installations/{githubInstallationId}/repositories)
 	ListGitHubRepositories(ctx context.Context, request ListGitHubRepositoriesRequestObject) (ListGitHubRepositoriesResponseObject, error)
+
+	// (GET /api/v1/workspaces/{workspaceId}/groups)
+	ListWorkspaceGroups(ctx context.Context, request ListWorkspaceGroupsRequestObject) (ListWorkspaceGroupsResponseObject, error)
+
+	// (POST /api/v1/workspaces/{workspaceId}/groups)
+	CreateWorkspaceGroup(ctx context.Context, request CreateWorkspaceGroupRequestObject) (CreateWorkspaceGroupResponseObject, error)
+
+	// (GET /api/v1/workspaces/{workspaceId}/groups/{groupId}/members)
+	ListWorkspaceGroupMembers(ctx context.Context, request ListWorkspaceGroupMembersRequestObject) (ListWorkspaceGroupMembersResponseObject, error)
+
+	// (DELETE /api/v1/workspaces/{workspaceId}/groups/{groupId}/members/{userId})
+	RemoveWorkspaceGroupMember(ctx context.Context, request RemoveWorkspaceGroupMemberRequestObject) (RemoveWorkspaceGroupMemberResponseObject, error)
+
+	// (PUT /api/v1/workspaces/{workspaceId}/groups/{groupId}/members/{userId})
+	AddWorkspaceGroupMember(ctx context.Context, request AddWorkspaceGroupMemberRequestObject) (AddWorkspaceGroupMemberResponseObject, error)
+
+	// (GET /api/v1/workspaces/{workspaceId}/members)
+	ListWorkspaceMembers(ctx context.Context, request ListWorkspaceMembersRequestObject) (ListWorkspaceMembersResponseObject, error)
+
+	// (POST /api/v1/workspaces/{workspaceId}/members)
+	CreateWorkspaceMember(ctx context.Context, request CreateWorkspaceMemberRequestObject) (CreateWorkspaceMemberResponseObject, error)
+
+	// (DELETE /api/v1/workspaces/{workspaceId}/members/{userId})
+	DeleteWorkspaceMember(ctx context.Context, request DeleteWorkspaceMemberRequestObject) (DeleteWorkspaceMemberResponseObject, error)
+
+	// (PUT /api/v1/workspaces/{workspaceId}/members/{userId})
+	PutWorkspaceMember(ctx context.Context, request PutWorkspaceMemberRequestObject) (PutWorkspaceMemberResponseObject, error)
 
 	// (GET /api/v1/workspaces/{workspaceId}/parameters)
 	ListParameters(ctx context.Context, request ListParametersRequestObject) (ListParametersResponseObject, error)
@@ -9576,6 +12802,147 @@ type strictHandler struct {
 	options     StrictHTTPServerOptions
 }
 
+// ListUsers operation middleware
+func (sh *strictHandler) ListUsers(w http.ResponseWriter, r *http.Request, params ListUsersParams) {
+	var request ListUsersRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListUsers(ctx, request.(ListUsersRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListUsers")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListUsersResponseObject); ok {
+		if err := validResponse.VisitListUsersResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateUser operation middleware
+func (sh *strictHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
+	var request CreateUserRequestObject
+
+	var body CreateUserJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateUser(ctx, request.(CreateUserRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateUser")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateUserResponseObject); ok {
+		if err := validResponse.VisitCreateUserResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateUserStatus operation middleware
+func (sh *strictHandler) UpdateUserStatus(w http.ResponseWriter, r *http.Request, userId UserId, params UpdateUserStatusParams) {
+	var request UpdateUserStatusRequestObject
+
+	request.UserId = userId
+	request.Params = params
+
+	var body UpdateUserStatusJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateUserStatus(ctx, request.(UpdateUserStatusRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateUserStatus")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateUserStatusResponseObject); ok {
+		if err := validResponse.VisitUpdateUserStatusResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreatePasswordResetGrant operation middleware
+func (sh *strictHandler) CreatePasswordResetGrant(w http.ResponseWriter, r *http.Request, userId UserId) {
+	var request CreatePasswordResetGrantRequestObject
+
+	request.UserId = userId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreatePasswordResetGrant(ctx, request.(CreatePasswordResetGrantRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreatePasswordResetGrant")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreatePasswordResetGrantResponseObject); ok {
+		if err := validResponse.VisitCreatePasswordResetGrantResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAuthenticationCapabilities operation middleware
+func (sh *strictHandler) GetAuthenticationCapabilities(w http.ResponseWriter, r *http.Request) {
+	var request GetAuthenticationCapabilitiesRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAuthenticationCapabilities(ctx, request.(GetAuthenticationCapabilitiesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAuthenticationCapabilities")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAuthenticationCapabilitiesResponseObject); ok {
+		if err := validResponse.VisitGetAuthenticationCapabilitiesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // CompleteGitHubAuthorization operation middleware
 func (sh *strictHandler) CompleteGitHubAuthorization(w http.ResponseWriter, r *http.Request, params CompleteGitHubAuthorizationParams) {
 	var request CompleteGitHubAuthorizationRequestObject
@@ -9678,6 +13045,99 @@ func (sh *strictHandler) GetOperation(w http.ResponseWriter, r *http.Request, op
 	}
 }
 
+// CompletePasswordReset operation middleware
+func (sh *strictHandler) CompletePasswordReset(w http.ResponseWriter, r *http.Request) {
+	var request CompletePasswordResetRequestObject
+
+	var body CompletePasswordResetJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CompletePasswordReset(ctx, request.(CompletePasswordResetRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CompletePasswordReset")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CompletePasswordResetResponseObject); ok {
+		if err := validResponse.VisitCompletePasswordResetResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RequestPasswordReset operation middleware
+func (sh *strictHandler) RequestPasswordReset(w http.ResponseWriter, r *http.Request) {
+	var request RequestPasswordResetRequestObject
+
+	var body RequestPasswordResetJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RequestPasswordReset(ctx, request.(RequestPasswordResetRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RequestPasswordReset")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RequestPasswordResetResponseObject); ok {
+		if err := validResponse.VisitRequestPasswordResetResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// VerifyPasswordReset operation middleware
+func (sh *strictHandler) VerifyPasswordReset(w http.ResponseWriter, r *http.Request) {
+	var request VerifyPasswordResetRequestObject
+
+	var body VerifyPasswordResetJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.VerifyPasswordReset(ctx, request.(VerifyPasswordResetRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "VerifyPasswordReset")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(VerifyPasswordResetResponseObject); ok {
+		if err := validResponse.VisitVerifyPasswordResetResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // Logout operation middleware
 func (sh *strictHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	var request LogoutRequestObject
@@ -9750,6 +13210,292 @@ func (sh *strictHandler) Login(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(LoginResponseObject); ok {
 		if err := validResponse.VisitLoginResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CompleteTOTPLogin operation middleware
+func (sh *strictHandler) CompleteTOTPLogin(w http.ResponseWriter, r *http.Request) {
+	var request CompleteTOTPLoginRequestObject
+
+	var body CompleteTOTPLoginJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CompleteTOTPLogin(ctx, request.(CompleteTOTPLoginRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CompleteTOTPLogin")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CompleteTOTPLoginResponseObject); ok {
+		if err := validResponse.VisitCompleteTOTPLoginResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetOwnProfile operation middleware
+func (sh *strictHandler) GetOwnProfile(w http.ResponseWriter, r *http.Request) {
+	var request GetOwnProfileRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetOwnProfile(ctx, request.(GetOwnProfileRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetOwnProfile")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetOwnProfileResponseObject); ok {
+		if err := validResponse.VisitGetOwnProfileResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateOwnProfile operation middleware
+func (sh *strictHandler) UpdateOwnProfile(w http.ResponseWriter, r *http.Request, params UpdateOwnProfileParams) {
+	var request UpdateOwnProfileRequestObject
+
+	request.Params = params
+
+	var body UpdateOwnProfileJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateOwnProfile(ctx, request.(UpdateOwnProfileRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateOwnProfile")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateOwnProfileResponseObject); ok {
+		if err := validResponse.VisitUpdateOwnProfileResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetOwnMFA operation middleware
+func (sh *strictHandler) GetOwnMFA(w http.ResponseWriter, r *http.Request) {
+	var request GetOwnMFARequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetOwnMFA(ctx, request.(GetOwnMFARequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetOwnMFA")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetOwnMFAResponseObject); ok {
+		if err := validResponse.VisitGetOwnMFAResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DisableOwnTOTP operation middleware
+func (sh *strictHandler) DisableOwnTOTP(w http.ResponseWriter, r *http.Request) {
+	var request DisableOwnTOTPRequestObject
+
+	var body DisableOwnTOTPJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DisableOwnTOTP(ctx, request.(DisableOwnTOTPRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DisableOwnTOTP")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DisableOwnTOTPResponseObject); ok {
+		if err := validResponse.VisitDisableOwnTOTPResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// BeginTOTPEnrollment operation middleware
+func (sh *strictHandler) BeginTOTPEnrollment(w http.ResponseWriter, r *http.Request) {
+	var request BeginTOTPEnrollmentRequestObject
+
+	var body BeginTOTPEnrollmentJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.BeginTOTPEnrollment(ctx, request.(BeginTOTPEnrollmentRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "BeginTOTPEnrollment")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(BeginTOTPEnrollmentResponseObject); ok {
+		if err := validResponse.VisitBeginTOTPEnrollmentResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ConfirmTOTPEnrollment operation middleware
+func (sh *strictHandler) ConfirmTOTPEnrollment(w http.ResponseWriter, r *http.Request) {
+	var request ConfirmTOTPEnrollmentRequestObject
+
+	var body ConfirmTOTPEnrollmentJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ConfirmTOTPEnrollment(ctx, request.(ConfirmTOTPEnrollmentRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ConfirmTOTPEnrollment")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ConfirmTOTPEnrollmentResponseObject); ok {
+		if err := validResponse.VisitConfirmTOTPEnrollmentResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ChangeOwnPassword operation middleware
+func (sh *strictHandler) ChangeOwnPassword(w http.ResponseWriter, r *http.Request) {
+	var request ChangeOwnPasswordRequestObject
+
+	var body ChangeOwnPasswordJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ChangeOwnPassword(ctx, request.(ChangeOwnPasswordRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ChangeOwnPassword")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ChangeOwnPasswordResponseObject); ok {
+		if err := validResponse.VisitChangeOwnPasswordResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListOwnSessions operation middleware
+func (sh *strictHandler) ListOwnSessions(w http.ResponseWriter, r *http.Request) {
+	var request ListOwnSessionsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListOwnSessions(ctx, request.(ListOwnSessionsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListOwnSessions")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListOwnSessionsResponseObject); ok {
+		if err := validResponse.VisitListOwnSessionsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RevokeOwnSession operation middleware
+func (sh *strictHandler) RevokeOwnSession(w http.ResponseWriter, r *http.Request, userSessionId UserSessionId) {
+	var request RevokeOwnSessionRequestObject
+
+	request.UserSessionId = userSessionId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RevokeOwnSession(ctx, request.(RevokeOwnSessionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RevokeOwnSession")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RevokeOwnSessionResponseObject); ok {
+		if err := validResponse.VisitRevokeOwnSessionResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -9900,6 +13646,119 @@ func (sh *strictHandler) UpdateWorkspace(w http.ResponseWriter, r *http.Request,
 	}
 }
 
+// ListWorkspaceAccessGrants operation middleware
+func (sh *strictHandler) ListWorkspaceAccessGrants(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId) {
+	var request ListWorkspaceAccessGrantsRequestObject
+
+	request.WorkspaceId = workspaceId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListWorkspaceAccessGrants(ctx, request.(ListWorkspaceAccessGrantsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListWorkspaceAccessGrants")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListWorkspaceAccessGrantsResponseObject); ok {
+		if err := validResponse.VisitListWorkspaceAccessGrantsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateWorkspaceAccessGrant operation middleware
+func (sh *strictHandler) CreateWorkspaceAccessGrant(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId) {
+	var request CreateWorkspaceAccessGrantRequestObject
+
+	request.WorkspaceId = workspaceId
+
+	var body CreateWorkspaceAccessGrantJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateWorkspaceAccessGrant(ctx, request.(CreateWorkspaceAccessGrantRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateWorkspaceAccessGrant")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateWorkspaceAccessGrantResponseObject); ok {
+		if err := validResponse.VisitCreateWorkspaceAccessGrantResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteWorkspaceAccessGrant operation middleware
+func (sh *strictHandler) DeleteWorkspaceAccessGrant(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, accessGrantId AccessGrantId) {
+	var request DeleteWorkspaceAccessGrantRequestObject
+
+	request.WorkspaceId = workspaceId
+	request.AccessGrantId = accessGrantId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteWorkspaceAccessGrant(ctx, request.(DeleteWorkspaceAccessGrantRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteWorkspaceAccessGrant")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteWorkspaceAccessGrantResponseObject); ok {
+		if err := validResponse.VisitDeleteWorkspaceAccessGrantResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListAuditEvents operation middleware
+func (sh *strictHandler) ListAuditEvents(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, params ListAuditEventsParams) {
+	var request ListAuditEventsRequestObject
+
+	request.WorkspaceId = workspaceId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListAuditEvents(ctx, request.(ListAuditEventsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListAuditEvents")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListAuditEventsResponseObject); ok {
+		if err := validResponse.VisitListAuditEventsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // ListGitHubInstallations operation middleware
 func (sh *strictHandler) ListGitHubInstallations(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId) {
 	var request ListGitHubInstallationsRequestObject
@@ -9999,6 +13858,269 @@ func (sh *strictHandler) ListGitHubRepositories(w http.ResponseWriter, r *http.R
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ListGitHubRepositoriesResponseObject); ok {
 		if err := validResponse.VisitListGitHubRepositoriesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListWorkspaceGroups operation middleware
+func (sh *strictHandler) ListWorkspaceGroups(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId) {
+	var request ListWorkspaceGroupsRequestObject
+
+	request.WorkspaceId = workspaceId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListWorkspaceGroups(ctx, request.(ListWorkspaceGroupsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListWorkspaceGroups")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListWorkspaceGroupsResponseObject); ok {
+		if err := validResponse.VisitListWorkspaceGroupsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateWorkspaceGroup operation middleware
+func (sh *strictHandler) CreateWorkspaceGroup(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId) {
+	var request CreateWorkspaceGroupRequestObject
+
+	request.WorkspaceId = workspaceId
+
+	var body CreateWorkspaceGroupJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateWorkspaceGroup(ctx, request.(CreateWorkspaceGroupRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateWorkspaceGroup")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateWorkspaceGroupResponseObject); ok {
+		if err := validResponse.VisitCreateWorkspaceGroupResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListWorkspaceGroupMembers operation middleware
+func (sh *strictHandler) ListWorkspaceGroupMembers(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, groupId GroupId) {
+	var request ListWorkspaceGroupMembersRequestObject
+
+	request.WorkspaceId = workspaceId
+	request.GroupId = groupId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListWorkspaceGroupMembers(ctx, request.(ListWorkspaceGroupMembersRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListWorkspaceGroupMembers")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListWorkspaceGroupMembersResponseObject); ok {
+		if err := validResponse.VisitListWorkspaceGroupMembersResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RemoveWorkspaceGroupMember operation middleware
+func (sh *strictHandler) RemoveWorkspaceGroupMember(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, groupId GroupId, userId UserId) {
+	var request RemoveWorkspaceGroupMemberRequestObject
+
+	request.WorkspaceId = workspaceId
+	request.GroupId = groupId
+	request.UserId = userId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RemoveWorkspaceGroupMember(ctx, request.(RemoveWorkspaceGroupMemberRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RemoveWorkspaceGroupMember")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RemoveWorkspaceGroupMemberResponseObject); ok {
+		if err := validResponse.VisitRemoveWorkspaceGroupMemberResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AddWorkspaceGroupMember operation middleware
+func (sh *strictHandler) AddWorkspaceGroupMember(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, groupId GroupId, userId UserId) {
+	var request AddWorkspaceGroupMemberRequestObject
+
+	request.WorkspaceId = workspaceId
+	request.GroupId = groupId
+	request.UserId = userId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AddWorkspaceGroupMember(ctx, request.(AddWorkspaceGroupMemberRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AddWorkspaceGroupMember")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AddWorkspaceGroupMemberResponseObject); ok {
+		if err := validResponse.VisitAddWorkspaceGroupMemberResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListWorkspaceMembers operation middleware
+func (sh *strictHandler) ListWorkspaceMembers(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId) {
+	var request ListWorkspaceMembersRequestObject
+
+	request.WorkspaceId = workspaceId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListWorkspaceMembers(ctx, request.(ListWorkspaceMembersRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListWorkspaceMembers")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListWorkspaceMembersResponseObject); ok {
+		if err := validResponse.VisitListWorkspaceMembersResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateWorkspaceMember operation middleware
+func (sh *strictHandler) CreateWorkspaceMember(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId) {
+	var request CreateWorkspaceMemberRequestObject
+
+	request.WorkspaceId = workspaceId
+
+	var body CreateWorkspaceMemberJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateWorkspaceMember(ctx, request.(CreateWorkspaceMemberRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateWorkspaceMember")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateWorkspaceMemberResponseObject); ok {
+		if err := validResponse.VisitCreateWorkspaceMemberResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteWorkspaceMember operation middleware
+func (sh *strictHandler) DeleteWorkspaceMember(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, userId UserId) {
+	var request DeleteWorkspaceMemberRequestObject
+
+	request.WorkspaceId = workspaceId
+	request.UserId = userId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteWorkspaceMember(ctx, request.(DeleteWorkspaceMemberRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteWorkspaceMember")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteWorkspaceMemberResponseObject); ok {
+		if err := validResponse.VisitDeleteWorkspaceMemberResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PutWorkspaceMember operation middleware
+func (sh *strictHandler) PutWorkspaceMember(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, userId UserId, params PutWorkspaceMemberParams) {
+	var request PutWorkspaceMemberRequestObject
+
+	request.WorkspaceId = workspaceId
+	request.UserId = userId
+	request.Params = params
+
+	var body PutWorkspaceMemberJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PutWorkspaceMember(ctx, request.(PutWorkspaceMemberRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PutWorkspaceMember")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PutWorkspaceMemberResponseObject); ok {
+		if err := validResponse.VisitPutWorkspaceMemberResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

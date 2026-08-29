@@ -15,10 +15,11 @@ import { createWorkspace, updateWorkspace } from "../workspace/api";
 import { useSelectedWorkspace } from "../workspace/WorkspaceContext";
 import { workspaceQueryKey } from "../workspace/queries";
 import { workspaceScopeKeys } from "../workspace/scope";
+import { canCreateWorkspace, canManageWorkspace } from "../../shared/auth/permissions";
 
-function SettingsLayout({ workspaceId, children }: { workspaceId: string; children: React.ReactNode }) {
+export function SettingsLayout({ workspaceId, children }: { workspaceId: string; children: React.ReactNode }) {
   const params = { workspaceId };
-  return <div className="stack"><PageHeader eyebrow="Workspace" title="Configurações" description="Gerencie identidade e integrações deste Workspace."/><TabNav label="Configurações do Workspace" items={[{ label: "Geral", to: "/workspaces/$workspaceId/settings", params }, { label: "GitHub", to: "/workspaces/$workspaceId/settings/github", params }]}/>{children}</div>;
+  return <div className="stack"><PageHeader eyebrow="Workspace" title="Configurações" description="Gerencie identidade, acesso e integrações deste Workspace."/><TabNav label="Configurações do Workspace" items={[{ label: "Geral", to: "/workspaces/$workspaceId/settings", params }, { label: "Membros", to: "/workspaces/$workspaceId/settings/members", params }, { label: "Grupos", to: "/workspaces/$workspaceId/settings/groups", params }, { label: "Acessos", to: "/workspaces/$workspaceId/settings/access", params }, { label: "Auditoria", to: "/workspaces/$workspaceId/settings/audit", params }, { label: "GitHub", to: "/workspaces/$workspaceId/settings/github", params }]}/>{children}</div>;
 }
 
 export function WorkspaceSettingsPage() {
@@ -34,13 +35,13 @@ export function WorkspaceSettingsPage() {
     return updateWorkspace(workspace, { name: nextName });
   }, onSuccess: () => queryClient.invalidateQueries({ queryKey: workspaceQueryKey }) });
   function submit(event: FormEvent) { event.preventDefault(); const error = validateResourceName(name); setValidation(error); if (!error) update.mutate(normalizeResourceName(name)); }
-  return <SettingsLayout workspaceId={workspaceId}><section className="panel stack"><div><p className="eyebrow">Geral</p><h2>Identidade do Workspace</h2><p className="muted">O nome identifica o contexto ativo no Console; IDs técnicos permanecem estáveis.</p></div>{session.data?.actor.role === "owner" ? <form className="form-row" onSubmit={submit}><Field label="Nome do Workspace" value={name} onChange={(event) => setName(event.target.value)} error={validation} maxLength={80} required/><Button type="submit" loading={update.isPending} disabled={!workspace || workspace.id !== workspaceId}>Salvar alterações</Button></form> : <Alert tone="info">Seu acesso é somente leitura. Apenas o owner pode alterar este Workspace.</Alert>}{update.isSuccess && <Alert tone="success">Workspace atualizado.</Alert>}{update.isError && <Alert>{userFacingError(update.error)}</Alert>}</section></SettingsLayout>;
+  return <SettingsLayout workspaceId={workspaceId}><section className="panel stack"><div><p className="eyebrow">Geral</p><h2>Identidade do Workspace</h2><p className="muted">O nome identifica o contexto ativo no Console; IDs técnicos permanecem estáveis.</p></div>{canManageWorkspace(session.data, workspaceId) ? <form className="form-row" onSubmit={submit}><Field label="Nome do Workspace" value={name} onChange={(event) => setName(event.target.value)} error={validation} maxLength={80} required/><Button type="submit" loading={update.isPending} disabled={!workspace || workspace.id !== workspaceId}>Salvar alterações</Button></form> : <Alert tone="info">Somente owners podem alterar este Workspace.</Alert>}{update.isSuccess && <Alert tone="success">Workspace atualizado.</Alert>}{update.isError && <Alert>{userFacingError(update.error)}</Alert>}</section></SettingsLayout>;
 }
 
 export function GitHubSettingsPage() {
   const { workspaceId } = useParams({ strict: false }) as { workspaceId: string };
   const session = useSessionQuery();
-  const canMutate = session.data?.actor.role === "owner";
+  const canMutate = canManageWorkspace(session.data, workspaceId);
   const queryClient = useQueryClient();
   const installations = useQuery({ queryKey: workspaceScopeKeys.githubInstallations(workspaceId), queryFn: () => listGitHubInstallations(workspaceId) });
   const connect = useMutation({ mutationFn: () => connectGitHubInstallation(workspaceId), onSuccess: ({ authorizationUrl }) => window.location.assign(authorizationUrl) });
@@ -58,5 +59,5 @@ export function NewWorkspacePage() {
   const [validation, setValidation] = useState("");
   const create = useMutation({ mutationFn: (nextName: string) => createWorkspace({ name: nextName }), onSuccess: async (result) => { await queryClient.invalidateQueries({ queryKey: workspaceQueryKey }); selectWorkspace(result.workspace.id); await navigate({ to: "/workspaces/$workspaceId/overview", params: { workspaceId: result.workspace.id }, replace: true }); } });
   function submit(event: FormEvent) { event.preventDefault(); const error = validateResourceName(name); setValidation(error); if (!error) create.mutate(normalizeResourceName(name)); }
-  return <div className="stack constrained"><PageHeader eyebrow="Novo contexto" title="Criar Workspace" description="Use Workspaces para separar produtos, equipes ou ambientes de administração." breadcrumbs={[{ label: "Visão geral", to: "/" }, { label: "Novo Workspace" }]}/>{session.data?.actor.role !== "owner" ? <Alert>Somente o owner pode criar Workspaces.</Alert> : <section className="panel stack"><form className="stack" onSubmit={submit}><Field label="Nome do Workspace" helper="Use um nome reconhecível para as pessoas que acessarão o Console." value={name} onChange={(event) => setName(event.target.value)} error={validation} maxLength={80} autoFocus required/><div className="form-actions"><Link to="/" className="secondary button-link">Cancelar</Link><Button type="submit" loading={create.isPending}>Criar Workspace</Button></div></form>{create.isError && <Alert>{userFacingError(create.error)}</Alert>}</section>}</div>;
+  return <div className="stack constrained"><PageHeader eyebrow="Novo contexto" title="Criar Workspace" description="Use Workspaces para separar produtos, equipes ou ambientes de administração." breadcrumbs={[{ label: "Visão geral", to: "/" }, { label: "Novo Workspace" }]}/>{!canCreateWorkspace(session.data) ? <Alert>A administração da instalação é necessária para criar Workspaces.</Alert> : <section className="panel stack"><form className="stack" onSubmit={submit}><Field label="Nome do Workspace" helper="Use um nome reconhecível para as pessoas que acessarão o Console." value={name} onChange={(event) => setName(event.target.value)} error={validation} maxLength={80} autoFocus required/><div className="form-actions"><Link to="/" className="secondary button-link">Cancelar</Link><Button type="submit" loading={create.isPending}>Criar Workspace</Button></div></form>{create.isError && <Alert>{userFacingError(create.error)}</Alert>}</section>}</div>;
 }

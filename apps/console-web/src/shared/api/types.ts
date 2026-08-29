@@ -1,7 +1,15 @@
 import type { components } from "./generated/control-plane";
 
-export type ActorRole = components["schemas"]["Session"]["actor"]["role"];
 export type Session = components["schemas"]["Session"];
+export type MFAChallenge = components["schemas"]["MFAChallenge"];
+export type MFAStatus = components["schemas"]["MFAStatus"];
+export type TOTPEnrollment = components["schemas"]["TOTPEnrollment"];
+export type User = components["schemas"]["User"];
+export type UserSession = components["schemas"]["UserSession"];
+export type WorkspaceMembership = components["schemas"]["WorkspaceMembership"];
+export type WorkspaceGroup = components["schemas"]["WorkspaceGroup"];
+export type AuditEvent = components["schemas"]["AuditEvent"];
+export type AccessGrant = components["schemas"]["AccessGrant"];
 export type Workspace = components["schemas"]["Workspace"];
 export type HierarchyInput = components["schemas"]["HierarchyInput"];
 export type Project = components["schemas"]["Project"];

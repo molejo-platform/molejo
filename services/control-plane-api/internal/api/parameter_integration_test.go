@@ -137,7 +137,7 @@ func TestParameterMaintenanceRecoversCommittedOpenBaoWriteAndPurgesArchivedValue
 	publicID := mustAPIID(t, "par")
 	reference := secretReference(workspace.PublicID, publicID)
 	var actorID int64
-	if err := storage.Pool.QueryRow(context.Background(), `SELECT actor_id FROM workspace_actors WHERE workspace_id=$1 ORDER BY actor_id LIMIT 1`, workspace.ID).Scan(&actorID); err != nil {
+	if err := storage.Pool.QueryRow(context.Background(), `SELECT user_id FROM workspace_memberships WHERE workspace_id=$1 ORDER BY user_id LIMIT 1`, workspace.ID).Scan(&actorID); err != nil {
 		t.Fatal(err)
 	}
 	mutation, _, err := storage.BeginCreateSecretParameter(context.Background(), workspace.ID, actorID, publicID, "/recovery/token", "", reference, domain.SHA256([]byte("fingerprint")), domain.SHA256([]byte("idempotency")), domain.SHA256([]byte("payload")))

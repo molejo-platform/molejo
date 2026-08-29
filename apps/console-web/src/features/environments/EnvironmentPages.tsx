@@ -20,12 +20,14 @@ import { createAppBuild, createAppEnvironment, createAppEnvironmentDeployment, g
 import { ProjectEnvironmentLayout } from "./ProjectEnvironmentLayout";
 import { RuntimeMetricsProvider, RuntimeStatusStrip } from "./RuntimeMetricsStatus";
 import { RuntimeConfigurationFields, defaultRuntimeConfiguration, parseRuntimeVariables } from "./RuntimeConfigurationForm";
+import { canEditWorkspace } from "../../shared/auth/permissions";
 
 export type EnvironmentParams = { workspaceId: string; projectId: string; environmentId: string; appEnvironmentId: string };
 
 export function EnvironmentAppsPage() {
   const { workspaceId, projectId, environmentId } = useParams({ strict: false }) as EnvironmentParams;
   const session = useSessionQuery();
+	const canMutate = canEditWorkspace(session.data, workspaceId);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const targets = useQuery({ queryKey: workspaceScopeKeys.environmentApps(workspaceId, projectId, environmentId), queryFn: () => listEnvironmentApps(workspaceId, projectId, environmentId), refetchInterval: (query) => query.state.data?.items.some((target) => target.state === "Progressing") ? 2_000 : false });
@@ -34,7 +36,7 @@ export function EnvironmentAppsPage() {
   const linkedApps = useMemo(() => new Set(targets.data?.items.map((target) => target.appId)), [targets.data?.items]);
   const availableApps = apps.data?.items.filter((app) => !linkedApps.has(app.id)) ?? [];
   if (targets.isError) return <ProjectEnvironmentLayout workspaceId={workspaceId} projectId={projectId} environmentId={environmentId}><Alert>{userFacingError(targets.error)}</Alert></ProjectEnvironmentLayout>;
-  return <ProjectEnvironmentLayout workspaceId={workspaceId} projectId={projectId} environmentId={environmentId}><section className="stack"><div className="section-heading"><div><p className="eyebrow">Environment</p><h2>Apps</h2><p className="muted">Somente Apps configurados neste Environment aparecem aqui.</p></div>{session.data?.actor.role === "owner" && <Button type="button" onClick={() => setShowAdd((value) => !value)}>{showAdd ? "Fechar" : "Adicionar App"}</Button>}</div>{(targets.error || apps.error) && <Alert>{userFacingError(targets.error ?? apps.error)}</Alert>}{showAdd && <AddAppToEnvironment workspaceId={workspaceId} projectId={projectId} environmentId={environmentId} availableApps={availableApps} onCreated={async (target) => { setShowAdd(false); await queryClient.invalidateQueries({ queryKey: workspaceScopeKeys.environmentApps(workspaceId, projectId, environmentId) }); await navigate({ to: "/workspaces/$workspaceId/projects/$projectId/environments/$environmentId/apps/$appEnvironmentId", params: { workspaceId, projectId, environmentId, appEnvironmentId: target.id } }); }}/>} {targets.isPending ? <p className="muted" role="status">Carregando Apps…</p> : targets.data?.items.length ? <div className="service-grid">{targets.data.items.map((target) => <Link className="service-card" aria-label={`Abrir ${target.appName}`} key={target.id} to="/workspaces/$workspaceId/projects/$projectId/environments/$environmentId/apps/$appEnvironmentId" params={{ workspaceId, projectId, environmentId, appEnvironmentId: target.id }}><div className="service-card-heading"><span className="service-mark" aria-hidden="true">{target.appName.slice(0, 1).toUpperCase()}</span><StatusBadge status={target.state}/></div><div><h3>{target.appName}</h3><p>{target.branch}</p></div><dl><div><dt>Runtime</dt><dd>{target.configuration.exposure === "Public" ? `${target.configuration.slug}.molejo.dev` : "Privado"}</dd></div><div><dt>Configuração</dt><dd>v{target.configurationVersion}</dd></div></dl></Link>)}</div> : <EmptyState title="Nenhum App neste Environment" description="Adicione um App existente ou crie um novo App já configurado para este Environment." action={session.data?.actor.role === "owner" && !showAdd ? <Button type="button" onClick={() => setShowAdd(true)}>Adicionar App</Button> : undefined}/>}</section></ProjectEnvironmentLayout>;
+  return <ProjectEnvironmentLayout workspaceId={workspaceId} projectId={projectId} environmentId={environmentId}><section className="stack"><div className="section-heading"><div><p className="eyebrow">Environment</p><h2>Apps</h2><p className="muted">Somente Apps configurados neste Environment aparecem aqui.</p></div>{canMutate && <Button type="button" onClick={() => setShowAdd((value) => !value)}>{showAdd ? "Fechar" : "Adicionar App"}</Button>}</div>{(targets.error || apps.error) && <Alert>{userFacingError(targets.error ?? apps.error)}</Alert>}{showAdd && canMutate && <AddAppToEnvironment workspaceId={workspaceId} projectId={projectId} environmentId={environmentId} availableApps={availableApps} onCreated={async (target) => { setShowAdd(false); await queryClient.invalidateQueries({ queryKey: workspaceScopeKeys.environmentApps(workspaceId, projectId, environmentId) }); await navigate({ to: "/workspaces/$workspaceId/projects/$projectId/environments/$environmentId/apps/$appEnvironmentId", params: { workspaceId, projectId, environmentId, appEnvironmentId: target.id } }); }}/>} {targets.isPending ? <p className="muted" role="status">Carregando Apps…</p> : targets.data?.items.length ? <div className="service-grid">{targets.data.items.map((target) => <Link className="service-card" aria-label={`Abrir ${target.appName}`} key={target.id} to="/workspaces/$workspaceId/projects/$projectId/environments/$environmentId/apps/$appEnvironmentId" params={{ workspaceId, projectId, environmentId, appEnvironmentId: target.id }}><div className="service-card-heading"><span className="service-mark" aria-hidden="true">{target.appName.slice(0, 1).toUpperCase()}</span><StatusBadge status={target.state}/></div><div><h3>{target.appName}</h3><p>{target.branch}</p></div><dl><div><dt>Runtime</dt><dd>{target.configuration.exposure === "Public" ? `${target.configuration.slug}.molejo.dev` : "Privado"}</dd></div><div><dt>Configuração</dt><dd>v{target.configurationVersion}</dd></div></dl></Link>)}</div> : <EmptyState title="Nenhum App neste Environment" description="Adicione um App existente ou crie um novo App já configurado para este Environment." action={canMutate && !showAdd ? <Button type="button" onClick={() => setShowAdd(true)}>Adicionar App</Button> : undefined}/>}</section></ProjectEnvironmentLayout>;
 }
 
 function AddAppToEnvironment({ workspaceId, projectId, environmentId, availableApps, onCreated }: { workspaceId: string; projectId: string; environmentId: string; availableApps: Array<{ id: string; name: string }>; onCreated: (target: AppEnvironment) => Promise<void> }) {
@@ -104,7 +106,7 @@ function TargetOverview({ target }: { target: AppEnvironment }) {
 export function EnvironmentAppBuildsPage() {
   const session = useSessionQuery();
   const queryClient = useQueryClient();
-  return <EnvironmentAppLayout>{(target, params) => <section className="stack"><DeliveryNav params={params}/><TargetBuilds target={target} params={params} canMutate={session.data?.actor.role === "owner"} queryClient={queryClient}/></section>}</EnvironmentAppLayout>;
+  return <EnvironmentAppLayout>{(target, params) => <section className="stack"><DeliveryNav params={params}/><TargetBuilds target={target} params={params} canMutate={canEditWorkspace(session.data, params.workspaceId)} queryClient={queryClient}/></section>}</EnvironmentAppLayout>;
 }
 
 function TargetBuilds({ target, params, canMutate, queryClient }: { target: AppEnvironment; params: EnvironmentParams; canMutate: boolean; queryClient: ReturnType<typeof useQueryClient> }) {
@@ -135,7 +137,7 @@ function TargetBuildDetail({ target, params }: { target: AppEnvironment; params:
 export function EnvironmentAppDeploymentsPage() {
   const session = useSessionQuery();
   const queryClient = useQueryClient();
-  return <EnvironmentAppLayout>{(target, params) => <section className="stack"><DeliveryNav params={params}/><TargetDeployments target={target} params={params} canMutate={session.data?.actor.role === "owner"} queryClient={queryClient}/></section>}</EnvironmentAppLayout>;
+  return <EnvironmentAppLayout>{(target, params) => <section className="stack"><DeliveryNav params={params}/><TargetDeployments target={target} params={params} canMutate={canEditWorkspace(session.data, params.workspaceId)} queryClient={queryClient}/></section>}</EnvironmentAppLayout>;
 }
 
 function TargetDeployments({ target, params, canMutate, queryClient }: { target: AppEnvironment; params: EnvironmentParams; canMutate: boolean; queryClient: ReturnType<typeof useQueryClient> }) {
@@ -158,7 +160,7 @@ function TargetDeployments({ target, params, canMutate, queryClient }: { target:
 export function EnvironmentAppReleasesPage() {
   const session = useSessionQuery();
   const queryClient = useQueryClient();
-  return <EnvironmentAppLayout>{(target, params) => <TargetReleases target={target} params={params} canMutate={session.data?.actor.role === "owner"} queryClient={queryClient}/>}</EnvironmentAppLayout>;
+  return <EnvironmentAppLayout>{(target, params) => <TargetReleases target={target} params={params} canMutate={canEditWorkspace(session.data, params.workspaceId)} queryClient={queryClient}/>}</EnvironmentAppLayout>;
 }
 
 function TargetReleases({ target, params, canMutate, queryClient }: { target: AppEnvironment; params: EnvironmentParams; canMutate: boolean; queryClient: ReturnType<typeof useQueryClient> }) {

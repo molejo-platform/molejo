@@ -4,9 +4,12 @@ import (
 	"errors"
 	"math"
 	"net/http"
+	"strings"
 
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/api/generated"
+	"github.com/fruto-platform/fruto/services/control-plane-api/internal/authorization"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/domain"
+	"github.com/fruto-platform/fruto/services/control-plane-api/internal/identity"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/store"
 )
 
@@ -15,7 +18,7 @@ type hierarchyInput struct {
 }
 
 func (h *generatedHandler) ListWorkspaces(w http.ResponseWriter, r *http.Request, params generated.ListWorkspacesParams) {
-	actor, ok := h.authorizeActor(w, r, false)
+	user, ok := h.authorizeUser(w, r, false)
 	if !ok {
 		return
 	}
@@ -23,7 +26,7 @@ func (h *generatedHandler) ListWorkspaces(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
-	items, nextCursor, err := h.server.Store.ListWorkspaces(r.Context(), actor.ID, beforeID, limit)
+	items, nextCursor, err := h.server.Store.ListWorkspaces(r.Context(), user.ID, beforeID, limit)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "storage_failed", "could not list workspaces", r)
 		return
@@ -32,8 +35,13 @@ func (h *generatedHandler) ListWorkspaces(w http.ResponseWriter, r *http.Request
 }
 
 func (h *generatedHandler) CreateWorkspace(w http.ResponseWriter, r *http.Request, _ generated.CreateWorkspaceParams) {
-	actor, ok := h.authorizeActor(w, r, true)
+	user, ok := h.authorizeUser(w, r, true)
 	if !ok {
+		return
+	}
+	context, err := h.server.Store.AuthorizationContext(r.Context(), user.ID, 0, "Installation", "default")
+	if err != nil || !authorization.Allowed(context, authorization.CreateWorkspace) {
+		writeError(w, http.StatusForbidden, "permission_denied", "installation administration is required", r)
 		return
 	}
 	idem, payload, ok := idempotency(r)
@@ -54,7 +62,7 @@ func (h *generatedHandler) CreateWorkspace(w http.ResponseWriter, r *http.Reques
 		if err != nil {
 			break
 		}
-		workspace, operation, _, err := h.server.Store.CreateWorkspace(r.Context(), actor.ID, workspaceID, operationID, name, domain.SHA256([]byte(idem)), payload)
+		workspace, operation, _, err := h.server.Store.CreateWorkspace(r.Context(), user.ID, workspaceID, operationID, name, domain.SHA256([]byte(idem)), payload)
 		if errors.Is(err, store.ErrPublicIDCollision) {
 			continue
 		}
@@ -354,39 +362,76 @@ func (h *generatedHandler) ArchiveApp(w http.ResponseWriter, r *http.Request, wo
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *generatedHandler) authorizeActor(w http.ResponseWriter, r *http.Request, mutation bool) (domain.Actor, bool) {
-	actorID, csrf, ok := h.server.session(r)
+func (h *generatedHandler) authorizeUser(w http.ResponseWriter, r *http.Request, mutation bool) (identity.User, bool) {
+	userID, csrf, ok := h.server.session(r)
 	if !ok {
 		writeError(w, http.StatusUnauthorized, "unauthenticated", "authentication required", r)
-		return domain.Actor{}, false
+		return identity.User{}, false
 	}
-	actor, err := h.server.Store.Actor(r.Context(), actorID)
+	user, err := h.server.Store.User(r.Context(), userID)
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, "unauthenticated", "authentication required", r)
-		return domain.Actor{}, false
+		return identity.User{}, false
 	}
 	if mutation && !h.server.validCSRF(r, csrf) {
 		writeError(w, http.StatusForbidden, "csrf_failed", "request could not be verified", r)
-		return domain.Actor{}, false
+		return identity.User{}, false
 	}
-	if mutation && actor.Role != "owner" {
-		writeError(w, http.StatusForbidden, "admin_required", "administrative access is required", r)
-		return domain.Actor{}, false
-	}
-	return actor, true
+	return user, true
 }
 
-func (h *generatedHandler) authorizeWorkspace(w http.ResponseWriter, r *http.Request, publicID string, mutation bool) (domain.Actor, domain.Workspace, bool) {
-	actor, ok := h.authorizeActor(w, r, mutation)
+func (h *generatedHandler) authorizeWorkspace(w http.ResponseWriter, r *http.Request, publicID string, mutation bool) (identity.User, domain.Workspace, bool) {
+	user, ok := h.authorizeUser(w, r, mutation)
 	if !ok {
-		return domain.Actor{}, domain.Workspace{}, false
+		return identity.User{}, domain.Workspace{}, false
 	}
-	workspace, err := h.server.Store.FindWorkspaceForActor(r.Context(), actor.ID, publicID)
+	workspace, err := h.server.Store.FindWorkspaceForUser(r.Context(), user.ID, publicID)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "resource_not_found", "resource was not found", r)
-		return domain.Actor{}, domain.Workspace{}, false
+		return identity.User{}, domain.Workspace{}, false
 	}
-	return actor, workspace, true
+	permission := authorization.ReadWorkspace
+	resourceType, resourceID := "Workspace", workspace.PublicID
+	if mutation {
+		permission = mutationPermission(r)
+		resourceType, resourceID = authorizationResource(r.URL.Path, workspace.PublicID)
+	}
+	context, err := h.server.Store.AuthorizationContext(r.Context(), user.ID, workspace.ID, resourceType, resourceID)
+	if err != nil || !authorization.Allowed(context, permission) {
+		writeError(w, http.StatusForbidden, "permission_denied", "permission is required", r)
+		return identity.User{}, domain.Workspace{}, false
+	}
+	return user, workspace, true
+}
+
+func mutationPermission(r *http.Request) authorization.Permission {
+	if r.Method == http.MethodPost && (strings.Contains(r.URL.Path, "/builds") || strings.Contains(r.URL.Path, "/deployments")) {
+		return authorization.Deploy
+	}
+	return authorization.EditResources
+}
+
+func authorizationResource(path, workspaceID string) (string, string) {
+	segments := strings.Split(strings.Trim(path, "/"), "/")
+	resourceType, resourceID := "Workspace", workspaceID
+	for index := 0; index+1 < len(segments); index++ {
+		switch segments[index] {
+		case "projects":
+			resourceType, resourceID = "Project", segments[index+1]
+		case "apps":
+			if resourceType == "Project" {
+				resourceType, resourceID = "App", segments[index+1]
+			}
+		case "environments":
+			if resourceType == "App" {
+				candidate := segments[index+1]
+				if strings.HasPrefix(candidate, "aev-") {
+					resourceType, resourceID = "AppEnvironment", candidate
+				}
+			}
+		}
+	}
+	return resourceType, resourceID
 }
 
 func (h *generatedHandler) projectExists(w http.ResponseWriter, r *http.Request, workspaceID int64, projectID string) bool {

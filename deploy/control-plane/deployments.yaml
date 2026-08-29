@@ -56,6 +56,10 @@ spec:
               value: /var/run/secrets/molejo/openbao-auth/token
             - name: FRUTO_PARAMETER_FINGERPRINT_KEY_FILE
               value: /var/run/secrets/molejo/parameter-fingerprint/key
+            - name: FRUTO_PASSWORD_RESET_KEY_FILE
+              value: /var/run/secrets/molejo/password-reset/key
+            - name: FRUTO_TOTP_ENABLED
+              value: "true"
           volumeMounts:
             - name: github-app
               mountPath: /var/run/secrets/molejo/github-app
@@ -71,6 +75,9 @@ spec:
               readOnly: true
             - name: parameter-fingerprint
               mountPath: /var/run/secrets/molejo/parameter-fingerprint
+              readOnly: true
+            - name: password-reset
+              mountPath: /var/run/secrets/molejo/password-reset
               readOnly: true
             - name: observability-reader
               mountPath: /var/run/secrets/molejo/observability
@@ -120,6 +127,9 @@ spec:
         - name: parameter-fingerprint
           secret:
             secretName: required-external-parameter-fingerprint-secret
+        - name: password-reset
+          secret:
+            secretName: required-external-password-reset-secret
         - name: observability-reader
           secret:
             secretName: required-external-observability-reader-secret

@@ -1,8 +1,8 @@
 import { request, setCsrfToken } from "../../shared/api/http-client";
-import type { Session } from "../../shared/api/types";
+import type { MFAChallenge, Session } from "../../shared/api/types";
 import { publishSessionState } from "../../shared/auth/session-state";
 
-export type LoginInput = { actor: "owner" | "tester-1" | "tester-2"; password: string };
+export type LoginInput = { username: string; password: string };
 
 export async function getSession() {
   const session = await request<Session>("/api/v1/session");
@@ -12,7 +12,13 @@ export async function getSession() {
 }
 
 export async function login(input: LoginInput) {
-  const session = await request<Session>("/api/v1/session", { method: "POST", body: JSON.stringify(input) });
+  const result = await request<Session | MFAChallenge>("/api/v1/session", { method: "POST", body: JSON.stringify(input) });
+  if ("csrfToken" in result) setCsrfToken(result.csrfToken);
+  return result;
+}
+
+export async function completeTOTPLogin(challengeToken: string, code: string) {
+  const session = await request<Session>("/api/v1/session/mfa/totp", { method: "POST", body: JSON.stringify({ challengeToken, code }) });
   setCsrfToken(session.csrfToken);
   return session;
 }

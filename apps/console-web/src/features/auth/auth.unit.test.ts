@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { getCsrfToken, request, setCsrfRecovery, setCsrfToken } from "../../shared/api/http-client";
 import { ApiRequestError } from "../../shared/api/errors";
-import { getSession, login } from "./api";
+import { completeTOTPLogin, getSession, login } from "./api";
 
 describe("auth slice", () => {
   beforeEach(() => {
@@ -14,9 +14,9 @@ describe("auth slice", () => {
 
   it("stores the CSRF token in memory after login", async () => {
     const fetchMock = vi.mocked(fetch);
-    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ actor: { id: "owner", role: "owner" }, csrfToken: "csrf-1" }), { status: 200 }));
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ user: { id: "usr-aaaaaaaaaaaaaaaaaaaa" }, assuranceLevel: "AAL1", csrfToken: "csrf-1", installationCapabilities: {}, workspaceMemberships: [] }), { status: 200 }));
 
-    await login({ actor: "owner", password: "secret" });
+    await login({ username: "owner", password: "secret" });
 
     expect(getCsrfToken()).toBe("csrf-1");
     expect(fetchMock).toHaveBeenCalledWith("/api/v1/session", expect.objectContaining({ method: "POST", credentials: "same-origin" }));
@@ -25,11 +25,25 @@ describe("auth slice", () => {
   it("surfaces invalid credentials as a typed API error", async () => {
     vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({ code: "invalid_credentials", message: "credentials are invalid", requestId: "req-1" }), { status: 401 }));
 
-    await expect(login({ actor: "owner", password: "wrong" })).rejects.toBeInstanceOf(ApiRequestError);
+    await expect(login({ username: "owner", password: "wrong" })).rejects.toBeInstanceOf(ApiRequestError);
+  });
+
+  it("does not create client session state until the MFA challenge completes", async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock
+      .mockResolvedValueOnce(new Response(JSON.stringify({ mfaRequired: true, method: "TOTP", challengeToken: "challenge-1" }), { status: 202 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ user: { id: "usr-aaaaaaaaaaaaaaaaaaaa" }, assuranceLevel: "AAL2", csrfToken: "csrf-2", installationCapabilities: {}, workspaceMemberships: [] }), { status: 200 }));
+
+    const challenge = await login({ username: "owner", password: "secret" });
+    expect("mfaRequired" in challenge).toBe(true);
+    expect(getCsrfToken()).toBeUndefined();
+
+    await completeTOTPLogin("challenge-1", "123456");
+    expect(getCsrfToken()).toBe("csrf-2");
   });
 
   it("keeps session reads separate from login and renews the in-memory token", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({ actor: { id: "owner", role: "owner" }, csrfToken: "csrf-2" }), { status: 200 }));
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({ user: { id: "usr-aaaaaaaaaaaaaaaaaaaa" }, assuranceLevel: "AAL1", csrfToken: "csrf-2", installationCapabilities: {}, workspaceMemberships: [] }), { status: 200 }));
 
     await getSession();
 

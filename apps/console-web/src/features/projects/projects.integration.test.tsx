@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  role: "owner" as "owner" | "tester",
+  role: "Owner" as "Owner" | "Viewer",
   createApp: vi.fn(),
   updateApp: vi.fn(),
   listApps: vi.fn().mockResolvedValue({ items: [{ id: "app-existingaaaaaaaaaaaa", name: "Existing", version: 1 }], nextCursor: null }),
@@ -13,7 +13,7 @@ vi.mock("@tanstack/react-router", () => ({
   useParams: () => ({ workspaceId: "ws-aaaaaaaaaaaaaaaaaaaa", projectId: "prj-aaaaaaaaaaaaaaaaaaaa" }),
   Link: ({ children }: { children: React.ReactNode }) => <a href="#resource">{children}</a>,
 }));
-vi.mock("../auth/model", () => ({ useSessionQuery: () => ({ data: { actor: { id: "actor", role: mocks.role } } }) }));
+vi.mock("../auth/model", () => ({ useSessionQuery: () => ({ data: { workspaceMemberships: [{ workspaceId: "ws-aaaaaaaaaaaaaaaaaaaa", role: mocks.role }] } }) }));
 vi.mock("./api", () => ({
   listApps: mocks.listApps,
   createApp: mocks.createApp,
@@ -27,7 +27,7 @@ import { renderWithQueryClient } from "../../test/render";
 
 afterEach(() => {
   cleanup();
-  mocks.role = "owner";
+  mocks.role = "Owner";
   mocks.createApp.mockReset();
   mocks.updateApp.mockReset();
 });
@@ -53,7 +53,7 @@ describe("Project Apps page", () => {
   });
 
   it("keeps a tester in an explicit read-only state", async () => {
-    mocks.role = "tester";
+    mocks.role = "Viewer";
     renderWithQueryClient(<ProjectAppsPage/>);
     await screen.findByText("Existing");
     expect(screen.queryByLabelText("Novo App")).toBeNull();

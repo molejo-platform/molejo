@@ -3,9 +3,17 @@ import { expect, test, type Page } from "@playwright/test";
 const password = process.env.FRUTO_E2E_PASSWORD ?? "";
 async function login(page: Page) {
   await page.goto("/login");
+  await page.getByLabel("Usuário").fill("owner");
   await page.getByLabel("Senha").fill(password);
   await page.getByRole("button", { name: "Entrar" }).click();
   await expect(page).toHaveURL(/\/workspaces\/ws-[a-z2-7]{20}\/overview$/);
+  await expect.poll(() => page.evaluate(async () => {
+    const response = await fetch("/api/v1/session");
+    if (!response.ok) return false;
+    const session = await response.json() as { workspaceMemberships?: { workspaceId: string; role: string }[] };
+    const workspaceId = window.location.pathname.split("/")[2];
+    return session.workspaceMemberships?.some((membership) => membership.workspaceId === workspaceId && membership.role === "Owner") === true;
+  })).toBe(true);
 }
 
 test.describe("control plane browser flow", () => {

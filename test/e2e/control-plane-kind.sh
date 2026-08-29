@@ -219,7 +219,7 @@ bootstrap_host_database() {
 login() {
   local base_url="$1" cookie_jar="$2"
   local payload response
-  payload="$(jq -cn --arg password "$owner_password" '{actor:"owner",password:$password}')"
+  payload="$(jq -cn --arg password "$owner_password" '{username:"owner",password:$password}')"
   response="$(curl --fail --silent --show-error -c "$cookie_jar" \
     -H "Origin: http://127.0.0.1:${vite_port}" -H 'Content-Type: application/json' \
     -d "$payload" "$base_url/api/v1/session")"
@@ -289,24 +289,24 @@ seed_test_release() {
       -v fixture_ref="$fixture_ref" -v release_id="$release_id" >/dev/null <<'SQL'
 WITH refs AS (
   SELECT w.id AS workspace_id, p.id AS project_id, a.id AS app_id,
-         ae.id AS app_environment_id, wa.actor_id
+         ae.id AS app_environment_id, wm.user_id
   FROM workspaces w
   JOIN projects p ON p.workspace_id=w.id
   JOIN apps a ON a.project_id=p.id
   JOIN app_environments ae ON ae.app_id=a.id
-  JOIN workspace_actors wa ON wa.workspace_id=w.id
+  JOIN workspace_memberships wm ON wm.workspace_id=w.id
   WHERE w.public_id=:'workspace_id' AND p.public_id=:'project_id'
     AND a.public_id=:'app_id' AND ae.public_id=:'app_environment_id'
   LIMIT 1
 ), inserted_build AS (
   INSERT INTO builds(
     public_id,workspace_id,project_id,app_id,app_environment_id,
-    requested_by_actor_id,github_installation_external_id,repository_id,
+    requested_by_user_id,github_installation_external_id,repository_id,
     repository_full_name,source_branch,commit_sha,platform,status,
     idempotency_hash,payload_hash,completed_at
   )
   SELECT 'bld-aaaaaaaaaaaaaaaaaaaa',workspace_id,project_id,app_id,
-    app_environment_id,actor_id,1,1,'molejo/e2e','main',repeat('a',40),
+    app_environment_id,user_id,1,1,'molejo/e2e','main',repeat('a',40),
     'linux/amd64','Succeeded',decode(repeat('01',32),'hex'),
     decode(repeat('02',32),'hex'),now()
   FROM refs
@@ -437,7 +437,7 @@ assert_http_status 403 "$deployment_base" \
   -H 'Idempotency-Key: e2e-no-csrf' -H 'Content-Type: application/json' -d "$deployment_intent"
 assert_http_status 403 "http://127.0.0.1:${host_api_port}/api/v1/session" \
   -X POST -H 'Origin: https://invalid.example' -H 'Content-Type: application/json' \
-  -d '{"actor":"owner","password":"invalid"}'
+  -d '{"username":"owner","password":"invalid"}'
 assert_http_status 404 "$deployment_base/dpl-aaaaaaaaaaaaaaaaaaaa" -b "$host_cookie_jar"
 
 wait_operation "http://127.0.0.1:${host_api_port}" "$api_operation_id" "$host_cookie_jar"

@@ -44,7 +44,7 @@ func TestHierarchyAPIEnforcesMembershipRoleAndDeploymentAncestry(t *testing.T) {
 	t.Cleanup(func() {
 		cleanupCtx := context.Background()
 		_, _ = storage.Pool.Exec(cleanupCtx, `DELETE FROM operations WHERE workspace_id=(SELECT id FROM workspaces WHERE public_id=$1)`, workspaceAccepted.Workspace.PublicID)
-		_, _ = storage.Pool.Exec(cleanupCtx, `DELETE FROM workspace_actors WHERE workspace_id=(SELECT id FROM workspaces WHERE public_id=$1)`, workspaceAccepted.Workspace.PublicID)
+		_, _ = storage.Pool.Exec(cleanupCtx, `DELETE FROM workspace_memberships WHERE workspace_id=(SELECT id FROM workspaces WHERE public_id=$1)`, workspaceAccepted.Workspace.PublicID)
 		_, _ = storage.Pool.Exec(cleanupCtx, `DELETE FROM workspaces WHERE public_id=$1`, workspaceAccepted.Workspace.PublicID)
 	})
 	if workspaceAccepted.Workspace.BootstrapState == "Ready" {
@@ -161,6 +161,22 @@ func TestHierarchyAPIEnforcesMembershipRoleAndDeploymentAncestry(t *testing.T) {
 	if response.Code != http.StatusForbidden {
 		t.Fatalf("tester mutation status=%d body=%s", response.Code, response.Body.String())
 	}
+	var testerPublicID string
+	if err = storage.Pool.QueryRow(ctx, `SELECT public_id FROM users WHERE id=$1`, testerID).Scan(&testerPublicID); err != nil {
+		t.Fatal(err)
+	}
+	response = hierarchyRequest(t, server, owner, http.MethodPost, "/api/v1/workspaces/"+workspace.PublicID+"/access-grants", fmt.Sprintf(`{"subjectType":"User","subjectId":%q,"resourceType":"Project","resourceId":%q,"relation":"Editor"}`, testerPublicID, project.PublicID), nil)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("grant project editor status=%d body=%s", response.Code, response.Body.String())
+	}
+	response = hierarchyRequest(t, server, tester, http.MethodPut, "/api/v1/workspaces/"+workspace.PublicID+"/projects/"+project.PublicID, `{"name":"Viewer Edited Project"}`, map[string]string{"If-Match": "2"})
+	if response.Code != http.StatusOK {
+		t.Fatalf("project editor mutation status=%d body=%s", response.Code, response.Body.String())
+	}
+	response = hierarchyRequest(t, server, tester, http.MethodPut, "/api/v1/workspaces/"+workspace.PublicID+"/projects/"+otherProject.PublicID, `{"name":"Forbidden Other Project"}`, map[string]string{"If-Match": "1"})
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("project editor crossed resource boundary status=%d body=%s", response.Code, response.Body.String())
+	}
 
 	otherWorkspaceID, err := domain.NewPublicID("ws")
 	if err != nil {
@@ -212,6 +228,22 @@ func TestHierarchyAPIReportsConflictReasonsPrecisely(t *testing.T) {
 	}
 	response = hierarchyRequest(t, server, owner, http.MethodDelete, "/api/v1/workspaces/"+workspace.PublicID+"/projects/"+project.PublicID, "", map[string]string{"If-Match": fmt.Sprint(project.Version)})
 	assertHierarchyConflict(t, response, "dependency_conflict", "resource has active dependencies")
+}
+
+func TestAuthorizationResourceUsesTheMostSpecificSupportedResource(t *testing.T) {
+	workspaceID := "ws-aaaaaaaaaaaaaaaaaaaa"
+	tests := []struct{ path, resourceType, resourceID string }{
+		{"/api/v1/workspaces/" + workspaceID + "/settings", "Workspace", workspaceID},
+		{"/api/v1/workspaces/" + workspaceID + "/projects/prj-aaaaaaaaaaaaaaaaaaaa/environments/env-bbbbbbbbbbbbbbbbbbbb", "Project", "prj-aaaaaaaaaaaaaaaaaaaa"},
+		{"/api/v1/workspaces/" + workspaceID + "/projects/prj-aaaaaaaaaaaaaaaaaaaa/apps/app-bbbbbbbbbbbbbbbbbbbb/source", "App", "app-bbbbbbbbbbbbbbbbbbbb"},
+		{"/api/v1/workspaces/" + workspaceID + "/projects/prj-aaaaaaaaaaaaaaaaaaaa/apps/app-bbbbbbbbbbbbbbbbbbbb/environments/aev-cccccccccccccccccccc/deployments", "AppEnvironment", "aev-cccccccccccccccccccc"},
+	}
+	for _, test := range tests {
+		resourceType, resourceID := authorizationResource(test.path, workspaceID)
+		if resourceType != test.resourceType || resourceID != test.resourceID {
+			t.Fatalf("path=%s resource=%s/%s, want %s/%s", test.path, resourceType, resourceID, test.resourceType, test.resourceID)
+		}
+	}
 }
 
 func assertHierarchyConflict(t *testing.T, response *httptest.ResponseRecorder, code, message string) {
@@ -269,6 +301,7 @@ func hierarchyRequest(t *testing.T, server *Server, session apiSession, method, 
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("X-CSRF-Token", session.CSRF)
 	request.AddCookie(&http.Cookie{Name: "fruto_session", Value: session.Token})
+	request.AddCookie(&http.Cookie{Name: "fruto_session_csrf", Value: session.CSRF})
 	for key, value := range headers {
 		request.Header.Set(key, value)
 	}
@@ -288,16 +321,19 @@ func insertTester(t *testing.T, storage *store.Store, workspaceID int64) int64 {
 	t.Helper()
 	actorKey := fmt.Sprintf("hierarchy-tester-%d", time.Now().UnixNano())
 	var actorID int64
-	if err := storage.Pool.QueryRow(context.Background(), `INSERT INTO actors(actor_key,role,password_hash) VALUES ($1,'tester','integration-only') RETURNING id`, actorKey).Scan(&actorID); err != nil {
+	if err := storage.Pool.QueryRow(context.Background(), `INSERT INTO users(public_id,username,username_key,display_name,status) VALUES ($1,$2,$2,$2,'Active') RETURNING id`, mustAPIID(t, "usr"), actorKey).Scan(&actorID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := storage.Pool.Exec(context.Background(), `INSERT INTO workspace_actors(workspace_id,actor_id) VALUES ($1,$2)`, workspaceID, actorID); err != nil {
+	if _, err := storage.Pool.Exec(context.Background(), `INSERT INTO password_credentials(user_id,password_hash) VALUES ($1,'integration-only')`, actorID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := storage.Pool.Exec(context.Background(), `INSERT INTO workspace_memberships(workspace_id,user_id,role,status) VALUES ($1,$2,'Viewer','Active')`, workspaceID, actorID); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		_, _ = storage.Pool.Exec(context.Background(), `DELETE FROM sessions WHERE actor_id=$1`, actorID)
-		_, _ = storage.Pool.Exec(context.Background(), `DELETE FROM workspace_actors WHERE actor_id=$1`, actorID)
-		_, _ = storage.Pool.Exec(context.Background(), `DELETE FROM actors WHERE id=$1`, actorID)
+		_, _ = storage.Pool.Exec(context.Background(), `DELETE FROM sessions WHERE user_id=$1`, actorID)
+		_, _ = storage.Pool.Exec(context.Background(), `DELETE FROM workspace_memberships WHERE user_id=$1`, actorID)
+		_, _ = storage.Pool.Exec(context.Background(), `DELETE FROM users WHERE id=$1`, actorID)
 	})
 	return actorID
 }

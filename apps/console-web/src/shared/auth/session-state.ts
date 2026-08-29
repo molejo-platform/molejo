@@ -8,7 +8,7 @@ const channelName = "molejo.session";
 
 export function applySessionState(queryClient: QueryClient, session: Session, resetCache = false) {
   const current = queryClient.getQueryData<Session | null>(sessionQueryKey);
-  if (resetCache || (current && current.actor.id !== session.actor.id)) queryClient.removeQueries();
+  if (resetCache || (current && current.user.id !== session.user.id)) queryClient.removeQueries();
   setCsrfToken(session.csrfToken);
   queryClient.setQueryData(sessionQueryKey, session);
 }
@@ -40,6 +40,6 @@ export function subscribeSessionState(queryClient: QueryClient) {
 
 function isSession(value: unknown): value is Session {
   if (!value || typeof value !== "object") return false;
-  const candidate = value as { actor?: { id?: unknown; role?: unknown }; csrfToken?: unknown };
-  return typeof candidate.csrfToken === "string" && typeof candidate.actor?.id === "string" && ["owner", "tester"].includes(String(candidate.actor.role));
+  const candidate = value as { user?: { id?: unknown }; csrfToken?: unknown; assuranceLevel?: unknown };
+  return typeof candidate.csrfToken === "string" && typeof candidate.user?.id === "string" && ["AAL1", "AAL2"].includes(String(candidate.assuranceLevel));
 }

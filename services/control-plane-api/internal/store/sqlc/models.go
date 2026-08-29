@@ -8,12 +8,18 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type Actor struct {
-	ID           int64              `json:"id"`
-	ActorKey     string             `json:"actor_key"`
-	Role         string             `json:"role"`
-	PasswordHash string             `json:"password_hash"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+type AccessGrant struct {
+	ID               int64              `json:"id"`
+	PublicID         string             `json:"public_id"`
+	WorkspaceID      int64              `json:"workspace_id"`
+	SubjectType      string             `json:"subject_type"`
+	SubjectID        int64              `json:"subject_id"`
+	ResourceType     string             `json:"resource_type"`
+	ResourcePublicID string             `json:"resource_public_id"`
+	Relation         string             `json:"relation"`
+	Version          int64              `json:"version"`
+	CreatedByUserID  int64              `json:"created_by_user_id"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 }
 
 type App struct {
@@ -55,7 +61,7 @@ type AppEnvironmentConfigurationRevision struct {
 	AppEnvironmentID  int64              `json:"app_environment_id"`
 	Version           int64              `json:"version"`
 	ConfigurationJson []byte             `json:"configuration_json"`
-	CreatedByActorID  pgtype.Int8        `json:"created_by_actor_id"`
+	CreatedByUserID   pgtype.Int8        `json:"created_by_user_id"`
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 }
 
@@ -65,7 +71,7 @@ type AppEnvironmentDeliveryPolicy struct {
 	PushEnabled      bool               `json:"push_enabled"`
 	ReleaseEnabled   bool               `json:"release_enabled"`
 	Version          int64              `json:"version"`
-	UpdatedByActorID int64              `json:"updated_by_actor_id"`
+	UpdatedByUserID  int64              `json:"updated_by_user_id"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 }
@@ -90,13 +96,51 @@ type AppGithubSource struct {
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 }
 
+type AuditEvent struct {
+	ID             int64              `json:"id"`
+	PublicID       string             `json:"public_id"`
+	OccurredAt     pgtype.Timestamptz `json:"occurred_at"`
+	ActorUserID    pgtype.Int8        `json:"actor_user_id"`
+	SessionID      pgtype.Int8        `json:"session_id"`
+	WorkspaceID    pgtype.Int8        `json:"workspace_id"`
+	Action         string             `json:"action"`
+	TargetType     string             `json:"target_type"`
+	TargetPublicID string             `json:"target_public_id"`
+	Outcome        string             `json:"outcome"`
+	Reason         string             `json:"reason"`
+	RequestID      string             `json:"request_id"`
+	TraceID        string             `json:"trace_id"`
+	SourceHash     []byte             `json:"source_hash"`
+	UserAgentHash  []byte             `json:"user_agent_hash"`
+	MetadataJson   []byte             `json:"metadata_json"`
+}
+
+type AuthenticationChallenge struct {
+	ID            int64              `json:"id"`
+	ChallengeHash []byte             `json:"challenge_hash"`
+	UserID        int64              `json:"user_id"`
+	Kind          string             `json:"kind"`
+	PayloadJson   []byte             `json:"payload_json"`
+	Attempts      int32              `json:"attempts"`
+	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+	ConsumedAt    pgtype.Timestamptz `json:"consumed_at"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+type AuthenticationRateLimit struct {
+	KeyHash      []byte             `json:"key_hash"`
+	Failures     int32              `json:"failures"`
+	BlockedUntil pgtype.Timestamptz `json:"blocked_until"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Build struct {
 	ID                           int64              `json:"id"`
 	PublicID                     string             `json:"public_id"`
 	WorkspaceID                  int64              `json:"workspace_id"`
 	ProjectID                    int64              `json:"project_id"`
 	AppID                        int64              `json:"app_id"`
-	RequestedByActorID           int64              `json:"requested_by_actor_id"`
+	RequestedByUserID            int64              `json:"requested_by_user_id"`
 	GithubInstallationID         pgtype.Int8        `json:"github_installation_id"`
 	GithubInstallationExternalID int64              `json:"github_installation_external_id"`
 	RepositoryID                 int64              `json:"repository_id"`
@@ -134,26 +178,26 @@ type BuildLog struct {
 }
 
 type DeliveryTarget struct {
-	ID                 int64              `json:"id"`
-	PublicID           string             `json:"public_id"`
-	GithubDeliveryID   int64              `json:"github_delivery_id"`
-	WorkspaceID        int64              `json:"workspace_id"`
-	ProjectID          int64              `json:"project_id"`
-	AppID              int64              `json:"app_id"`
-	AppEnvironmentID   int64              `json:"app_environment_id"`
-	RequestedByActorID int64              `json:"requested_by_actor_id"`
-	PolicyVersion      int64              `json:"policy_version"`
-	TriggerType        string             `json:"trigger_type"`
-	SourceBranch       string             `json:"source_branch"`
-	CommitSha          string             `json:"commit_sha"`
-	BuildID            pgtype.Int8        `json:"build_id"`
-	DeploymentID       pgtype.Int8        `json:"deployment_id"`
-	Status             string             `json:"status"`
-	ErrorCode          string             `json:"error_code"`
-	ErrorMessage       string             `json:"error_message"`
-	CreatedAt          pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
-	CompletedAt        pgtype.Timestamptz `json:"completed_at"`
+	ID                int64              `json:"id"`
+	PublicID          string             `json:"public_id"`
+	GithubDeliveryID  int64              `json:"github_delivery_id"`
+	WorkspaceID       int64              `json:"workspace_id"`
+	ProjectID         int64              `json:"project_id"`
+	AppID             int64              `json:"app_id"`
+	AppEnvironmentID  int64              `json:"app_environment_id"`
+	RequestedByUserID int64              `json:"requested_by_user_id"`
+	PolicyVersion     int64              `json:"policy_version"`
+	TriggerType       string             `json:"trigger_type"`
+	SourceBranch      string             `json:"source_branch"`
+	CommitSha         string             `json:"commit_sha"`
+	BuildID           pgtype.Int8        `json:"build_id"`
+	DeploymentID      pgtype.Int8        `json:"deployment_id"`
+	Status            string             `json:"status"`
+	ErrorCode         string             `json:"error_code"`
+	ErrorMessage      string             `json:"error_message"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	CompletedAt       pgtype.Timestamptz `json:"completed_at"`
 }
 
 type Deployment struct {
@@ -163,7 +207,7 @@ type Deployment struct {
 	AppEnvironmentID     int64              `json:"app_environment_id"`
 	AppID                int64              `json:"app_id"`
 	ReleaseID            int64              `json:"release_id"`
-	RequestedByActorID   int64              `json:"requested_by_actor_id"`
+	RequestedByUserID    int64              `json:"requested_by_user_id"`
 	ConfigurationVersion int64              `json:"configuration_version"`
 	ConfigurationJson    []byte             `json:"configuration_json"`
 	Status               string             `json:"status"`
@@ -191,7 +235,7 @@ type GithubConnectionState struct {
 	ID                   int64              `json:"id"`
 	StateHash            []byte             `json:"state_hash"`
 	BrowserHash          []byte             `json:"browser_hash"`
-	ActorID              int64              `json:"actor_id"`
+	UserID               int64              `json:"user_id"`
 	WorkspaceID          int64              `json:"workspace_id"`
 	Step                 string             `json:"step"`
 	GithubInstallationID pgtype.Int8        `json:"github_installation_id"`
@@ -230,7 +274,7 @@ type GithubInstallation struct {
 	ID                   int64              `json:"id"`
 	PublicID             string             `json:"public_id"`
 	WorkspaceID          int64              `json:"workspace_id"`
-	ConnectedByActorID   int64              `json:"connected_by_actor_id"`
+	ConnectedByUserID    int64              `json:"connected_by_user_id"`
 	GithubInstallationID int64              `json:"github_installation_id"`
 	AccountID            int64              `json:"account_id"`
 	AccountLogin         string             `json:"account_login"`
@@ -241,29 +285,35 @@ type GithubInstallation struct {
 	Status               string             `json:"status"`
 }
 
+type InstallationRoleAssignment struct {
+	UserID    int64              `json:"user_id"`
+	Role      string             `json:"role"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
 type Operation struct {
-	ID               int64              `json:"id"`
-	PublicID         string             `json:"public_id"`
-	WorkspaceID      int64              `json:"workspace_id"`
-	AppEnvironmentID pgtype.Int8        `json:"app_environment_id"`
-	DeploymentID     pgtype.Int8        `json:"deployment_id"`
-	ActorID          int64              `json:"actor_id"`
-	Kind             string             `json:"kind"`
-	Status           string             `json:"status"`
-	IdempotencyHash  []byte             `json:"idempotency_hash"`
-	PayloadHash      []byte             `json:"payload_hash"`
-	DesiredVersion   int64              `json:"desired_version"`
-	Attempts         int32              `json:"attempts"`
-	NextAttemptAt    pgtype.Timestamptz `json:"next_attempt_at"`
-	LeaseUntil       pgtype.Timestamptz `json:"lease_until"`
-	WorkerID         pgtype.Text        `json:"worker_id"`
-	FencingToken     int64              `json:"fencing_token"`
-	ErrorCode        string             `json:"error_code"`
-	ErrorMessage     string             `json:"error_message"`
-	StartedAt        pgtype.Timestamptz `json:"started_at"`
-	CompletedAt      pgtype.Timestamptz `json:"completed_at"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	ID                int64              `json:"id"`
+	PublicID          string             `json:"public_id"`
+	WorkspaceID       int64              `json:"workspace_id"`
+	AppEnvironmentID  pgtype.Int8        `json:"app_environment_id"`
+	DeploymentID      pgtype.Int8        `json:"deployment_id"`
+	RequestedByUserID int64              `json:"requested_by_user_id"`
+	Kind              string             `json:"kind"`
+	Status            string             `json:"status"`
+	IdempotencyHash   []byte             `json:"idempotency_hash"`
+	PayloadHash       []byte             `json:"payload_hash"`
+	DesiredVersion    int64              `json:"desired_version"`
+	Attempts          int32              `json:"attempts"`
+	NextAttemptAt     pgtype.Timestamptz `json:"next_attempt_at"`
+	LeaseUntil        pgtype.Timestamptz `json:"lease_until"`
+	WorkerID          pgtype.Text        `json:"worker_id"`
+	FencingToken      int64              `json:"fencing_token"`
+	ErrorCode         string             `json:"error_code"`
+	ErrorMessage      string             `json:"error_message"`
+	StartedAt         pgtype.Timestamptz `json:"started_at"`
+	CompletedAt       pgtype.Timestamptz `json:"completed_at"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Parameter struct {
@@ -294,7 +344,7 @@ type ParameterPathReservation struct {
 type ParameterVersion struct {
 	ParameterID                  int64              `json:"parameter_id"`
 	Version                      int64              `json:"version"`
-	CreatedByActorID             int64              `json:"created_by_actor_id"`
+	CreatedByUserID              int64              `json:"created_by_user_id"`
 	PlaintextValue               pgtype.Text        `json:"plaintext_value"`
 	SecretReference              pgtype.Text        `json:"secret_reference"`
 	SecretBackendVersion         pgtype.Int8        `json:"secret_backend_version"`
@@ -309,6 +359,26 @@ type ParameterVersion struct {
 	CompletedAt                  pgtype.Timestamptz `json:"completed_at"`
 }
 
+type PasswordCredential struct {
+	UserID       int64              `json:"user_id"`
+	PasswordHash string             `json:"password_hash"`
+	Algorithm    string             `json:"algorithm"`
+	ChangedAt    pgtype.Timestamptz `json:"changed_at"`
+}
+
+type PasswordResetGrant struct {
+	ID              int64              `json:"id"`
+	PublicID        string             `json:"public_id"`
+	UserID          int64              `json:"user_id"`
+	CodeHash        []byte             `json:"code_hash"`
+	Attempts        int32              `json:"attempts"`
+	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
+	VerifiedAt      pgtype.Timestamptz `json:"verified_at"`
+	ConsumedAt      pgtype.Timestamptz `json:"consumed_at"`
+	CreatedByUserID int64              `json:"created_by_user_id"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
 type Project struct {
 	ID          int64              `json:"id"`
 	PublicID    string             `json:"public_id"`
@@ -319,6 +389,14 @@ type Project struct {
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 	ArchivedAt  pgtype.Timestamptz `json:"archived_at"`
+}
+
+type RecoveryCode struct {
+	ID        int64              `json:"id"`
+	UserID    int64              `json:"user_id"`
+	CodeHash  []byte             `json:"code_hash"`
+	UsedAt    pgtype.Timestamptz `json:"used_at"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
 type Release struct {
@@ -347,13 +425,50 @@ type ReleaseGcCandidate struct {
 }
 
 type Session struct {
-	ID        int64              `json:"id"`
-	TokenHash []byte             `json:"token_hash"`
-	ActorID   int64              `json:"actor_id"`
-	CsrfHash  []byte             `json:"csrf_hash"`
-	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
-	RevokedAt pgtype.Timestamptz `json:"revoked_at"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	ID             int64              `json:"id"`
+	TokenHash      []byte             `json:"token_hash"`
+	UserID         int64              `json:"user_id"`
+	CsrfHash       []byte             `json:"csrf_hash"`
+	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
+	RevokedAt      pgtype.Timestamptz `json:"revoked_at"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	PublicID       string             `json:"public_id"`
+	AuthVersion    int64              `json:"auth_version"`
+	AssuranceLevel string             `json:"assurance_level"`
+	LastSeenAt     pgtype.Timestamptz `json:"last_seen_at"`
+	IdleExpiresAt  pgtype.Timestamptz `json:"idle_expires_at"`
+}
+
+type TotpCredential struct {
+	UserID          int64              `json:"user_id"`
+	SecretReference string             `json:"secret_reference"`
+	SecretVersion   int64              `json:"secret_version"`
+	EnabledAt       pgtype.Timestamptz `json:"enabled_at"`
+	LastUsedStep    int64              `json:"last_used_step"`
+}
+
+type User struct {
+	ID          int64              `json:"id"`
+	Username    string             `json:"username"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	PublicID    string             `json:"public_id"`
+	UsernameKey string             `json:"username_key"`
+	DisplayName string             `json:"display_name"`
+	Status      string             `json:"status"`
+	Version     int64              `json:"version"`
+	AuthVersion int64              `json:"auth_version"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
+type WebauthnCredential struct {
+	ID             int64              `json:"id"`
+	PublicID       string             `json:"public_id"`
+	UserID         int64              `json:"user_id"`
+	CredentialID   []byte             `json:"credential_id"`
+	CredentialJson []byte             `json:"credential_json"`
+	Name           string             `json:"name"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	LastUsedAt     pgtype.Timestamptz `json:"last_used_at"`
 }
 
 type Workspace struct {
@@ -367,7 +482,30 @@ type Workspace struct {
 	Version        int64              `json:"version"`
 }
 
-type WorkspaceActor struct {
-	WorkspaceID int64 `json:"workspace_id"`
-	ActorID     int64 `json:"actor_id"`
+type WorkspaceGroup struct {
+	ID          int64              `json:"id"`
+	PublicID    string             `json:"public_id"`
+	WorkspaceID int64              `json:"workspace_id"`
+	Name        string             `json:"name"`
+	NameKey     string             `json:"name_key"`
+	Version     int64              `json:"version"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
+type WorkspaceGroupMember struct {
+	WorkspaceID int64              `json:"workspace_id"`
+	GroupID     int64              `json:"group_id"`
+	UserID      int64              `json:"user_id"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+type WorkspaceMembership struct {
+	WorkspaceID int64              `json:"workspace_id"`
+	UserID      int64              `json:"user_id"`
+	Role        string             `json:"role"`
+	Status      string             `json:"status"`
+	Version     int64              `json:"version"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }

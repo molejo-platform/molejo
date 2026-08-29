@@ -49,7 +49,7 @@ vi.mock("@tanstack/react-router", () => ({
   useMatchRoute: () => () => false,
   Link: ({ children }: { children: React.ReactNode }) => <a href="#target">{children}</a>,
 }));
-vi.mock("../auth/model", () => ({ useSessionQuery: () => ({ data: { actor: { id: "actor", role: "owner" } } }) }));
+vi.mock("../auth/model", () => ({ useSessionQuery: () => ({ data: { workspaceMemberships: [{ workspaceId: "ws-aaaaaaaaaaaaaaaaaaaa", role: "Owner" }] } }) }));
 vi.mock("../parameters/api", () => ({ listParameters: vi.fn().mockResolvedValue({ items: [{ id: "par-aaaaaaaaaaaaaaaaaaaa", path: "/shared/api-token", type: "Secret", description: "", currentVersion: 2, version: 2, configured: true, createdAt: "2026-08-27T00:00:00Z", updatedAt: "2026-08-27T00:00:00Z" }], nextCursor: null }) }));
 vi.mock("./ProjectEnvironmentLayout", () => ({ ProjectEnvironmentLayout: ({ children }: { children: React.ReactNode }) => <>{children}</> }));
 vi.mock("../projects/api", () => ({

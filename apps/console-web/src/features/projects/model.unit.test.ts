@@ -9,7 +9,8 @@ describe("resource model", () => {
   });
 
   it("keeps mutation permission explicit", () => {
-    expect(canMutateResources("owner")).toBe(true);
-    expect(canMutateResources("tester")).toBe(false);
+    expect(canMutateResources("Owner")).toBe(true);
+    expect(canMutateResources("Member")).toBe(true);
+    expect(canMutateResources("Viewer")).toBe(false);
   });
 });

@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/api/generated"
+	"github.com/fruto-platform/fruto/services/control-plane-api/internal/authorization"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/domain"
 	"github.com/go-chi/chi/v5"
 )
@@ -42,12 +43,12 @@ func (h *generatedHandler) Login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *generatedHandler) GetSession(w http.ResponseWriter, r *http.Request) {
-	actorID, _, ok := h.server.session(r)
+	principal, ok := h.server.sessionPrincipal(r)
 	if !ok {
 		writeError(w, http.StatusUnauthorized, "unauthenticated", "authentication required", r)
 		return
 	}
-	h.server.sessionInfo(w, r, actorID)
+	h.server.sessionInfo(w, r, principal.UserID, principal.AssuranceLevel)
 }
 
 func (h *generatedHandler) Logout(w http.ResponseWriter, r *http.Request) {
@@ -71,12 +72,12 @@ func (h *generatedHandler) GetCurrentWorkspace(w http.ResponseWriter, r *http.Re
 }
 
 func (h *generatedHandler) GetOperation(w http.ResponseWriter, r *http.Request, operationID string) {
-	actorID, _, ok := h.server.session(r)
+	userID, _, ok := h.server.session(r)
 	if !ok {
 		writeError(w, http.StatusUnauthorized, "unauthenticated", "authentication required", r)
 		return
 	}
-	operation, err := h.server.Store.GetOperationForActor(r.Context(), actorID, operationID)
+	operation, err := h.server.Store.GetOperationForUser(r.Context(), userID, operationID)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "operation_not_found", "operation was not found", r)
 		return
@@ -85,7 +86,7 @@ func (h *generatedHandler) GetOperation(w http.ResponseWriter, r *http.Request, 
 }
 
 func (h *generatedHandler) authorize(w http.ResponseWriter, r *http.Request, mutation bool) (int64, domain.Workspace, bool) {
-	actorID, csrf, ok := h.server.session(r)
+	userID, csrf, ok := h.server.session(r)
 	if !ok {
 		writeError(w, http.StatusUnauthorized, "unauthenticated", "authentication required", r)
 		return 0, domain.Workspace{}, false
@@ -94,17 +95,19 @@ func (h *generatedHandler) authorize(w http.ResponseWriter, r *http.Request, mut
 		writeError(w, http.StatusForbidden, "csrf_failed", "request could not be verified", r)
 		return 0, domain.Workspace{}, false
 	}
-	if mutation {
-		actor, err := h.server.Store.Actor(r.Context(), actorID)
-		if err != nil || actor.Role != "owner" {
-			writeError(w, http.StatusForbidden, "admin_required", "administrative access is required", r)
-			return 0, domain.Workspace{}, false
-		}
-	}
-	workspace, err := h.server.Store.WorkspaceForActor(r.Context(), actorID)
+	workspace, err := h.server.Store.WorkspaceForUser(r.Context(), userID)
 	if err != nil {
 		writeError(w, http.StatusForbidden, "workspace_forbidden", "workspace access is not configured", r)
 		return 0, domain.Workspace{}, false
 	}
-	return actorID, workspace, true
+	permission := authorization.ReadWorkspace
+	if mutation {
+		permission = authorization.EditResources
+	}
+	context, err := h.server.Store.AuthorizationContext(r.Context(), userID, workspace.ID, "Workspace", workspace.PublicID)
+	if err != nil || !authorization.Allowed(context, permission) {
+		writeError(w, http.StatusForbidden, "permission_denied", "permission is required", r)
+		return 0, domain.Workspace{}, false
+	}
+	return userID, workspace, true
 }

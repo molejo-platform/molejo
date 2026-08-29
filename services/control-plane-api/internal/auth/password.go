@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -12,6 +13,8 @@ import (
 
 	"golang.org/x/crypto/argon2"
 )
+
+const resetAlphabet = "ABCDEFGHJKMNPQRSTVWXYZ23456789"
 
 const (
 	argonMemory     = 64 * 1024
@@ -32,6 +35,37 @@ func HashPassword(password string) (string, error) {
 	hash := argon2.IDKey([]byte(password), salt, argonTime, argonMemory, argonThreads, argonKeyLength)
 	enc := base64.RawStdEncoding
 	return fmt.Sprintf("$argon2id$v=19$m=%d,t=%d,p=%d$%s$%s", argonMemory, argonTime, argonThreads, enc.EncodeToString(salt), enc.EncodeToString(hash)), nil
+}
+
+func ValidatePassword(password string) error {
+	if len(password) < 15 {
+		return errors.New("password must contain at least 15 characters")
+	}
+	if len(password) > 1024 {
+		return errors.New("password must contain at most 1024 bytes")
+	}
+	return nil
+}
+
+func NewResetCode() (string, error) {
+	bytes := make([]byte, 12)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", err
+	}
+	for index := range bytes {
+		bytes[index] = resetAlphabet[int(bytes[index])%len(resetAlphabet)]
+	}
+	return string(bytes[:4]) + "-" + string(bytes[4:8]) + "-" + string(bytes[8:]), nil
+}
+
+func HashResetCode(key []byte, code string) []byte {
+	digest := hmac.New(sha256.New, key)
+	_, _ = digest.Write([]byte(strings.ToUpper(strings.TrimSpace(code))))
+	return digest.Sum(nil)
+}
+
+func VerifyResetCode(key []byte, code string, expected []byte) bool {
+	return hmac.Equal(HashResetCode(key, code), expected)
 }
 
 func VerifyPassword(password, encoded string) bool {

@@ -78,6 +78,7 @@ func run() error {
 	cfg.AllowedRegistries = csvEnv("FRUTO_ALLOWED_REGISTRIES", cfg.AllowedRegistries)
 	cfg.TrustedProxyCIDRs = csvEnv("FRUTO_TRUSTED_PROXY_CIDRS", nil)
 	cfg.CookieSecure = os.Getenv("FRUTO_COOKIE_SECURE") == "true"
+	cfg.TOTPEnabled = os.Getenv("FRUTO_TOTP_ENABLED") == "true"
 	cfg.WorkspaceNamespace = env("FRUTO_WORKSPACE_NAMESPACE", cfg.WorkspaceNamespace)
 	if cfg.MaxReplicas, err = int32Env("FRUTO_MAX_REPLICAS", cfg.MaxReplicas); err != nil {
 		return err
@@ -94,6 +95,9 @@ func run() error {
 			return fmt.Errorf("invalid FRUTO_SESSION_TTL")
 		}
 		cfg.SessionTTL = d
+	}
+	if cfg.SessionIdleTTL, err = durationEnv("FRUTO_SESSION_IDLE_TTL", cfg.SessionIdleTTL); err != nil {
+		return err
 	}
 	if value := os.Getenv("FRUTO_OPERATION_LEASE"); value != "" {
 		d, parseErr := time.ParseDuration(value)
@@ -178,11 +182,16 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	server.AuthenticationSecrets = server.ParameterSecrets
 	server.GitHub, err = githubService(cfg)
 	if err != nil {
 		return err
 	}
 	server.GitHubWebhookSecret, err = readOptionalSecretFile("GITHUB_WEBHOOK_SECRET_FILE")
+	if err != nil {
+		return err
+	}
+	server.PasswordResetKey, err = readOptionalSecretFile("FRUTO_PASSWORD_RESET_KEY_FILE")
 	if err != nil {
 		return err
 	}

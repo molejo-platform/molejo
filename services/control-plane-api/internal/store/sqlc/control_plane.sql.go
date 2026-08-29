@@ -11,22 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const addWorkspaceActor = `-- name: AddWorkspaceActor :exec
-INSERT INTO workspace_actors (workspace_id, actor_id)
-VALUES ($1, $2)
-ON CONFLICT DO NOTHING
-`
-
-type AddWorkspaceActorParams struct {
-	WorkspaceID int64 `json:"workspace_id"`
-	ActorID     int64 `json:"actor_id"`
-}
-
-func (q *Queries) AddWorkspaceActor(ctx context.Context, arg AddWorkspaceActorParams) error {
-	_, err := q.db.Exec(ctx, addWorkspaceActor, arg.WorkspaceID, arg.ActorID)
-	return err
-}
-
 const archiveApp = `-- name: ArchiveApp :one
 UPDATE apps a
 SET archived_at = now(), version = a.version + 1, updated_at = now()
@@ -302,28 +286,6 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (C
 	return i, err
 }
 
-const createSession = `-- name: CreateSession :exec
-INSERT INTO sessions (token_hash, actor_id, csrf_hash, expires_at)
-VALUES ($1, $2, $3, $4)
-`
-
-type CreateSessionParams struct {
-	TokenHash []byte             `json:"token_hash"`
-	ActorID   int64              `json:"actor_id"`
-	CsrfHash  []byte             `json:"csrf_hash"`
-	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
-}
-
-func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) error {
-	_, err := q.db.Exec(ctx, createSession,
-		arg.TokenHash,
-		arg.ActorID,
-		arg.CsrfHash,
-		arg.ExpiresAt,
-	)
-	return err
-}
-
 const findActiveAppForUpdate = `-- name: FindActiveAppForUpdate :one
 SELECT a.id, a.public_id, a.project_id, a.name, a.version, a.created_at, a.updated_at, a.archived_at
 FROM apps a
@@ -563,19 +525,19 @@ func (q *Queries) FindProject(ctx context.Context, arg FindProjectParams) (FindP
 	return i, err
 }
 
-const findWorkspaceForActor = `-- name: FindWorkspaceForActor :one
+const findWorkspaceForUser = `-- name: FindWorkspaceForUser :one
 SELECT w.id, w.public_id, w.name, w.namespace_name, w.version, w.bootstrap_state, w.created_at, w.updated_at
 FROM workspaces AS w
-JOIN workspace_actors AS wa ON wa.workspace_id = w.id
-WHERE wa.actor_id = $1 AND w.public_id = $2
+JOIN workspace_memberships AS wm ON wm.workspace_id = w.id
+WHERE wm.user_id = $1 AND wm.status = 'Active' AND w.public_id = $2
 `
 
-type FindWorkspaceForActorParams struct {
-	ActorID  int64  `json:"actor_id"`
+type FindWorkspaceForUserParams struct {
+	UserID   int64  `json:"user_id"`
 	PublicID string `json:"public_id"`
 }
 
-type FindWorkspaceForActorRow struct {
+type FindWorkspaceForUserRow struct {
 	ID             int64              `json:"id"`
 	PublicID       string             `json:"public_id"`
 	Name           string             `json:"name"`
@@ -586,9 +548,9 @@ type FindWorkspaceForActorRow struct {
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 }
 
-func (q *Queries) FindWorkspaceForActor(ctx context.Context, arg FindWorkspaceForActorParams) (FindWorkspaceForActorRow, error) {
-	row := q.db.QueryRow(ctx, findWorkspaceForActor, arg.ActorID, arg.PublicID)
-	var i FindWorkspaceForActorRow
+func (q *Queries) FindWorkspaceForUser(ctx context.Context, arg FindWorkspaceForUserParams) (FindWorkspaceForUserRow, error) {
+	row := q.db.QueryRow(ctx, findWorkspaceForUser, arg.UserID, arg.PublicID)
+	var i FindWorkspaceForUserRow
 	err := row.Scan(
 		&i.ID,
 		&i.PublicID,
@@ -603,11 +565,11 @@ func (q *Queries) FindWorkspaceForActor(ctx context.Context, arg FindWorkspaceFo
 }
 
 const findWorkspaceOperationByIdempotency = `-- name: FindWorkspaceOperationByIdempotency :one
-SELECT o.id, o.public_id, o.workspace_id, o.actor_id, o.kind, o.status,
+SELECT o.id, o.public_id, o.workspace_id, o.requested_by_user_id AS actor_id, o.kind, o.status,
        o.desired_version, o.attempts, o.created_at, o.updated_at,
        o.error_code, o.error_message, o.payload_hash
 FROM operations o
-WHERE o.actor_id = $1
+WHERE o.requested_by_user_id = $1
   AND o.kind = 'EnsureWorkspace'
   AND o.app_environment_id IS NULL
   AND o.deployment_id IS NULL
@@ -615,8 +577,8 @@ WHERE o.actor_id = $1
 `
 
 type FindWorkspaceOperationByIdempotencyParams struct {
-	ActorID         int64  `json:"actor_id"`
-	IdempotencyHash []byte `json:"idempotency_hash"`
+	RequestedByUserID int64  `json:"requested_by_user_id"`
+	IdempotencyHash   []byte `json:"idempotency_hash"`
 }
 
 type FindWorkspaceOperationByIdempotencyRow struct {
@@ -636,7 +598,7 @@ type FindWorkspaceOperationByIdempotencyRow struct {
 }
 
 func (q *Queries) FindWorkspaceOperationByIdempotency(ctx context.Context, arg FindWorkspaceOperationByIdempotencyParams) (FindWorkspaceOperationByIdempotencyRow, error) {
-	row := q.db.QueryRow(ctx, findWorkspaceOperationByIdempotency, arg.ActorID, arg.IdempotencyHash)
+	row := q.db.QueryRow(ctx, findWorkspaceOperationByIdempotency, arg.RequestedByUserID, arg.IdempotencyHash)
 	var i FindWorkspaceOperationByIdempotencyRow
 	err := row.Scan(
 		&i.ID,
@@ -652,70 +614,6 @@ func (q *Queries) FindWorkspaceOperationByIdempotency(ctx context.Context, arg F
 		&i.ErrorCode,
 		&i.ErrorMessage,
 		&i.PayloadHash,
-	)
-	return i, err
-}
-
-const getActiveSession = `-- name: GetActiveSession :one
-SELECT actor_id, csrf_hash
-FROM sessions
-WHERE token_hash = $1
-  AND revoked_at IS NULL
-  AND expires_at > now()
-`
-
-type GetActiveSessionRow struct {
-	ActorID  int64  `json:"actor_id"`
-	CsrfHash []byte `json:"csrf_hash"`
-}
-
-func (q *Queries) GetActiveSession(ctx context.Context, tokenHash []byte) (GetActiveSessionRow, error) {
-	row := q.db.QueryRow(ctx, getActiveSession, tokenHash)
-	var i GetActiveSessionRow
-	err := row.Scan(&i.ActorID, &i.CsrfHash)
-	return i, err
-}
-
-const getActorByID = `-- name: GetActorByID :one
-SELECT id, actor_key, role
-FROM actors
-WHERE id = $1
-`
-
-type GetActorByIDRow struct {
-	ID       int64  `json:"id"`
-	ActorKey string `json:"actor_key"`
-	Role     string `json:"role"`
-}
-
-func (q *Queries) GetActorByID(ctx context.Context, id int64) (GetActorByIDRow, error) {
-	row := q.db.QueryRow(ctx, getActorByID, id)
-	var i GetActorByIDRow
-	err := row.Scan(&i.ID, &i.ActorKey, &i.Role)
-	return i, err
-}
-
-const getActorByKey = `-- name: GetActorByKey :one
-SELECT id, actor_key, role, password_hash
-FROM actors
-WHERE actor_key = $1
-`
-
-type GetActorByKeyRow struct {
-	ID           int64  `json:"id"`
-	ActorKey     string `json:"actor_key"`
-	Role         string `json:"role"`
-	PasswordHash string `json:"password_hash"`
-}
-
-func (q *Queries) GetActorByKey(ctx context.Context, actorKey string) (GetActorByKeyRow, error) {
-	row := q.db.QueryRow(ctx, getActorByKey, actorKey)
-	var i GetActorByKeyRow
-	err := row.Scan(
-		&i.ID,
-		&i.ActorKey,
-		&i.Role,
-		&i.PasswordHash,
 	)
 	return i, err
 }
@@ -753,16 +651,16 @@ func (q *Queries) GetWorkspaceByID(ctx context.Context, id int64) (GetWorkspaceB
 	return i, err
 }
 
-const getWorkspaceForActor = `-- name: GetWorkspaceForActor :one
+const getWorkspaceForUser = `-- name: GetWorkspaceForUser :one
 SELECT w.id, w.public_id, w.name, w.namespace_name, w.version, w.bootstrap_state, w.created_at, w.updated_at
 FROM workspaces AS w
-JOIN workspace_actors AS wa ON wa.workspace_id = w.id
-WHERE wa.actor_id = $1
+JOIN workspace_memberships AS wm ON wm.workspace_id = w.id
+WHERE wm.user_id = $1 AND wm.status = 'Active'
 ORDER BY w.id
 LIMIT 1
 `
 
-type GetWorkspaceForActorRow struct {
+type GetWorkspaceForUserRow struct {
 	ID             int64              `json:"id"`
 	PublicID       string             `json:"public_id"`
 	Name           string             `json:"name"`
@@ -773,9 +671,9 @@ type GetWorkspaceForActorRow struct {
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 }
 
-func (q *Queries) GetWorkspaceForActor(ctx context.Context, actorID int64) (GetWorkspaceForActorRow, error) {
-	row := q.db.QueryRow(ctx, getWorkspaceForActor, actorID)
-	var i GetWorkspaceForActorRow
+func (q *Queries) GetWorkspaceForUser(ctx context.Context, userID int64) (GetWorkspaceForUserRow, error) {
+	row := q.db.QueryRow(ctx, getWorkspaceForUser, userID)
+	var i GetWorkspaceForUserRow
 	err := row.Scan(
 		&i.ID,
 		&i.PublicID,
@@ -830,20 +728,20 @@ func (q *Queries) InsertWorkspace(ctx context.Context, arg InsertWorkspaceParams
 
 const insertWorkspaceOperation = `-- name: InsertWorkspaceOperation :one
 INSERT INTO operations(
-    public_id, workspace_id, app_environment_id, deployment_id, actor_id, kind, status,
+    public_id, workspace_id, app_environment_id, deployment_id, requested_by_user_id, kind, status,
     idempotency_hash, payload_hash, desired_version
 )
 VALUES ($1, $2, NULL, NULL, $3, 'EnsureWorkspace', 'Pending', $4, $5, 1)
-RETURNING id, public_id, workspace_id, actor_id, kind, status,
+RETURNING id, public_id, workspace_id, requested_by_user_id AS actor_id, kind, status,
           desired_version, attempts, created_at, updated_at, error_code, error_message
 `
 
 type InsertWorkspaceOperationParams struct {
-	PublicID        string `json:"public_id"`
-	WorkspaceID     int64  `json:"workspace_id"`
-	ActorID         int64  `json:"actor_id"`
-	IdempotencyHash []byte `json:"idempotency_hash"`
-	PayloadHash     []byte `json:"payload_hash"`
+	PublicID          string `json:"public_id"`
+	WorkspaceID       int64  `json:"workspace_id"`
+	RequestedByUserID int64  `json:"requested_by_user_id"`
+	IdempotencyHash   []byte `json:"idempotency_hash"`
+	PayloadHash       []byte `json:"payload_hash"`
 }
 
 type InsertWorkspaceOperationRow struct {
@@ -865,7 +763,7 @@ func (q *Queries) InsertWorkspaceOperation(ctx context.Context, arg InsertWorksp
 	row := q.db.QueryRow(ctx, insertWorkspaceOperation,
 		arg.PublicID,
 		arg.WorkspaceID,
-		arg.ActorID,
+		arg.RequestedByUserID,
 		arg.IdempotencyHash,
 		arg.PayloadHash,
 	)
@@ -1079,22 +977,22 @@ func (q *Queries) ListProjects(ctx context.Context, arg ListProjectsParams) ([]L
 	return items, nil
 }
 
-const listWorkspacesForActor = `-- name: ListWorkspacesForActor :many
+const listWorkspacesForUser = `-- name: ListWorkspacesForUser :many
 SELECT w.id, w.public_id, w.name, w.namespace_name, w.version, w.bootstrap_state, w.created_at, w.updated_at
 FROM workspaces AS w
-JOIN workspace_actors AS wa ON wa.workspace_id = w.id
-WHERE wa.actor_id = $1 AND w.id < $2
+JOIN workspace_memberships AS wm ON wm.workspace_id = w.id
+WHERE wm.user_id = $1 AND wm.status = 'Active' AND w.id < $2
 ORDER BY w.id DESC
 LIMIT $3
 `
 
-type ListWorkspacesForActorParams struct {
-	ActorID int64 `json:"actor_id"`
-	ID      int64 `json:"id"`
-	Limit   int32 `json:"limit"`
+type ListWorkspacesForUserParams struct {
+	UserID int64 `json:"user_id"`
+	ID     int64 `json:"id"`
+	Limit  int32 `json:"limit"`
 }
 
-type ListWorkspacesForActorRow struct {
+type ListWorkspacesForUserRow struct {
 	ID             int64              `json:"id"`
 	PublicID       string             `json:"public_id"`
 	Name           string             `json:"name"`
@@ -1105,15 +1003,15 @@ type ListWorkspacesForActorRow struct {
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 }
 
-func (q *Queries) ListWorkspacesForActor(ctx context.Context, arg ListWorkspacesForActorParams) ([]ListWorkspacesForActorRow, error) {
-	rows, err := q.db.Query(ctx, listWorkspacesForActor, arg.ActorID, arg.ID, arg.Limit)
+func (q *Queries) ListWorkspacesForUser(ctx context.Context, arg ListWorkspacesForUserParams) ([]ListWorkspacesForUserRow, error) {
+	rows, err := q.db.Query(ctx, listWorkspacesForUser, arg.UserID, arg.ID, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ListWorkspacesForActorRow{}
+	items := []ListWorkspacesForUserRow{}
 	for rows.Next() {
-		var i ListWorkspacesForActorRow
+		var i ListWorkspacesForUserRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.PublicID,
@@ -1132,39 +1030,6 @@ func (q *Queries) ListWorkspacesForActor(ctx context.Context, arg ListWorkspaces
 		return nil, err
 	}
 	return items, nil
-}
-
-const revokeActiveSession = `-- name: RevokeActiveSession :execrows
-UPDATE sessions
-SET revoked_at = now()
-WHERE token_hash = $1
-  AND actor_id = $2
-  AND revoked_at IS NULL
-  AND expires_at > now()
-`
-
-type RevokeActiveSessionParams struct {
-	TokenHash []byte `json:"token_hash"`
-	ActorID   int64  `json:"actor_id"`
-}
-
-func (q *Queries) RevokeActiveSession(ctx context.Context, arg RevokeActiveSessionParams) (int64, error) {
-	result, err := q.db.Exec(ctx, revokeActiveSession, arg.TokenHash, arg.ActorID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const revokeSession = `-- name: RevokeSession :exec
-UPDATE sessions
-SET revoked_at = now()
-WHERE token_hash = $1
-`
-
-func (q *Queries) RevokeSession(ctx context.Context, tokenHash []byte) error {
-	_, err := q.db.Exec(ctx, revokeSession, tokenHash)
-	return err
 }
 
 const updateApp = `-- name: UpdateApp :one
@@ -1357,28 +1222,6 @@ func (q *Queries) UpdateWorkspaceName(ctx context.Context, arg UpdateWorkspaceNa
 		&i.UpdatedAt,
 	)
 	return i, err
-}
-
-const upsertActor = `-- name: UpsertActor :one
-INSERT INTO actors (actor_key, role, password_hash)
-VALUES ($1, $2, $3)
-ON CONFLICT (actor_key) DO UPDATE
-SET role = EXCLUDED.role,
-    password_hash = EXCLUDED.password_hash
-RETURNING id
-`
-
-type UpsertActorParams struct {
-	ActorKey     string `json:"actor_key"`
-	Role         string `json:"role"`
-	PasswordHash string `json:"password_hash"`
-}
-
-func (q *Queries) UpsertActor(ctx context.Context, arg UpsertActorParams) (int64, error) {
-	row := q.db.QueryRow(ctx, upsertActor, arg.ActorKey, arg.Role, arg.PasswordHash)
-	var id int64
-	err := row.Scan(&id)
-	return id, err
 }
 
 const upsertWorkspace = `-- name: UpsertWorkspace :one

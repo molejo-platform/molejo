@@ -16,6 +16,7 @@ import { listParameters } from "../parameters/api";
 import { workspaceScopeKeys } from "../workspace/scope";
 import { EnvironmentAppLayout, type EnvironmentParams } from "./EnvironmentPages";
 import { parseRuntimeVariables, runtimeVariablesToText } from "./RuntimeConfigurationForm";
+import { canEditWorkspace } from "../../shared/auth/permissions";
 
 type Section = "build" | "variables" | "secrets" | "network" | "health" | "resources";
 
@@ -36,7 +37,7 @@ function ConfigurationNav({ params }: { params: EnvironmentParams }) {
 function page(section: Section, title: string, description: string, render: (draft: RuntimeConfiguration, setDraft: (value: RuntimeConfiguration) => void, parameters: Parameter[], disabled: boolean, onValidityChange: (valid: boolean) => void) => ReactNode) {
   return function ConfigurationPage() {
     const session = useSessionQuery();
-    return <EnvironmentAppLayout>{(target, params) => <section className="stack"><ConfigurationNav params={params}/><ConfigurationEditor target={target} params={params} section={section} title={title} description={description} canMutate={session.data?.actor.role === "owner"} render={render}/></section>}</EnvironmentAppLayout>;
+    return <EnvironmentAppLayout>{(target, params) => <section className="stack"><ConfigurationNav params={params}/><ConfigurationEditor target={target} params={params} section={section} title={title} description={description} canMutate={canEditWorkspace(session.data, params.workspaceId)} render={render}/></section>}</EnvironmentAppLayout>;
   };
 }
 
@@ -113,7 +114,7 @@ export function EnvironmentBuildConfigurationPage() {
   const session = useSessionQuery();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  return <EnvironmentAppLayout>{(target, params) => <section className="stack"><ConfigurationNav params={params}/><ConfigurationEditor target={target} params={params} section="build" title="Build e branch" description="A branch pertence a este App dentro deste Environment; cada build resolve e registra um SHA imutável." canMutate={session.data?.actor.role === "owner"} render={() => null}/><DeliveryAutomation target={target} params={params} canMutate={session.data?.actor.role === "owner"}/>{session.data?.actor.role === "owner" && <RemoveFromEnvironment target={target} params={params} navigate={navigate} queryClient={queryClient}/>}</section>}</EnvironmentAppLayout>;
+  return <EnvironmentAppLayout>{(target, params) => { const canMutate = canEditWorkspace(session.data, params.workspaceId); return <section className="stack"><ConfigurationNav params={params}/><ConfigurationEditor target={target} params={params} section="build" title="Build e branch" description="A branch pertence a este App dentro deste Environment; cada build resolve e registra um SHA imutável." canMutate={canMutate} render={() => null}/><DeliveryAutomation target={target} params={params} canMutate={canMutate}/>{canMutate && <RemoveFromEnvironment target={target} params={params} navigate={navigate} queryClient={queryClient}/>}</section>; }}</EnvironmentAppLayout>;
 }
 
 function DeliveryAutomation({ target, params, canMutate }: { target: AppEnvironment; params: EnvironmentParams; canMutate: boolean }) {

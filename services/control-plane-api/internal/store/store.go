@@ -15,10 +15,10 @@ import (
 	"time"
 
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/domain"
+	"github.com/fruto-platform/fruto/services/control-plane-api/internal/identity"
 	storesqlc "github.com/fruto-platform/fruto/services/control-plane-api/internal/store/sqlc"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
@@ -199,7 +199,7 @@ func loadAndValidateChecksums(ctx context.Context, db *sql.DB, migrations []migr
 	return applied, nil
 }
 
-func (s *Store) Bootstrap(ctx context.Context, workspace domain.Workspace, actors map[string]struct{ Role, PasswordHash string }) error {
+func (s *Store) Bootstrap(ctx context.Context, workspace domain.Workspace, users map[string]struct{ Role, PasswordHash string }) error {
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -209,54 +209,72 @@ func (s *Store) Bootstrap(ctx context.Context, workspace domain.Workspace, actor
 		return err
 	}
 	queries := s.queries.WithTx(tx)
-	actorIDs := make([]int64, 0, len(actors))
-	for key, actor := range actors {
-		actorID, queryErr := queries.UpsertActor(ctx, storesqlc.UpsertActorParams{ActorKey: key, Role: actor.Role, PasswordHash: actor.PasswordHash})
-		err = queryErr
-		if err != nil {
+	userIDs := make([]int64, 0, len(users))
+	roles := make(map[int64]string, len(users))
+	for username, bootstrapUser := range users {
+		normalized, normalizeErr := identity.NormalizeUsername(username)
+		if normalizeErr != nil {
+			return normalizeErr
+		}
+		publicID, idErr := domain.NewPublicID("usr")
+		if idErr != nil {
+			return idErr
+		}
+		var userID int64
+		if err = tx.QueryRow(ctx, `INSERT INTO users(public_id,username,username_key,display_name,status)
+			VALUES($1,$2,$2,$2,'Active') ON CONFLICT(username_key) DO UPDATE SET updated_at=now() RETURNING id`, publicID, normalized).Scan(&userID); err != nil {
 			return err
 		}
-		actorIDs = append(actorIDs, actorID)
+		if _, err = tx.Exec(ctx, `INSERT INTO password_credentials(user_id,password_hash) VALUES($1,$2)
+			ON CONFLICT(user_id) DO UPDATE SET password_hash=EXCLUDED.password_hash,changed_at=now()`, userID, bootstrapUser.PasswordHash); err != nil {
+			return err
+		}
+		role := authorizationRole(bootstrapUser.Role)
+		roles[userID] = role
+		if role == "Owner" {
+			if _, err = tx.Exec(ctx, `INSERT INTO installation_role_assignments(user_id,role) VALUES($1,'Administrator') ON CONFLICT DO NOTHING`, userID); err != nil {
+				return err
+			}
+		}
+		userIDs = append(userIDs, userID)
 	}
 	workspaceID, err := queries.UpsertWorkspace(ctx, storesqlc.UpsertWorkspaceParams{PublicID: workspace.PublicID, Name: workspace.Name, NamespaceName: workspace.Namespace})
 	if err != nil {
 		return err
 	}
-	for _, actorID := range actorIDs {
-		if err = queries.AddWorkspaceActor(ctx, storesqlc.AddWorkspaceActorParams{WorkspaceID: workspaceID, ActorID: actorID}); err != nil {
+	for _, userID := range userIDs {
+		if _, err = tx.Exec(ctx, `INSERT INTO workspace_memberships(workspace_id,user_id,role,status) VALUES($1,$2,$3,'Active')
+			ON CONFLICT(workspace_id,user_id) DO UPDATE SET role=EXCLUDED.role,status='Active',version=workspace_memberships.version+1,updated_at=now()`, workspaceID, userID, roles[userID]); err != nil {
 			return err
 		}
 	}
-	if len(actorIDs) == 0 {
-		return errors.New("workspace bootstrap requires at least one actor")
+	if len(userIDs) == 0 {
+		return errors.New("workspace bootstrap requires at least one user")
 	}
-	sort.Slice(actorIDs, func(i, j int) bool { return actorIDs[i] < actorIDs[j] })
+	sort.Slice(userIDs, func(i, j int) bool { return userIDs[i] < userIDs[j] })
 	operationID, err := domain.NewPublicID("op")
 	if err != nil {
 		return err
 	}
 	bootstrapHash := domain.SHA256([]byte(workspace.PublicID + ":ensure-workspace"))
-	if _, err = tx.Exec(ctx, `INSERT INTO operations(public_id,workspace_id,app_environment_id,deployment_id,actor_id,kind,status,idempotency_hash,payload_hash,desired_version)
+	if _, err = tx.Exec(ctx, `INSERT INTO operations(public_id,workspace_id,app_environment_id,deployment_id,requested_by_user_id,kind,status,idempotency_hash,payload_hash,desired_version)
 			SELECT $1,$2,NULL,NULL,$3,'EnsureWorkspace','Pending',$4,$4,1
 			WHERE EXISTS (SELECT 1 FROM workspaces WHERE id=$2 AND bootstrap_state <> 'Ready')
-			  AND NOT EXISTS (SELECT 1 FROM operations WHERE workspace_id=$2 AND kind='EnsureWorkspace' AND status IN ('Pending','Running'))`, operationID, workspaceID, actorIDs[0], bootstrapHash); err != nil {
+			  AND NOT EXISTS (SELECT 1 FROM operations WHERE workspace_id=$2 AND kind='EnsureWorkspace' AND status IN ('Pending','Running'))`, operationID, workspaceID, userIDs[0], bootstrapHash); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
 }
 
-func (s *Store) Authenticate(ctx context.Context, key string) (domain.Actor, string, error) {
-	row, err := s.queries.GetActorByKey(ctx, key)
-	return domain.Actor{ID: row.ID, Key: row.ActorKey, Role: row.Role}, row.PasswordHash, err
+func authorizationRole(legacyRole string) string {
+	if legacyRole == "owner" {
+		return "Owner"
+	}
+	return "Viewer"
 }
 
-func (s *Store) Actor(ctx context.Context, actorID int64) (domain.Actor, error) {
-	row, err := s.queries.GetActorByID(ctx, actorID)
-	return domain.Actor{ID: row.ID, Key: row.ActorKey, Role: row.Role}, err
-}
-
-func (s *Store) WorkspaceForActor(ctx context.Context, actorID int64) (domain.Workspace, error) {
-	row, err := s.queries.GetWorkspaceForActor(ctx, actorID)
+func (s *Store) WorkspaceForUser(ctx context.Context, userID int64) (domain.Workspace, error) {
+	row, err := s.queries.GetWorkspaceForUser(ctx, userID)
 	return workspaceValue(row.ID, row.PublicID, row.Name, row.NamespaceName, row.Version, row.BootstrapState, row.CreatedAt, row.UpdatedAt), err
 }
 
@@ -335,34 +353,53 @@ func (s *Store) SchemaReady(ctx context.Context) error {
 	return nil
 }
 
-func (s *Store) CreateSession(ctx context.Context, actorID int64, tokenHash, csrfHash []byte, expires time.Time) error {
-	return s.queries.CreateSession(ctx, storesqlc.CreateSessionParams{TokenHash: tokenHash, ActorID: actorID, CsrfHash: csrfHash, ExpiresAt: pgtype.Timestamptz{Time: expires, Valid: true}})
+func (s *Store) CreateSession(ctx context.Context, userID int64, tokenHash, csrfHash []byte, expires time.Time) error {
+	user, err := s.User(ctx, userID)
+	if err != nil {
+		return err
+	}
+	publicID, err := domain.NewPublicID("ses")
+	if err != nil {
+		return err
+	}
+	_, err = s.Pool.Exec(ctx, `INSERT INTO sessions(public_id,token_hash,user_id,csrf_hash,expires_at,idle_expires_at,auth_version,assurance_level)
+		VALUES($1,$2,$3,$4,$5,$5,$6,'AAL1')`, publicID, tokenHash, userID, csrfHash, expires, user.AuthVersion)
+	return err
 }
 
 func (s *Store) Session(ctx context.Context, tokenHash []byte) (int64, []byte, error) {
-	row, err := s.queries.GetActiveSession(ctx, tokenHash)
-	return row.ActorID, row.CsrfHash, err
+	principal, err := s.UserSession(ctx, tokenHash, time.Hour)
+	return principal.UserID, principal.CSRFHash, err
 }
 
 func (s *Store) RevokeSession(ctx context.Context, tokenHash []byte) error {
-	return s.queries.RevokeSession(ctx, tokenHash)
+	_, err := s.Pool.Exec(ctx, `UPDATE sessions SET revoked_at=now() WHERE token_hash=$1`, tokenHash)
+	return err
 }
 
-func (s *Store) RotateSession(ctx context.Context, actorID int64, oldTokenHash, newTokenHash, csrfHash []byte, expires time.Time) error {
+func (s *Store) RotateSession(ctx context.Context, userID int64, oldTokenHash, newTokenHash, csrfHash []byte, expires time.Time) error {
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback(ctx)
-	queries := s.queries.WithTx(tx)
-	rowsAffected, err := queries.RevokeActiveSession(ctx, storesqlc.RevokeActiveSessionParams{TokenHash: oldTokenHash, ActorID: actorID})
+	result, err := tx.Exec(ctx, `UPDATE sessions SET revoked_at=now() WHERE token_hash=$1 AND user_id=$2 AND revoked_at IS NULL AND expires_at>now()`, oldTokenHash, userID)
 	if err != nil {
 		return err
 	}
-	if rowsAffected != 1 {
+	if result.RowsAffected() != 1 {
 		return ErrSessionInvalid
 	}
-	if err = queries.CreateSession(ctx, storesqlc.CreateSessionParams{TokenHash: newTokenHash, ActorID: actorID, CsrfHash: csrfHash, ExpiresAt: pgtype.Timestamptz{Time: expires, Valid: true}}); err != nil {
+	user, err := s.User(ctx, userID)
+	if err != nil {
+		return err
+	}
+	publicID, err := domain.NewPublicID("ses")
+	if err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, `INSERT INTO sessions(public_id,token_hash,user_id,csrf_hash,expires_at,idle_expires_at,auth_version,assurance_level)
+		VALUES($1,$2,$3,$4,$5,$5,$6,'AAL1')`, publicID, newTokenHash, userID, csrfHash, expires, user.AuthVersion); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
@@ -385,6 +422,8 @@ var ErrLeaseLost = errors.New("operation lease lost")
 var ErrNotFound = errors.New("not found")
 
 var ErrSessionInvalid = errors.New("session is no longer valid")
+
+var ErrResetCodeInvalid = errors.New("password reset code is invalid")
 
 var ErrPublicIDCollision = errors.New("public ID collision")
 

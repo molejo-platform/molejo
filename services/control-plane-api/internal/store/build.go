@@ -96,7 +96,7 @@ func (s *Store) CreateBuildWithMetadata(ctx context.Context, workspaceID, actorI
 
 	var build domain.Build
 	err = tx.QueryRow(ctx, `
-		INSERT INTO builds(public_id,workspace_id,project_id,app_id,app_environment_id,requested_by_actor_id,
+		INSERT INTO builds(public_id,workspace_id,project_id,app_id,app_environment_id,requested_by_user_id,
 		  github_installation_id,github_installation_external_id,repository_id,repository_full_name,
 		  source_branch,commit_sha,commit_title,commit_author_name,commit_author_login,committed_at,platform,idempotency_hash,payload_hash)
 		SELECT $1,p.workspace_id,p.id,a.id,ae.id,$2,i.id,i.github_installation_id,src.repository_id,
@@ -148,7 +148,7 @@ func (s *Store) buildByIdempotency(ctx context.Context, query buildQuery, worksp
 		       b.fencing_token,b.lease_until,COALESCE(b.error_code,''),COALESCE(b.error_message,''),b.created_at,b.updated_at,
 		       p.public_id,a.public_id,ae.public_id,b.payload_hash
 		FROM builds b JOIN projects p ON p.id=b.project_id JOIN apps a ON a.id=b.app_id JOIN app_environments ae ON ae.id=b.app_environment_id
-		WHERE b.workspace_id=$1 AND b.requested_by_actor_id=$2 AND b.idempotency_hash=$3`, workspaceID, actorID, hash).
+		WHERE b.workspace_id=$1 AND b.requested_by_user_id=$2 AND b.idempotency_hash=$3`, workspaceID, actorID, hash).
 		Scan(append(buildScanTargets(&build), &build.ProjectPublicID, &build.AppPublicID, &build.AppEnvironmentPublicID, &payload)...)
 	return build, payload, err
 }

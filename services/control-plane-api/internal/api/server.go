@@ -10,13 +10,15 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"sort"
 	"strings"
-	"sync"
 	"time"
 
+	"github.com/fruto-platform/fruto/services/control-plane-api/internal/audit"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/auth"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/domain"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/githubapp"
+	"github.com/fruto-platform/fruto/services/control-plane-api/internal/identity"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/observability"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/parameters"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/runtime"
@@ -41,6 +43,7 @@ type Config struct {
 	MaxCPU                          int64
 	MaxMemory                       int64
 	SessionTTL                      time.Duration
+	SessionIdleTTL                  time.Duration
 	OperationLease                  time.Duration
 	ParameterRetention              time.Duration
 	ParameterMutationTimeout        time.Duration
@@ -55,37 +58,47 @@ type Config struct {
 	ObservabilityLivePerUser        int
 	ObservabilityMetricsLivePoll    time.Duration
 	ObservabilityMetricsLivePerUser int
+	TOTPEnabled                     bool
 }
 
 func DefaultConfig() Config {
-	return Config{Mode: "development", PublicURL: "http://127.0.0.1:8080", CookieName: "fruto_session", AllowedOrigin: "http://127.0.0.1:8080", AllowedHosts: []string{"127.0.0.1:8080", "localhost:8080"}, AllowedRegistries: []string{"ghcr.io"}, MaxReplicas: 5, MaxCPU: 2000, MaxMemory: 2048, SessionTTL: 12 * time.Hour, OperationLease: 30 * time.Second, ParameterRetention: 7 * 24 * time.Hour, ParameterMutationTimeout: 5 * time.Minute, WorkspaceNamespace: "fruto-workspaces", GitHubStateTTL: 10 * time.Minute, GitHubCookieName: "molejo_github_state", ObservabilityLogMaxWindow: 24 * time.Hour, ObservabilityMetricMaxWindow: 30 * 24 * time.Hour, ObservabilityEventMaxWindow: 7 * 24 * time.Hour, ObservabilityLiveTTL: 10 * time.Minute, ObservabilityLivePoll: 2 * time.Second, ObservabilityLivePerUser: 3, ObservabilityMetricsLivePoll: 30 * time.Second, ObservabilityMetricsLivePerUser: 2}
+	return Config{Mode: "development", PublicURL: "http://127.0.0.1:8080", CookieName: "fruto_session", AllowedOrigin: "http://127.0.0.1:8080", AllowedHosts: []string{"127.0.0.1:8080", "localhost:8080"}, AllowedRegistries: []string{"ghcr.io"}, MaxReplicas: 5, MaxCPU: 2000, MaxMemory: 2048, SessionTTL: 12 * time.Hour, SessionIdleTTL: 2 * time.Hour, OperationLease: 30 * time.Second, ParameterRetention: 7 * 24 * time.Hour, ParameterMutationTimeout: 5 * time.Minute, WorkspaceNamespace: "fruto-workspaces", GitHubStateTTL: 10 * time.Minute, GitHubCookieName: "molejo_github_state", ObservabilityLogMaxWindow: 24 * time.Hour, ObservabilityMetricMaxWindow: 30 * 24 * time.Hour, ObservabilityEventMaxWindow: 7 * 24 * time.Hour, ObservabilityLiveTTL: 10 * time.Minute, ObservabilityLivePoll: 2 * time.Second, ObservabilityLivePerUser: 3, ObservabilityMetricsLivePoll: 30 * time.Second, ObservabilityMetricsLivePerUser: 2}
 }
 
 type Server struct {
-	Store                *store.Store
-	Runtime              runtime.Client
-	Config               Config
-	Logger               *slog.Logger
-	Tracer               trace.Tracer
-	GitHub               githubapp.Service
-	GitHubWebhookSecret  []byte
-	ParameterSecrets     parameters.SecretValueStore
-	SecretFingerprintKey []byte
-	Observability        observability.Reader
-	limiter              *loginLimiter
-	logLiveLimiter       *concurrencyLimiter
-	metricsLiveLimiter   *concurrencyLimiter
-	metricSnapshots      *metricSnapshotCache
-	token                func(int) (string, error)
-	deploymentID         func() (string, error)
-	parameterID          func() (string, error)
+	Store                 *store.Store
+	Runtime               runtime.Client
+	Config                Config
+	Logger                *slog.Logger
+	Tracer                trace.Tracer
+	GitHub                githubapp.Service
+	GitHubWebhookSecret   []byte
+	ParameterSecrets      parameters.SecretValueStore
+	SecretFingerprintKey  []byte
+	PasswordResetKey      []byte
+	AuthenticationSecrets parameters.SecretValueStore
+	Observability         observability.Reader
+	logLiveLimiter        *concurrencyLimiter
+	metricsLiveLimiter    *concurrencyLimiter
+	metricSnapshots       *metricSnapshotCache
+	token                 func(int) (string, error)
+	deploymentID          func() (string, error)
+	parameterID           func() (string, error)
+	dummyPasswordHash     string
 }
 
 func NewServer(s *store.Store, r runtime.Client, cfg Config, logger *slog.Logger) *Server {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Server{Store: s, Runtime: r, Config: cfg, Logger: logger, Tracer: noop.NewTracerProvider().Tracer("github.com/fruto-platform/fruto/services/control-plane-api"), ParameterSecrets: parameters.UnavailableStore{}, Observability: observability.UnavailableReader{}, limiter: &loginLimiter{entries: map[string]loginAttempt{}}, logLiveLimiter: &concurrencyLimiter{active: map[int64]int{}}, metricsLiveLimiter: &concurrencyLimiter{active: map[int64]int{}}, metricSnapshots: newMetricSnapshotCache(cfg.ObservabilityMetricsLivePoll), token: randomToken, deploymentID: func() (string, error) { return domain.NewPublicID("dpl") }, parameterID: func() (string, error) { return domain.NewPublicID("par") }}
+	dummyHash, _ := auth.HashPassword("molejo-invalid-credential")
+	if cfg.SessionTTL <= 0 {
+		cfg.SessionTTL = 12 * time.Hour
+	}
+	if cfg.SessionIdleTTL <= 0 || cfg.SessionIdleTTL > cfg.SessionTTL {
+		cfg.SessionIdleTTL = min(2*time.Hour, cfg.SessionTTL)
+	}
+	return &Server{Store: s, Runtime: r, Config: cfg, Logger: logger, Tracer: noop.NewTracerProvider().Tracer("github.com/fruto-platform/fruto/services/control-plane-api"), ParameterSecrets: parameters.UnavailableStore{}, AuthenticationSecrets: parameters.UnavailableStore{}, Observability: observability.UnavailableReader{}, logLiveLimiter: &concurrencyLimiter{active: map[int64]int{}}, metricsLiveLimiter: &concurrencyLimiter{active: map[int64]int{}}, metricSnapshots: newMetricSnapshotCache(cfg.ObservabilityMetricsLivePoll), token: randomToken, deploymentID: func() (string, error) { return domain.NewPublicID("dpl") }, parameterID: func() (string, error) { return domain.NewPublicID("par") }, dummyPasswordHash: dummyHash}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -97,26 +110,67 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "origin_forbidden", "request origin is not allowed", r)
 		return
 	}
-	ip := s.remoteIP(r)
-	if !s.limiter.allow(ip) {
-		writeError(w, http.StatusTooManyRequests, "login_rate_limited", "too many login attempts", r)
-		return
-	}
 	var input struct {
-		Actor    string `json:"actor"`
+		Username string `json:"username"`
 		Password string `json:"password"`
 	}
 	if err := decodeJSON(r, &input); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_json", "request body is invalid", r)
 		return
 	}
-	actor, hash, err := s.Store.Authenticate(r.Context(), input.Actor)
-	if err != nil || !auth.VerifyPassword(input.Password, hash) {
-		s.limiter.fail(ip)
+	username, normalizeErr := identity.NormalizeUsername(input.Username)
+	if normalizeErr != nil {
+		username = strings.ToLower(strings.TrimSpace(input.Username))
+	}
+	ipKey := auth.HashToken("ip:" + s.remoteIP(r))
+	userKey := auth.HashToken("user:" + username)
+	ipAllowed, ipErr := s.Store.AuthenticationAllowed(r.Context(), ipKey)
+	userAllowed, userErr := s.Store.AuthenticationAllowed(r.Context(), userKey)
+	if ipErr != nil || userErr != nil {
+		writeError(w, http.StatusServiceUnavailable, "authentication_unavailable", "authentication is temporarily unavailable", r)
+		return
+	}
+	if !ipAllowed || !userAllowed {
+		writeError(w, http.StatusTooManyRequests, "login_rate_limited", "too many login attempts", r)
+		return
+	}
+	user, hash, err := s.Store.AuthenticateUser(r.Context(), username)
+	if err != nil {
+		hash = s.dummyPasswordHash
+	}
+	passwordValid := auth.VerifyPassword(input.Password, hash)
+	if err != nil || !passwordValid || user.Status != identity.StatusActive || normalizeErr != nil {
+		_ = s.Store.RecordAuthenticationFailure(r.Context(), ipKey)
+		_ = s.Store.RecordAuthenticationFailure(r.Context(), userKey)
+		_ = s.recordAudit(r, audit.Event{Action: "authentication.login", TargetType: "User", Outcome: audit.Failed, Reason: "invalid_credentials"})
 		writeError(w, http.StatusUnauthorized, "invalid_credentials", "credentials are invalid", r)
 		return
 	}
-	s.limiter.success(ip)
+	_ = s.Store.ClearAuthenticationFailures(r.Context(), userKey)
+	_ = s.Store.ClearAuthenticationFailures(r.Context(), ipKey)
+	mfa, err := s.Store.UserMFAStatus(r.Context(), user.ID)
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "authentication_unavailable", "authentication is temporarily unavailable", r)
+		return
+	}
+	if mfa.TOTPEnabled {
+		challenge, tokenErr := s.newToken(32)
+		if tokenErr != nil || s.Store.CreateAuthenticationChallenge(r.Context(), auth.HashToken(challenge), user.ID, "Login", nil, time.Now().Add(5*time.Minute)) != nil {
+			writeError(w, http.StatusInternalServerError, "authentication_failed", "authentication could not continue", r)
+			return
+		}
+		writeJSON(w, http.StatusAccepted, map[string]any{"mfaRequired": true, "method": "TOTP", "challengeToken": challenge})
+		return
+	}
+	s.issueSession(w, r, user, "AAL1")
+}
+
+func (s *Server) issueSession(w http.ResponseWriter, r *http.Request, user identity.User, assuranceLevel string) {
+	installationAdmin, workspaceRoles, err := s.sessionAuthorization(r.Context(), user.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "session_failed", "could not create session", r)
+		return
+	}
 	token, err := s.newToken(32)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "session_failed", "could not create session", r)
@@ -127,54 +181,96 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "session_failed", "could not create session", r)
 		return
 	}
-	if err = s.Store.CreateSession(r.Context(), actor.ID, auth.HashToken(token), auth.HashToken(csrf), time.Now().Add(s.Config.SessionTTL)); err != nil {
+	sessionPublicID, err := domain.NewPublicID("ses")
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "session_failed", "could not create session", r)
+		return
+	}
+	now := time.Now()
+	event := s.auditEvent(r, "authentication.login", "User", user.PublicID, audit.Succeeded)
+	event.ActorUserID = &user.ID
+	if err = s.Store.CreateUserSession(r.Context(), sessionPublicID, user, auth.HashToken(token), auth.HashToken(csrf), assuranceLevel, now.Add(s.Config.SessionIdleTTL), now.Add(s.Config.SessionTTL), event); err != nil {
 		writeError(w, http.StatusInternalServerError, "session_failed", "could not create session", r)
 		return
 	}
 	http.SetCookie(w, &http.Cookie{Name: s.Config.CookieName, Value: token, Path: "/", HttpOnly: true, Secure: s.Config.CookieSecure || s.isHTTPS(r), SameSite: http.SameSiteStrictMode, MaxAge: int(s.Config.SessionTTL.Seconds())})
+	s.setCSRFCookie(w, r, csrf, int(s.Config.SessionTTL.Seconds()))
 	w.Header().Set("Cache-Control", "no-store")
-	writeJSON(w, http.StatusOK, map[string]any{"actor": map[string]string{"id": actor.Key, "role": actor.Role}, "csrfToken": csrf})
+	s.writeSession(w, user, assuranceLevel, csrf, installationAdmin, workspaceRoles)
 }
 
-func (s *Server) sessionInfo(w http.ResponseWriter, r *http.Request, actorID int64) {
-	actor, err := s.Store.Actor(r.Context(), actorID)
+func (s *Server) sessionInfo(w http.ResponseWriter, r *http.Request, userID int64, assuranceLevel string) {
+	user, err := s.Store.User(r.Context(), userID)
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, "unauthenticated", "authentication required", r)
 		return
 	}
-	token, err := s.newToken(32)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "session_failed", "could not refresh session", r)
-		return
-	}
-	newCSRF, err := s.newToken(32)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "session_failed", "could not refresh session", r)
-		return
-	}
-	cookie, err := r.Cookie(s.Config.CookieName)
+	csrfCookie, err := r.Cookie(s.Config.CookieName + "_csrf")
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, "unauthenticated", "authentication required", r)
 		return
 	}
-	if err = s.Store.RotateSession(r.Context(), actor.ID, auth.HashToken(cookie.Value), auth.HashToken(token), auth.HashToken(newCSRF), time.Now().Add(s.Config.SessionTTL)); err != nil {
-		writeError(w, http.StatusInternalServerError, "session_failed", "could not refresh session", r)
-		return
-	}
-	http.SetCookie(w, &http.Cookie{Name: s.Config.CookieName, Value: token, Path: "/", HttpOnly: true, Secure: s.Config.CookieSecure || s.isHTTPS(r), SameSite: http.SameSiteStrictMode, MaxAge: int(s.Config.SessionTTL.Seconds())})
 	w.Header().Set("Cache-Control", "no-store")
-	writeJSON(w, http.StatusOK, map[string]any{"actor": map[string]string{"id": actor.Key, "role": actor.Role}, "csrfToken": newCSRF})
+	installationAdmin, workspaceRoles, err := s.sessionAuthorization(r.Context(), user.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "session_failed", "could not load session", r)
+		return
+	}
+	s.writeSession(w, user, assuranceLevel, csrfCookie.Value, installationAdmin, workspaceRoles)
 }
 
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 	if cookie, err := r.Cookie(s.Config.CookieName); err == nil {
-		if err = s.Store.RevokeSession(r.Context(), auth.HashToken(cookie.Value)); err != nil {
+		event := s.auditEvent(r, "authentication.logout", "Session", "", audit.Succeeded)
+		if principal, sessionErr := s.Store.UserSession(r.Context(), auth.HashToken(cookie.Value), s.Config.SessionIdleTTL); sessionErr == nil {
+			event.ActorUserID = &principal.UserID
+			event.SessionID = &principal.SessionID
+		}
+		if err = s.Store.RevokeSessionToken(r.Context(), auth.HashToken(cookie.Value), event); err != nil {
 			writeError(w, http.StatusInternalServerError, "session_failed", "could not end session", r)
 			return
 		}
 	}
-	http.SetCookie(w, &http.Cookie{Name: s.Config.CookieName, Value: "", Path: "/", HttpOnly: true, MaxAge: -1, SameSite: http.SameSiteStrictMode})
+	s.clearSessionCookies(w, r)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) sessionAuthorization(ctx context.Context, userID int64) (bool, map[string]string, error) {
+	installationAdmin, err := s.Store.IsInstallationAdministrator(ctx, userID)
+	if err != nil {
+		return false, nil, err
+	}
+	workspaceRoles, err := s.Store.UserWorkspaceRoles(ctx, userID)
+	return installationAdmin, workspaceRoles, err
+}
+
+func (s *Server) writeSession(w http.ResponseWriter, user identity.User, assuranceLevel, csrf string, installationAdmin bool, workspaceRoles map[string]string) {
+	workspaceMemberships := make([]map[string]string, 0, len(workspaceRoles))
+	workspaceIDs := make([]string, 0, len(workspaceRoles))
+	for workspaceID := range workspaceRoles {
+		workspaceIDs = append(workspaceIDs, workspaceID)
+	}
+	sort.Strings(workspaceIDs)
+	for _, workspaceID := range workspaceIDs {
+		role := workspaceRoles[workspaceID]
+		workspaceMemberships = append(workspaceMemberships, map[string]string{"workspaceId": workspaceID, "role": role})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"user":                     user,
+		"assuranceLevel":           assuranceLevel,
+		"csrfToken":                csrf,
+		"installationCapabilities": map[string]bool{"manageUsers": installationAdmin, "createWorkspace": installationAdmin},
+		"workspaceMemberships":     workspaceMemberships,
+	})
+}
+
+func (s *Server) setCSRFCookie(w http.ResponseWriter, r *http.Request, value string, maxAge int) {
+	http.SetCookie(w, &http.Cookie{Name: s.Config.CookieName + "_csrf", Value: value, Path: "/", HttpOnly: false, Secure: s.Config.CookieSecure || s.isHTTPS(r), SameSite: http.SameSiteStrictMode, MaxAge: maxAge})
+}
+
+func (s *Server) clearSessionCookies(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, &http.Cookie{Name: s.Config.CookieName, Value: "", Path: "/", HttpOnly: true, Secure: s.Config.CookieSecure || s.isHTTPS(r), MaxAge: -1, SameSite: http.SameSiteStrictMode})
+	s.setCSRFCookie(w, r, "", -1)
 }
 
 func (s *Server) logAcceptedOperation(r *http.Request, op domain.Operation) {
@@ -186,11 +282,23 @@ func (s *Server) session(r *http.Request) (int64, []byte, bool) {
 	if err != nil || cookie.Value == "" {
 		return 0, nil, false
 	}
-	actor, csrf, err := s.Store.Session(r.Context(), auth.HashToken(cookie.Value))
-	return actor, csrf, err == nil
+	principal, err := s.Store.UserSession(r.Context(), auth.HashToken(cookie.Value), s.Config.SessionIdleTTL)
+	return principal.UserID, principal.CSRFHash, err == nil
 }
+
+func (s *Server) sessionPrincipal(r *http.Request) (store.SessionPrincipal, bool) {
+	cookie, err := r.Cookie(s.Config.CookieName)
+	if err != nil || cookie.Value == "" {
+		return store.SessionPrincipal{}, false
+	}
+	principal, err := s.Store.UserSession(r.Context(), auth.HashToken(cookie.Value), s.Config.SessionIdleTTL)
+	return principal, err == nil
+}
+
 func (s *Server) validCSRF(r *http.Request, hash []byte) bool {
-	return s.originAllowed(r) && len(hash) > 0 && strings.TrimSpace(r.Header.Get("X-CSRF-Token")) != "" && equal(auth.HashToken(r.Header.Get("X-CSRF-Token")), hash)
+	csrf := strings.TrimSpace(r.Header.Get("X-CSRF-Token"))
+	cookie, err := r.Cookie(s.Config.CookieName + "_csrf")
+	return err == nil && s.originAllowed(r) && len(hash) > 0 && csrf != "" && csrf == cookie.Value && equal(auth.HashToken(csrf), hash)
 }
 func (s *Server) originAllowed(r *http.Request) bool {
 	origin := r.Header.Get("Origin")
@@ -228,7 +336,7 @@ func securityMiddleware(s *Server, next http.Handler) http.Handler {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
-		if strings.HasPrefix(r.URL.Path, "/api/v1/session") {
+		if strings.HasPrefix(r.URL.Path, "/api/v1/session") || strings.HasPrefix(r.URL.Path, "/api/v1/users") || strings.HasPrefix(r.URL.Path, "/api/v1/admin/users") || strings.HasPrefix(r.URL.Path, "/api/v1/password-resets") {
 			w.Header().Set("Cache-Control", "no-store")
 		}
 		if strings.HasPrefix(s.Config.PublicURL, "https://") && s.isHTTPS(r) {
@@ -347,6 +455,32 @@ func requestID(r *http.Request) string {
 	id, _ := r.Context().Value(requestIDContextKey{}).(string)
 	return id
 }
+
+func (s *Server) auditEvent(r *http.Request, action, targetType, targetPublicID, outcome string) audit.Event {
+	publicID, _ := domain.NewPublicID("aud")
+	span := trace.SpanContextFromContext(r.Context())
+	return audit.Event{
+		PublicID:       publicID,
+		Action:         action,
+		TargetType:     targetType,
+		TargetPublicID: targetPublicID,
+		Outcome:        outcome,
+		RequestID:      requestID(r),
+		TraceID:        span.TraceID().String(),
+		SourceHash:     auth.HashToken("ip:" + s.remoteIP(r)),
+		UserAgentHash:  auth.HashToken("ua:" + r.UserAgent()),
+	}
+}
+
+func (s *Server) recordAudit(r *http.Request, event audit.Event) error {
+	base := s.auditEvent(r, event.Action, event.TargetType, event.TargetPublicID, event.Outcome)
+	base.ActorUserID = event.ActorUserID
+	base.SessionID = event.SessionID
+	base.WorkspaceID = event.WorkspaceID
+	base.Reason = event.Reason
+	base.Metadata = event.Metadata
+	return s.Store.RecordAudit(r.Context(), base)
+}
 func writeJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -366,34 +500,6 @@ func (s *Server) logger() *slog.Logger {
 	}
 	return slog.Default()
 }
-
-type loginAttempt struct {
-	Count        int
-	BlockedUntil time.Time
-}
-type loginLimiter struct {
-	sync.Mutex
-	entries map[string]loginAttempt
-}
-
-func (l *loginLimiter) allow(ip string) bool {
-	l.Lock()
-	defer l.Unlock()
-	e := l.entries[ip]
-	return time.Now().After(e.BlockedUntil) && e.Count < 8
-}
-func (l *loginLimiter) fail(ip string) {
-	l.Lock()
-	defer l.Unlock()
-	e := l.entries[ip]
-	e.Count++
-	if e.Count >= 8 {
-		e.BlockedUntil = time.Now().Add(time.Duration(e.Count) * time.Second)
-		e.Count = 0
-	}
-	l.entries[ip] = e
-}
-func (l *loginLimiter) success(ip string) { l.Lock(); defer l.Unlock(); delete(l.entries, ip) }
 
 func (s *Server) RunOnce(ctx context.Context, workerID string) (bool, error) {
 	op, appEnvironment, deployment, ok, err := s.Store.ClaimNext(ctx, workerID, s.Config.OperationLease)

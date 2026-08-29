@@ -86,7 +86,7 @@ func (s *Store) BeginCreateSecretParameter(ctx context.Context, workspaceID, act
 		return domain.SecretMutation{}, false, translateDBError(err)
 	}
 	_, err = tx.Exec(ctx, `INSERT INTO parameter_versions(
-		parameter_id,version,created_by_actor_id,secret_reference,secret_backend_version,fingerprint,
+		parameter_id,version,created_by_user_id,secret_reference,secret_backend_version,fingerprint,
 		value_state,expected_secret_backend_version,idempotency_hash,payload_hash,requested_path,requested_description)
 		VALUES($1,1,$2,$3,1,$4,'Pending',0,$5,$6,$7,$8)`, parameterID, actorID, reference, fingerprint, idempotencyHash, payloadHash, path, description)
 	if err != nil {
@@ -149,7 +149,7 @@ func (s *Store) BeginReplaceSecretParameter(ctx context.Context, workspaceID, ac
 	}
 	nextVersion := currentVersion + 1
 	_, err = tx.Exec(ctx, `INSERT INTO parameter_versions(
-		parameter_id,version,created_by_actor_id,secret_reference,secret_backend_version,fingerprint,
+		parameter_id,version,created_by_user_id,secret_reference,secret_backend_version,fingerprint,
 		value_state,expected_secret_backend_version,idempotency_hash,payload_hash,requested_path,requested_description)
 		VALUES($1,$2,$3,$4,$5,$6,'Pending',$7,$8,$9,$10,$11)`, parameterID, nextVersion, actorID, reference, backendVersion+1, fingerprint, backendVersion, idempotencyHash, payloadHash, path, description)
 	if uniqueConstraint(err) == "parameter_versions_one_pending" {
@@ -171,7 +171,7 @@ func findSecretMutation(ctx context.Context, tx pgx.Tx, workspaceID, actorID int
 	err := tx.QueryRow(ctx, `SELECT p.id,p.public_id,p.workspace_id,pv.version,p.version,pv.secret_reference,
 		pv.expected_secret_backend_version,pv.secret_backend_version,pv.value_state,pv.created_at,pv.payload_hash
 		FROM parameter_versions pv JOIN parameters p ON p.id=pv.parameter_id
-		WHERE p.workspace_id=$1 AND pv.created_by_actor_id=$2 AND pv.idempotency_hash=$3`, workspaceID, actorID, idempotencyHash).
+		WHERE p.workspace_id=$1 AND pv.created_by_user_id=$2 AND pv.idempotency_hash=$3`, workspaceID, actorID, idempotencyHash).
 		Scan(&mutation.ParameterID, &mutation.ParameterPublicID, &mutation.WorkspaceID, &mutation.ParameterVersion,
 			&mutation.ResourceVersion, &mutation.Reference, &mutation.ExpectedBackendVersion, &mutation.BackendVersion,
 			&mutation.State, &mutation.CreatedAt, &storedPayload)

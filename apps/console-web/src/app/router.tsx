@@ -14,6 +14,9 @@ import { ParametersPage } from "../features/parameters/ParametersPage";
 import { ProjectAppsPage, ProjectEnvironmentsPage, ProjectOverviewPage, ProjectsPage } from "../features/projects/ProjectPages";
 import { GitHubSettingsPage, NewWorkspacePage, WorkspaceSettingsPage } from "../features/settings/SettingsPages";
 import { WorkspaceEntryPage } from "../features/workspace/WorkspaceEntryPage";
+import { AccountPage, ForgotPasswordPage } from "../features/identity/AccountPages";
+import { AdministrationPage } from "../features/identity/AdministrationPage";
+import { WorkspaceAccessGrantsPage, WorkspaceAuditPage, WorkspaceGroupsPage, WorkspaceMembersPage } from "../features/identity/WorkspaceAccessPages";
 import { AppShell } from "./AppShell";
 
 export type RouterContext = { queryClient: QueryClient };
@@ -29,6 +32,7 @@ const loginRoute = createRoute({
   },
   component: LoginPage,
 });
+const forgotPasswordRoute = createRoute({ getParentRoute: () => rootRoute, path: "/forgot-password", component: ForgotPasswordPage });
 
 const protectedRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -40,13 +44,10 @@ const protectedRoute = createRoute({
   component: AppShell,
 });
 
-async function requireOwner(context: RouterContext, workspaceId?: string) {
+async function requireInstallationAdmin(context: RouterContext) {
   const session = await context.queryClient.ensureQueryData(sessionQueryOptions());
   if (!session) throw redirect({ to: "/login" });
-  if (session.actor.role !== "owner") {
-    if (workspaceId) throw redirect({ to: "/workspaces/$workspaceId/overview", params: { workspaceId } });
-    throw redirect({ to: "/" });
-  }
+  if (!session.installationCapabilities.manageUsers) throw redirect({ to: "/" });
 }
 
 const workspaceEntryRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/", component: WorkspaceEntryPage });
@@ -78,11 +79,17 @@ const appOverviewRoute = createRoute({ getParentRoute: () => protectedRoute, pat
 const appSourceRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/$workspaceId/projects/$projectId/apps/$appId/source", component: AppSourcePage });
 const settingsRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/$workspaceId/settings", component: WorkspaceSettingsPage });
 const githubSettingsRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/$workspaceId/settings/github", component: GitHubSettingsPage });
-const newWorkspaceRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/new", beforeLoad: ({ context }) => requireOwner(context), component: NewWorkspacePage });
+const memberSettingsRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/$workspaceId/settings/members", component: WorkspaceMembersPage });
+const groupSettingsRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/$workspaceId/settings/groups", component: WorkspaceGroupsPage });
+const accessSettingsRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/$workspaceId/settings/access", component: WorkspaceAccessGrantsPage });
+const auditSettingsRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/$workspaceId/settings/audit", component: WorkspaceAuditPage });
+const newWorkspaceRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/workspaces/new", beforeLoad: ({ context }) => requireInstallationAdmin(context), component: NewWorkspacePage });
+const accountRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/account", component: AccountPage });
+const administrationRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/admin/users", beforeLoad: ({ context }) => requireInstallationAdmin(context), component: AdministrationPage });
 
 const routeTree = rootRoute.addChildren([
-  loginRoute,
-  protectedRoute.addChildren([workspaceEntryRoute, overviewRoute, projectsRoute, parametersRoute, projectEntryRoute, projectOverviewRoute, projectAppsRoute, projectEnvironmentsRoute, environmentAppsRoute, environmentAppOverviewRoute, environmentAppBuildsRoute, environmentBuildDetailRoute, environmentAppDeploymentsRoute, environmentAppReleasesRoute, environmentAppObservabilityRoute, environmentAppLogsRoute, environmentAppMetricsRoute, environmentAppEventsRoute, environmentAppSettingsRoute, environmentAppBuildSettingsRoute, environmentAppSecretSettingsRoute, environmentAppNetworkSettingsRoute, environmentAppHealthSettingsRoute, environmentAppResourceSettingsRoute, environmentAppVersionSettingsRoute, appOverviewRoute, appSourceRoute, settingsRoute, githubSettingsRoute, newWorkspaceRoute]),
+  loginRoute, forgotPasswordRoute,
+  protectedRoute.addChildren([workspaceEntryRoute, overviewRoute, projectsRoute, parametersRoute, projectEntryRoute, projectOverviewRoute, projectAppsRoute, projectEnvironmentsRoute, environmentAppsRoute, environmentAppOverviewRoute, environmentAppBuildsRoute, environmentBuildDetailRoute, environmentAppDeploymentsRoute, environmentAppReleasesRoute, environmentAppObservabilityRoute, environmentAppLogsRoute, environmentAppMetricsRoute, environmentAppEventsRoute, environmentAppSettingsRoute, environmentAppBuildSettingsRoute, environmentAppSecretSettingsRoute, environmentAppNetworkSettingsRoute, environmentAppHealthSettingsRoute, environmentAppResourceSettingsRoute, environmentAppVersionSettingsRoute, appOverviewRoute, appSourceRoute, settingsRoute, githubSettingsRoute, memberSettingsRoute, groupSettingsRoute, accessSettingsRoute, auditSettingsRoute, newWorkspaceRoute, accountRoute, administrationRoute]),
 ]);
 
 export function createAppRouter(queryClient: QueryClient, history: ReturnType<typeof createBrowserHistory> = createBrowserHistory()) {

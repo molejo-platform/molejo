@@ -329,7 +329,7 @@ func createRelease(t *testing.T, storage *Store, workspaceID, actorID int64, pro
 	buildID := newID(t, "bld")
 	commit := strings.Repeat("a", 40)
 	var internalBuildID int64
-	err := storage.Pool.QueryRow(ctx, `INSERT INTO builds(public_id,workspace_id,project_id,app_id,app_environment_id,requested_by_actor_id,github_installation_external_id,repository_id,repository_full_name,source_branch,commit_sha,platform,status,idempotency_hash,payload_hash)
+	err := storage.Pool.QueryRow(ctx, `INSERT INTO builds(public_id,workspace_id,project_id,app_id,app_environment_id,requested_by_user_id,github_installation_external_id,repository_id,repository_full_name,source_branch,commit_sha,platform,status,idempotency_hash,payload_hash)
 		VALUES($1,$2,$3,$4,$5,$6,1,1,'molejo/testkit',$7,$8,'linux/amd64','Succeeded',$9,$10) RETURNING id`,
 		buildID, workspaceID, project.ID, app.ID, target.ID, actorID, target.SourceBranch, commit, domain.SHA256([]byte(buildID)), domain.SHA256([]byte("payload:"+buildID))).Scan(&internalBuildID)
 	if err != nil {
@@ -377,7 +377,7 @@ func newIntegrationFixture(t *testing.T) (*Store, int64, int64) {
 	if err = storage.Pool.QueryRow(ctx, `SELECT id FROM workspaces WHERE public_id=$1`, workspace.PublicID).Scan(&workspaceID); err != nil {
 		t.Fatal(err)
 	}
-	if err = storage.Pool.QueryRow(ctx, `SELECT id FROM actors WHERE actor_key=$1`, actorKey).Scan(&actorID); err != nil {
+	if err = storage.Pool.QueryRow(ctx, `SELECT id FROM users WHERE username=$1`, actorKey).Scan(&actorID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = storage.Pool.Exec(ctx, `UPDATE workspaces SET bootstrap_state='Ready'`); err != nil {

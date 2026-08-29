@@ -2,7 +2,8 @@ import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/r
 
 import { ApiRequestError } from "../../shared/api/errors";
 import { applySessionState, clearSessionState, publishSessionState, sessionQueryKey } from "../../shared/auth/session-state";
-import { getSession, login, logout, type LoginInput } from "./api";
+import { completeTOTPLogin, getSession, login, logout, type LoginInput } from "./api";
+import type { Session } from "../../shared/api/types";
 
 export { sessionQueryKey };
 
@@ -32,6 +33,19 @@ export function useLoginMutation() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: LoginInput) => login(input),
+    onSuccess: (result) => {
+      if (!("csrfToken" in result)) return;
+      const session = result as Session;
+      applySessionState(queryClient, session, true);
+      publishSessionState(session);
+    },
+  });
+}
+
+export function useCompleteTOTPLoginMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ challengeToken, code }: { challengeToken: string; code: string }) => completeTOTPLogin(challengeToken, code),
     onSuccess: (session) => {
       applySessionState(queryClient, session, true);
       publishSessionState(session);

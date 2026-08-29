@@ -14,6 +14,7 @@ import (
 
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/api/generated"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/domain"
+	"github.com/fruto-platform/fruto/services/control-plane-api/internal/identity"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/observability"
 )
 
@@ -205,7 +206,7 @@ func (h *generatedHandler) StreamAppEnvironmentRuntimeLogs(w http.ResponseWriter
 			}
 		case <-reauthorize.C:
 			currentActor, _, authenticated := h.server.session(r)
-			currentWorkspace, authErr := h.server.Store.WorkspaceForActor(r.Context(), currentActor)
+			currentWorkspace, authErr := h.server.Store.FindWorkspaceForUser(r.Context(), currentActor, workspace.PublicID)
 			if !authenticated || currentActor != actor.ID || authErr != nil || currentWorkspace.ID != workspace.ID {
 				_ = writeSSE(w, flusher, "event: end\ndata: {\"reason\":\"authorization_changed\"}\n\n")
 				return
@@ -300,7 +301,7 @@ func (h *generatedHandler) StreamAppEnvironmentRuntimeMetrics(w http.ResponseWri
 			}
 		case <-reauthorize.C:
 			currentActor, _, authenticated := h.server.session(r)
-			currentWorkspace, authErr := h.server.Store.WorkspaceForActor(r.Context(), currentActor)
+			currentWorkspace, authErr := h.server.Store.FindWorkspaceForUser(r.Context(), currentActor, workspace.PublicID)
 			if !authenticated || currentActor != actor.ID || authErr != nil || currentWorkspace.ID != workspace.ID {
 				_ = writeSSE(w, flusher, "event: end\ndata: {\"reason\":\"authorization_changed\"}\n\n")
 				return
@@ -341,10 +342,10 @@ type observabilityEventsResponse struct {
 	Items []observability.Event `json:"items"`
 }
 
-func (h *generatedHandler) observabilityScope(w http.ResponseWriter, r *http.Request, workspaceID generated.WorkspaceId, projectID generated.ProjectId, appID generated.AppId, appEnvironmentID generated.AppEnvironmentId) (domain.Actor, domain.Workspace, domain.AppEnvironment, bool) {
+func (h *generatedHandler) observabilityScope(w http.ResponseWriter, r *http.Request, workspaceID generated.WorkspaceId, projectID generated.ProjectId, appID generated.AppId, appEnvironmentID generated.AppEnvironmentId) (identity.User, domain.Workspace, domain.AppEnvironment, bool) {
 	actor, workspace, ok := h.authorizeWorkspace(w, r, string(workspaceID), false)
 	if !ok {
-		return domain.Actor{}, domain.Workspace{}, domain.AppEnvironment{}, false
+		return identity.User{}, domain.Workspace{}, domain.AppEnvironment{}, false
 	}
 	appEnvironment, ok := h.appEnvironment(w, r, workspace.ID, string(projectID), string(appID), string(appEnvironmentID))
 	return actor, workspace, appEnvironment, ok

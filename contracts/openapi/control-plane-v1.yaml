@@ -23,6 +23,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/Session'
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '202':
+          description: A second factor is required
+          content: { application/json: { schema: { $ref: '#/components/schemas/MFAChallenge' } } }
     get:
       operationId: getSession
       responses:
@@ -37,6 +40,332 @@ paths:
       operationId: logout
       responses:
         '204': { description: Session revoked }
+  /api/v1/auth/capabilities:
+    get:
+      operationId: getAuthenticationCapabilities
+      responses:
+        '200':
+          description: Authentication methods enabled for this installation
+          content: { application/json: { schema: { $ref: '#/components/schemas/AuthenticationCapabilities' } } }
+  /api/v1/session/mfa/totp:
+    post:
+      operationId: completeTOTPLogin
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/TOTPChallengeInput' } } }
+      responses:
+        '200': { description: Authenticated session at AAL2, content: { application/json: { schema: { $ref: '#/components/schemas/Session' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /api/v1/users/me:
+    get:
+      operationId: getOwnProfile
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { description: Current user profile, content: { application/json: { schema: { $ref: '#/components/schemas/User' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    put:
+      operationId: updateOwnProfile
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: '#/components/parameters/IfMatch' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ProfileInput' } } }
+      responses:
+        '200': { description: Updated profile, content: { application/json: { schema: { $ref: '#/components/schemas/User' } } } }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/users/me/password:
+    put:
+      operationId: changeOwnPassword
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/PasswordChangeInput' } } }
+      responses:
+        '204': { description: Password changed and all sessions revoked }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/v1/users/me/sessions:
+    get:
+      operationId: listOwnSessions
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Active sessions
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties: { items: { type: array, items: { $ref: '#/components/schemas/UserSession' } } }
+  /api/v1/users/me/sessions/{userSessionId}:
+    parameters: [{ $ref: '#/components/parameters/UserSessionId' }]
+    delete:
+      operationId: revokeOwnSession
+      security: [{ sessionCookie: [] }]
+      responses:
+        '204': { description: Session revoked }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/users/me/mfa:
+    get:
+      operationId: getOwnMFA
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { description: Current MFA state, content: { application/json: { schema: { $ref: '#/components/schemas/MFAStatus' } } } }
+  /api/v1/users/me/mfa/totp/enrollment:
+    post:
+      operationId: beginTOTPEnrollment
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/PasswordConfirmation' } } }
+      responses:
+        '201': { description: Enrollment secret shown once, content: { application/json: { schema: { $ref: '#/components/schemas/TOTPEnrollment' } } } }
+        '503': { $ref: '#/components/responses/Unavailable' }
+    put:
+      operationId: confirmTOTPEnrollment
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/TOTPEnrollmentConfirmation' } } }
+      responses:
+        '200': { description: TOTP enabled and recovery codes shown once, content: { application/json: { schema: { $ref: '#/components/schemas/MFARecoveryCodes' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+    delete:
+      operationId: disableOwnTOTP
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/PasswordConfirmation' } } }
+      responses:
+        '204': { description: TOTP disabled }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/v1/password-resets/request:
+    post:
+      operationId: requestPasswordReset
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/PasswordResetRequest' } } }
+      responses:
+        '202': { description: Request accepted regardless of user existence }
+  /api/v1/password-resets/verify:
+    post:
+      operationId: verifyPasswordReset
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/PasswordResetVerification' } } }
+      responses:
+        '200':
+          description: Code verified
+          content: { application/json: { schema: { $ref: '#/components/schemas/PasswordResetTicket' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /api/v1/password-resets/complete:
+    put:
+      operationId: completePasswordReset
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/PasswordResetCompletion' } } }
+      responses:
+        '204': { description: Password replaced and sessions revoked }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /api/v1/admin/users:
+    get:
+      operationId: listUsers
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Installation users
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/User' } }
+                  nextCursor: { type: [string, 'null'] }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      operationId: createUser
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/UserCreateInput' } } }
+      responses:
+        '201': { description: User created, content: { application/json: { schema: { $ref: '#/components/schemas/User' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/admin/users/{userId}:
+    parameters: [{ $ref: '#/components/parameters/UserId' }]
+    put:
+      operationId: updateUserStatus
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: '#/components/parameters/IfMatch' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/UserStatusInput' } } }
+      responses:
+        '200': { description: User updated, content: { application/json: { schema: { $ref: '#/components/schemas/User' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/admin/users/{userId}/password-reset:
+    parameters: [{ $ref: '#/components/parameters/UserId' }]
+    post:
+      operationId: createPasswordResetGrant
+      security: [{ sessionCookie: [] }]
+      responses:
+        '201':
+          description: One-time reset code; returned only on creation
+          content: { application/json: { schema: { $ref: '#/components/schemas/PasswordResetGrant' } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/workspaces/{workspaceId}/members:
+    parameters: [{ $ref: '#/components/parameters/WorkspaceId' }]
+    get:
+      operationId: listWorkspaceMembers
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Workspace memberships
+          content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/WorkspaceMembership' } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      operationId: createWorkspaceMember
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/WorkspaceMemberCreateInput' } } }
+      responses:
+        '201': { description: Membership created, content: { application/json: { schema: { $ref: '#/components/schemas/WorkspaceMembership' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/workspaces/{workspaceId}/members/{userId}:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/UserId' }
+    put:
+      operationId: putWorkspaceMember
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: '#/components/parameters/OptionalIfMatch' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/WorkspaceMembershipInput' } } }
+      responses:
+        '200': { description: Membership saved, content: { application/json: { schema: { $ref: '#/components/schemas/WorkspaceMembership' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      operationId: deleteWorkspaceMember
+      security: [{ sessionCookie: [] }]
+      responses:
+        '204': { description: Membership deleted }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/workspaces/{workspaceId}/groups:
+    parameters: [{ $ref: '#/components/parameters/WorkspaceId' }]
+    get:
+      operationId: listWorkspaceGroups
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Workspace groups
+          content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/WorkspaceGroup' } } } } } }
+    post:
+      operationId: createWorkspaceGroup
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/WorkspaceGroupInput' } } }
+      responses:
+        '201': { description: Group created, content: { application/json: { schema: { $ref: '#/components/schemas/WorkspaceGroup' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/workspaces/{workspaceId}/groups/{groupId}/members/{userId}:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/GroupId' }
+      - { $ref: '#/components/parameters/UserId' }
+    put:
+      operationId: addWorkspaceGroupMember
+      security: [{ sessionCookie: [] }]
+      responses:
+        '204': { description: Group member added }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      operationId: removeWorkspaceGroupMember
+      security: [{ sessionCookie: [] }]
+      responses:
+        '204': { description: Group member removed }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/workspaces/{workspaceId}/groups/{groupId}/members:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/GroupId' }
+    get:
+      operationId: listWorkspaceGroupMembers
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Current members of the workspace group
+          content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/WorkspaceMembership' } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/workspaces/{workspaceId}/audit-events:
+    parameters: [{ $ref: '#/components/parameters/WorkspaceId' }]
+    get:
+      operationId: listAuditEvents
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Append-only workspace audit trail
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/AuditEvent' } }
+                  nextCursor: { type: [string, 'null'] }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/v1/workspaces/{workspaceId}/access-grants:
+    parameters: [{ $ref: '#/components/parameters/WorkspaceId' }]
+    get:
+      operationId: listWorkspaceAccessGrants
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Explicit ReBAC relations in this Workspace
+          content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/AccessGrant' } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      operationId: createWorkspaceAccessGrant
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AccessGrantInput' } } }
+      responses:
+        '201': { description: Relation granted, content: { application/json: { schema: { $ref: '#/components/schemas/AccessGrant' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/workspaces/{workspaceId}/access-grants/{accessGrantId}:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/AccessGrantId' }
+    delete:
+      operationId: deleteWorkspaceAccessGrant
+      security: [{ sessionCookie: [] }]
+      responses:
+        '204': { description: Relation revoked }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /api/v1/workspaces/current:
     get:
       operationId: getCurrentWorkspace
@@ -1074,6 +1403,26 @@ components:
       in: path
       required: true
       schema: { type: string, pattern: '^rel-[a-z2-7]{20}$' }
+    UserId:
+      name: userId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^usr-[a-z2-7]{20}$' }
+    UserSessionId:
+      name: userSessionId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^ses-[a-z2-7]{20}$' }
+    GroupId:
+      name: groupId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^grp-[a-z2-7]{20}$' }
+    AccessGrantId:
+      name: accessGrantId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^agr-[a-z2-7]{20}$' }
     IdempotencyKey:
       name: Idempotency-Key
       in: header
@@ -1090,6 +1439,11 @@ components:
       in: header
       required: true
       schema: { type: integer, minimum: 1 }
+    OptionalIfMatch:
+      name: If-Match
+      in: header
+      required: false
+      schema: { type: integer, minimum: 1 }
     DeliveryPolicyIfMatch:
       name: If-Match
       in: header
@@ -1100,7 +1454,7 @@ components:
       description: Authentication required
       content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
     Forbidden:
-      description: Authenticated Actor cannot perform this action
+      description: Authenticated user cannot perform this action
       content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
     BadRequest:
       description: Invalid request
@@ -1130,22 +1484,260 @@ components:
   schemas:
     LoginRequest:
       type: object
-      required: [actor, password]
+      required: [username, password]
       additionalProperties: false
       properties:
-        actor: { type: string, enum: [owner, tester-1, tester-2] }
-        password: { type: string, minLength: 1, writeOnly: true }
+        username: { type: string, minLength: 3, maxLength: 64 }
+        password: { type: string, minLength: 1, maxLength: 1024, writeOnly: true }
     Session:
       type: object
-      required: [actor, csrfToken]
+      required: [user, assuranceLevel, csrfToken, installationCapabilities, workspaceMemberships]
+      additionalProperties: false
       properties:
-        actor:
-          type: object
-          required: [id, role]
-          properties:
-            id: { type: string }
-            role: { type: string, enum: [owner, tester] }
+        user: { $ref: '#/components/schemas/User' }
+        assuranceLevel: { type: string, enum: [AAL1, AAL2] }
         csrfToken: { type: string, writeOnly: true }
+        installationCapabilities:
+          type: object
+          required: [manageUsers, createWorkspace]
+          additionalProperties: false
+          properties:
+            manageUsers: { type: boolean }
+            createWorkspace: { type: boolean }
+        workspaceMemberships:
+          type: array
+          items:
+            type: object
+            required: [workspaceId, role]
+            additionalProperties: false
+            properties:
+              workspaceId: { type: string, pattern: '^ws-[a-z2-7]{20}$' }
+              role: { type: string, enum: [Owner, Member, Viewer] }
+    AuthenticationCapabilities:
+      type: object
+      required: [password, totp, passkey]
+      additionalProperties: false
+      properties:
+        password: { type: boolean }
+        totp: { type: boolean }
+        passkey: { type: boolean }
+    MFAChallenge:
+      type: object
+      required: [mfaRequired, method, challengeToken]
+      additionalProperties: false
+      properties:
+        mfaRequired: { type: boolean, const: true }
+        method: { type: string, enum: [TOTP] }
+        challengeToken: { type: string, writeOnly: true }
+    TOTPChallengeInput:
+      type: object
+      required: [challengeToken, code]
+      additionalProperties: false
+      properties:
+        challengeToken: { type: string, writeOnly: true }
+        code: { type: string, pattern: '^([0-9]{6}|[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4})$', writeOnly: true }
+    MFAStatus:
+      type: object
+      required: [totpEnabled, passkeyCount]
+      additionalProperties: false
+      properties:
+        totpEnabled: { type: boolean }
+        passkeyCount: { type: integer, minimum: 0 }
+    TOTPEnrollment:
+      type: object
+      required: [challengeToken, secret, otpAuthUrl]
+      additionalProperties: false
+      properties:
+        challengeToken: { type: string, writeOnly: true }
+        secret: { type: string, writeOnly: true }
+        otpAuthUrl: { type: string, writeOnly: true }
+    TOTPEnrollmentConfirmation:
+      type: object
+      required: [challengeToken, code]
+      additionalProperties: false
+      properties:
+        challengeToken: { type: string, writeOnly: true }
+        code: { type: string, pattern: '^[0-9]{6}$', writeOnly: true }
+    MFARecoveryCodes:
+      type: object
+      required: [recoveryCodes]
+      additionalProperties: false
+      properties:
+        recoveryCodes: { type: array, minItems: 8, maxItems: 10, items: { type: string, writeOnly: true } }
+    PasswordConfirmation:
+      type: object
+      required: [password]
+      additionalProperties: false
+      properties:
+        password: { type: string, minLength: 1, maxLength: 1024, writeOnly: true }
+    User:
+      type: object
+      required: [id, username, displayName, status, version, createdAt, updatedAt]
+      additionalProperties: false
+      properties:
+        id: { type: string, pattern: '^usr-[a-z2-7]{20}$' }
+        username: { type: string, minLength: 3, maxLength: 64 }
+        displayName: { type: string, minLength: 1, maxLength: 120 }
+        status: { type: string, enum: [Active, Disabled, Locked] }
+        version: { type: integer, minimum: 1 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ProfileInput:
+      type: object
+      required: [displayName]
+      additionalProperties: false
+      properties:
+        displayName: { type: string, minLength: 1, maxLength: 120 }
+    PasswordChangeInput:
+      type: object
+      required: [currentPassword, newPassword]
+      additionalProperties: false
+      properties:
+        currentPassword: { type: string, minLength: 1, maxLength: 1024, writeOnly: true }
+        newPassword: { type: string, minLength: 15, maxLength: 1024, writeOnly: true }
+    PasswordResetRequest:
+      type: object
+      required: [username]
+      additionalProperties: false
+      properties:
+        username: { type: string, minLength: 3, maxLength: 64 }
+    PasswordResetVerification:
+      type: object
+      required: [username, code]
+      additionalProperties: false
+      properties:
+        username: { type: string, minLength: 3, maxLength: 64 }
+        code: { type: string, minLength: 12, maxLength: 14, writeOnly: true }
+    PasswordResetTicket:
+      type: object
+      required: [ticket]
+      additionalProperties: false
+      properties:
+        ticket: { type: string, pattern: '^prg-[a-z2-7]{20}$', writeOnly: true }
+    PasswordResetCompletion:
+      type: object
+      required: [username, ticket, newPassword]
+      additionalProperties: false
+      properties:
+        username: { type: string, minLength: 3, maxLength: 64 }
+        ticket: { type: string, pattern: '^prg-[a-z2-7]{20}$', writeOnly: true }
+        newPassword: { type: string, minLength: 15, maxLength: 1024, writeOnly: true }
+    PasswordResetGrant:
+      type: object
+      required: [code, expiresAt]
+      additionalProperties: false
+      properties:
+        code: { type: string, writeOnly: true }
+        expiresAt: { type: string, format: date-time }
+    UserCreateInput:
+      type: object
+      required: [username, displayName, password]
+      additionalProperties: false
+      properties:
+        username: { type: string, minLength: 3, maxLength: 64 }
+        displayName: { type: string, minLength: 1, maxLength: 120 }
+        password: { type: string, minLength: 15, maxLength: 1024, writeOnly: true }
+        installationAdministrator: { type: boolean, default: false }
+    UserStatusInput:
+      type: object
+      required: [status]
+      additionalProperties: false
+      properties:
+        status: { type: string, enum: [Active, Disabled, Locked] }
+    UserSession:
+      type: object
+      required: [id, assuranceLevel, lastSeenAt, expiresAt, current]
+      additionalProperties: false
+      properties:
+        id: { type: string, pattern: '^ses-[a-z2-7]{20}$' }
+        assuranceLevel: { type: string, enum: [AAL1, AAL2] }
+        lastSeenAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        current: { type: boolean }
+    WorkspaceMembership:
+      type: object
+      required: [workspaceId, userId, username, displayName, role, status, version, createdAt, updatedAt]
+      additionalProperties: false
+      properties:
+        workspaceId: { type: string, pattern: '^ws-[a-z2-7]{20}$' }
+        userId: { type: string, pattern: '^usr-[a-z2-7]{20}$' }
+        username: { type: string }
+        displayName: { type: string }
+        role: { type: string, enum: [Owner, Member, Viewer] }
+        status: { type: string, enum: [Active, Suspended] }
+        version: { type: integer, minimum: 1 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    WorkspaceMembershipInput:
+      type: object
+      required: [role, status]
+      additionalProperties: false
+      properties:
+        role: { type: string, enum: [Owner, Member, Viewer] }
+        status: { type: string, enum: [Active, Suspended] }
+    WorkspaceMemberCreateInput:
+      type: object
+      required: [username, role, status]
+      additionalProperties: false
+      properties:
+        username: { type: string, minLength: 3, maxLength: 64 }
+        role: { type: string, enum: [Owner, Member, Viewer] }
+        status: { type: string, enum: [Active, Suspended] }
+    WorkspaceGroup:
+      type: object
+      required: [id, name, version, memberCount, createdAt, updatedAt]
+      additionalProperties: false
+      properties:
+        id: { type: string, pattern: '^grp-[a-z2-7]{20}$' }
+        name: { type: string, minLength: 1, maxLength: 80 }
+        version: { type: integer, minimum: 1 }
+        memberCount: { type: integer, minimum: 0 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    WorkspaceGroupInput:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+    AccessGrant:
+      type: object
+      required: [id, subjectType, subjectId, subjectName, resourceType, resourceId, relation, createdAt]
+      additionalProperties: false
+      properties:
+        id: { type: string, pattern: '^agr-[a-z2-7]{20}$' }
+        subjectType: { type: string, enum: [User, Group] }
+        subjectId: { type: string }
+        subjectName: { type: string }
+        resourceType: { type: string, enum: [Workspace, Project, App, AppEnvironment] }
+        resourceId: { type: string }
+        relation: { type: string, enum: [Viewer, Editor, Deployer, Manager] }
+        createdAt: { type: string, format: date-time }
+    AccessGrantInput:
+      type: object
+      required: [subjectType, subjectId, resourceType, resourceId, relation]
+      additionalProperties: false
+      properties:
+        subjectType: { type: string, enum: [User, Group] }
+        subjectId: { type: string }
+        resourceType: { type: string, enum: [Workspace, Project, App, AppEnvironment] }
+        resourceId: { type: string }
+        relation: { type: string, enum: [Viewer, Editor, Deployer, Manager] }
+    AuditEvent:
+      type: object
+      required: [id, occurredAt, action, targetType, outcome, metadata]
+      additionalProperties: false
+      properties:
+        id: { type: string, pattern: '^aud-[a-z2-7]{20}$' }
+        occurredAt: { type: string, format: date-time }
+        actorUserId: { type: string, pattern: '^usr-[a-z2-7]{20}$' }
+        action: { type: string }
+        targetType: { type: string }
+        targetId: { type: string }
+        outcome: { type: string, enum: [Succeeded, Failed, Denied] }
+        reason: { type: string }
+        requestId: { type: string }
+        metadata: { type: object, additionalProperties: true }
     Workspace:
       type: object
       required: [id, name, version, state, createdAt, updatedAt]

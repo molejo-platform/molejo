@@ -10,6 +10,9 @@ import (
 )
 
 func (c Config) Validate() error {
+	if c.SessionIdleTTL <= 0 || c.SessionTTL <= 0 || c.SessionIdleTTL > c.SessionTTL {
+		return fmt.Errorf("session idle TTL must be positive and at most the absolute TTL")
+	}
 	if c.ObservabilityLogMaxWindow <= 0 || c.ObservabilityLogMaxWindow > 24*time.Hour {
 		return fmt.Errorf("observability log max window must be positive and at most 24 hours")
 	}

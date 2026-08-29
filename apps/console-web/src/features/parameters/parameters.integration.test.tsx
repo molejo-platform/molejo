@@ -3,14 +3,14 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  role: "owner" as "owner" | "tester",
+  role: "Owner" as "Owner" | "Viewer",
   listParameters: vi.fn(),
   createParameter: vi.fn(),
   replaceParameter: vi.fn(),
 }));
 
 vi.mock("@tanstack/react-router", () => ({ useParams: () => ({ workspaceId: "ws-aaaaaaaaaaaaaaaaaaaa" }) }));
-vi.mock("../auth/model", () => ({ useSessionQuery: () => ({ data: { actor: { id: "actor", role: mocks.role } } }) }));
+vi.mock("../auth/model", () => ({ useSessionQuery: () => ({ data: { workspaceMemberships: [{ workspaceId: "ws-aaaaaaaaaaaaaaaaaaaa", role: mocks.role }] } }) }));
 vi.mock("./api", () => ({
   listParameters: mocks.listParameters,
   createParameter: mocks.createParameter,
@@ -23,7 +23,7 @@ import { renderWithQueryClient } from "../../test/render";
 
 afterEach(() => {
   cleanup();
-  mocks.role = "owner";
+  mocks.role = "Owner";
   mocks.listParameters.mockReset();
   mocks.createParameter.mockReset();
   mocks.replaceParameter.mockReset();
@@ -67,7 +67,7 @@ describe("Parameters page", () => {
   });
 
   it("keeps testers read-only", async () => {
-    mocks.role = "tester";
+    mocks.role = "Viewer";
     mocks.listParameters.mockResolvedValue({ items: [], nextCursor: null });
     renderWithQueryClient(<ParametersPage/>);
     await screen.findByText("Nenhum Parameter");

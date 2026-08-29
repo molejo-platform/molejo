@@ -57,7 +57,7 @@ func (h *generatedHandler) CompleteGitHubInstallation(w http.ResponseWriter, r *
 		writeError(w, http.StatusBadRequest, "github_state_invalid", "GitHub connection state is invalid or expired", r)
 		return
 	}
-	authorized, err := h.server.Store.GitHubConnectionAuthorized(r.Context(), pending.ActorID, pending.WorkspaceID)
+	authorized, err := h.server.Store.GitHubConnectionAuthorized(r.Context(), pending.UserID, pending.WorkspaceID)
 	if err != nil || !authorized {
 		writeError(w, http.StatusForbidden, "github_connection_forbidden", "GitHub connection is no longer authorized", r)
 		return
@@ -72,7 +72,7 @@ func (h *generatedHandler) CompleteGitHubInstallation(w http.ResponseWriter, r *
 		writeError(w, http.StatusServiceUnavailable, "github_connection_failed", "could not continue GitHub connection", r)
 		return
 	}
-	if err = h.server.Store.CreateGitHubConnectionState(r.Context(), auth.HashToken(state), auth.HashToken(browser), pending.ActorID, pending.WorkspaceID, githubAuthorizationStep, params.InstallationId, time.Now().Add(h.server.Config.GitHubStateTTL)); err != nil {
+	if err = h.server.Store.CreateGitHubConnectionState(r.Context(), auth.HashToken(state), auth.HashToken(browser), pending.UserID, pending.WorkspaceID, githubAuthorizationStep, params.InstallationId, time.Now().Add(h.server.Config.GitHubStateTTL)); err != nil {
 		h.server.logger().Error("create GitHub authorization state", "request_id", requestID(r), "error", err)
 		writeError(w, http.StatusServiceUnavailable, "github_connection_failed", "could not continue GitHub connection", r)
 		return
@@ -93,7 +93,7 @@ func (h *generatedHandler) CompleteGitHubAuthorization(w http.ResponseWriter, r 
 		writeError(w, http.StatusBadRequest, "github_state_invalid", "GitHub authorization state is invalid or expired", r)
 		return
 	}
-	authorized, err := h.server.Store.GitHubConnectionAuthorized(r.Context(), pending.ActorID, pending.WorkspaceID)
+	authorized, err := h.server.Store.GitHubConnectionAuthorized(r.Context(), pending.UserID, pending.WorkspaceID)
 	if err != nil || !authorized {
 		writeError(w, http.StatusForbidden, "github_connection_forbidden", "GitHub connection is no longer authorized", r)
 		return
@@ -117,7 +117,7 @@ func (h *generatedHandler) CompleteGitHubAuthorization(w http.ResponseWriter, r 
 		if idErr != nil {
 			break
 		}
-		_, err = h.server.Store.ConnectGitHubInstallation(r.Context(), publicID, pending.WorkspaceID, pending.ActorID, installation.ID, installation.AccountID, installation.AccountLogin, installation.AccountType, installation.RepositorySelection)
+		_, err = h.server.Store.ConnectGitHubInstallation(r.Context(), publicID, pending.WorkspaceID, pending.UserID, installation.ID, installation.AccountID, installation.AccountLogin, installation.AccountType, installation.RepositorySelection)
 		if !errors.Is(err, store.ErrPublicIDCollision) {
 			break
 		}

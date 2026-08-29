@@ -12,13 +12,14 @@ import { EmptyState, PageHeader } from "../../shared/ui/Page";
 import { useSessionQuery } from "../auth/model";
 import { workspaceScopeKeys } from "../workspace/scope";
 import { archiveParameter, createParameter, listParameters, replaceParameter } from "./api";
+import { canEditWorkspace } from "../../shared/auth/permissions";
 
 const emptyInput: ParameterInput = { path: "", type: "PlainText", description: "", value: "" };
 
 export function ParametersPage() {
   const { workspaceId } = useParams({ strict: false }) as { workspaceId: string };
   const session = useSessionQuery();
-  const canMutate = session.data?.actor.role === "owner";
+  const canMutate = canEditWorkspace(session.data, workspaceId);
   const queryClient = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<Parameter>();

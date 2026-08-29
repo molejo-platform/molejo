@@ -5,13 +5,16 @@ import { getCsrfToken, setCsrfToken } from "../api/http-client";
 import type { Session } from "../api/types";
 import { applySessionState, clearSessionState, sessionQueryKey } from "./session-state";
 
-const owner = { actor: { id: "owner", role: "owner" }, csrfToken: "owner-csrf" } satisfies Session;
-const tester = { actor: { id: "tester-1", role: "tester" }, csrfToken: "tester-csrf" } satisfies Session;
+function session(id: string, csrfToken: string): Session {
+  return { user: { id, username: id, displayName: id, status: "Active", version: 1, createdAt: "2026-08-29T00:00:00Z", updatedAt: "2026-08-29T00:00:00Z" }, assuranceLevel: "AAL1", csrfToken, installationCapabilities: { manageUsers: false, createWorkspace: false }, workspaceMemberships: [] };
+}
+const owner = session("usr-aaaaaaaaaaaaaaaaaaaa", "owner-csrf");
+const tester = session("usr-bbbbbbbbbbbbbbbbbbbb", "tester-csrf");
 
 afterEach(() => setCsrfToken(undefined));
 
 describe("session state", () => {
-  it("clears actor-scoped queries when login changes identity", () => {
+  it("clears user-scoped queries when login changes identity", () => {
     const queryClient = new QueryClient();
     queryClient.setQueryData(sessionQueryKey, owner);
     queryClient.setQueryData(["workspaces", "list"], { items: [{ id: "private" }] });
@@ -23,7 +26,7 @@ describe("session state", () => {
     expect(getCsrfToken()).toBe("tester-csrf");
   });
 
-  it("adopts a rotated CSRF token without discarding same-actor cache", () => {
+  it("adopts a refreshed CSRF token without discarding the same-user cache", () => {
     const queryClient = new QueryClient();
     queryClient.setQueryData(sessionQueryKey, owner);
     queryClient.setQueryData(["workspaces", "list"], { items: [{ id: "private" }] });
@@ -34,7 +37,7 @@ describe("session state", () => {
     expect(getCsrfToken()).toBe("rotated");
   });
 
-  it("removes actor-scoped data on logout", () => {
+  it("removes user-scoped data on logout", () => {
     const queryClient = new QueryClient();
     queryClient.setQueryData(["workspaces", "list"], { items: [{ id: "private" }] });
 

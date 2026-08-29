@@ -14,11 +14,12 @@ import { archiveApp, archiveEnvironment, archiveProject, createApp, createEnviro
 import { normalizeResourceName, validateResourceName } from "./model";
 import { workspaceScopeKeys } from "../workspace/scope";
 import { ProjectLayout } from "./ProjectLayout";
+import { canEditWorkspace } from "../../shared/auth/permissions";
 
 export function ProjectsPage() {
   const { workspaceId } = useParams({ strict: false }) as { workspaceId: string };
   const session = useSessionQuery();
-  const canMutate = session.data?.actor.role === "owner";
+  const canMutate = canEditWorkspace(session.data, workspaceId);
   const queryClient = useQueryClient();
   const projects = useQuery({ queryKey: workspaceScopeKeys.projects(workspaceId), queryFn: () => listProjects(workspaceId) });
   const create = useMutation({ mutationFn: (name: string) => createProject(workspaceId, { name }), onSuccess: () => queryClient.invalidateQueries({ queryKey: workspaceScopeKeys.projects(workspaceId) }) });
@@ -30,7 +31,7 @@ export function ProjectOverviewPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const session = useSessionQuery();
-  const canMutate = session.data?.actor.role === "owner";
+  const canMutate = canEditWorkspace(session.data, workspaceId);
   const apps = useQuery({ queryKey: workspaceScopeKeys.apps(workspaceId, projectId), queryFn: () => listApps(workspaceId, projectId) });
   const environments = useQuery({ queryKey: workspaceScopeKeys.environments(workspaceId, projectId), queryFn: () => listEnvironments(workspaceId, projectId) });
   const project = useQuery({ queryKey: workspaceScopeKeys.project(workspaceId, projectId), queryFn: () => getProject(workspaceId, projectId) });
@@ -52,7 +53,7 @@ export function ProjectEnvironmentsPage() {
 
 function ProjectResourcePage<T extends App | Environment>({ workspaceId, projectId, kind, queryKey, list, create, update, archive, href }: { workspaceId: string; projectId: string; kind: "App" | "Environment"; queryKey: readonly unknown[]; list: () => Promise<{ items: T[]; nextCursor: string | null }>; create: (name: string) => Promise<T>; update: (resource: T, name: string) => Promise<T>; archive: (resource: T) => Promise<void>; href?: (resource: T) => { to: string; params: Record<string, string> } }) {
   const session = useSessionQuery();
-  const canMutate = session.data?.actor.role === "owner";
+  const canMutate = canEditWorkspace(session.data, workspaceId);
   const queryClient = useQueryClient();
   const resources = useQuery({ queryKey, queryFn: list });
   const createMutation = useMutation({ mutationFn: create, onSuccess: () => queryClient.invalidateQueries({ queryKey }) });

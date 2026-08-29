@@ -12,7 +12,7 @@ vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => mocks.navigate,
 }));
 vi.mock("../auth/model", () => ({
-  useSessionQuery: () => ({ data: { actor: { id: "owner", role: "owner" } } }),
+  useSessionQuery: () => ({ data: { user: { username: "owner", displayName: "Owner" }, installationCapabilities: { createWorkspace: true }, workspaceMemberships: [{ workspaceId: "ws-aaaaaaaaaaaaaaaaaaaa", role: "Owner" }] } }),
   useLogoutMutation: () => mocks.logout,
 }));
 vi.mock("./WorkspaceContext", () => ({

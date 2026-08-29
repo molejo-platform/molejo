@@ -75,7 +75,7 @@ func (s *Store) CreateParameter(ctx context.Context, workspaceID, actorID int64,
 		return domain.Parameter{}, translateDBError(err)
 	}
 	plain, reference, backendVersion, fingerprint := parameterValueArguments(value)
-	if _, err = tx.Exec(ctx, `INSERT INTO parameter_versions(parameter_id,version,created_by_actor_id,plaintext_value,secret_reference,secret_backend_version,fingerprint)
+	if _, err = tx.Exec(ctx, `INSERT INTO parameter_versions(parameter_id,version,created_by_user_id,plaintext_value,secret_reference,secret_backend_version,fingerprint)
 		VALUES($1,1,$2,$3,$4,$5,$6)`, parameterID, actorID, plain, reference, backendVersion, fingerprint); err != nil {
 		return domain.Parameter{}, translateDBError(err)
 	}
@@ -163,7 +163,7 @@ func (s *Store) ReplaceParameter(ctx context.Context, workspaceID, actorID int64
 	}
 	nextVersion := currentVersion + 1
 	plain, reference, backendVersion, fingerprint := parameterValueArguments(value)
-	if _, err = tx.Exec(ctx, `INSERT INTO parameter_versions(parameter_id,version,created_by_actor_id,plaintext_value,secret_reference,secret_backend_version,fingerprint) VALUES($1,$2,$3,$4,$5,$6,$7)`, parameterID, nextVersion, actorID, plain, reference, backendVersion, fingerprint); err != nil {
+	if _, err = tx.Exec(ctx, `INSERT INTO parameter_versions(parameter_id,version,created_by_user_id,plaintext_value,secret_reference,secret_backend_version,fingerprint) VALUES($1,$2,$3,$4,$5,$6,$7)`, parameterID, nextVersion, actorID, plain, reference, backendVersion, fingerprint); err != nil {
 		return domain.Parameter{}, translateDBError(err)
 	}
 	if _, err = tx.Exec(ctx, `UPDATE parameters SET path=$3,description=$4,current_version=$5,version=version+1,updated_at=now() WHERE id=$1 AND workspace_id=$2`, parameterID, workspaceID, path, description, nextVersion); err != nil {

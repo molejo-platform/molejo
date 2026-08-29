@@ -93,7 +93,7 @@ func TestWorkerRetriesAppEnvironmentDeletionUntilRuntimeAbsenceIsObserved(t *tes
 	if processed, runErr := server.RunOnce(ctx, "delete-worker"); runErr != nil || !processed {
 		t.Fatalf("first delete: processed=%v err=%v", processed, runErr)
 	}
-	currentOperation, err := s.GetOperationForActor(ctx, actorID, operation.PublicID)
+	currentOperation, err := s.GetOperationForUser(ctx, actorID, operation.PublicID)
 	if err != nil || currentOperation.Status != domain.OperationPending {
 		t.Fatalf("operation after observed runtime=%+v err=%v", currentOperation, err)
 	}
@@ -115,36 +115,28 @@ func TestWorkerRetriesAppEnvironmentDeletionUntilRuntimeAbsenceIsObserved(t *tes
 	}
 }
 
-func TestSessionRefreshFailureKeepsTheOldSessionValid(t *testing.T) {
+func TestSessionReadKeepsTheExistingSessionStable(t *testing.T) {
 	ctx := context.Background()
 	s, _, actorID, _ := newExecutorIntegrationFixture(t)
 	oldToken := "old-session-token"
-	collidingToken := "already-issued-token"
-	csrf := domain.SHA256([]byte("csrf"))
+	csrfToken := "csrf-token"
+	csrf := domain.SHA256([]byte(csrfToken))
 	if err := s.CreateSession(ctx, actorID, domain.SHA256([]byte(oldToken)), csrf, time.Now().Add(time.Hour)); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.CreateSession(ctx, actorID, domain.SHA256([]byte(collidingToken)), csrf, time.Now().Add(time.Hour)); err != nil {
-		t.Fatal(err)
-	}
-	server := NewServer(s, nil, Config{CookieName: "fruto_session", SessionTTL: time.Hour}, nil)
-	issued := []string{collidingToken, "new-csrf-token"}
-	server.token = func(int) (string, error) {
-		value := issued[0]
-		issued = issued[1:]
-		return value, nil
-	}
+	server := NewServer(s, nil, Config{CookieName: "fruto_session", SessionTTL: time.Hour, SessionIdleTTL: time.Hour}, nil)
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/session", nil)
 	request.AddCookie(&http.Cookie{Name: "fruto_session", Value: oldToken})
+	request.AddCookie(&http.Cookie{Name: "fruto_session_csrf", Value: csrfToken})
 	recorder := httptest.NewRecorder()
 
-	server.sessionInfo(recorder, request, actorID)
+	server.sessionInfo(recorder, request, actorID, "AAL1")
 
-	if recorder.Code != http.StatusInternalServerError || recorder.Header().Get("Set-Cookie") != "" {
-		t.Fatalf("refresh status=%d Set-Cookie=%q", recorder.Code, recorder.Header().Get("Set-Cookie"))
+	if recorder.Code != http.StatusOK || recorder.Header().Get("Set-Cookie") != "" {
+		t.Fatalf("session status=%d Set-Cookie=%q", recorder.Code, recorder.Header().Get("Set-Cookie"))
 	}
 	if _, _, err := s.Session(ctx, domain.SHA256([]byte(oldToken))); err != nil {
-		t.Fatalf("refresh failure revoked the old session: %v", err)
+		t.Fatalf("session read revoked the existing session: %v", err)
 	}
 }
 
@@ -221,7 +213,7 @@ func createExecutorTargetAndRelease(t *testing.T, s *store.Store, workspaceID, a
 	}
 	buildID := mustAPIID(t, "bld")
 	var internalBuildID int64
-	err = s.Pool.QueryRow(ctx, `INSERT INTO builds(public_id,workspace_id,project_id,app_id,app_environment_id,requested_by_actor_id,github_installation_external_id,repository_id,repository_full_name,source_branch,commit_sha,platform,status,idempotency_hash,payload_hash)
+	err = s.Pool.QueryRow(ctx, `INSERT INTO builds(public_id,workspace_id,project_id,app_id,app_environment_id,requested_by_user_id,github_installation_external_id,repository_id,repository_full_name,source_branch,commit_sha,platform,status,idempotency_hash,payload_hash)
 		VALUES($1,$2,$3,$4,$5,$6,1,1,'molejo/platform',$7,$8,'linux/amd64','Succeeded',$9,$10) RETURNING id`, buildID, workspaceID, project.ID, app.ID, target.ID, actorID, target.SourceBranch, strings.Repeat("a", 40), domain.SHA256([]byte(buildID)), domain.SHA256([]byte("payload:"+buildID))).Scan(&internalBuildID)
 	if err != nil {
 		t.Fatal(err)
@@ -264,7 +256,7 @@ func newExecutorIntegrationFixture(t *testing.T) (*store.Store, int64, int64, st
 	if err = s.Pool.QueryRow(ctx, `SELECT id FROM workspaces WHERE public_id=$1`, workspace.PublicID).Scan(&workspaceID); err != nil {
 		t.Fatal(err)
 	}
-	if err = s.Pool.QueryRow(ctx, `SELECT id FROM actors WHERE actor_key=$1`, actorKey).Scan(&actorID); err != nil {
+	if err = s.Pool.QueryRow(ctx, `SELECT id FROM users WHERE username=$1`, actorKey).Scan(&actorID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = s.Pool.Exec(ctx, `UPDATE workspaces SET bootstrap_state='Ready',updated_at=now() WHERE id=$1`, workspaceID); err != nil {

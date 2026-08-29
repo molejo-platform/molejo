@@ -10,31 +10,30 @@ import (
 )
 
 type GitHubConnectionState struct {
-	ActorID        int64
+	UserID         int64
 	WorkspaceID    int64
 	Step           string
 	InstallationID int64
 }
 
-func (s *Store) GitHubConnectionAuthorized(ctx context.Context, actorID, workspaceID int64) (bool, error) {
+func (s *Store) GitHubConnectionAuthorized(ctx context.Context, userID, workspaceID int64) (bool, error) {
 	var authorized bool
 	err := s.Pool.QueryRow(ctx, `
 		SELECT EXISTS(
-			SELECT 1 FROM actors a
-			JOIN workspace_actors wa ON wa.actor_id=a.id
-			WHERE a.id=$1 AND a.role='owner' AND wa.workspace_id=$2
-		)`, actorID, workspaceID).Scan(&authorized)
+			SELECT 1 FROM workspace_memberships wm
+			WHERE wm.user_id=$1 AND wm.role='Owner' AND wm.status='Active' AND wm.workspace_id=$2
+		)`, userID, workspaceID).Scan(&authorized)
 	return authorized, err
 }
 
-func (s *Store) CreateGitHubConnectionState(ctx context.Context, stateHash, browserHash []byte, actorID, workspaceID int64, step string, installationID int64, expiresAt time.Time) error {
+func (s *Store) CreateGitHubConnectionState(ctx context.Context, stateHash, browserHash []byte, userID, workspaceID int64, step string, installationID int64, expiresAt time.Time) error {
 	var externalID any
 	if installationID > 0 {
 		externalID = installationID
 	}
 	_, err := s.Pool.Exec(ctx, `
-		INSERT INTO github_connection_states(state_hash,browser_hash,actor_id,workspace_id,step,github_installation_id,expires_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7)`, stateHash, browserHash, actorID, workspaceID, step, externalID, expiresAt)
+		INSERT INTO github_connection_states(state_hash,browser_hash,user_id,workspace_id,step,github_installation_id,expires_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7)`, stateHash, browserHash, userID, workspaceID, step, externalID, expiresAt)
 	return err
 }
 
@@ -45,21 +44,21 @@ func (s *Store) ConsumeGitHubConnectionState(ctx context.Context, stateHash, bro
 		SET consumed_at=now()
 		WHERE state_hash=$1 AND browser_hash=$2 AND step=$3
 		  AND consumed_at IS NULL AND expires_at > now()
-		RETURNING actor_id,workspace_id,step,COALESCE(github_installation_id,0)`, stateHash, browserHash, step).
-		Scan(&value.ActorID, &value.WorkspaceID, &value.Step, &value.InstallationID)
+		RETURNING user_id,workspace_id,step,COALESCE(github_installation_id,0)`, stateHash, browserHash, step).
+		Scan(&value.UserID, &value.WorkspaceID, &value.Step, &value.InstallationID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return GitHubConnectionState{}, ErrNotFound
 	}
 	return value, err
 }
 
-func (s *Store) ConnectGitHubInstallation(ctx context.Context, publicID string, workspaceID, actorID, externalID, accountID int64, accountLogin, accountType, repositorySelection string) (domain.GitHubInstallation, error) {
+func (s *Store) ConnectGitHubInstallation(ctx context.Context, publicID string, workspaceID, userID, externalID, accountID int64, accountLogin, accountType, repositorySelection string) (domain.GitHubInstallation, error) {
 	var value domain.GitHubInstallation
 	err := s.Pool.QueryRow(ctx, `
-		INSERT INTO github_installations(public_id,workspace_id,connected_by_actor_id,github_installation_id,account_id,account_login,account_type,repository_selection)
+		INSERT INTO github_installations(public_id,workspace_id,connected_by_user_id,github_installation_id,account_id,account_login,account_type,repository_selection)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
 		ON CONFLICT (github_installation_id) DO UPDATE SET
-			connected_by_actor_id=EXCLUDED.connected_by_actor_id,
+			connected_by_user_id=EXCLUDED.connected_by_user_id,
 			account_id=EXCLUDED.account_id,
 			account_login=EXCLUDED.account_login,
 			account_type=EXCLUDED.account_type,
@@ -68,7 +67,7 @@ func (s *Store) ConnectGitHubInstallation(ctx context.Context, publicID string, 
 			updated_at=now()
 		WHERE github_installations.workspace_id=EXCLUDED.workspace_id
 		RETURNING id,public_id,workspace_id,github_installation_id,account_id,account_login,account_type,repository_selection,created_at`,
-		publicID, workspaceID, actorID, externalID, accountID, accountLogin, accountType, repositorySelection).
+		publicID, workspaceID, userID, externalID, accountID, accountLogin, accountType, repositorySelection).
 		Scan(&value.ID, &value.PublicID, &value.WorkspaceID, &value.ExternalID, &value.AccountID, &value.AccountLogin, &value.AccountType, &value.RepositorySelection, &value.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.GitHubInstallation{}, ErrConflict

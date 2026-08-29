@@ -1,21 +1,3 @@
--- name: GetActorByID :one
-SELECT id, actor_key, role
-FROM actors
-WHERE id = $1;
-
--- name: UpsertActor :one
-INSERT INTO actors (actor_key, role, password_hash)
-VALUES ($1, $2, $3)
-ON CONFLICT (actor_key) DO UPDATE
-SET role = EXCLUDED.role,
-    password_hash = EXCLUDED.password_hash
-RETURNING id;
-
--- name: GetActorByKey :one
-SELECT id, actor_key, role, password_hash
-FROM actors
-WHERE actor_key = $1;
-
 -- name: UpsertWorkspace :one
 INSERT INTO workspaces (public_id, name, namespace_name)
 VALUES ($1, $2, $3)
@@ -23,16 +5,11 @@ ON CONFLICT (namespace_name) DO UPDATE
 SET name = EXCLUDED.name
 RETURNING id;
 
--- name: AddWorkspaceActor :exec
-INSERT INTO workspace_actors (workspace_id, actor_id)
-VALUES ($1, $2)
-ON CONFLICT DO NOTHING;
-
--- name: GetWorkspaceForActor :one
+-- name: GetWorkspaceForUser :one
 SELECT w.id, w.public_id, w.name, w.namespace_name, w.version, w.bootstrap_state, w.created_at, w.updated_at
 FROM workspaces AS w
-JOIN workspace_actors AS wa ON wa.workspace_id = w.id
-WHERE wa.actor_id = $1
+JOIN workspace_memberships AS wm ON wm.workspace_id = w.id
+WHERE wm.user_id = $1 AND wm.status = 'Active'
 ORDER BY w.id
 LIMIT 1;
 
@@ -41,19 +18,19 @@ SELECT id, public_id, name, namespace_name, version, bootstrap_state, created_at
 FROM workspaces
 WHERE id = $1;
 
--- name: ListWorkspacesForActor :many
+-- name: ListWorkspacesForUser :many
 SELECT w.id, w.public_id, w.name, w.namespace_name, w.version, w.bootstrap_state, w.created_at, w.updated_at
 FROM workspaces AS w
-JOIN workspace_actors AS wa ON wa.workspace_id = w.id
-WHERE wa.actor_id = $1 AND w.id < $2
+JOIN workspace_memberships AS wm ON wm.workspace_id = w.id
+WHERE wm.user_id = $1 AND wm.status = 'Active' AND w.id < $2
 ORDER BY w.id DESC
 LIMIT $3;
 
--- name: FindWorkspaceForActor :one
+-- name: FindWorkspaceForUser :one
 SELECT w.id, w.public_id, w.name, w.namespace_name, w.version, w.bootstrap_state, w.created_at, w.updated_at
 FROM workspaces AS w
-JOIN workspace_actors AS wa ON wa.workspace_id = w.id
-WHERE wa.actor_id = $1 AND w.public_id = $2;
+JOIN workspace_memberships AS wm ON wm.workspace_id = w.id
+WHERE wm.user_id = $1 AND wm.status = 'Active' AND w.public_id = $2;
 
 -- name: InsertWorkspace :one
 INSERT INTO workspaces(public_id, name, namespace_name)
@@ -67,11 +44,11 @@ WHERE id = $1 AND version = $2
 RETURNING id, public_id, name, namespace_name, version, bootstrap_state, created_at, updated_at;
 
 -- name: FindWorkspaceOperationByIdempotency :one
-SELECT o.id, o.public_id, o.workspace_id, o.actor_id, o.kind, o.status,
+SELECT o.id, o.public_id, o.workspace_id, o.requested_by_user_id AS actor_id, o.kind, o.status,
        o.desired_version, o.attempts, o.created_at, o.updated_at,
        o.error_code, o.error_message, o.payload_hash
 FROM operations o
-WHERE o.actor_id = $1
+WHERE o.requested_by_user_id = $1
   AND o.kind = 'EnsureWorkspace'
   AND o.app_environment_id IS NULL
   AND o.deployment_id IS NULL
@@ -79,11 +56,11 @@ WHERE o.actor_id = $1
 
 -- name: InsertWorkspaceOperation :one
 INSERT INTO operations(
-    public_id, workspace_id, app_environment_id, deployment_id, actor_id, kind, status,
+    public_id, workspace_id, app_environment_id, deployment_id, requested_by_user_id, kind, status,
     idempotency_hash, payload_hash, desired_version
 )
 VALUES ($1, $2, NULL, NULL, $3, 'EnsureWorkspace', 'Pending', $4, $5, 1)
-RETURNING id, public_id, workspace_id, actor_id, kind, status,
+RETURNING id, public_id, workspace_id, requested_by_user_id AS actor_id, kind, status,
           desired_version, attempts, created_at, updated_at, error_code, error_message;
 
 -- name: CreateProject :one
@@ -214,27 +191,3 @@ WHERE a.project_id = p.id AND p.workspace_id = $1 AND p.public_id = $2
   AND a.public_id = $3 AND a.version = $4 AND a.archived_at IS NULL
   AND NOT EXISTS (SELECT 1 FROM app_environments ae WHERE ae.app_id = a.id AND ae.archived_at IS NULL)
 RETURNING a.id, a.public_id, a.project_id, a.name, a.version, a.created_at, a.updated_at, a.archived_at;
-
--- name: CreateSession :exec
-INSERT INTO sessions (token_hash, actor_id, csrf_hash, expires_at)
-VALUES ($1, $2, $3, $4);
-
--- name: GetActiveSession :one
-SELECT actor_id, csrf_hash
-FROM sessions
-WHERE token_hash = $1
-  AND revoked_at IS NULL
-  AND expires_at > now();
-
--- name: RevokeSession :exec
-UPDATE sessions
-SET revoked_at = now()
-WHERE token_hash = $1;
-
--- name: RevokeActiveSession :execrows
-UPDATE sessions
-SET revoked_at = now()
-WHERE token_hash = $1
-  AND actor_id = $2
-  AND revoked_at IS NULL
-  AND expires_at > now();

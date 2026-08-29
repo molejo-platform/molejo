@@ -48,7 +48,7 @@ func (s *Store) PutDeliveryPolicy(ctx context.Context, workspaceID, actorID int6
 	var policy domain.DeliveryPolicy
 	if expectedVersion == 0 {
 		err = tx.QueryRow(ctx, `
-			INSERT INTO app_environment_delivery_policies(app_environment_id,workspace_id,push_enabled,release_enabled,updated_by_actor_id)
+			INSERT INTO app_environment_delivery_policies(app_environment_id,workspace_id,push_enabled,release_enabled,updated_by_user_id)
 			VALUES($1,$2,$3,$4,$5)
 			ON CONFLICT (app_environment_id) DO NOTHING
 			RETURNING $6,push_enabled,release_enabled,version,updated_at`,
@@ -60,7 +60,7 @@ func (s *Store) PutDeliveryPolicy(ctx context.Context, workspaceID, actorID int6
 	} else {
 		err = tx.QueryRow(ctx, `
 			UPDATE app_environment_delivery_policies
-			SET push_enabled=$1,release_enabled=$2,updated_by_actor_id=$3,version=version+1,updated_at=now()
+			SET push_enabled=$1,release_enabled=$2,updated_by_user_id=$3,version=version+1,updated_at=now()
 			WHERE app_environment_id=$4 AND workspace_id=$5 AND version=$6
 			RETURNING $7,push_enabled,release_enabled,version,updated_at`,
 			pushEnabled, releaseEnabled, actorID, appEnvironmentID, workspaceID, expectedVersion, appEnvironmentPublicID).
@@ -178,7 +178,7 @@ func (s *Store) ReleaseGitHubDeliveryClaims(ctx context.Context, workerID string
 func (s *Store) DeliveryCandidates(ctx context.Context, delivery domain.GitHubDelivery, trigger string) ([]domain.DeliveryCandidate, error) {
 	rows, err := s.Pool.Query(ctx, `
 		SELECT p.workspace_id,p.id,p.public_id,a.id,a.public_id,ae.id,ae.public_id,ae.source_branch,
-		       dp.updated_by_actor_id,dp.version
+		       dp.updated_by_user_id,dp.version
 		FROM github_installations i
 		JOIN app_github_sources src ON src.github_installation_id=i.id
 		JOIN apps a ON a.id=src.app_id JOIN projects p ON p.id=a.project_id
@@ -217,7 +217,7 @@ func (s *Store) CreateDeliveryTargetBuild(ctx context.Context, delivery domain.G
 	var target domain.DeliveryTarget
 	err = tx.QueryRow(ctx, `
 		SELECT t.id,t.public_id,t.github_delivery_id,t.workspace_id,t.project_id,t.app_id,t.app_environment_id,
-		       ae.public_id,t.requested_by_actor_id,t.trigger_type,t.source_branch,t.commit_sha,COALESCE(t.build_id,0),
+		       ae.public_id,t.requested_by_user_id,t.trigger_type,t.source_branch,t.commit_sha,COALESCE(t.build_id,0),
 		       COALESCE(b.public_id,''),COALESCE(r.public_id,''),COALESCE(t.deployment_id,0),COALESCE(d.public_id,''),t.status
 		FROM delivery_targets t JOIN app_environments ae ON ae.id=t.app_environment_id
 		LEFT JOIN builds b ON b.id=t.build_id LEFT JOIN releases r ON r.build_id=b.id LEFT JOIN deployments d ON d.id=t.deployment_id
@@ -240,7 +240,7 @@ func (s *Store) CreateDeliveryTargetBuild(ctx context.Context, delivery domain.G
 	}
 	err = tx.QueryRow(ctx, `
 		INSERT INTO delivery_targets(public_id,github_delivery_id,workspace_id,project_id,app_id,app_environment_id,
-		  requested_by_actor_id,policy_version,trigger_type,source_branch,commit_sha)
+		  requested_by_user_id,policy_version,trigger_type,source_branch,commit_sha)
 		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
 		RETURNING id`, targetPublicID, delivery.ID, candidate.WorkspaceID, candidate.ProjectID, candidate.AppID,
 		candidate.AppEnvironmentID, candidate.RequestedByActorID, candidate.PolicyVersion, trigger, candidate.SourceBranch, metadata.SHA).
@@ -255,7 +255,7 @@ func (s *Store) CreateDeliveryTargetBuild(ctx context.Context, delivery domain.G
 	payloadHash := domain.SHA256([]byte(trigger + "\n" + metadata.SHA + "\n" + candidate.SourceBranch))
 	var buildID int64
 	err = tx.QueryRow(ctx, `
-		INSERT INTO builds(public_id,workspace_id,project_id,app_id,app_environment_id,requested_by_actor_id,
+		INSERT INTO builds(public_id,workspace_id,project_id,app_id,app_environment_id,requested_by_user_id,
 		  github_installation_id,github_installation_external_id,repository_id,repository_full_name,source_branch,
 		  commit_sha,commit_title,commit_author_name,commit_author_login,committed_at,trigger_type,github_delivery_id,
 		  platform,idempotency_hash,payload_hash)
@@ -311,7 +311,7 @@ func (s *Store) ApplyGitHubInstallationDelivery(ctx context.Context, delivery do
 func (s *Store) DeliveryTargetsToAdvance(ctx context.Context, limit int) ([]domain.DeliveryTarget, error) {
 	rows, err := s.Pool.Query(ctx, `
 		SELECT t.id,t.public_id,t.github_delivery_id,t.workspace_id,t.project_id,t.app_id,t.app_environment_id,
-		       ae.public_id,t.requested_by_actor_id,t.trigger_type,t.source_branch,t.commit_sha,COALESCE(t.build_id,0),
+		       ae.public_id,t.requested_by_user_id,t.trigger_type,t.source_branch,t.commit_sha,COALESCE(t.build_id,0),
 		       COALESCE(b.public_id,''),COALESCE(r.public_id,''),COALESCE(t.deployment_id,0),COALESCE(d.public_id,''),t.status,
 		       COALESCE(b.status,''),COALESCE(d.status,'')
 		FROM delivery_targets t JOIN app_environments ae ON ae.id=t.app_environment_id

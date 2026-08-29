@@ -8,7 +8,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/auth"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/domain"
@@ -143,6 +142,7 @@ func TestCSRFValidation(t *testing.T) {
 	req.Header.Set("Origin", "https://console.example")
 	token := "csrf-token"
 	req.Header.Set("X-CSRF-Token", token)
+	req.AddCookie(&http.Cookie{Name: "_csrf", Value: token})
 	if !s.validCSRF(req, auth.HashToken(token)) {
 		t.Fatal("expected CSRF token to verify")
 	}
@@ -173,7 +173,7 @@ func TestSessionEndpointsRejectInvalidOriginAndDisableCaching(t *testing.T) {
 		AllowedOrigin: "https://console.example",
 		AllowedHosts:  []string{"console.example"},
 	}, nil)
-	request := httptest.NewRequest(http.MethodPost, "/api/v1/session", strings.NewReader(`{"actor":"owner","password":"secret"}`))
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/session", strings.NewReader(`{"username":"owner","password":"secret"}`))
 	request.Host = "console.example"
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Origin", "https://invalid.example")
@@ -186,23 +186,5 @@ func TestSessionEndpointsRejectInvalidOriginAndDisableCaching(t *testing.T) {
 	}
 	if got := recorder.Header().Get("Cache-Control"); got != "no-store" {
 		t.Fatalf("session Cache-Control = %q, want no-store", got)
-	}
-}
-
-func TestLoginLimiter(t *testing.T) {
-	l := &loginLimiter{entries: map[string]loginAttempt{}}
-	for i := 0; i < 8; i++ {
-		if !l.allow("127.0.0.1") {
-			t.Fatal("request was limited too early")
-		}
-		l.fail("127.0.0.1")
-	}
-	if l.allow("127.0.0.1") {
-		t.Fatal("expected rate limit")
-	}
-	l.entries["127.0.0.1"] = loginAttempt{BlockedUntil: time.Now().Add(-time.Second)}
-	l.success("127.0.0.1")
-	if !l.allow("127.0.0.1") {
-		t.Fatal("successful login should reset limiter")
 	}
 }

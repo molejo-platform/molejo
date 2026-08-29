@@ -1,5 +1,3 @@
-import type { ActorRole } from "../../shared/api/types";
-
 export function normalizeResourceName(value: string) { return value.trim().replace(/\s+/g, " "); }
 export function validateResourceName(value: string) {
   const normalized = normalizeResourceName(value);
@@ -8,4 +6,4 @@ export function validateResourceName(value: string) {
   if (/\p{Cc}/u.test(normalized)) return "O nome contém caracteres inválidos.";
   return "";
 }
-export function canMutateResources(role: ActorRole) { return role === "owner"; }
+export function canMutateResources(role: "Owner" | "Member" | "Viewer") { return role === "Owner" || role === "Member"; }

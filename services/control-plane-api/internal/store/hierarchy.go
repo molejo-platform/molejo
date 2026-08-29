@@ -15,11 +15,11 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-func (s *Store) ListWorkspaces(ctx context.Context, actorID, beforeID int64, limit int) ([]domain.Workspace, string, error) {
+func (s *Store) ListWorkspaces(ctx context.Context, userID, beforeID int64, limit int) ([]domain.Workspace, string, error) {
 	if beforeID == 0 {
 		beforeID = math.MaxInt64
 	}
-	rows, err := s.queries.ListWorkspacesForActor(ctx, storesqlc.ListWorkspacesForActorParams{ActorID: actorID, ID: beforeID, Limit: int32(limit + 1)})
+	rows, err := s.queries.ListWorkspacesForUser(ctx, storesqlc.ListWorkspacesForUserParams{UserID: userID, ID: beforeID, Limit: int32(limit + 1)})
 	if err != nil {
 		return nil, "", err
 	}
@@ -33,15 +33,15 @@ func (s *Store) ListWorkspaces(ctx context.Context, actorID, beforeID int64, lim
 	return items, "", nil
 }
 
-func (s *Store) FindWorkspaceForActor(ctx context.Context, actorID int64, publicID string) (domain.Workspace, error) {
-	row, err := s.queries.FindWorkspaceForActor(ctx, storesqlc.FindWorkspaceForActorParams{ActorID: actorID, PublicID: publicID})
+func (s *Store) FindWorkspaceForUser(ctx context.Context, userID int64, publicID string) (domain.Workspace, error) {
+	row, err := s.queries.FindWorkspaceForUser(ctx, storesqlc.FindWorkspaceForUserParams{UserID: userID, PublicID: publicID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.Workspace{}, ErrNotFound
 	}
 	return workspaceValue(row.ID, row.PublicID, row.Name, row.NamespaceName, row.Version, row.BootstrapState, row.CreatedAt, row.UpdatedAt), err
 }
 
-func (s *Store) CreateWorkspace(ctx context.Context, actorID int64, publicID, operationID, name string, idempotencyHash, payloadHash []byte) (domain.Workspace, domain.Operation, bool, error) {
+func (s *Store) CreateWorkspace(ctx context.Context, userID int64, publicID, operationID, name string, idempotencyHash, payloadHash []byte) (domain.Workspace, domain.Operation, bool, error) {
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return domain.Workspace{}, domain.Operation{}, false, err
@@ -51,7 +51,7 @@ func (s *Store) CreateWorkspace(ctx context.Context, actorID int64, publicID, op
 		return domain.Workspace{}, domain.Operation{}, false, err
 	}
 	queries := s.queries.WithTx(tx)
-	existing, err := queries.FindWorkspaceOperationByIdempotency(ctx, storesqlc.FindWorkspaceOperationByIdempotencyParams{ActorID: actorID, IdempotencyHash: idempotencyHash})
+	existing, err := queries.FindWorkspaceOperationByIdempotency(ctx, storesqlc.FindWorkspaceOperationByIdempotencyParams{RequestedByUserID: userID, IdempotencyHash: idempotencyHash})
 	if err == nil {
 		if !bytes.Equal(existing.PayloadHash, payloadHash) {
 			return domain.Workspace{}, domain.Operation{}, false, ErrConflict
@@ -69,11 +69,11 @@ func (s *Store) CreateWorkspace(ctx context.Context, actorID int64, publicID, op
 	if err != nil {
 		return domain.Workspace{}, domain.Operation{}, false, hierarchyWriteError(err)
 	}
-	if err = queries.AddWorkspaceActor(ctx, storesqlc.AddWorkspaceActorParams{WorkspaceID: workspace.ID, ActorID: actorID}); err != nil {
+	if _, err = tx.Exec(ctx, `INSERT INTO workspace_memberships(workspace_id,user_id,role,status) VALUES($1,$2,'Owner','Active')`, workspace.ID, userID); err != nil {
 		return domain.Workspace{}, domain.Operation{}, false, err
 	}
 	operation, err := queries.InsertWorkspaceOperation(ctx, storesqlc.InsertWorkspaceOperationParams{
-		PublicID: operationID, WorkspaceID: workspace.ID, ActorID: actorID,
+		PublicID: operationID, WorkspaceID: workspace.ID, RequestedByUserID: userID,
 		IdempotencyHash: idempotencyHash, PayloadHash: payloadHash,
 	})
 	if err != nil {
