@@ -16,6 +16,7 @@ import { EnvironmentAppLayout, type EnvironmentParams } from "./EnvironmentPages
 import { useRuntimeMetrics } from "./RuntimeMetricsStatus";
 import { getRuntimeMetrics, listRuntimeEvents, listRuntimeLogs, runtimeLogStreamURL, type RuntimeLogFilters, type RuntimeRange } from "./observability-api";
 import { RuntimeLogStore } from "./runtime-log-store";
+import { RuntimeLogBody } from "./RuntimeLogBody";
 
 const ranges = [
   { value: "0.25", label: "Últimos 15 minutos" },
@@ -168,7 +169,7 @@ export function RuntimeLogList({ items, discardedCount = 0, receivedCount = item
     if (atEnd) setSeenCount(receivedCount);
   }
 
-  return <section className="runtime-log-viewer"><div className="runtime-log-toolbar"><span>{items.length.toLocaleString("pt-BR")} registros na visualização</span>{discardedCount > 0 && <span>{discardedCount.toLocaleString("pt-BR")} antigos descartados do navegador</span>}{!following && <Button type="button" variant="secondary" onClick={() => { setFollowing(true); setSeenCount(receivedCount); }}>{unseenCount > 0 ? `${unseenCount.toLocaleString("pt-BR")} novos · ir ao fim` : "Ir aos mais recentes"}</Button>}</div><div ref={scrollRef} className="runtime-logs" aria-label="Logs do runtime" onScroll={updateFollowState}><div className="runtime-log-virtual" style={{ height: `${virtualizer.getTotalSize()}px` }}>{virtualizer.getVirtualItems().map((row) => { const item = items[row.index]; return <article ref={virtualizer.measureElement} data-index={row.index} className="runtime-log" key={item.id} style={{ transform: `translateY(${row.start}px)` }}><time dateTime={item.timestamp}>{formatDateTime(item.timestamp)}</time><span className="runtime-log-meta">{item.severity || "LOG"}</span><pre>{item.body}</pre></article>; })}</div></div></section>;
+  return <section className="runtime-log-viewer"><div className="runtime-log-toolbar"><span>{items.length.toLocaleString("pt-BR")} registros na visualização</span>{discardedCount > 0 && <span>{discardedCount.toLocaleString("pt-BR")} antigos descartados do navegador</span>}{!following && <Button type="button" variant="secondary" onClick={() => { setFollowing(true); setSeenCount(receivedCount); }}>{unseenCount > 0 ? `${unseenCount.toLocaleString("pt-BR")} novos · ir ao fim` : "Ir aos mais recentes"}</Button>}</div><div ref={scrollRef} className="runtime-logs" aria-label="Logs do runtime" onScroll={updateFollowState}><div className="runtime-log-virtual" style={{ height: `${virtualizer.getTotalSize()}px` }}>{virtualizer.getVirtualItems().map((row) => { const item = items[row.index]; return <article ref={virtualizer.measureElement} data-index={row.index} className="runtime-log" key={item.id} style={{ transform: `translateY(${row.start}px)` }}><time dateTime={item.timestamp}>{formatDateTime(item.timestamp)}</time><span className="runtime-log-meta">{item.severity || "LOG"}</span><RuntimeLogBody body={item.body}/></article>; })}</div></div></section>;
 }
 
 export function EnvironmentAppMetricsPage() {

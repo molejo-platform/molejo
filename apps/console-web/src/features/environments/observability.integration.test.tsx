@@ -1,4 +1,5 @@
 import { act, cleanup, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ listRuntimeLogs: vi.fn() }));
@@ -13,6 +14,7 @@ vi.mock("./observability-api", async (importOriginal) => {
 });
 
 import { MetricCard, RuntimeLogsPage, RuntimeMetricsPage } from "./ObservabilityPages";
+import { RuntimeLogBody } from "./RuntimeLogBody";
 import { renderWithQueryClient } from "../../test/render";
 
 const target = {
@@ -36,6 +38,31 @@ class FakeEventSource {
 afterEach(() => { cleanup(); mocks.listRuntimeLogs.mockReset(); FakeEventSource.instances = []; vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 describe("runtime observability", () => {
+  it("highlights structured logs and lets the user reveal their nesting", async () => {
+    const user = userEvent.setup();
+    renderWithQueryClient(<RuntimeLogBody body='{"request":{"status":200,"cached":true}}'/>);
+
+    const content = screen.getByLabelText("Conteúdo JSON do log");
+    const format = screen.getByRole("button", { name: "Formatar JSON" });
+    expect(format.getAttribute("aria-expanded")).toBe("false");
+    expect(content.textContent).toBe('{"request":{"status":200,"cached":true}}');
+
+    await user.click(format);
+
+    expect(screen.getByRole("button", { name: "Compactar JSON" }).getAttribute("aria-expanded")).toBe("true");
+    expect(content.textContent).toContain('\n  "request": {\n    "status": 200');
+  });
+
+  it("keeps plain logs as text and never interprets log content as markup", () => {
+    const { rerenderWithQueryClient } = renderWithQueryClient(<RuntimeLogBody body="server ready"/>);
+    expect(screen.getByText("server ready")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Formatar JSON" })).toBeNull();
+
+    rerenderWithQueryClient(<RuntimeLogBody body='{"message":"<script>unsafe()</script>"}'/>);
+    expect(screen.getByLabelText("Conteúdo JSON do log").textContent).toContain("<script>unsafe()</script>");
+    expect(document.querySelector("script")).toBeNull();
+  });
+
   it("distinguishes an empty log interval from a backend failure", async () => {
     mocks.listRuntimeLogs.mockResolvedValueOnce({ from: "2026-08-28T10:00:00Z", to: "2026-08-28T11:00:00Z", liveCursor: "cursor-1", nextCursor: null, items: [] });
     const { unmount } = renderWithQueryClient(<RuntimeLogsPage target={target} params={params}/>);

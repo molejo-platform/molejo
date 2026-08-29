@@ -227,6 +227,23 @@ input:disabled, select:disabled, textarea:disabled { background: var(--color-sur
 .runtime-log + .runtime-log { border-top: 1px solid rgb(255 255 255 / 11%); }
 .runtime-log time, .runtime-log-meta { color: #a9c8c4; font-size: .7rem; }
 .runtime-log pre { font: inherit; margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.runtime-log-body { --log-bracket-0: #f5cf7a; --log-bracket-1: #9fddd5; --log-bracket-2: #b9cef5; --log-bracket-3: #d8bdf0; --log-bracket-4: #f1b6c4; --log-bracket-5: #b9dfa0; --log-key: #aee8df; --log-string: #dce9a9; --log-number: #f5c980; --log-literal: #efb2c2; align-items: start; display: grid; gap: var(--space-2); grid-template-columns: minmax(0, 1fr) auto; min-width: 0; }
+.runtime-log-body pre { min-width: 0; }
+.runtime-log-json-toggle { align-self: start; background: transparent; border: 1px solid rgb(255 255 255 / 25%); border-radius: var(--radius-sm); color: #d8e7e4; cursor: pointer; font: inherit; font-size: .7rem; font-weight: 750; min-height: 44px; padding: .35rem .65rem; }
+.runtime-log-json-toggle:hover { background: rgb(255 255 255 / 8%); border-color: rgb(255 255 255 / 45%); }
+.runtime-log-json-toggle:focus-visible { box-shadow: 0 0 0 3px rgb(159 221 213 / 40%); outline: 2px solid #9fddd5; outline-offset: 2px; }
+.runtime-json-key { color: var(--log-key); font-weight: 700; }
+.runtime-json-string { color: var(--log-string); }
+.runtime-json-number { color: var(--log-number); }
+.runtime-json-boolean, .runtime-json-null { color: var(--log-literal); font-weight: 700; }
+.runtime-json-punctuation { color: #a9c8c4; }
+.runtime-json-bracket { font-weight: 800; }
+.runtime-json-bracket.depth-0 { color: var(--log-bracket-0); }
+.runtime-json-bracket.depth-1 { color: var(--log-bracket-1); }
+.runtime-json-bracket.depth-2 { color: var(--log-bracket-2); }
+.runtime-json-bracket.depth-3 { color: var(--log-bracket-3); }
+.runtime-json-bracket.depth-4 { color: var(--log-bracket-4); }
+.runtime-json-bracket.depth-5 { color: var(--log-bracket-5); }
 .metric-grid { display: grid; gap: var(--space-4); grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
 .metric-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); display: grid; gap: var(--space-4); overflow: hidden; padding: var(--space-6); }
 .metric-card > div:first-child { display: grid; gap: var(--space-1); }
