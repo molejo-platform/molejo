@@ -46,6 +46,8 @@ parameter_worker_identity="system:serviceaccount:fruto-control-plane:control-pla
 
 https_result="$(curl --silent --show-error --output /dev/null --write-out '%{http_code} %{ssl_verify_result}' --max-time 15 https://cloud.molejo.dev/)"
 [[ "$https_result" == "200 0" ]]
+capabilities="$(curl --silent --show-error --fail --max-time 15 https://cloud.molejo.dev/api/v1/auth/capabilities)"
+jq -e '.password == true and .totp == true and .passkey == false' <<<"$capabilities" >/dev/null
 http_headers="$(curl --silent --show-error --head --max-time 15 http://cloud.molejo.dev/)"
 grep -Eq '^HTTP/[^ ]+ (301|308)' <<<"$http_headers"
 grep -Eiq '^location: https://cloud\.molejo\.dev/?' <<<"$http_headers"

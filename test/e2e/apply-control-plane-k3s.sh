@@ -18,7 +18,7 @@ release_metadata_load "$release_dir/metadata/observability.env"
 
 actual_uid="$(kubectl --context "$context" get namespace kube-system -o jsonpath='{.metadata.uid}')"
 [[ "$actual_uid" == "$expected_uid" ]] || { echo "cluster UID does not match the approved target" >&2; exit 1; }
-for secret in fruto-control-plane-postgres fruto-control-plane-db fruto-control-plane-bootstrap registry-pull "$MOLEJO_PARAMETER_FINGERPRINT_SECRET" "$MOLEJO_OBSERVABILITY_READER_SECRET"; do
+for secret in fruto-control-plane-postgres fruto-control-plane-db fruto-control-plane-bootstrap registry-pull "$MOLEJO_PASSWORD_RESET_SECRET" "$MOLEJO_PARAMETER_FINGERPRINT_SECRET" "$MOLEJO_OBSERVABILITY_READER_SECRET"; do
   kubectl --context "$context" -n fruto-control-plane get secret "$secret" >/dev/null
 done
 if [[ "$MOLEJO_GITHUB_APP_SECRET" != molejo-github-app-unconfigured ]]; then

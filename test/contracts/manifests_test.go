@@ -90,6 +90,26 @@ func TestLabParameterWorkerUsesThePrivateRegistryCredential(t *testing.T) {
 	}
 }
 
+func TestPasswordResetSecretParticipatesInTheReleaseContract(t *testing.T) {
+	required := map[string][]string{
+		"deploy/control-plane/deployments.yaml":    {"required-external-password-reset-secret", "FRUTO_PASSWORD_RESET_KEY_FILE"},
+		"test/e2e/prepare-control-plane-k3s.sh":    {"MOLEJO_PASSWORD_RESET_SECRET", "apply_versioned_object", "password-reset-key"},
+		"test/e2e/render-control-plane-release.sh": {"required-external-password-reset-secret", "MOLEJO_PASSWORD_RESET_SECRET"},
+		"test/e2e/apply-control-plane-k3s.sh":      {"MOLEJO_PASSWORD_RESET_SECRET"},
+	}
+	for path, fragments := range required {
+		contents, err := os.ReadFile(filepath.Join("..", "..", path))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, fragment := range fragments {
+			if !strings.Contains(string(contents), fragment) {
+				t.Fatalf("%s is missing release contract fragment %q", path, fragment)
+			}
+		}
+	}
+}
+
 func TestObservabilityPlaneIsInternalBoundedAndDigestPinned(t *testing.T) {
 	workloads := []struct{ kind, name, container string }{
 		{"StatefulSet", "clickhouse", "clickhouse"},

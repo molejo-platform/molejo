@@ -34,7 +34,7 @@ source "$script_dir/lib/release-configuration.sh"
 release_metadata_load "$release_dir/metadata/control-plane.env"
 release_metadata_load "$release_dir/metadata/openbao.env"
 release_metadata_load "$release_dir/metadata/observability.env"
-for name in "$MOLEJO_GITHUB_APP_SECRET" "$MOLEJO_GITHUB_WEBHOOK_SECRET" "$MOLEJO_OPENBAO_CA_CONFIGMAP" "$MOLEJO_PARAMETER_FINGERPRINT_SECRET" "$MOLEJO_OBSERVABILITY_READER_SECRET"; do
+for name in "$MOLEJO_GITHUB_APP_SECRET" "$MOLEJO_GITHUB_WEBHOOK_SECRET" "$MOLEJO_PASSWORD_RESET_SECRET" "$MOLEJO_OPENBAO_CA_CONFIGMAP" "$MOLEJO_PARAMETER_FINGERPRINT_SECRET" "$MOLEJO_OBSERVABILITY_READER_SECRET"; do
   [[ "$name" =~ ^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$ ]] || { echo "invalid release object name" >&2; exit 2; }
 done
 
@@ -64,6 +64,7 @@ commit="$(git rev-parse HEAD)"
       -e "s|ghcr.io/fruto-platform/console-web@sha256:0000000000000000000000000000000000000000000000000000000000000000|$console_image|g" \
       -e "s|molejo-github-app|$MOLEJO_GITHUB_APP_SECRET|g" \
       -e "s|required-external-github-webhook-secret|$MOLEJO_GITHUB_WEBHOOK_SECRET|g" \
+      -e "s|required-external-password-reset-secret|$MOLEJO_PASSWORD_RESET_SECRET|g" \
       -e "s|required-external-openbao-ca-configmap|$MOLEJO_OPENBAO_CA_CONFIGMAP|g" \
       -e "s|required-external-parameter-fingerprint-secret|$MOLEJO_PARAMETER_FINGERPRINT_SECRET|g" \
       -e "s|required-external-observability-reader-secret|$MOLEJO_OBSERVABILITY_READER_SECRET|g"

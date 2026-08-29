@@ -27,6 +27,7 @@ postgres_user="$release_dir/secrets/postgres-username"
 postgres_password="$release_dir/secrets/postgres-password"
 postgres_database="$release_dir/secrets/postgres-database"
 database_url="$release_dir/secrets/database-url"
+password_reset_key="$release_dir/secrets/password-reset-key"
 
 if [[ ! -s "$owner_password" ]]; then
   openssl rand -base64 24 >"$owner_password"
@@ -40,7 +41,14 @@ if [[ ! -s "$postgres_password" ]]; then openssl rand -hex 32 >"$postgres_passwo
 if [[ ! -s "$database_url" ]]; then
   printf 'postgresql://fruto:%s@postgres:5432/fruto?sslmode=disable' "$(<"$postgres_password")" >"$database_url"
 fi
+if [[ ! -s "$password_reset_key" ]]; then openssl rand -base64 48 >"$password_reset_key"; fi
 chmod 0600 "$release_dir"/secrets/*
+
+temporary_dir="$(mktemp -d)"
+trap 'rm -rf "$temporary_dir"' EXIT
+kubectl --context "$context" -n fruto-control-plane create secret generic molejo-password-reset \
+  --from-file=key="$password_reset_key" --dry-run=client -o json >"$temporary_dir/password-reset.json"
+password_reset_secret="$(apply_versioned_object "$context" fruto-control-plane molejo-password-reset password-reset "$temporary_dir/password-reset.json")"
 
 kubectl --context "$context" apply -f deploy/control-plane/namespace.yaml >/dev/null
 kubectl --context "$context" -n fruto-control-plane create secret generic fruto-control-plane-postgres \
@@ -65,13 +73,10 @@ fi
 webhook_secret_file="${MOLEJO_GITHUB_WEBHOOK_SECRET_FILE:-}"
 if [[ -n "$webhook_secret_file" ]]; then
   [[ -s "$webhook_secret_file" ]] || { echo "MOLEJO_GITHUB_WEBHOOK_SECRET_FILE does not exist" >&2; exit 2; }
-  webhook_input="$(mktemp)"
-  trap 'rm -f "$webhook_input"' EXIT
+  webhook_input="$temporary_dir/github-webhook.json"
   kubectl --context "$context" -n fruto-control-plane create secret generic molejo-github-webhook \
     --from-file=GITHUB_WEBHOOK_SECRET="$webhook_secret_file" --dry-run=client -o json >"$webhook_input"
   webhook_secret="$(apply_versioned_object "$context" fruto-control-plane molejo-github-webhook github-webhook "$webhook_input")"
-  rm -f "$webhook_input"
-  trap - EXIT
 else
   webhook_secret="$(kubectl --context "$context" -n fruto-control-plane get secret \
     -l molejo.dev/configuration-family=github-webhook -o json | jq -er '.items | sort_by(.metadata.creationTimestamp) | last | .metadata.name')" || {
@@ -81,6 +86,7 @@ else
 fi
 release_metadata_write "$release_dir/metadata/control-plane.env" \
   "MOLEJO_GITHUB_APP_SECRET=$github_secret" \
-  "MOLEJO_GITHUB_WEBHOOK_SECRET=$webhook_secret"
+  "MOLEJO_GITHUB_WEBHOOK_SECRET=$webhook_secret" \
+  "MOLEJO_PASSWORD_RESET_SECRET=$password_reset_secret"
 
 printf 'prepared external Secrets and immutable GitHub credential version; owner password remains only at %s\n' "$owner_password"
