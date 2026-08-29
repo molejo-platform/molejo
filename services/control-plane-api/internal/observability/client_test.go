@@ -21,7 +21,7 @@ func TestClickHouseLogsAlwaysScopeQueriesToRuntime(t *testing.T) {
 		}
 		form = r.Form
 		w.Header().Set("Content-Type", "application/x-ndjson")
-		_, _ = w.Write([]byte(`{"id":"11111111-1111-4111-8111-111111111111","timestamp":"2026-08-28T12:00:00.123456789Z","ingested_at":"2026-08-28T12:00:01.123456789Z","body":"ready","severity":"INFO","instance":"pod-1","container":"app"}` + "\n"))
+		_, _ = w.Write([]byte(`{"id":"11111111-1111-4111-8111-111111111111","timestamp_ns":1787918400123456789,"ingested_at_ns":1787918401123456789,"body":"ready","severity":"INFO","instance":"pod-1","container":"app"}` + "\n"))
 	}))
 	defer server.Close()
 
@@ -39,6 +39,9 @@ func TestClickHouseLogsAlwaysScopeQueriesToRuntime(t *testing.T) {
 	if len(page.Items) != 1 || page.Items[0].Body != "ready" || page.Items[0].ID != "log-11111111111141118111111111111111" {
 		t.Fatalf("unexpected items: %#v", page.Items)
 	}
+	if got := page.Items[0].Timestamp.Nanosecond(); got != 123456789 {
+		t.Fatalf("timestamp nanoseconds = %d, want 123456789", got)
+	}
 	for key, want := range map[string]string{"param_namespace": "workspace-a", "param_runtime": "runtime-a", "param_search": "ready", "param_limit": "51"} {
 		if got := form.Get(key); got != want {
 			t.Fatalf("%s = %q, want %q", key, got, want)
@@ -48,7 +51,7 @@ func TestClickHouseLogsAlwaysScopeQueriesToRuntime(t *testing.T) {
 		t.Fatalf("param_from = %q, want ClickHouse DateTime64 format", got)
 	}
 	query := form.Get("query")
-	if !strings.Contains(query, "k8s.namespace.name") || !strings.Contains(query, "k8s.deployment.name") || !strings.Contains(query, "MolejoLogId") || !strings.Contains(query, "MolejoIngestedAt") {
+	if !strings.Contains(query, "k8s.namespace.name") || !strings.Contains(query, "k8s.deployment.name") || !strings.Contains(query, "MolejoLogId") || !strings.Contains(query, "MolejoIngestedAt") || !strings.Contains(query, "toUnixTimestamp64Nano") {
 		t.Fatalf("query is not tenant and runtime scoped: %s", query)
 	}
 }

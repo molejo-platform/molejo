@@ -205,30 +205,29 @@ func NewClickHouseClient(endpoint, database, username, password string, httpClie
 }
 
 func (c *ClickHouseClient) LogWatermark(ctx context.Context) (LogCursor, error) {
-	sql := `SELECT formatDateTime(now64(9), '%Y-%m-%dT%H:%i:%S.%fZ', 'UTC') AS ingested_at FORMAT JSONEachRow`
-	var encoded string
+	sql := `SELECT toUnixTimestamp64Nano(now64(9)) AS ingested_at_ns FORMAT JSONEachRow`
+	var ingestedAtNS int64
 	err := c.query(ctx, sql, nil, func(reader io.Reader) error {
 		var row struct {
-			IngestedAt string `json:"ingested_at"`
+			IngestedAtNS int64 `json:"ingested_at_ns"`
 		}
 		if err := json.NewDecoder(reader).Decode(&row); err != nil {
 			return err
 		}
-		encoded = row.IngestedAt
+		ingestedAtNS = row.IngestedAtNS
 		return nil
 	})
 	if err != nil {
 		return LogCursor{}, err
 	}
-	ingestedAt, err := time.Parse(time.RFC3339Nano, encoded)
-	if err != nil {
+	if ingestedAtNS <= 0 {
 		return LogCursor{}, fmt.Errorf("%w: invalid ClickHouse watermark", ErrUnavailable)
 	}
-	return LogCursor{IngestedAt: ingestedAt, ID: maxLogUUID}, nil
+	return LogCursor{IngestedAt: time.Unix(0, ingestedAtNS).UTC(), ID: maxLogUUID}, nil
 }
 
 func (c *ClickHouseClient) Logs(ctx context.Context, scope Scope, query LogQuery) (LogPage, error) {
-	sql := fmt.Sprintf(`SELECT toString(MolejoLogId) AS id, formatDateTime(Timestamp, '%%Y-%%m-%%dT%%H:%%i:%%S.%%fZ', 'UTC') AS timestamp, formatDateTime(MolejoIngestedAt, '%%Y-%%m-%%dT%%H:%%i:%%S.%%fZ', 'UTC') AS ingested_at, Body AS body, SeverityText AS severity, ResourceAttributes['k8s.pod.name'] AS instance, ResourceAttributes['k8s.container.name'] AS container
+	sql := fmt.Sprintf(`SELECT toString(MolejoLogId) AS id, toUnixTimestamp64Nano(Timestamp) AS timestamp_ns, toUnixTimestamp64Nano(MolejoIngestedAt) AS ingested_at_ns, Body AS body, SeverityText AS severity, ResourceAttributes['k8s.pod.name'] AS instance, ResourceAttributes['k8s.container.name'] AS container
 FROM %s.otel_logs
 WHERE Timestamp >= {from:DateTime64(9)} AND Timestamp <= {to:DateTime64(9)}
   AND (MolejoIngestedAt, MolejoLogId) <= ({snapshot_at:DateTime64(9)}, {snapshot_id:UUID})
@@ -267,7 +266,7 @@ ORDER BY Timestamp DESC, MolejoLogId DESC LIMIT {limit:UInt32} FORMAT JSONEachRo
 }
 
 func (c *ClickHouseClient) LiveLogs(ctx context.Context, scope Scope, query LiveLogQuery) (LogBatch, error) {
-	sql := fmt.Sprintf(`SELECT toString(MolejoLogId) AS id, formatDateTime(Timestamp, '%%Y-%%m-%%dT%%H:%%i:%%S.%%fZ', 'UTC') AS timestamp, formatDateTime(MolejoIngestedAt, '%%Y-%%m-%%dT%%H:%%i:%%S.%%fZ', 'UTC') AS ingested_at, Body AS body, SeverityText AS severity, ResourceAttributes['k8s.pod.name'] AS instance, ResourceAttributes['k8s.container.name'] AS container
+	sql := fmt.Sprintf(`SELECT toString(MolejoLogId) AS id, toUnixTimestamp64Nano(Timestamp) AS timestamp_ns, toUnixTimestamp64Nano(MolejoIngestedAt) AS ingested_at_ns, Body AS body, SeverityText AS severity, ResourceAttributes['k8s.pod.name'] AS instance, ResourceAttributes['k8s.container.name'] AS container
 FROM %s.otel_logs
 WHERE (MolejoIngestedAt, MolejoLogId) > ({after_at:DateTime64(9)}, {after_id:UUID})
   AND ResourceAttributes['k8s.namespace.name'] = {namespace:String}
@@ -299,23 +298,21 @@ func (c *ClickHouseClient) queryLogEntries(ctx context.Context, sql string, para
 		scanner.Buffer(make([]byte, 64<<10), maxTextBytes*2)
 		for scanner.Scan() {
 			var row struct {
-				ID         string `json:"id"`
-				Timestamp  string `json:"timestamp"`
-				IngestedAt string `json:"ingested_at"`
-				Body       string `json:"body"`
-				Severity   string `json:"severity"`
-				Instance   string `json:"instance"`
-				Container  string `json:"container"`
+				ID           string `json:"id"`
+				TimestampNS  int64  `json:"timestamp_ns"`
+				IngestedAtNS int64  `json:"ingested_at_ns"`
+				Body         string `json:"body"`
+				Severity     string `json:"severity"`
+				Instance     string `json:"instance"`
+				Container    string `json:"container"`
 			}
 			if err := json.Unmarshal(scanner.Bytes(), &row); err != nil {
 				return err
 			}
-			timestamp, timestampErr := time.Parse(time.RFC3339Nano, row.Timestamp)
-			ingestedAt, ingestedErr := time.Parse(time.RFC3339Nano, row.IngestedAt)
-			if timestampErr != nil || ingestedErr != nil || !logUUIDRE.MatchString(row.ID) {
+			if row.TimestampNS <= 0 || row.IngestedAtNS <= 0 || !logUUIDRE.MatchString(row.ID) {
 				continue
 			}
-			items = append(items, LogEntry{ID: publicLogID(row.ID), Timestamp: timestamp, Body: sanitizeText(row.Body), Severity: sanitizeLabel(row.Severity), Instance: sanitizeLabel(row.Instance), Container: sanitizeLabel(row.Container), cursor: LogCursor{IngestedAt: ingestedAt, ID: strings.ToLower(row.ID)}})
+			items = append(items, LogEntry{ID: publicLogID(row.ID), Timestamp: time.Unix(0, row.TimestampNS).UTC(), Body: sanitizeText(row.Body), Severity: sanitizeLabel(row.Severity), Instance: sanitizeLabel(row.Instance), Container: sanitizeLabel(row.Container), cursor: LogCursor{IngestedAt: time.Unix(0, row.IngestedAtNS).UTC(), ID: strings.ToLower(row.ID)}})
 		}
 		return scanner.Err()
 	}); err != nil {
