@@ -1,9 +1,10 @@
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
 
 import { userFacingError } from "../../shared/api/errors";
-import type { AppEnvironment, RuntimeEvent, RuntimeLog, RuntimeMetricSample, RuntimeMetricSeries } from "../../shared/api/types";
+import type { AppEnvironment, RuntimeEvent, RuntimeLog, RuntimeLogBatch, RuntimeMetricSample, RuntimeMetricSeries } from "../../shared/api/types";
 import { formatDateTime } from "../../shared/format";
 import { Alert } from "../../shared/ui/Alert";
 import { Button } from "../../shared/ui/Button";
@@ -14,6 +15,7 @@ import { workspaceScopeKeys } from "../workspace/scope";
 import { EnvironmentAppLayout, type EnvironmentParams } from "./EnvironmentPages";
 import { useRuntimeMetrics } from "./RuntimeMetricsStatus";
 import { getRuntimeMetrics, listRuntimeEvents, listRuntimeLogs, runtimeLogStreamURL, type RuntimeLogFilters, type RuntimeRange } from "./observability-api";
+import { RuntimeLogStore } from "./runtime-log-store";
 
 const ranges = [
   { value: "0.25", label: "Últimos 15 minutos" },
@@ -64,12 +66,25 @@ export function RuntimeLogsPage({ target, params }: { target: AppEnvironment; pa
   const [filters, setFilters] = useState<RuntimeLogFilters>(() => ({ ...createRange(1), limit: 300 }));
   const [live, setLive] = useState(false);
   const [liveState, setLiveState] = useState<"idle" | "connecting" | "connected" | "reconnecting" | "error">("idle");
-  const [liveItems, setLiveItems] = useState<RuntimeLog[]>([]);
-  const logs = useQuery({ queryKey: workspaceScopeKeys.appEnvironmentRuntimeLogs(params.workspaceId, params.projectId, target.appId, target.id, filters), queryFn: () => listRuntimeLogs(params.workspaceId, params.projectId, target.appId, target.id, filters) });
-  const streamURL = runtimeLogStreamURL(params.workspaceId, params.projectId, target.appId, target.id, filters);
+  const store = useMemo(() => new RuntimeLogStore(), [filters, target.id]);
+  const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
+  const logs = useInfiniteQuery({
+    queryKey: workspaceScopeKeys.appEnvironmentRuntimeLogs(params.workspaceId, params.projectId, target.appId, target.id, filters),
+    queryFn: ({ pageParam }) => listRuntimeLogs(params.workspaceId, params.projectId, target.appId, target.id, { ...filters, cursor: pageParam }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+  });
+  const liveCursor = logs.data?.pages[0]?.liveCursor;
+  const streamURL = liveCursor ? runtimeLogStreamURL(params.workspaceId, params.projectId, target.appId, target.id, filters, liveCursor) : undefined;
+
+  useEffect(() => () => store.dispose(), [store]);
+  useEffect(() => {
+    const historical = logs.data?.pages.flatMap((page) => page.items);
+    if (historical) store.mergeHistory(historical);
+  }, [logs.data?.pages, store]);
 
   useEffect(() => {
-    if (!live) return;
+    if (!live || !streamURL) return;
     setLiveState("connecting");
     const source = new EventSource(streamURL);
     let reconnectNotice: number | undefined;
@@ -88,15 +103,15 @@ export function RuntimeLogsPage({ target, params }: { target: AppEnvironment; pa
     source.onopen = connected;
     const receive = (event: Event) => {
       try {
-        const item = JSON.parse((event as MessageEvent<string>).data) as RuntimeLog;
-        setLiveItems((current) => [item, ...current.filter((existing) => logKey(existing) !== logKey(item))].slice(0, 500));
+        const batch = JSON.parse((event as MessageEvent<string>).data) as RuntimeLogBatch;
+        store.appendBatch(batch.items);
       } catch {
         setLiveState("error");
         source.close();
         setLive(false);
       }
     };
-    source.addEventListener("log", receive);
+    source.addEventListener("logs", receive);
     const end = (event: Event) => {
       try {
         const reason = (JSON.parse((event as MessageEvent<string>).data) as { reason?: string }).reason;
@@ -109,25 +124,41 @@ export function RuntimeLogsPage({ target, params }: { target: AppEnvironment; pa
     };
     source.addEventListener("end", end);
     source.onerror = connectionInterrupted;
-    return () => { clearReconnectNotice(); source.removeEventListener("log", receive); source.removeEventListener("end", end); source.close(); };
-  }, [live, streamURL]);
-
-  const items = useMemo(() => {
-    const merged = [...liveItems, ...(logs.data?.items ?? [])];
-    return merged.filter((item, index) => merged.findIndex((candidate) => logKey(candidate) === logKey(item)) === index).slice(0, 500);
-  }, [liveItems, logs.data?.items]);
+    return () => { clearReconnectNotice(); source.removeEventListener("logs", receive); source.removeEventListener("end", end); source.close(); };
+  }, [live, store, streamURL]);
 
   function applyFilters(event: FormEvent) {
     event.preventDefault();
-    setLiveItems([]);
+    setLive(false);
+    setLiveState("idle");
     setFilters({ ...createRange(Number(hours)), search: search.trim() || undefined, instance: instance.trim() || undefined, limit: 300 });
   }
 
-  return <section className="stack"><ObservabilityNav params={params}/><div className="section-heading"><div><p className="eyebrow">Runtime</p><h2>Logs</h2><p className="muted">Pesquise o histórico por padrão. Ative o fluxo contínuo somente quando estiver acompanhando uma ocorrência.</p></div><Button type="button" variant={live ? "danger" : "secondary"} onClick={() => { setLiveState(live ? "idle" : "connecting"); setLive((value) => !value); }}>{live ? "Parar live" : "Ver ao vivo"}</Button></div><form className="panel observability-filters" onSubmit={applyFilters}><SelectField label="Período" value={hours} onChange={(event) => setHours(event.target.value)}>{ranges.map((range) => <option key={range.value} value={range.value}>{range.label}</option>)}</SelectField><Field label="Buscar no conteúdo" value={search} onChange={(event) => setSearch(event.target.value)} maxLength={200}/><Field label="Instância exata" value={instance} onChange={(event) => setInstance(event.target.value)} maxLength={253}/><Button type="submit" loading={logs.isFetching}>Aplicar filtros</Button></form>{liveState === "connecting" && <p className="live-status pending" role="status"><span aria-hidden="true"/>Conectando ao vivo…</p>}{liveState === "connected" && <p className="live-status" role="status"><span aria-hidden="true"/>Ao vivo ativo</p>}{liveState === "reconnecting" && <p className="live-status pending" role="status"><span aria-hidden="true"/>Atualização temporariamente interrompida…</p>}{liveState === "error" && <Alert>O fluxo ao vivo foi encerrado. A consulta histórica continua disponível.</Alert>}{logs.isError ? <Alert>{userFacingError(logs.error)}</Alert> : logs.isPending ? <p className="muted" role="status">Carregando logs do runtime…</p> : items.length ? <RuntimeLogList items={items}/> : <EmptyState title="Nenhum log neste período" description="Amplie o período ou remova os filtros. Um resultado vazio é diferente de uma falha na consulta."/>}</section>;
+  return <section className="stack"><ObservabilityNav params={params}/><div className="section-heading"><div><p className="eyebrow">Runtime</p><h2>Logs</h2><p className="muted">Pesquise o histórico por padrão. Ative o fluxo contínuo somente quando estiver acompanhando uma ocorrência.</p></div><Button type="button" variant={live ? "danger" : "secondary"} disabled={!liveCursor} onClick={() => { setLiveState(live ? "idle" : "connecting"); setLive((value) => !value); }}>{live ? "Parar live" : "Ver ao vivo"}</Button></div><form className="panel observability-filters" onSubmit={applyFilters}><SelectField label="Período" value={hours} onChange={(event) => setHours(event.target.value)}>{ranges.map((range) => <option key={range.value} value={range.value}>{range.label}</option>)}</SelectField><Field label="Buscar no conteúdo" value={search} onChange={(event) => setSearch(event.target.value)} maxLength={200}/><Field label="Instância exata" value={instance} onChange={(event) => setInstance(event.target.value)} maxLength={253}/><Button type="submit" loading={logs.isFetching}>Aplicar filtros</Button></form>{liveState === "connecting" && <p className="live-status pending" role="status"><span aria-hidden="true"/>Conectando ao vivo…</p>}{liveState === "connected" && <p className="live-status" role="status"><span aria-hidden="true"/>Ao vivo ativo</p>}{liveState === "reconnecting" && <p className="live-status pending" role="status"><span aria-hidden="true"/>Atualização temporariamente interrompida…</p>}{liveState === "error" && <Alert>O fluxo ao vivo foi encerrado. A consulta histórica continua disponível.</Alert>}{logs.isError ? <Alert>{userFacingError(logs.error)}</Alert> : logs.isPending ? <p className="muted" role="status">Carregando logs do runtime…</p> : snapshot.items.length ? <><RuntimeLogList items={snapshot.items} discardedCount={snapshot.discardedCount} receivedCount={snapshot.receivedCount}/>{logs.hasNextPage && <Button type="button" variant="secondary" loading={logs.isFetchingNextPage} onClick={() => logs.fetchNextPage()}>Carregar logs anteriores</Button>}</> : <EmptyState title="Nenhum log neste período" description="Amplie o período ou remova os filtros. Um resultado vazio é diferente de uma falha na consulta."/>}</section>;
 }
 
-export function RuntimeLogList({ items }: { items: RuntimeLog[] }) {
-  return <div className="runtime-logs" aria-label="Logs do runtime">{items.map((item) => <article className="runtime-log" key={logKey(item)}><time dateTime={item.timestamp}>{formatDateTime(item.timestamp)}</time><span className="runtime-log-meta">{item.severity || "LOG"}{item.instance ? ` · ${item.instance}` : ""}{item.container ? ` · ${item.container}` : ""}</span><pre>{item.body}</pre></article>)}</div>;
+export function RuntimeLogList({ items, discardedCount = 0, receivedCount = items.length }: { items: readonly RuntimeLog[]; discardedCount?: number; receivedCount?: number }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [following, setFollowing] = useState(true);
+  const [seenCount, setSeenCount] = useState(receivedCount);
+  const virtualizer = useVirtualizer({ count: items.length, getScrollElement: () => scrollRef.current, estimateSize: () => 78, overscan: 10, getItemKey: (index) => items[index].id });
+  const unseenCount = following ? 0 : Math.max(0, receivedCount - seenCount);
+
+  useEffect(() => {
+    if (!following || !items.length) return;
+    virtualizer.scrollToIndex(items.length - 1, { align: "end" });
+    setSeenCount(receivedCount);
+  }, [following, items.length, receivedCount, virtualizer]);
+
+  function updateFollowState() {
+    const element = scrollRef.current;
+    if (!element) return;
+    const atEnd = element.scrollHeight - element.scrollTop - element.clientHeight < 80;
+    setFollowing(atEnd);
+    if (atEnd) setSeenCount(receivedCount);
+  }
+
+  return <section className="runtime-log-viewer"><div className="runtime-log-toolbar"><span>{items.length.toLocaleString("pt-BR")} registros na visualização</span>{discardedCount > 0 && <span>{discardedCount.toLocaleString("pt-BR")} antigos descartados do navegador</span>}{!following && <Button type="button" variant="secondary" onClick={() => { setFollowing(true); setSeenCount(receivedCount); }}>{unseenCount > 0 ? `${unseenCount.toLocaleString("pt-BR")} novos · ir ao fim` : "Ir aos mais recentes"}</Button>}</div><div ref={scrollRef} className="runtime-logs" aria-label="Logs do runtime" onScroll={updateFollowState}><div className="runtime-log-virtual" style={{ height: `${virtualizer.getTotalSize()}px` }}>{virtualizer.getVirtualItems().map((row) => { const item = items[row.index]; return <article ref={virtualizer.measureElement} data-index={row.index} className="runtime-log" key={item.id} style={{ transform: `translateY(${row.start}px)` }}><time dateTime={item.timestamp}>{formatDateTime(item.timestamp)}</time><span className="runtime-log-meta">{item.severity || "LOG"}{item.instance ? ` · ${item.instance}` : ""}{item.container ? ` · ${item.container}` : ""}</span><pre>{item.body}</pre></article>; })}</div></div></section>;
 }
 
 export function EnvironmentAppMetricsPage() {
@@ -178,10 +209,6 @@ function observabilityLinks(params: EnvironmentParams) {
     metrics: { to: "/workspaces/$workspaceId/projects/$projectId/environments/$environmentId/apps/$appEnvironmentId/observability/metrics" as const, params: routeParams },
     events: { to: "/workspaces/$workspaceId/projects/$projectId/environments/$environmentId/apps/$appEnvironmentId/observability/events" as const, params: routeParams },
   };
-}
-
-function logKey(item: RuntimeLog) {
-  return `${item.timestamp}\u0000${item.instance ?? ""}\u0000${item.body}`;
 }
 
 function latestSample(samples: RuntimeMetricSample[], name: RuntimeMetricSample["name"]) {

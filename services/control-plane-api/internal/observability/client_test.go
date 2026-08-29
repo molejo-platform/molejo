@@ -21,7 +21,7 @@ func TestClickHouseLogsAlwaysScopeQueriesToRuntime(t *testing.T) {
 		}
 		form = r.Form
 		w.Header().Set("Content-Type", "application/x-ndjson")
-		_, _ = w.Write([]byte(`{"timestamp":"2026-08-28T12:00:00Z","body":"ready","severity":"INFO","instance":"pod-1","container":"app"}` + "\n"))
+		_, _ = w.Write([]byte(`{"id":"11111111-1111-4111-8111-111111111111","timestamp":"2026-08-28T12:00:00.123456789Z","ingested_at":"2026-08-28T12:00:01.123456789Z","body":"ready","severity":"INFO","instance":"pod-1","container":"app"}` + "\n"))
 	}))
 	defer server.Close()
 
@@ -29,16 +29,17 @@ func TestClickHouseLogsAlwaysScopeQueriesToRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	items, err := client.Logs(context.Background(), Scope{Namespace: "workspace-a", RuntimeName: "runtime-a"}, LogQuery{
-		From: time.Date(2026, 8, 28, 11, 0, 0, 0, time.UTC), To: time.Date(2026, 8, 28, 12, 0, 0, 0, time.UTC), Search: "ready", Limit: 50,
+	page, err := client.Logs(context.Background(), Scope{Namespace: "workspace-a", RuntimeName: "runtime-a"}, LogQuery{
+		From: time.Date(2026, 8, 28, 11, 0, 0, 0, time.UTC), To: time.Date(2026, 8, 28, 12, 1, 0, 0, time.UTC), Search: "ready", Limit: 50,
+		Snapshot: LogCursor{IngestedAt: time.Date(2026, 8, 28, 12, 2, 0, 0, time.UTC), ID: maxLogUUID},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(items) != 1 || items[0].Body != "ready" {
-		t.Fatalf("unexpected items: %#v", items)
+	if len(page.Items) != 1 || page.Items[0].Body != "ready" || page.Items[0].ID != "log-11111111111141118111111111111111" {
+		t.Fatalf("unexpected items: %#v", page.Items)
 	}
-	for key, want := range map[string]string{"param_namespace": "workspace-a", "param_runtime": "runtime-a", "param_search": "ready", "param_limit": "50"} {
+	for key, want := range map[string]string{"param_namespace": "workspace-a", "param_runtime": "runtime-a", "param_search": "ready", "param_limit": "51"} {
 		if got := form.Get(key); got != want {
 			t.Fatalf("%s = %q, want %q", key, got, want)
 		}
@@ -47,7 +48,7 @@ func TestClickHouseLogsAlwaysScopeQueriesToRuntime(t *testing.T) {
 		t.Fatalf("param_from = %q, want ClickHouse DateTime64 format", got)
 	}
 	query := form.Get("query")
-	if !strings.Contains(query, "k8s.namespace.name") || !strings.Contains(query, "k8s.deployment.name") {
+	if !strings.Contains(query, "k8s.namespace.name") || !strings.Contains(query, "k8s.deployment.name") || !strings.Contains(query, "MolejoLogId") || !strings.Contains(query, "MolejoIngestedAt") {
 		t.Fatalf("query is not tenant and runtime scoped: %s", query)
 	}
 }

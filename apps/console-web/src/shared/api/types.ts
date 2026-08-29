@@ -30,6 +30,7 @@ export type Deployment = components["schemas"]["Deployment"];
 export type Operation = components["schemas"]["Operation"];
 export type RuntimeLog = components["schemas"]["RuntimeLog"];
 export type RuntimeLogs = components["schemas"]["RuntimeLogs"];
+export type RuntimeLogBatch = components["schemas"]["RuntimeLogBatch"];
 export type RuntimeMetricPoint = components["schemas"]["RuntimeMetricPoint"];
 export type RuntimeMetricSeries = components["schemas"]["RuntimeMetricSeries"];
 export type RuntimeMetrics = components["schemas"]["RuntimeMetrics"];

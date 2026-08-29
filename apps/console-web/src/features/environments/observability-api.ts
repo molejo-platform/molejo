@@ -2,7 +2,7 @@ import { request } from "../../shared/api/http-client";
 import type { RuntimeEvents, RuntimeLogs, RuntimeMetrics } from "../../shared/api/types";
 
 export type RuntimeRange = { from: string; to: string };
-export type RuntimeLogFilters = RuntimeRange & { search?: string; instance?: string; limit?: number };
+export type RuntimeLogFilters = RuntimeRange & { search?: string; instance?: string; limit?: number; cursor?: string };
 export type RuntimeMetricFilters = RuntimeRange & { stepSeconds?: number };
 export type RuntimeEventFilters = RuntimeRange & { limit?: number };
 
@@ -30,8 +30,8 @@ export function listRuntimeEvents(workspaceId: string, projectId: string, appId:
   return request<RuntimeEvents>(withQuery(`${runtimeObservabilityBase(workspaceId, projectId, appId, appEnvironmentId)}/events`, filters));
 }
 
-export function runtimeLogStreamURL(workspaceId: string, projectId: string, appId: string, appEnvironmentId: string, filters: Pick<RuntimeLogFilters, "search" | "instance">) {
-  return withQuery(`${runtimeObservabilityBase(workspaceId, projectId, appId, appEnvironmentId)}/logs/live`, { search: filters.search, instance: filters.instance });
+export function runtimeLogStreamURL(workspaceId: string, projectId: string, appId: string, appEnvironmentId: string, filters: Pick<RuntimeLogFilters, "search" | "instance">, cursor?: string) {
+  return withQuery(`${runtimeObservabilityBase(workspaceId, projectId, appId, appEnvironmentId)}/logs/live`, { search: filters.search, instance: filters.instance, cursor });
 }
 
 export function runtimeMetricStreamURL(workspaceId: string, projectId: string, appId: string, appEnvironmentId: string) {

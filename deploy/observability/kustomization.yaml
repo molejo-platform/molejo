@@ -6,4 +6,5 @@ resources:
   - configmaps.yaml
   - services.yaml
   - workloads.yaml
+  - log-schema-migration.yaml
   - network-policies.yaml

@@ -14,6 +14,7 @@ for target in statefulset/clickhouse statefulset/victoria-metrics deployment/ote
   kubectl --context "$context" -n molejo-observability rollout status "$target" --timeout=60s >/dev/null
 done
 kubectl --context "$context" -n molejo-observability-agents rollout status daemonset/otel-agent --timeout=60s >/dev/null
+kubectl --context "$context" -n molejo-observability wait --for=condition=complete job/clickhouse-log-schema-migrate --timeout=60s >/dev/null
 
 for component in otel-gateway otel-cluster; do
   if kubectl --context "$context" -n molejo-observability logs -l app.kubernetes.io/name="$component" --tail=200 --prefix 2>&1 | grep -Eiq 'failed to start|error decoding|invalid configuration|permanent error'; then

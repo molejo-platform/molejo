@@ -67,7 +67,9 @@ spec:
   podSelector: { matchLabels: { app.kubernetes.io/name: clickhouse } }
   policyTypes: [Ingress]
   ingress:
-    - from: [{ podSelector: { matchLabels: { app.kubernetes.io/name: otel-gateway } } }]
+    - from:
+        - podSelector: { matchLabels: { app.kubernetes.io/name: otel-gateway } }
+        - podSelector: { matchLabels: { app.kubernetes.io/name: clickhouse-log-schema-migrate } }
       ports: [{ protocol: TCP, port: 9000 }]
     - from:
         - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: fruto-control-plane } }
@@ -88,6 +90,18 @@ spec:
         - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: fruto-control-plane } }
           podSelector: { matchLabels: { app.kubernetes.io/name: control-plane-api } }
       ports: [{ protocol: TCP, port: 8428 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: clickhouse-log-schema-migrate
+  namespace: molejo-observability
+spec:
+  podSelector: { matchLabels: { app.kubernetes.io/name: clickhouse-log-schema-migrate } }
+  policyTypes: [Egress]
+  egress:
+    - to: [{ podSelector: { matchLabels: { app.kubernetes.io/name: clickhouse } } }]
+      ports: [{ protocol: TCP, port: 9000 }]
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

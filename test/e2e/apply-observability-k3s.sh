@@ -10,10 +10,12 @@ actual_uid="$(kubectl --context "$context" get namespace kube-system -o jsonpath
 
 kubectl --context "$context" -n molejo-observability get secret molejo-observability-credentials >/dev/null
 kubectl --context "$context" -n fruto-control-plane get secret molejo-observability-reader >/dev/null
+kubectl --context "$context" -n molejo-observability delete job clickhouse-log-schema-migrate --ignore-not-found >/dev/null
 kubectl --context "$context" apply --server-side --dry-run=server -k deploy/observability-lab >/dev/null
 kubectl --context "$context" apply --server-side -k deploy/observability-lab >/dev/null
 
 kubectl --context "$context" -n molejo-observability rollout status statefulset/clickhouse --timeout=600s
+kubectl --context "$context" -n molejo-observability wait --for=condition=complete job/clickhouse-log-schema-migrate --timeout=300s
 kubectl --context "$context" -n molejo-observability rollout status statefulset/victoria-metrics --timeout=300s
 kubectl --context "$context" -n molejo-observability rollout status deployment/otel-gateway --timeout=300s
 kubectl --context "$context" -n molejo-observability rollout status deployment/otel-cluster --timeout=300s

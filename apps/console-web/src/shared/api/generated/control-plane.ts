@@ -984,6 +984,7 @@ export interface components {
             updatedAt?: string;
         };
         RuntimeLog: {
+            id: string;
             /** Format: date-time */
             timestamp: string;
             body: string;
@@ -996,6 +997,12 @@ export interface components {
             from: string;
             /** Format: date-time */
             to: string;
+            liveCursor: string;
+            nextCursor?: string | null;
+            items: components["schemas"]["RuntimeLog"][];
+        };
+        RuntimeLogBatch: {
+            cursor: string;
             items: components["schemas"]["RuntimeLog"][];
         };
         RuntimeMetricPoint: {
@@ -2651,6 +2658,8 @@ export interface operations {
                 search?: string;
                 instance?: string;
                 limit?: number;
+                /** @description Opaque keyset cursor returned by the previous page */
+                cursor?: string;
             };
             header?: never;
             path: {
@@ -2682,6 +2691,8 @@ export interface operations {
             query?: {
                 search?: string;
                 instance?: string;
+                /** @description Opaque live cursor returned with the historical snapshot */
+                cursor?: string;
             };
             header?: never;
             path: {

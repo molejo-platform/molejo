@@ -26,8 +26,10 @@ class FakeEventSource {
   static instances: FakeEventSource[] = [];
   onopen: (() => void) | null = null;
   onerror: (() => void) | null = null;
-  addEventListener() {}
-  removeEventListener() {}
+  private listeners = new Map<string, (event: Event) => void>();
+  addEventListener(name: string, listener: EventListener) { this.listeners.set(name, listener); }
+  removeEventListener(name: string) { this.listeners.delete(name); }
+  emit(name: string, payload: unknown) { this.listeners.get(name)?.({ data: JSON.stringify(payload) } as MessageEvent<string>); }
   close() {}
 }
 
@@ -35,7 +37,7 @@ afterEach(() => { cleanup(); mocks.listRuntimeLogs.mockReset(); FakeEventSource.
 
 describe("runtime observability", () => {
   it("distinguishes an empty log interval from a backend failure", async () => {
-    mocks.listRuntimeLogs.mockResolvedValueOnce({ from: "2026-08-28T10:00:00Z", to: "2026-08-28T11:00:00Z", items: [] });
+    mocks.listRuntimeLogs.mockResolvedValueOnce({ from: "2026-08-28T10:00:00Z", to: "2026-08-28T11:00:00Z", liveCursor: "cursor-1", nextCursor: null, items: [] });
     const { unmount } = renderWithQueryClient(<RuntimeLogsPage target={target} params={params}/>);
     expect(await screen.findByText("Nenhum log neste período")).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
@@ -56,7 +58,7 @@ describe("runtime observability", () => {
   it("keeps live logs enabled while EventSource reconnects", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.stubGlobal("EventSource", class extends FakeEventSource { constructor() { super(); FakeEventSource.instances.push(this); } });
-    mocks.listRuntimeLogs.mockResolvedValue({ from: "2026-08-28T10:00:00Z", to: "2026-08-28T11:00:00Z", items: [] });
+    mocks.listRuntimeLogs.mockResolvedValue({ from: "2026-08-28T10:00:00Z", to: "2026-08-28T11:00:00Z", liveCursor: "cursor-1", nextCursor: null, items: [] });
     renderWithQueryClient(<RuntimeLogsPage target={target} params={params}/>);
     const start = await screen.findByRole("button", { name: "Ver ao vivo" });
     act(() => start.click());

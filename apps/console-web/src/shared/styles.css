@@ -218,8 +218,12 @@ input:disabled, select:disabled, textarea:disabled { background: var(--color-sur
 .live-status { align-items: center; color: var(--color-success); display: flex; font-size: .82rem; font-weight: 800; gap: var(--space-2); margin: 0; }
 .live-status span { animation: live-pulse 1.8s ease-in-out infinite; background: currentColor; border-radius: 50%; height: .55rem; width: .55rem; }
 .live-status.pending { color: var(--color-warning); }
-.runtime-logs { background: var(--color-brand-strong); border: 1px solid var(--color-brand); border-radius: var(--radius-md); color: #e8f2ec; max-height: 42rem; overflow: auto; }
-.runtime-log { display: grid; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: .78rem; gap: .25rem; padding: var(--space-3) var(--space-4); }
+.runtime-log-viewer { display: grid; gap: var(--space-2); }
+.runtime-log-toolbar { align-items: center; color: var(--color-text-muted); display: flex; flex-wrap: wrap; font-size: .75rem; gap: var(--space-2) var(--space-4); justify-content: flex-end; min-height: 2.5rem; }
+.runtime-log-toolbar button { margin-left: auto; }
+.runtime-logs { background: var(--color-brand-strong); border: 1px solid var(--color-brand); border-radius: var(--radius-md); color: #e8f2ec; height: min(42rem, 68vh); overflow: auto; overscroll-behavior: contain; }
+.runtime-log-virtual { position: relative; width: 100%; }
+.runtime-log { display: grid; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: .78rem; gap: .25rem; left: 0; min-height: 78px; padding: var(--space-3) var(--space-4); position: absolute; top: 0; width: 100%; }
 .runtime-log + .runtime-log { border-top: 1px solid rgb(255 255 255 / 11%); }
 .runtime-log time, .runtime-log-meta { color: #a9c8c4; font-size: .7rem; }
 .runtime-log pre { font: inherit; margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }

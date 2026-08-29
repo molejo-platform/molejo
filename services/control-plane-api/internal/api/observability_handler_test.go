@@ -27,9 +27,18 @@ func (r *deadlineRecorder) SetWriteDeadline(deadline time.Time) error {
 	return nil
 }
 
-func (r *recordingObservabilityReader) Logs(_ context.Context, scope observability.Scope, _ observability.LogQuery) ([]observability.LogEntry, error) {
+func (r *recordingObservabilityReader) LogWatermark(context.Context) (observability.LogCursor, error) {
+	return observability.LogCursor{IngestedAt: time.Date(2026, 8, 28, 12, 0, 0, 0, time.UTC), ID: "ffffffff-ffff-ffff-ffff-ffffffffffff"}, nil
+}
+
+func (r *recordingObservabilityReader) Logs(_ context.Context, scope observability.Scope, query observability.LogQuery) (observability.LogPage, error) {
 	r.scope = scope
-	return []observability.LogEntry{}, nil
+	return observability.LogPage{Items: []observability.LogEntry{}, LiveCursor: query.Snapshot}, nil
+}
+
+func (r *recordingObservabilityReader) LiveLogs(_ context.Context, scope observability.Scope, query observability.LiveLogQuery) (observability.LogBatch, error) {
+	r.scope = scope
+	return observability.LogBatch{Items: []observability.LogEntry{}, Cursor: query.After}, nil
 }
 
 func (r *recordingObservabilityReader) Metrics(_ context.Context, scope observability.Scope, query observability.MetricQuery) (observability.Metrics, error) {
@@ -55,6 +64,38 @@ func TestMetricSnapshotClearsTheWriteDeadlineAfterFlushing(t *testing.T) {
 	}
 	if len(recorder.deadlines) != 2 || recorder.deadlines[0].IsZero() || !recorder.deadlines[1].IsZero() {
 		t.Fatalf("write deadlines were not bounded and cleared: %#v", recorder.deadlines)
+	}
+}
+
+func TestLiveLogBatchUsesStableCursorAndPreservesIdenticalRecords(t *testing.T) {
+	recorder := &deadlineRecorder{ResponseRecorder: httptest.NewRecorder()}
+	items := []observability.LogEntry{
+		{ID: "log-a", Timestamp: time.Date(2026, 8, 28, 12, 0, 0, 0, time.UTC), Body: "same", Severity: "INFO"},
+		{ID: "log-b", Timestamp: time.Date(2026, 8, 28, 12, 0, 0, 0, time.UTC), Body: "same", Severity: "INFO"},
+	}
+
+	if !writeLiveLogBatch(recorder, recorder, "cursor-2", items) {
+		t.Fatal("live log batch write failed")
+	}
+	body := recorder.Body.String()
+	if !strings.Contains(body, "id: cursor-2") || !strings.Contains(body, "event: logs") || strings.Count(body, `"body":"same"`) != 2 {
+		t.Fatalf("unexpected SSE batch: %s", body)
+	}
+}
+
+func TestLogCursorsRoundTripWithoutExposingStorageFields(t *testing.T) {
+	snapshot := observability.LogCursor{IngestedAt: time.Date(2026, 8, 28, 12, 0, 0, 123, time.UTC), ID: "ffffffff-ffff-ffff-ffff-ffffffffffff"}
+	position := observability.LogPosition{Timestamp: time.Date(2026, 8, 28, 11, 59, 0, 456, time.UTC), ID: "11111111-1111-4111-8111-111111111111"}
+	encoded := encodeHistoricalLogCursor(snapshot, position)
+	decodedSnapshot, decodedPosition, err := decodeHistoricalLogCursor(encoded)
+	if err != nil || decodedSnapshot != snapshot || decodedPosition != position {
+		t.Fatalf("decoded snapshot=%+v position=%+v err=%v", decodedSnapshot, decodedPosition, err)
+	}
+	if strings.Contains(encoded, snapshot.ID) || strings.Contains(encoded, position.ID) {
+		t.Fatalf("cursor exposes storage fields: %s", encoded)
+	}
+	if _, err := decodeLiveLogCursor("not-a-cursor"); err == nil {
+		t.Fatal("invalid cursor was accepted")
 	}
 }
 

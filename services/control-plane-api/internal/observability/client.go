@@ -19,9 +19,15 @@ import (
 
 const maxTextBytes = 64 << 10
 
+const (
+	minLogUUID = "00000000-0000-0000-0000-000000000000"
+	maxLogUUID = "ffffffff-ffff-ffff-ffff-ffffffffffff"
+)
+
 var (
 	ErrUnavailable = errors.New("observability backend unavailable")
 	identifierRE   = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+	logUUIDRE      = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 )
 
 type Scope struct {
@@ -35,6 +41,44 @@ type LogQuery struct {
 	Search   string
 	Instance string
 	Limit    int
+	Snapshot LogCursor
+	Before   *LogPosition
+}
+
+type LiveLogQuery struct {
+	After    LogCursor
+	Search   string
+	Instance string
+	Limit    int
+}
+
+type LogCursor struct {
+	IngestedAt time.Time
+	ID         string
+}
+
+type LogPosition struct {
+	Timestamp time.Time
+	ID        string
+}
+
+func (cursor LogCursor) Valid() bool {
+	return !cursor.IngestedAt.IsZero() && logUUIDRE.MatchString(cursor.ID)
+}
+
+func (position LogPosition) Valid() bool {
+	return !position.Timestamp.IsZero() && logUUIDRE.MatchString(position.ID)
+}
+
+type LogPage struct {
+	Items      []LogEntry
+	Next       *LogPosition
+	LiveCursor LogCursor
+}
+
+type LogBatch struct {
+	Items  []LogEntry
+	Cursor LogCursor
 }
 
 type MetricQuery struct {
@@ -50,11 +94,13 @@ type EventQuery struct {
 }
 
 type LogEntry struct {
+	ID        string    `json:"id"`
 	Timestamp time.Time `json:"timestamp"`
 	Body      string    `json:"body"`
 	Severity  string    `json:"severity"`
 	Instance  string    `json:"instance,omitempty"`
 	Container string    `json:"container,omitempty"`
+	cursor    LogCursor
 }
 
 type MetricPoint struct {
@@ -99,7 +145,9 @@ type Event struct {
 }
 
 type Reader interface {
-	Logs(context.Context, Scope, LogQuery) ([]LogEntry, error)
+	LogWatermark(context.Context) (LogCursor, error)
+	Logs(context.Context, Scope, LogQuery) (LogPage, error)
+	LiveLogs(context.Context, Scope, LiveLogQuery) (LogBatch, error)
 	Metrics(context.Context, Scope, MetricQuery) (Metrics, error)
 	CurrentMetrics(context.Context, Scope, time.Time) (MetricSnapshot, error)
 	Events(context.Context, Scope, EventQuery) ([]Event, error)
@@ -107,8 +155,16 @@ type Reader interface {
 
 type UnavailableReader struct{}
 
-func (UnavailableReader) Logs(context.Context, Scope, LogQuery) ([]LogEntry, error) {
-	return nil, ErrUnavailable
+func (UnavailableReader) LogWatermark(context.Context) (LogCursor, error) {
+	return LogCursor{}, ErrUnavailable
+}
+
+func (UnavailableReader) Logs(context.Context, Scope, LogQuery) (LogPage, error) {
+	return LogPage{}, ErrUnavailable
+}
+
+func (UnavailableReader) LiveLogs(context.Context, Scope, LiveLogQuery) (LogBatch, error) {
+	return LogBatch{}, ErrUnavailable
 }
 
 func (UnavailableReader) Metrics(context.Context, Scope, MetricQuery) (Metrics, error) {
@@ -148,54 +204,122 @@ func NewClickHouseClient(endpoint, database, username, password string, httpClie
 	return &ClickHouseClient{endpoint: parsed, database: database, username: username, password: password, http: httpClient}, nil
 }
 
-func (c *ClickHouseClient) Logs(ctx context.Context, scope Scope, query LogQuery) ([]LogEntry, error) {
-	sql := fmt.Sprintf(`SELECT formatDateTime(Timestamp, '%%Y-%%m-%%dT%%H:%%i:%%SZ', 'UTC') AS timestamp, Body AS body, SeverityText AS severity, ResourceAttributes['k8s.pod.name'] AS instance, ResourceAttributes['k8s.container.name'] AS container
+func (c *ClickHouseClient) LogWatermark(ctx context.Context) (LogCursor, error) {
+	sql := `SELECT formatDateTime(now64(9), '%Y-%m-%dT%H:%i:%S.%fZ', 'UTC') AS ingested_at FORMAT JSONEachRow`
+	var encoded string
+	err := c.query(ctx, sql, nil, func(reader io.Reader) error {
+		var row struct {
+			IngestedAt string `json:"ingested_at"`
+		}
+		if err := json.NewDecoder(reader).Decode(&row); err != nil {
+			return err
+		}
+		encoded = row.IngestedAt
+		return nil
+	})
+	if err != nil {
+		return LogCursor{}, err
+	}
+	ingestedAt, err := time.Parse(time.RFC3339Nano, encoded)
+	if err != nil {
+		return LogCursor{}, fmt.Errorf("%w: invalid ClickHouse watermark", ErrUnavailable)
+	}
+	return LogCursor{IngestedAt: ingestedAt, ID: maxLogUUID}, nil
+}
+
+func (c *ClickHouseClient) Logs(ctx context.Context, scope Scope, query LogQuery) (LogPage, error) {
+	sql := fmt.Sprintf(`SELECT toString(MolejoLogId) AS id, formatDateTime(Timestamp, '%%Y-%%m-%%dT%%H:%%i:%%S.%%fZ', 'UTC') AS timestamp, formatDateTime(MolejoIngestedAt, '%%Y-%%m-%%dT%%H:%%i:%%S.%%fZ', 'UTC') AS ingested_at, Body AS body, SeverityText AS severity, ResourceAttributes['k8s.pod.name'] AS instance, ResourceAttributes['k8s.container.name'] AS container
 FROM %s.otel_logs
 WHERE Timestamp >= {from:DateTime64(9)} AND Timestamp <= {to:DateTime64(9)}
+  AND (MolejoIngestedAt, MolejoLogId) <= ({snapshot_at:DateTime64(9)}, {snapshot_id:UUID})
   AND ResourceAttributes['k8s.namespace.name'] = {namespace:String}
   AND ResourceAttributes['k8s.deployment.name'] = {runtime:String}
   AND ({instance:String} = '' OR ResourceAttributes['k8s.pod.name'] = {instance:String})
   AND ({search:String} = '' OR positionCaseInsensitive(Body, {search:String}) > 0)
-ORDER BY Timestamp DESC LIMIT {limit:UInt32} FORMAT JSONEachRow`, c.database)
+  AND ({has_before:UInt8} = 0 OR (Timestamp, MolejoLogId) < ({before_at:DateTime64(9)}, {before_id:UUID}))
+ORDER BY Timestamp DESC, MolejoLogId DESC LIMIT {limit:UInt32} FORMAT JSONEachRow`, c.database)
 	params := scopeParams(scope, query.From, query.To)
 	params.Set("param_instance", query.Instance)
 	params.Set("param_search", query.Search)
-	params.Set("param_limit", strconv.Itoa(query.Limit))
-
-	var rows []struct {
-		Timestamp string `json:"timestamp"`
-		Body      string `json:"body"`
-		Severity  string `json:"severity"`
-		Instance  string `json:"instance"`
-		Container string `json:"container"`
+	params.Set("param_limit", strconv.Itoa(query.Limit+1))
+	params.Set("param_snapshot_at", clickHouseDateTime(query.Snapshot.IngestedAt))
+	params.Set("param_snapshot_id", query.Snapshot.ID)
+	params.Set("param_has_before", "0")
+	params.Set("param_before_at", clickHouseDateTime(time.Unix(0, 0)))
+	params.Set("param_before_id", minLogUUID)
+	if query.Before != nil {
+		params.Set("param_has_before", "1")
+		params.Set("param_before_at", clickHouseDateTime(query.Before.Timestamp))
+		params.Set("param_before_id", query.Before.ID)
 	}
+
+	items, err := c.queryLogEntries(ctx, sql, params)
+	if err != nil {
+		return LogPage{}, err
+	}
+	page := LogPage{Items: items, LiveCursor: query.Snapshot}
+	if len(page.Items) > query.Limit {
+		page.Items = page.Items[:query.Limit]
+		last := page.Items[len(page.Items)-1]
+		page.Next = &LogPosition{Timestamp: last.Timestamp, ID: last.cursor.ID}
+	}
+	return page, nil
+}
+
+func (c *ClickHouseClient) LiveLogs(ctx context.Context, scope Scope, query LiveLogQuery) (LogBatch, error) {
+	sql := fmt.Sprintf(`SELECT toString(MolejoLogId) AS id, formatDateTime(Timestamp, '%%Y-%%m-%%dT%%H:%%i:%%S.%%fZ', 'UTC') AS timestamp, formatDateTime(MolejoIngestedAt, '%%Y-%%m-%%dT%%H:%%i:%%S.%%fZ', 'UTC') AS ingested_at, Body AS body, SeverityText AS severity, ResourceAttributes['k8s.pod.name'] AS instance, ResourceAttributes['k8s.container.name'] AS container
+FROM %s.otel_logs
+WHERE (MolejoIngestedAt, MolejoLogId) > ({after_at:DateTime64(9)}, {after_id:UUID})
+  AND ResourceAttributes['k8s.namespace.name'] = {namespace:String}
+  AND ResourceAttributes['k8s.deployment.name'] = {runtime:String}
+  AND ({instance:String} = '' OR ResourceAttributes['k8s.pod.name'] = {instance:String})
+  AND ({search:String} = '' OR positionCaseInsensitive(Body, {search:String}) > 0)
+ORDER BY MolejoIngestedAt ASC, MolejoLogId ASC LIMIT {limit:UInt32} FORMAT JSONEachRow`, c.database)
+	params := scopeParams(scope, time.Time{}, time.Time{})
+	params.Set("param_after_at", clickHouseDateTime(query.After.IngestedAt))
+	params.Set("param_after_id", query.After.ID)
+	params.Set("param_instance", query.Instance)
+	params.Set("param_search", query.Search)
+	params.Set("param_limit", strconv.Itoa(query.Limit))
+	items, err := c.queryLogEntries(ctx, sql, params)
+	if err != nil {
+		return LogBatch{}, err
+	}
+	batch := LogBatch{Items: items, Cursor: query.After}
+	if len(items) > 0 {
+		batch.Cursor = items[len(items)-1].cursor
+	}
+	return batch, nil
+}
+
+func (c *ClickHouseClient) queryLogEntries(ctx context.Context, sql string, params url.Values) ([]LogEntry, error) {
+	items := make([]LogEntry, 0)
 	if err := c.query(ctx, sql, params, func(reader io.Reader) error {
 		scanner := bufio.NewScanner(reader)
 		scanner.Buffer(make([]byte, 64<<10), maxTextBytes*2)
 		for scanner.Scan() {
 			var row struct {
-				Timestamp string `json:"timestamp"`
-				Body      string `json:"body"`
-				Severity  string `json:"severity"`
-				Instance  string `json:"instance"`
-				Container string `json:"container"`
+				ID         string `json:"id"`
+				Timestamp  string `json:"timestamp"`
+				IngestedAt string `json:"ingested_at"`
+				Body       string `json:"body"`
+				Severity   string `json:"severity"`
+				Instance   string `json:"instance"`
+				Container  string `json:"container"`
 			}
 			if err := json.Unmarshal(scanner.Bytes(), &row); err != nil {
 				return err
 			}
-			rows = append(rows, row)
+			timestamp, timestampErr := time.Parse(time.RFC3339Nano, row.Timestamp)
+			ingestedAt, ingestedErr := time.Parse(time.RFC3339Nano, row.IngestedAt)
+			if timestampErr != nil || ingestedErr != nil || !logUUIDRE.MatchString(row.ID) {
+				continue
+			}
+			items = append(items, LogEntry{ID: publicLogID(row.ID), Timestamp: timestamp, Body: sanitizeText(row.Body), Severity: sanitizeLabel(row.Severity), Instance: sanitizeLabel(row.Instance), Container: sanitizeLabel(row.Container), cursor: LogCursor{IngestedAt: ingestedAt, ID: strings.ToLower(row.ID)}})
 		}
 		return scanner.Err()
 	}); err != nil {
 		return nil, err
-	}
-	items := make([]LogEntry, 0, len(rows))
-	for _, row := range rows {
-		timestamp, err := time.Parse(time.RFC3339Nano, row.Timestamp)
-		if err != nil {
-			continue
-		}
-		items = append(items, LogEntry{Timestamp: timestamp, Body: sanitizeText(row.Body), Severity: sanitizeLabel(row.Severity), Instance: sanitizeLabel(row.Instance), Container: sanitizeLabel(row.Container)})
 	}
 	return items, nil
 }
@@ -483,11 +607,25 @@ type CombinedReader struct {
 	MetricsDB *VictoriaMetricsClient
 }
 
-func (c CombinedReader) Logs(ctx context.Context, scope Scope, query LogQuery) ([]LogEntry, error) {
+func (c CombinedReader) LogWatermark(ctx context.Context) (LogCursor, error) {
 	if c.Telemetry == nil {
-		return nil, ErrUnavailable
+		return LogCursor{}, ErrUnavailable
+	}
+	return c.Telemetry.LogWatermark(ctx)
+}
+
+func (c CombinedReader) Logs(ctx context.Context, scope Scope, query LogQuery) (LogPage, error) {
+	if c.Telemetry == nil {
+		return LogPage{}, ErrUnavailable
 	}
 	return c.Telemetry.Logs(ctx, scope, query)
+}
+
+func (c CombinedReader) LiveLogs(ctx context.Context, scope Scope, query LiveLogQuery) (LogBatch, error) {
+	if c.Telemetry == nil {
+		return LogBatch{}, ErrUnavailable
+	}
+	return c.Telemetry.LiveLogs(ctx, scope, query)
 }
 
 func (c CombinedReader) Metrics(ctx context.Context, scope Scope, query MetricQuery) (Metrics, error) {
@@ -526,6 +664,10 @@ func sanitizeText(value string) string {
 		value = value[:len(value)-1]
 	}
 	return value
+}
+
+func publicLogID(value string) string {
+	return "log-" + strings.ReplaceAll(strings.ToLower(value), "-", "")
 }
 
 func sanitizeLabel(value string) string {

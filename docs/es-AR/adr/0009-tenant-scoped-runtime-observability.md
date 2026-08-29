@@ -21,6 +21,12 @@ métricas usan un presupuesto SSE autenticado separado y un intervalo de consult
 alineado con la recolección. Ambos streams envían heartbeats, expiran y revalidan
 la autorización mientras están conectados.
 
+Cada log almacenado recibe un identificador y timestamp de ingesta estables. La
+navegación histórica usa cursores opacos por clave sobre un snapshot fijo; el SSE
+live envía lotes limitados cuyo ID de evento es un cursor opaco reanudable. La
+reconexión mediante `Last-Event-ID` es, por lo tanto, idempotente y no depende de
+comparar el contenido de los mensajes ni de una única ventana de polling.
+
 OpenTelemetry Collectors forman la frontera portátil de ingestión. Un agente por
 nodo recolecta logs de containers y métricas del kubelet, mientras que un
 collector de cluster reúne eventos de Kubernetes. Un gateway enriquece y exporta
@@ -43,6 +49,11 @@ histórica de logs es el comportamiento predeterminado y el live tail es
 explícito. La telemetría desconocida o atrasada sigue siendo distinguible de
 cero, y los eventos de despliegue pueden correlacionarse con los gráficos
 históricos.
+La Console compone páginas históricas y lotes live en una store dedicada y
+limitada, publica actualizaciones con una cadencia controlada y virtualiza las
+filas renderizadas. Informa cuando los registros antiguos salen de la vista local
+y pausa el seguimiento automático cuando el usuario se aleja de los registros
+más recientes.
 
 ## Consequences
 

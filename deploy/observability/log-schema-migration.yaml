@@ -1,0 +1,58 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: clickhouse-log-schema-migrate
+  namespace: molejo-observability
+  labels:
+    app.kubernetes.io/name: clickhouse-log-schema-migrate
+    app.kubernetes.io/part-of: molejo-observability
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: clickhouse-log-schema-migrate
+        app.kubernetes.io/part-of: molejo-observability
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: migrate
+          image: clickhouse/clickhouse-server@sha256:4ff0d6c199a9ebb906af75ae406496e8a96edd0187afdc16d51c0fb77ffca588
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom: { secretKeyRef: { name: molejo-observability-credentials, key: ingest-password } }
+          command: [sh, -ec]
+          args:
+            - |
+              query() {
+                clickhouse-client --host clickhouse.molejo-observability.svc --user molejo_ingest --password "$CLICKHOUSE_PASSWORD" --query "$1"
+              }
+              attempt=0
+              until [ "$(query 'EXISTS TABLE otel.otel_logs')" = "1" ]; do
+                attempt=$((attempt + 1))
+                [ "$attempt" -lt 120 ] || exit 1
+                sleep 2
+              done
+              if [ "$(query "SELECT count() FROM system.columns WHERE database = 'otel' AND table = 'otel_logs' AND name = 'MolejoLogId'")" = "0" ]; then
+                query "ALTER TABLE otel.otel_logs ADD COLUMN MolejoLogId UUID DEFAULT generateUUIDv4()"
+                query "ALTER TABLE otel.otel_logs MATERIALIZE COLUMN MolejoLogId SETTINGS mutations_sync = 2"
+              fi
+              if [ "$(query "SELECT count() FROM system.columns WHERE database = 'otel' AND table = 'otel_logs' AND name = 'MolejoIngestedAt'")" = "0" ]; then
+                query "ALTER TABLE otel.otel_logs ADD COLUMN MolejoIngestedAt DateTime64(9) DEFAULT now64(9)"
+                query "ALTER TABLE otel.otel_logs MATERIALIZE COLUMN MolejoIngestedAt SETTINGS mutations_sync = 2"
+              fi
+          resources:
+            requests: { cpu: 25m, memory: 64Mi }
+            limits: { cpu: 250m, memory: 256Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
+            readOnlyRootFilesystem: true

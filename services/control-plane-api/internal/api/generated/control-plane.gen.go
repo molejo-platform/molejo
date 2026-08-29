@@ -828,16 +828,25 @@ type RuntimeEvents struct {
 type RuntimeLog struct {
 	Body      string    `json:"body"`
 	Container *string   `json:"container,omitempty"`
+	Id        string    `json:"id"`
 	Instance  *string   `json:"instance,omitempty"`
 	Severity  string    `json:"severity"`
 	Timestamp time.Time `json:"timestamp"`
 }
 
+// RuntimeLogBatch defines model for RuntimeLogBatch.
+type RuntimeLogBatch struct {
+	Cursor string       `json:"cursor"`
+	Items  []RuntimeLog `json:"items"`
+}
+
 // RuntimeLogs defines model for RuntimeLogs.
 type RuntimeLogs struct {
-	From  time.Time    `json:"from"`
-	Items []RuntimeLog `json:"items"`
-	To    time.Time    `json:"to"`
+	From       time.Time    `json:"from"`
+	Items      []RuntimeLog `json:"items"`
+	LiveCursor string       `json:"liveCursor"`
+	NextCursor *string      `json:"nextCursor,omitempty"`
+	To         time.Time    `json:"to"`
 }
 
 // RuntimeMetricPoint defines model for RuntimeMetricPoint.
@@ -1141,12 +1150,18 @@ type ListAppEnvironmentRuntimeLogsParams struct {
 	Search   *string    `form:"search,omitempty" json:"search,omitempty"`
 	Instance *string    `form:"instance,omitempty" json:"instance,omitempty"`
 	Limit    *int       `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Cursor Opaque keyset cursor returned by the previous page
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
 // StreamAppEnvironmentRuntimeLogsParams defines parameters for StreamAppEnvironmentRuntimeLogs.
 type StreamAppEnvironmentRuntimeLogsParams struct {
 	Search   *string `form:"search,omitempty" json:"search,omitempty"`
 	Instance *string `form:"instance,omitempty" json:"instance,omitempty"`
+
+	// Cursor Opaque live cursor returned with the historical snapshot
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
 // GetAppEnvironmentRuntimeMetricsParams defines parameters for GetAppEnvironmentRuntimeMetrics.
@@ -4226,6 +4241,19 @@ func (siw *ServerInterfaceWrapper) ListAppEnvironmentRuntimeLogs(w http.Response
 		return
 	}
 
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListAppEnvironmentRuntimeLogs(w, r, workspaceId, projectId, appId, appEnvironmentId, params)
 	}))
@@ -4304,6 +4332,19 @@ func (siw *ServerInterfaceWrapper) StreamAppEnvironmentRuntimeLogs(w http.Respon
 			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "instance"})
 		} else {
 			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "instance", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
 		}
 		return
 	}

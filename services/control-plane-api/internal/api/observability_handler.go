@@ -1,6 +1,8 @@
 package api
 
 import (
+	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -59,12 +61,32 @@ func (h *generatedHandler) ListAppEnvironmentRuntimeLogs(w http.ResponseWriter, 
 	if params.Instance != nil {
 		query.Instance = strings.TrimSpace(*params.Instance)
 	}
-	items, err := h.server.Observability.Logs(r.Context(), runtimeScope(workspace, appEnvironment), query)
+	if params.Cursor != nil {
+		snapshot, before, err := decodeHistoricalLogCursor(*params.Cursor)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "observability_cursor_invalid", "log cursor is invalid", r)
+			return
+		}
+		query.Snapshot, query.Before = snapshot, &before
+	} else {
+		watermark, err := h.server.Observability.LogWatermark(r.Context())
+		if err != nil {
+			h.writeObservabilityError(w, r, err)
+			return
+		}
+		query.Snapshot = watermark
+	}
+	page, err := h.server.Observability.Logs(r.Context(), runtimeScope(workspace, appEnvironment), query)
 	if err != nil {
 		h.writeObservabilityError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, observabilityLogsResponse{From: from, To: to, Items: items})
+	var nextCursor *string
+	if page.Next != nil {
+		encoded := encodeHistoricalLogCursor(page.LiveCursor, *page.Next)
+		nextCursor = &encoded
+	}
+	writeJSON(w, http.StatusOK, observabilityLogsResponse{From: from, To: to, LiveCursor: encodeLiveLogCursor(page.LiveCursor), NextCursor: nextCursor, Items: page.Items})
 }
 
 func (h *generatedHandler) GetAppEnvironmentRuntimeMetrics(w http.ResponseWriter, r *http.Request, workspaceID generated.WorkspaceId, projectID generated.ProjectId, appID generated.AppId, appEnvironmentID generated.AppEnvironmentId, params generated.GetAppEnvironmentRuntimeMetricsParams) {
@@ -137,10 +159,19 @@ func (h *generatedHandler) StreamAppEnvironmentRuntimeLogs(w http.ResponseWriter
 	if params.Instance != nil {
 		instance = strings.TrimSpace(*params.Instance)
 	}
-	start := time.Now().UTC().Add(-2 * h.server.Config.ObservabilityLivePoll)
-	initial, err := h.server.Observability.Logs(r.Context(), runtimeScope(workspace, appEnvironment), observability.LogQuery{From: start, To: time.Now().UTC(), Search: search, Instance: instance, Limit: 200})
+	encodedCursor := strings.TrimSpace(r.Header.Get("Last-Event-ID"))
+	if params.Cursor != nil && encodedCursor == "" {
+		encodedCursor = strings.TrimSpace(*params.Cursor)
+	}
+	var cursor observability.LogCursor
+	var err error
+	if encodedCursor == "" {
+		cursor, err = h.server.Observability.LogWatermark(r.Context())
+	} else {
+		cursor, err = decodeLiveLogCursor(encodedCursor)
+	}
 	if err != nil {
-		h.writeObservabilityError(w, r, err)
+		writeError(w, http.StatusBadRequest, "observability_cursor_invalid", "live log cursor is invalid", r)
 		return
 	}
 	flusher, ok := w.(http.Flusher)
@@ -156,9 +187,11 @@ func (h *generatedHandler) StreamAppEnvironmentRuntimeLogs(w http.ResponseWriter
 	if !writeSSE(w, flusher, "retry: 5000\n\n") {
 		return
 	}
-	seen := map[string]struct{}{}
-	if !writeLiveLogs(w, flusher, initial, seen) {
+	scope := runtimeScope(workspace, appEnvironment)
+	if next, healthy := h.drainLiveLogs(r.Context(), w, flusher, scope, cursor, search, instance); !healthy {
 		return
+	} else {
+		cursor = next
 	}
 	ticker := time.NewTicker(h.server.Config.ObservabilityLivePoll)
 	defer ticker.Stop()
@@ -168,7 +201,6 @@ func (h *generatedHandler) StreamAppEnvironmentRuntimeLogs(w http.ResponseWriter
 	defer reauthorize.Stop()
 	timeout := time.NewTimer(h.server.Config.ObservabilityLiveTTL)
 	defer timeout.Stop()
-	cursor := time.Now().UTC()
 	for {
 		select {
 		case <-r.Context().Done():
@@ -187,21 +219,39 @@ func (h *generatedHandler) StreamAppEnvironmentRuntimeLogs(w http.ResponseWriter
 				_ = writeSSE(w, flusher, "event: end\ndata: {\"reason\":\"authorization_changed\"}\n\n")
 				return
 			}
-		case now := <-ticker.C:
-			items, queryErr := h.server.Observability.Logs(r.Context(), runtimeScope(workspace, appEnvironment), observability.LogQuery{From: cursor.Add(-time.Second), To: now.UTC(), Search: search, Instance: instance, Limit: 200})
-			if queryErr != nil {
-				_ = writeSSE(w, flusher, "event: telemetry-error\ndata: {\"code\":\"observability_unavailable\"}\n\n")
+		case <-ticker.C:
+			next, healthy := h.drainLiveLogs(r.Context(), w, flusher, scope, cursor, search, instance)
+			if !healthy {
 				return
 			}
-			if !writeLiveLogs(w, flusher, items, seen) {
-				return
-			}
-			cursor = now.UTC()
-			if len(seen) > 2000 {
-				seen = map[string]struct{}{}
-			}
+			cursor = next
 		}
 	}
+}
+
+func (h *generatedHandler) drainLiveLogs(ctx context.Context, w http.ResponseWriter, flusher http.Flusher, scope observability.Scope, cursor observability.LogCursor, search, instance string) (observability.LogCursor, bool) {
+	const (
+		batchSize    = 500
+		maximumPages = 20
+	)
+	for page := 0; page < maximumPages; page++ {
+		batch, err := h.server.Observability.LiveLogs(ctx, scope, observability.LiveLogQuery{After: cursor, Search: search, Instance: instance, Limit: batchSize})
+		if err != nil {
+			_ = writeSSE(w, flusher, "event: telemetry-error\ndata: {\"code\":\"observability_unavailable\"}\n\n")
+			return cursor, false
+		}
+		if len(batch.Items) == 0 {
+			return cursor, true
+		}
+		cursor = batch.Cursor
+		if !writeLiveLogBatch(w, flusher, encodeLiveLogCursor(cursor), batch.Items) {
+			return cursor, false
+		}
+		if len(batch.Items) < batchSize {
+			return cursor, true
+		}
+	}
+	return cursor, true
 }
 
 func (h *generatedHandler) StreamAppEnvironmentRuntimeMetrics(w http.ResponseWriter, r *http.Request, workspaceID generated.WorkspaceId, projectID generated.ProjectId, appID generated.AppId, appEnvironmentID generated.AppEnvironmentId) {
@@ -277,9 +327,11 @@ func (h *generatedHandler) StreamAppEnvironmentRuntimeMetrics(w http.ResponseWri
 }
 
 type observabilityLogsResponse struct {
-	From  time.Time                `json:"from"`
-	To    time.Time                `json:"to"`
-	Items []observability.LogEntry `json:"items"`
+	From       time.Time                `json:"from"`
+	To         time.Time                `json:"to"`
+	LiveCursor string                   `json:"liveCursor"`
+	NextCursor *string                  `json:"nextCursor"`
+	Items      []observability.LogEntry `json:"items"`
 }
 
 type observabilityEventsResponse struct {
@@ -329,23 +381,76 @@ func operationEvents(operations []domain.Operation) []observability.Event {
 	return items
 }
 
-func writeLiveLogs(w http.ResponseWriter, flusher http.Flusher, items []observability.LogEntry, seen map[string]struct{}) bool {
-	sort.SliceStable(items, func(i, j int) bool { return items[i].Timestamp.Before(items[j].Timestamp) })
-	for _, item := range items {
-		key := item.Timestamp.Format(time.RFC3339Nano) + "\x00" + item.Instance + "\x00" + item.Body
-		if _, exists := seen[key]; exists {
-			continue
-		}
-		seen[key] = struct{}{}
-		payload, err := json.Marshal(item)
-		if err != nil {
-			continue
-		}
-		if !writeSSE(w, flusher, fmt.Sprintf("event: log\ndata: %s\n\n", payload)) {
-			return false
-		}
+func writeLiveLogBatch(w http.ResponseWriter, flusher http.Flusher, cursor string, items []observability.LogEntry) bool {
+	payload, err := json.Marshal(struct {
+		Cursor string                   `json:"cursor"`
+		Items  []observability.LogEntry `json:"items"`
+	}{Cursor: cursor, Items: items})
+	if err != nil {
+		return false
 	}
-	return true
+	return writeSSE(w, flusher, fmt.Sprintf("id: %s\nevent: logs\ndata: %s\n\n", cursor, payload))
+}
+
+type encodedLogCursor struct {
+	Version    int    `json:"v"`
+	IngestedAt string `json:"ingestedAt"`
+	IngestedID string `json:"ingestedId"`
+	BeforeAt   string `json:"beforeAt,omitempty"`
+	BeforeID   string `json:"beforeId,omitempty"`
+}
+
+func encodeLiveLogCursor(cursor observability.LogCursor) string {
+	return encodeLogCursor(encodedLogCursor{Version: 1, IngestedAt: cursor.IngestedAt.UTC().Format(time.RFC3339Nano), IngestedID: cursor.ID})
+}
+
+func encodeHistoricalLogCursor(snapshot observability.LogCursor, before observability.LogPosition) string {
+	return encodeLogCursor(encodedLogCursor{Version: 1, IngestedAt: snapshot.IngestedAt.UTC().Format(time.RFC3339Nano), IngestedID: snapshot.ID, BeforeAt: before.Timestamp.UTC().Format(time.RFC3339Nano), BeforeID: before.ID})
+}
+
+func encodeLogCursor(cursor encodedLogCursor) string {
+	payload, _ := json.Marshal(cursor)
+	return base64.RawURLEncoding.EncodeToString(payload)
+}
+
+func decodeLiveLogCursor(encoded string) (observability.LogCursor, error) {
+	cursor, err := decodeLogCursor(encoded)
+	if err != nil {
+		return observability.LogCursor{}, err
+	}
+	ingestedAt, err := time.Parse(time.RFC3339Nano, cursor.IngestedAt)
+	result := observability.LogCursor{IngestedAt: ingestedAt, ID: cursor.IngestedID}
+	if err != nil || !result.Valid() {
+		return observability.LogCursor{}, errors.New("invalid live log cursor")
+	}
+	return result, nil
+}
+
+func decodeHistoricalLogCursor(encoded string) (observability.LogCursor, observability.LogPosition, error) {
+	cursor, err := decodeLogCursor(encoded)
+	if err != nil {
+		return observability.LogCursor{}, observability.LogPosition{}, err
+	}
+	ingestedAt, ingestedErr := time.Parse(time.RFC3339Nano, cursor.IngestedAt)
+	beforeAt, beforeErr := time.Parse(time.RFC3339Nano, cursor.BeforeAt)
+	snapshot := observability.LogCursor{IngestedAt: ingestedAt, ID: cursor.IngestedID}
+	before := observability.LogPosition{Timestamp: beforeAt, ID: cursor.BeforeID}
+	if ingestedErr != nil || beforeErr != nil || !snapshot.Valid() || !before.Valid() {
+		return observability.LogCursor{}, observability.LogPosition{}, errors.New("invalid historical log cursor")
+	}
+	return snapshot, before, nil
+}
+
+func decodeLogCursor(encoded string) (encodedLogCursor, error) {
+	payload, err := base64.RawURLEncoding.DecodeString(strings.TrimSpace(encoded))
+	if err != nil || len(payload) > 1024 {
+		return encodedLogCursor{}, errors.New("invalid log cursor")
+	}
+	var cursor encodedLogCursor
+	if json.Unmarshal(payload, &cursor) != nil || cursor.Version != 1 {
+		return encodedLogCursor{}, errors.New("invalid log cursor")
+	}
+	return cursor, nil
 }
 
 func writeMetricSnapshot(w http.ResponseWriter, flusher http.Flusher, snapshot observability.MetricSnapshot) bool {

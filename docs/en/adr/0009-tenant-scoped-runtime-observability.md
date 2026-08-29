@@ -19,6 +19,12 @@ Current metric snapshots use a separate authenticated SSE budget and a polling
 interval aligned with collection. Both streams send heartbeats, expire, and
 revalidate authorization while connected.
 
+Every stored log receives a stable ingestion identifier and timestamp. Historical
+navigation uses opaque keyset cursors over a fixed snapshot; live SSE sends bounded
+batches whose event ID is an opaque resumable cursor. Reconnection through
+`Last-Event-ID` is therefore idempotent and does not depend on matching message
+contents or on a single polling window.
+
 OpenTelemetry Collectors form the portable ingestion boundary. A node agent
 collects container logs and kubelet metrics, while a cluster collector gathers
 Kubernetes events. A gateway enriches and exports signals. The laboratory
@@ -38,6 +44,10 @@ Every AppEnvironment view carries a compact operational scoreboard. Metrics are
 live only while that view is visible; historical log search is the default and
 live tail is explicit. Unknown and stale telemetry remains distinguishable from
 zero, and deployment events can be correlated with historical charts.
+The browser composes historical pages and live batches in a dedicated bounded
+store, publishes updates at a controlled cadence, and virtualizes rendered rows.
+It reports when old rows leave the local view and pauses automatic following when
+the user scrolls away from the newest records.
 
 ## Consequences
 
