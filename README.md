@@ -197,6 +197,12 @@ effects are documented in the operator runbook.
 | `just control-plane-prepare-k3s` | Generate external lab credentials and Kubernetes Secrets. |
 | `just control-plane-apply-k3s` | Apply migrations, bootstrap, workloads, and routes in order. |
 | `just control-plane-accept-k3s` | Check release digests, routes, RBAC, TLS, and redirect. |
+| `just openbao-prepare-k3s` | Apply the lab OpenBao configuration and prepare versioned control-plane references. |
+| `just observability-prepare-k3s` | Prepare immutable observability credential versions outside Git. |
+| `just observability-render-release` | Render the commit-identified observability bundle. |
+| `just observability-apply-k3s` | Apply the observability release without imperative restarts. |
+| `just observability-accept-k3s` | Verify collector health and the OTLP-to-ClickHouse write/read path. |
+| `just configuration-gc-k3s` | Explicitly collect unreferenced platform configuration versions after acceptance. |
 | `just builds-build-release` | Publish the Phase 8 build worker as a `linux/amd64` digest. |
 | `just builds-render-release` | Render the external digest-pinned build-plane bundle. |
 | `just builds-prepare-k3s` | Prepare BuildKit mTLS and external build credentials on `fruto-lab`. |

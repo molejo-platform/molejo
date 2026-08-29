@@ -70,7 +70,7 @@ spec:
           emptyDir: { sizeLimit: 10Gi }
         - name: tls
           secret:
-            secretName: molejo-buildkit-tls
+            secretName: required-external-buildkit-tls-secret
             defaultMode: 0440
             items:
               - { key: ca.pem, path: ca.pem }

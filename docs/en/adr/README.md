@@ -24,3 +24,5 @@
   — Draft
 - [ADR-0009: Tenant-Scoped Runtime Observability](0009-tenant-scoped-runtime-observability.md)
   — Draft
+- [ADR-0010: Immutable Platform Configuration Releases](0010-immutable-platform-configuration-releases.md)
+  — Draft

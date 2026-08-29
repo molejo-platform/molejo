@@ -170,11 +170,17 @@ openbao-prepare-k3s:
 observability-prepare-k3s:
     bash test/e2e/prepare-observability-k3s.sh
 
+observability-render-release:
+    bash test/e2e/render-observability-release.sh
+
 observability-apply-k3s:
     bash test/e2e/apply-observability-k3s.sh
 
 observability-accept-k3s:
     bash test/e2e/accept-observability-k3s.sh
+
+configuration-gc-k3s:
+    bash test/e2e/gc-platform-configurations-k3s.sh
 
 builds-build-release:
     bash test/e2e/build-build-worker-release.sh

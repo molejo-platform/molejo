@@ -20,6 +20,8 @@ esac
 
 actual_uid="$(kubectl --context fruto-lab get namespace kube-system -o jsonpath='{.metadata.uid}')"
 [[ "$actual_uid" == "$expected_uid" ]] || { echo "cluster UID does not match the approved target" >&2; exit 1; }
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$script_dir/lib/release-configuration.sh"
 
 umask 077
 temporary="$(mktemp -d)"
@@ -53,16 +55,20 @@ kubectl --context fruto-lab -n molejo-builds create secret generic molejo-build-
   --from-file=database-url="$database_url_file" \
   --from-literal=github-app-id="$github_app_id" \
   --from-file=github-private-key.pem="$github_key_file" \
-  --dry-run=client -o json | kubectl --context fruto-lab apply -f - >/dev/null
+  --dry-run=client -o json >"$temporary/build-worker.json"
+build_worker_secret="$(apply_versioned_object fruto-lab molejo-builds molejo-build-worker build-worker "$temporary/build-worker.json")"
 kubectl --context fruto-lab -n molejo-builds create secret generic molejo-buildkit-tls \
   --from-file=ca.pem="$tls_dir/ca.pem" \
   --from-file=server-cert.pem="$tls_dir/server-cert.pem" \
   --from-file=server-key.pem="$tls_dir/server-key.pem" \
   --from-file=client-cert.pem="$tls_dir/client-cert.pem" \
   --from-file=client-key.pem="$tls_dir/client-key.pem" \
-  --dry-run=client -o json | kubectl --context fruto-lab apply -f - >/dev/null
-kubectl --context fruto-lab -n "$registry_secret_namespace" get secret "$registry_secret_name" -o json |
-  jq 'del(.metadata.annotations,.metadata.creationTimestamp,.metadata.managedFields,.metadata.ownerReferences,.metadata.resourceVersion,.metadata.uid) | .metadata.name="molejo-build-registry" | .metadata.namespace="molejo-builds"' |
-  kubectl --context fruto-lab apply -f - >/dev/null
+  --dry-run=client -o json >"$temporary/buildkit-tls.json"
+buildkit_tls_secret="$(apply_versioned_object fruto-lab molejo-builds molejo-buildkit-tls buildkit-tls "$temporary/buildkit-tls.json")"
+registry_secret="$(copy_versioned_secret_between_namespaces fruto-lab "$registry_secret_namespace" "$registry_secret_name" molejo-builds molejo-build-registry build-registry)"
+release_metadata_write "$release_dir/metadata/builds.env" \
+  "MOLEJO_BUILD_WORKER_SECRET=$build_worker_secret" \
+  "MOLEJO_BUILDKIT_TLS_SECRET=$buildkit_tls_secret" \
+  "MOLEJO_BUILD_REGISTRY_SECRET=$registry_secret"
 
-printf 'prepared external build-plane Secrets in context fruto-lab; private material remains under %s\n' "$tls_dir"
+printf 'prepared immutable build-plane Secret versions in context fruto-lab; private material remains under %s\n' "$tls_dir"

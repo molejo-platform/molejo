@@ -3,8 +3,44 @@ kind: Kustomization
 resources:
   - namespace.yaml
   - service-accounts-rbac.yaml
-  - configmaps.yaml
   - services.yaml
   - workloads.yaml
   - log-schema-migration.yaml
   - network-policies.yaml
+configMapGenerator:
+  - name: clickhouse-config
+    namespace: molejo-observability
+    files:
+      - retention.xml=config/clickhouse-retention.xml
+    options:
+      immutable: true
+      labels:
+        app.kubernetes.io/managed-by: molejo-release
+        molejo.dev/configuration-family: clickhouse-config
+  - name: otel-agent-config
+    namespace: molejo-observability-agents
+    files:
+      - collector.yaml=config/otel-agent.yaml
+    options:
+      immutable: true
+      labels:
+        app.kubernetes.io/managed-by: molejo-release
+        molejo.dev/configuration-family: otel-agent-config
+  - name: otel-cluster-config
+    namespace: molejo-observability
+    files:
+      - collector.yaml=config/otel-cluster.yaml
+    options:
+      immutable: true
+      labels:
+        app.kubernetes.io/managed-by: molejo-release
+        molejo.dev/configuration-family: otel-cluster-config
+  - name: otel-gateway-config
+    namespace: molejo-observability
+    files:
+      - collector.yaml=config/otel-gateway.yaml
+    options:
+      immutable: true
+      labels:
+        app.kubernetes.io/managed-by: molejo-release
+        molejo.dev/configuration-family: otel-gateway-config

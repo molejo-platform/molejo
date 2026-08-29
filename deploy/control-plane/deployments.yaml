@@ -96,7 +96,7 @@ spec:
               - { key: private-key.pem, path: private-key.pem }
         - name: openbao-ca
           configMap:
-            name: openbao-ca
+            name: required-external-openbao-ca-configmap
         - name: openbao-auth
           projected:
             sources:
@@ -106,10 +106,10 @@ spec:
                   expirationSeconds: 600
         - name: parameter-fingerprint
           secret:
-            secretName: fruto-parameter-fingerprint
+            secretName: required-external-parameter-fingerprint-secret
         - name: observability-reader
           secret:
-            secretName: molejo-observability-reader
+            secretName: required-external-observability-reader-secret
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -165,7 +165,7 @@ spec:
             readOnlyRootFilesystem: true
       volumes:
         - name: openbao-ca
-          configMap: { name: openbao-ca }
+          configMap: { name: required-external-openbao-ca-configmap }
         - name: openbao-auth
           projected:
             sources:
@@ -238,7 +238,7 @@ spec:
             readOnlyRootFilesystem: true
       volumes:
         - name: openbao-ca
-          configMap: { name: openbao-ca }
+          configMap: { name: required-external-openbao-ca-configmap }
         - name: openbao-auth
           projected:
             sources:

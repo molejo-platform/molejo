@@ -19,7 +19,7 @@ spec:
         app.kubernetes.io/part-of: molejo-platform
     spec:
       automountServiceAccountToken: false
-      imagePullSecrets: [{ name: molejo-build-registry }]
+      imagePullSecrets: [{ name: required-external-build-registry-secret }]
       nodeSelector:
         kubernetes.io/arch: amd64
         fruto.cleidsonoliveira.dev/role: runtime
@@ -35,10 +35,10 @@ spec:
           env:
             - name: FRUTO_DATABASE_URL
               valueFrom:
-                secretKeyRef: { name: molejo-build-worker, key: database-url }
+                secretKeyRef: { name: required-external-build-worker-secret, key: database-url }
             - name: GITHUB_APP_ID
               valueFrom:
-                secretKeyRef: { name: molejo-build-worker, key: github-app-id }
+                secretKeyRef: { name: required-external-build-worker-secret, key: github-app-id }
             - name: GITHUB_APP_PRIVATE_KEY_FILE
               value: /var/run/secrets/molejo/github-app/private-key.pem
             - name: FRUTO_BUILDKIT_ADDRESS
@@ -87,13 +87,13 @@ spec:
           emptyDir: { sizeLimit: 1Gi }
         - name: github-app
           secret:
-            secretName: molejo-build-worker
+            secretName: required-external-build-worker-secret
             defaultMode: 0440
             items:
               - { key: github-private-key.pem, path: private-key.pem }
         - name: buildkit-tls
           secret:
-            secretName: molejo-buildkit-tls
+            secretName: required-external-buildkit-tls-secret
             defaultMode: 0440
             items:
               - { key: ca.pem, path: ca.pem }
@@ -101,7 +101,7 @@ spec:
               - { key: client-key.pem, path: client-key.pem }
         - name: registry
           secret:
-            secretName: molejo-build-registry
+            secretName: required-external-build-registry-secret
             defaultMode: 0440
             items:
               - { key: .dockerconfigjson, path: config.json }

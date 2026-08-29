@@ -1,0 +1,5 @@
+<clickhouse>
+  <logger><level>information</level><console>true</console></logger>
+  <listen_host>::</listen_host>
+  <max_server_memory_usage_to_ram_ratio>0.65</max_server_memory_usage_to_ram_ratio>
+</clickhouse>

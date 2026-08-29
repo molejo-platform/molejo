@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-for command in kubectl openssl mkdir chmod cat tr; do
+for command in kubectl openssl mkdir chmod cat tr jq install mktemp; do
   command -v "$command" >/dev/null 2>&1 || { echo "$command is required" >&2; exit 2; }
 done
 
@@ -17,6 +17,9 @@ esac
 
 actual_uid="$(kubectl --context "$context" get namespace kube-system -o jsonpath='{.metadata.uid}')"
 [[ "$actual_uid" == "$expected_uid" ]] || { echo "cluster UID does not match the approved target" >&2; exit 1; }
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$script_dir/lib/release-configuration.sh"
 
 umask 077
 credential_dir="$release_dir/secrets/observability"
@@ -54,13 +57,20 @@ EOF
 chmod 0600 "$credential_dir"/*
 
 kubectl --context "$context" apply -f deploy/observability/namespace.yaml >/dev/null
+temporary="$(mktemp -d)"
+trap 'rm -rf "$temporary"' EXIT
 kubectl --context "$context" -n molejo-observability create secret generic molejo-observability-credentials \
   --from-file=ingest-password="$ingest_password" \
   --from-file=reader-password="$reader_password" \
   --from-file=users.xml="$users_xml" \
-  --dry-run=client -o json | kubectl --context "$context" apply -f - >/dev/null
+  --dry-run=client -o json >"$temporary/credentials.json"
+credentials_secret="$(apply_versioned_object "$context" molejo-observability molejo-observability-credentials observability-credentials "$temporary/credentials.json")"
 kubectl --context "$context" -n fruto-control-plane create secret generic molejo-observability-reader \
   --from-file=reader-password="$reader_password" \
-  --dry-run=client -o json | kubectl --context "$context" apply -f - >/dev/null
+  --dry-run=client -o json >"$temporary/reader.json"
+reader_secret="$(apply_versioned_object "$context" fruto-control-plane molejo-observability-reader observability-reader "$temporary/reader.json")"
+release_metadata_write "$release_dir/metadata/observability.env" \
+  "MOLEJO_OBSERVABILITY_CREDENTIALS_SECRET=$credentials_secret" \
+  "MOLEJO_OBSERVABILITY_READER_SECRET=$reader_secret"
 
-printf 'prepared observability credentials outside Git at %s\n' "$credential_dir"
+printf 'prepared immutable observability credential versions; private material remains at %s\n' "$credential_dir"

@@ -131,7 +131,7 @@ func TestObservabilityPlaneIsInternalBoundedAndDigestPinned(t *testing.T) {
 }
 
 func TestObservabilityIngestionIsRuntimeScopedAndQueriesAreBounded(t *testing.T) {
-	config, err := os.ReadFile(filepath.Join("..", "..", "deploy/observability/configmaps.yaml"))
+	config, err := os.ReadFile(filepath.Join("..", "..", "deploy/observability/config/otel-agent.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}

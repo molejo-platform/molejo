@@ -16,6 +16,8 @@ esac
 
 actual_uid="$(kubectl --context "$context" get namespace kube-system -o jsonpath='{.metadata.uid}')"
 [[ "$actual_uid" == "$expected_uid" ]] || { echo "cluster UID does not match the approved target" >&2; exit 1; }
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$script_dir/lib/release-configuration.sh"
 
 umask 077
 mkdir -p "$release_dir/secrets"
@@ -55,5 +57,12 @@ kubectl --context "$context" -n fruto-control-plane create secret generic fruto-
 kubectl --context "$context" -n fruto-system get secret registry-pull -o json |
   jq 'del(.metadata.annotations,.metadata.creationTimestamp,.metadata.managedFields,.metadata.ownerReferences,.metadata.resourceVersion,.metadata.uid) | .metadata.namespace="fruto-control-plane"' |
   kubectl --context "$context" apply -f - >/dev/null
+if kubectl --context "$context" -n fruto-control-plane get secret molejo-github-app >/dev/null 2>&1; then
+  github_secret="$(copy_versioned_secret "$context" fruto-control-plane molejo-github-app molejo-github-app github-app)"
+else
+  github_secret="molejo-github-app-unconfigured"
+fi
+release_metadata_write "$release_dir/metadata/control-plane.env" \
+  "MOLEJO_GITHUB_APP_SECRET=$github_secret"
 
-printf 'prepared external Secrets; owner password remains only at %s\n' "$owner_password"
+printf 'prepared external Secrets and immutable GitHub credential version; owner password remains only at %s\n' "$owner_password"

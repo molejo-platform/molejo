@@ -1,0 +1,73 @@
+receivers:
+  filelog:
+    include: [/var/log/pods/*/*/*.log]
+    exclude: [/var/log/pods/molejo-observability_*/*/*.log]
+    include_file_path: true
+    start_at: end
+    operators:
+      - id: container-parser
+        type: container
+  kubeletstats:
+    auth_type: serviceAccount
+    collection_interval: 30s
+    endpoint: https://${env:K8S_NODE_NAME}:10250
+    metric_groups: [container, pod, node]
+processors:
+  memory_limiter:
+    check_interval: 5s
+    limit_mib: 192
+    spike_limit_mib: 48
+  k8sattributes:
+    auth_type: serviceAccount
+    passthrough: false
+    filter:
+      node_from_env_var: K8S_NODE_NAME
+    pod_association:
+      - sources:
+          - from: resource_attribute
+            name: k8s.pod.uid
+      - sources:
+          - from: connection
+    extract:
+      metadata:
+        - k8s.namespace.name
+        - k8s.deployment.name
+        - k8s.replicaset.name
+        - k8s.statefulset.name
+        - k8s.daemonset.name
+        - k8s.pod.name
+        - k8s.pod.uid
+        - k8s.container.name
+      labels:
+        - key: platform.fruto.calouro.tech/app-deployment
+          tag_name: molejo.app_environment.runtime
+          from: pod
+  filter/runtime:
+    error_mode: ignore
+    logs:
+      log_record:
+        - 'resource.attributes["molejo.app_environment.runtime"] == nil'
+    metrics:
+      datapoint:
+        - 'resource.attributes["molejo.app_environment.runtime"] == nil'
+  batch:
+    send_batch_size: 512
+    timeout: 2s
+exporters:
+  otlp:
+    endpoint: otel-gateway.molejo-observability.svc:4317
+    tls: { insecure: true }
+    retry_on_failure: { enabled: true, max_elapsed_time: 5m }
+    sending_queue: { enabled: true, queue_size: 2048 }
+service:
+  telemetry:
+    logs: { level: info }
+  pipelines:
+    logs:
+      receivers: [filelog]
+      processors: [memory_limiter, k8sattributes, filter/runtime, batch]
+      exporters: [otlp]
+    metrics:
+      receivers: [kubeletstats]
+      processors: [memory_limiter, k8sattributes, filter/runtime, batch]
+      exporters: [otlp]

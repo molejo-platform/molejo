@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-for command in jq kubectl openssl; do
+for command in jq kubectl openssl base64 install mktemp sort cut awk; do
   command -v "$command" >/dev/null 2>&1 || { echo "$command is required" >&2; exit 2; }
 done
 
@@ -15,9 +15,14 @@ case "$release_dir" in
 esac
 actual_uid="$(kubectl --context "$context" get namespace kube-system -o jsonpath='{.metadata.uid}')"
 [[ "$actual_uid" == "$expected_uid" ]] || { echo "cluster UID does not match the approved target" >&2; exit 1; }
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$script_dir/lib/release-configuration.sh"
 
 kubectl --context "$context" apply --server-side -k deploy/openbao-lab >/dev/null
 kubectl --context "$context" -n molejo-secrets wait --for=condition=Ready certificate/openbao-server --timeout=300s
+tls_fingerprint="$(kubectl --context "$context" -n molejo-secrets get secret openbao-server-tls -o go-template='{{index .data "tls.crt"}}' | base64 --decode | openssl dgst -sha256 -r)"
+tls_fingerprint="${tls_fingerprint%% *}"
+kubectl --context "$context" -n molejo-secrets patch statefulset openbao --type merge -p "{\"spec\":{\"template\":{\"metadata\":{\"annotations\":{\"molejo.dev/tls-fingerprint\":\"$tls_fingerprint\"}}}}}" >/dev/null
 kubectl --context "$context" -n molejo-secrets rollout status statefulset/openbao --timeout=300s
 
 umask 077
@@ -83,11 +88,16 @@ bao auth disable jwt >/dev/null 2>&1 || true
 
 kubectl --context "$context" -n molejo-secrets get secret openbao-server-tls -o jsonpath='{.data.ca\.crt}' |
   base64 --decode >"$release_dir/secrets/openbao-ca.crt"
+temporary="$(mktemp -d)"
+trap 'rm -rf "$temporary"' EXIT
 kubectl --context "$context" -n fruto-control-plane create configmap openbao-ca \
-  --from-file=ca.crt="$release_dir/secrets/openbao-ca.crt" --dry-run=client -o yaml |
-  kubectl --context "$context" apply -f - >/dev/null
+  --from-file=ca.crt="$release_dir/secrets/openbao-ca.crt" --dry-run=client -o json >"$temporary/openbao-ca.json"
+openbao_ca_configmap="$(apply_versioned_object "$context" fruto-control-plane openbao-ca openbao-ca "$temporary/openbao-ca.json")"
 kubectl --context "$context" -n fruto-control-plane create secret generic fruto-parameter-fingerprint \
-  --from-file=key="$fingerprint_file" --dry-run=client -o yaml |
-  kubectl --context "$context" apply -f - >/dev/null
+  --from-file=key="$fingerprint_file" --dry-run=client -o json >"$temporary/fingerprint.json"
+fingerprint_secret="$(apply_versioned_object "$context" fruto-control-plane fruto-parameter-fingerprint parameter-fingerprint "$temporary/fingerprint.json")"
+release_metadata_write "$release_dir/metadata/openbao.env" \
+  "MOLEJO_OPENBAO_CA_CONFIGMAP=$openbao_ca_configmap" \
+  "MOLEJO_PARAMETER_FINGERPRINT_SECRET=$fingerprint_secret"
 
 printf 'OpenBao is initialized, unsealed, and configured; recovery material remains at %s\n' "$init_file"

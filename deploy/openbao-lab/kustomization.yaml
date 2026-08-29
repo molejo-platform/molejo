@@ -2,3 +2,13 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - openbao.yaml
+configMapGenerator:
+  - name: openbao-config
+    namespace: molejo-secrets
+    files:
+      - openbao.hcl=config/openbao.hcl
+    options:
+      immutable: true
+      labels:
+        app.kubernetes.io/managed-by: molejo-release
+        molejo.dev/configuration-family: openbao-config

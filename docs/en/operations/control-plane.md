@@ -58,9 +58,10 @@ repository. Disconnect is rejected while any App still references the
 installation.
 
 Supply the App ID, Client ID, slug, client secret, and RSA private key through an
-out-of-band `molejo-github-app` Secret. The deployment mounts the two credentials
-as files and starts normally when this optional Secret does not exist; GitHub
-endpoints then return `github_not_configured`. Use
+out-of-band `molejo-github-app` Secret. Lab preparation copies it to an immutable,
+content-versioned Secret referenced by the rendered release. The deployment mounts
+the two credentials as files and starts normally when the optional source Secret
+does not exist; GitHub endpoints then return `github_not_configured`. Use
 `deploy/control-plane/github-app-secret.example.yaml` only as a shape reference
 and never place real credentials in Git.
 
@@ -188,6 +189,15 @@ fixture. Run `just openbao-prepare-k3s` with the approved `fruto-lab` context an
 keep initialization and fingerprint material outside Git. This fixture is not a
 high-availability or production secret service.
 
+Platform configuration uses immutable, content-addressed ConfigMaps. Rotatable
+credentials use immutable Secret versions created outside Git; a rendered release
+references one exact version and garbage collection retains the two newest versions
+plus every version still referenced by a workload. Observability is rendered as a
+commit-identified external release. Its acceptance sends one sanitized OTLP record
+through the gateway and queries it back from ClickHouse. Garbage collection is a
+separate, explicitly confirmed operation after every active release is accepted.
+An unchanged reapply does not restart collectors.
+
 ## Phase 8 build plane
 
 An owner starts a Build for an AppEnvironment whose App has a connected GitHub
@@ -219,19 +229,26 @@ export FRUTO_TESTKIT_IMAGE='<approved-testkit-digest-reference>'
 export MOLEJO_BUILD_IMAGE_REPOSITORY='<registry>/<repository-prefix>'
 
 just ci
+export GITHUB_APP_ID='<github-app-id>'
+export GITHUB_APP_PRIVATE_KEY_FILE='<protected-github-app-pem>'
+just openbao-prepare-k3s
+just observability-prepare-k3s
+just control-plane-prepare-k3s
+just builds-prepare-k3s
+
 just control-plane-build-release
 just builds-build-release
 source "$FRUTO_RELEASE_DIR/images.env"
 source "$FRUTO_RELEASE_DIR/builds.env"
 export FRUTO_RELEASE_OUTPUT="$FRUTO_RELEASE_DIR/control-plane.yaml"
 export FRUTO_BUILDS_RELEASE_OUTPUT="$FRUTO_RELEASE_DIR/builds.yaml"
+export FRUTO_OBSERVABILITY_RELEASE_OUTPUT="$FRUTO_RELEASE_DIR/observability.yaml"
 just control-plane-render-release
 just builds-render-release
+just observability-render-release
 
-export GITHUB_APP_ID='<github-app-id>'
-export GITHUB_APP_PRIVATE_KEY_FILE='<protected-github-app-pem>'
-just control-plane-prepare-k3s
-just builds-prepare-k3s
+just observability-apply-k3s
+just observability-accept-k3s
 just control-plane-apply-k3s
 just builds-apply-k3s
 ```

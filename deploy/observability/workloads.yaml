@@ -48,7 +48,7 @@ spec:
       volumes:
         - { name: logs, emptyDir: {} }
         - { name: config, configMap: { name: clickhouse-config } }
-        - { name: credentials, secret: { secretName: molejo-observability-credentials } }
+        - { name: credentials, secret: { secretName: required-external-observability-credentials-secret } }
   volumeClaimTemplates:
     - metadata: { name: data }
       spec:
@@ -139,7 +139,7 @@ spec:
           args: ["--config=/etc/otelcol/collector.yaml"]
           env:
             - name: CLICKHOUSE_INGEST_PASSWORD
-              valueFrom: { secretKeyRef: { name: molejo-observability-credentials, key: ingest-password } }
+              valueFrom: { secretKeyRef: { name: required-external-observability-credentials-secret, key: ingest-password } }
           ports:
             - { name: otlp-grpc, containerPort: 4317 }
             - { name: otlp-http, containerPort: 4318 }

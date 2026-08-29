@@ -1,0 +1,51 @@
+receivers:
+  otlp:
+    protocols:
+      grpc: { endpoint: 0.0.0.0:4317 }
+      http: { endpoint: 0.0.0.0:4318 }
+processors:
+  memory_limiter:
+    check_interval: 5s
+    limit_mib: 384
+    spike_limit_mib: 96
+  batch:
+    send_batch_size: 1024
+    timeout: 2s
+exporters:
+  clickhouse:
+    endpoint: tcp://clickhouse.molejo-observability.svc:9000?dial_timeout=10s
+    database: otel
+    username: molejo_ingest
+    password: ${env:CLICKHOUSE_INGEST_PASSWORD}
+    create_schema: true
+    ttl: 168h
+    logs_table_name: otel_logs
+    retry_on_failure: { enabled: true, max_elapsed_time: 5m }
+    sending_queue: { enabled: true, queue_size: 4096 }
+  otlphttp/victoria:
+    endpoint: http://victoria-metrics.molejo-observability.svc:8428/opentelemetry
+    encoding: proto
+    retry_on_failure: { enabled: true, max_elapsed_time: 5m }
+    sending_queue: { enabled: true, queue_size: 4096 }
+service:
+  telemetry:
+    logs: { level: info }
+    metrics:
+      level: normal
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: 0.0.0.0
+                port: 8888
+                without_type_suffix: true
+                without_units: true
+  pipelines:
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [clickhouse]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp/victoria]

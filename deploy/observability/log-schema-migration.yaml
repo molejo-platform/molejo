@@ -28,7 +28,7 @@ spec:
           imagePullPolicy: IfNotPresent
           env:
             - name: CLICKHOUSE_PASSWORD
-              valueFrom: { secretKeyRef: { name: molejo-observability-credentials, key: ingest-password } }
+              valueFrom: { secretKeyRef: { name: required-external-observability-credentials-secret, key: ingest-password } }
           command: [sh, -ec]
           args:
             - |
