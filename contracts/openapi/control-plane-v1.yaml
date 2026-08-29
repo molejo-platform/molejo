@@ -484,6 +484,18 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '409': { $ref: '#/components/responses/Conflict' }
         '503': { $ref: '#/components/responses/Unavailable' }
+  /api/v1/github/webhooks:
+    post:
+      operationId: receiveGitHubWebhook
+      security: []
+      responses:
+        '200': { description: GitHub ping accepted }
+        '202': { description: Authenticated GitHub delivery accepted for asynchronous processing }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { description: Webhook payload exceeds the bounded receiver limit }
+        '503': { $ref: '#/components/responses/Unavailable' }
   /api/v1/workspaces/{workspaceId}/github/installations:
     parameters: [{ $ref: '#/components/parameters/WorkspaceId' }]
     get:
@@ -750,6 +762,36 @@ paths:
         '202':
           description: Runtime removal accepted
           content: { application/json: { schema: { $ref: '#/components/schemas/Operation' } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/delivery-policy:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/AppId' }
+      - { $ref: '#/components/parameters/AppEnvironmentId' }
+    get:
+      operationId: getAppEnvironmentDeliveryPolicy
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Continuous delivery policy for this App Environment
+          content: { application/json: { schema: { $ref: '#/components/schemas/DeliveryPolicy' } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      operationId: replaceAppEnvironmentDeliveryPolicy
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: '#/components/parameters/DeliveryPolicyIfMatch' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/DeliveryPolicyInput' } } }
+      responses:
+        '200':
+          description: Replaced continuous delivery policy
+          content: { application/json: { schema: { $ref: '#/components/schemas/DeliveryPolicy' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
@@ -1048,6 +1090,11 @@ components:
       in: header
       required: true
       schema: { type: integer, minimum: 1 }
+    DeliveryPolicyIfMatch:
+      name: If-Match
+      in: header
+      required: true
+      schema: { type: integer, minimum: 0 }
   responses:
     Unauthorized:
       description: Authentication required
@@ -1190,9 +1237,10 @@ components:
       additionalProperties: false
       properties:
         appEnvironmentId: { type: string, pattern: '^aev-[a-z2-7]{20}$' }
+        commitSha: { type: string, pattern: '^[a-f0-9]{40}$', description: Optional immutable historical commit to rebuild. }
     Build:
       type: object
-      required: [id, projectId, appId, appEnvironmentId, repository, branch, commitSha, platform, status, attempts, createdAt, updatedAt]
+      required: [id, projectId, appId, appEnvironmentId, repository, branch, commitSha, commitTitle, commitAuthorName, commitAuthorLogin, trigger, platform, status, attempts, createdAt, updatedAt]
       additionalProperties: false
       properties:
         id: { type: string, pattern: '^bld-[a-z2-7]{20}$' }
@@ -1202,8 +1250,13 @@ components:
         repository: { type: string, minLength: 3 }
         branch: { type: string, minLength: 1, maxLength: 255 }
         commitSha: { type: string, pattern: '^[a-f0-9]{40}$' }
+        commitTitle: { type: string, maxLength: 500 }
+        commitAuthorName: { type: string, maxLength: 255 }
+        commitAuthorLogin: { type: string, maxLength: 255 }
+        committedAt: { type: string, format: date-time }
+        trigger: { type: string, enum: [Manual, Push, Release] }
         platform: { type: string, enum: [linux/amd64] }
-        status: { type: string, enum: [Pending, Running, Succeeded, Failed] }
+        status: { type: string, enum: [Pending, Running, Succeeded, Failed, Superseded, TimedOut] }
         attempts: { type: integer, minimum: 0, maximum: 3 }
         errorCode: { type: string }
         errorMessage: { type: string }
@@ -1219,18 +1272,43 @@ components:
         createdAt: { type: string, format: date-time }
     Release:
       type: object
-      required: [id, projectId, appId, buildId, branch, commitSha, image, platform, createdAt]
+      required: [id, projectId, appId, appEnvironmentId, buildId, branch, commitSha, commitTitle, commitAuthorName, commitAuthorLogin, trigger, image, platform, availabilityStatus, createdAt]
       additionalProperties: false
       properties:
         id: { type: string, pattern: '^rel-[a-z2-7]{20}$' }
         projectId: { type: string, pattern: '^prj-[a-z2-7]{20}$' }
         appId: { type: string, pattern: '^app-[a-z2-7]{20}$' }
+        appEnvironmentId: { type: string, pattern: '^aev-[a-z2-7]{20}$' }
         buildId: { type: string, pattern: '^bld-[a-z2-7]{20}$' }
         branch: { type: string, minLength: 1, maxLength: 255 }
         commitSha: { type: string, pattern: '^[a-f0-9]{40}$' }
+        commitTitle: { type: string, maxLength: 500 }
+        commitAuthorName: { type: string, maxLength: 255 }
+        commitAuthorLogin: { type: string, maxLength: 255 }
+        committedAt: { type: string, format: date-time }
+        trigger: { type: string, enum: [Manual, Push, Release] }
         image: { type: string, pattern: '^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$' }
         platform: { type: string, enum: [linux/amd64] }
+        availabilityStatus: { type: string, enum: [Available, Expired] }
+        expiredAt: { type: string, format: date-time }
         createdAt: { type: string, format: date-time }
+    DeliveryPolicyInput:
+      type: object
+      required: [pushEnabled, releaseEnabled]
+      additionalProperties: false
+      properties:
+        pushEnabled: { type: boolean }
+        releaseEnabled: { type: boolean }
+    DeliveryPolicy:
+      type: object
+      required: [appEnvironmentId, pushEnabled, releaseEnabled, version, updatedAt]
+      additionalProperties: false
+      properties:
+        appEnvironmentId: { type: string, pattern: '^aev-[a-z2-7]{20}$' }
+        pushEnabled: { type: boolean }
+        releaseEnabled: { type: boolean }
+        version: { type: integer, minimum: 0 }
+        updatedAt: { type: string, format: date-time }
     Variable:
       type: object
       required: [name, value]

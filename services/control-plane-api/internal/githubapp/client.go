@@ -42,6 +42,7 @@ type Service interface {
 	UserCanAccessInstallation(context.Context, string, int64) (bool, error)
 	Repositories(context.Context, int64) ([]domain.GitHubRepository, error)
 	ResolveCommit(context.Context, int64, int64, string) (string, error)
+	Commit(context.Context, int64, int64, string) (domain.CommitMetadata, error)
 	Archive(context.Context, int64, int64, string, io.Writer) error
 	DeleteInstallation(context.Context, int64) error
 }
@@ -236,24 +237,53 @@ func (c *Client) Repositories(ctx context.Context, installationID int64) ([]doma
 }
 
 func (c *Client) ResolveCommit(ctx context.Context, installationID, repositoryID int64, ref string) (string, error) {
+	commit, err := c.Commit(ctx, installationID, repositoryID, ref)
+	return commit.SHA, err
+}
+
+func (c *Client) Commit(ctx context.Context, installationID, repositoryID int64, ref string) (domain.CommitMetadata, error) {
 	if repositoryID < 1 || strings.TrimSpace(ref) == "" {
-		return "", errors.New("repository and ref are required")
+		return domain.CommitMetadata{}, errors.New("repository and ref are required")
 	}
 	token, err := c.installationToken(ctx, installationID)
 	if err != nil {
-		return "", err
+		return domain.CommitMetadata{}, err
 	}
 	var response struct {
-		SHA string `json:"sha"`
+		SHA    string `json:"sha"`
+		Commit struct {
+			Message string `json:"message"`
+			Author  struct {
+				Name string    `json:"name"`
+				Date time.Time `json:"date"`
+			} `json:"author"`
+		} `json:"commit"`
+		Author *struct {
+			Login string `json:"login"`
+		} `json:"author"`
 	}
 	path := "/repositories/" + strconv.FormatInt(repositoryID, 10) + "/commits/" + url.PathEscape(ref)
 	if err = c.tokenRequest(ctx, http.MethodGet, path, token, nil, &response); err != nil {
-		return "", err
+		return domain.CommitMetadata{}, err
 	}
 	if err = domain.ValidateCommitSHA(response.SHA); err != nil {
-		return "", errors.New("github returned an invalid commit SHA")
+		return domain.CommitMetadata{}, errors.New("github returned an invalid commit SHA")
 	}
-	return response.SHA, nil
+	title := strings.TrimSpace(strings.SplitN(response.Commit.Message, "\n", 2)[0])
+	titleRunes := []rune(title)
+	if len(titleRunes) > 500 {
+		title = string(titleRunes[:500])
+	}
+	authorLogin := ""
+	if response.Author != nil {
+		authorLogin = strings.TrimSpace(response.Author.Login)
+	}
+	var committedAt *time.Time
+	if !response.Commit.Author.Date.IsZero() {
+		value := response.Commit.Author.Date.UTC()
+		committedAt = &value
+	}
+	return domain.CommitMetadata{SHA: response.SHA, Title: title, AuthorName: strings.TrimSpace(response.Commit.Author.Name), AuthorLogin: authorLogin, CommittedAt: committedAt}, nil
 }
 
 func (c *Client) Archive(ctx context.Context, installationID, repositoryID int64, commitSHA string, destination io.Writer) error {

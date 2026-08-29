@@ -10,11 +10,18 @@ import (
 )
 
 const (
-	BuildPending   = "Pending"
-	BuildRunning   = "Running"
-	BuildSucceeded = "Succeeded"
-	BuildFailed    = "Failed"
-	BuildPlatform  = "linux/amd64"
+	BuildPending     = "Pending"
+	BuildRunning     = "Running"
+	BuildSucceeded   = "Succeeded"
+	BuildFailed      = "Failed"
+	BuildSuperseded  = "Superseded"
+	BuildTimedOut    = "TimedOut"
+	BuildPlatform    = "linux/amd64"
+	TriggerManual    = "Manual"
+	TriggerPush      = "Push"
+	TriggerRelease   = "Release"
+	ReleaseAvailable = "Available"
+	ReleaseExpired   = "Expired"
 )
 
 var (
@@ -38,6 +45,11 @@ type Build struct {
 	RepositoryFullName     string     `json:"repository"`
 	SourceBranch           string     `json:"branch"`
 	CommitSHA              string     `json:"commitSha"`
+	CommitTitle            string     `json:"commitTitle"`
+	CommitAuthorName       string     `json:"commitAuthorName"`
+	CommitAuthorLogin      string     `json:"commitAuthorLogin"`
+	CommittedAt            *time.Time `json:"committedAt,omitempty"`
+	TriggerType            string     `json:"trigger"`
 	Platform               string     `json:"platform"`
 	Status                 string     `json:"status"`
 	Attempts               int        `json:"attempts"`
@@ -57,19 +69,28 @@ type BuildLog struct {
 }
 
 type Release struct {
-	ID              int64     `json:"-"`
-	PublicID        string    `json:"id"`
-	WorkspaceID     int64     `json:"-"`
-	ProjectID       int64     `json:"-"`
-	AppID           int64     `json:"-"`
-	ProjectPublicID string    `json:"projectId"`
-	AppPublicID     string    `json:"appId"`
-	BuildPublicID   string    `json:"buildId"`
-	SourceBranch    string    `json:"branch"`
-	CommitSHA       string    `json:"commitSha"`
-	Image           string    `json:"image"`
-	Platform        string    `json:"platform"`
-	CreatedAt       time.Time `json:"createdAt"`
+	ID                     int64      `json:"-"`
+	PublicID               string     `json:"id"`
+	WorkspaceID            int64      `json:"-"`
+	ProjectID              int64      `json:"-"`
+	AppID                  int64      `json:"-"`
+	AppEnvironmentID       int64      `json:"-"`
+	ProjectPublicID        string     `json:"projectId"`
+	AppPublicID            string     `json:"appId"`
+	AppEnvironmentPublicID string     `json:"appEnvironmentId"`
+	BuildPublicID          string     `json:"buildId"`
+	SourceBranch           string     `json:"branch"`
+	CommitSHA              string     `json:"commitSha"`
+	CommitTitle            string     `json:"commitTitle"`
+	CommitAuthorName       string     `json:"commitAuthorName"`
+	CommitAuthorLogin      string     `json:"commitAuthorLogin"`
+	CommittedAt            *time.Time `json:"committedAt,omitempty"`
+	TriggerType            string     `json:"trigger"`
+	Image                  string     `json:"image"`
+	Platform               string     `json:"platform"`
+	AvailabilityStatus     string     `json:"availabilityStatus"`
+	ExpiredAt              *time.Time `json:"expiredAt,omitempty"`
+	CreatedAt              time.Time  `json:"createdAt"`
 }
 
 func ValidateCommitSHA(value string) error {

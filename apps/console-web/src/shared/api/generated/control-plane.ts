@@ -292,6 +292,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/github/webhooks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["receiveGitHubWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspaceId}/github/installations": {
         parameters: {
             query?: never;
@@ -486,6 +502,27 @@ export interface paths {
         put: operations["updateAppEnvironment"];
         post?: never;
         delete: operations["deleteAppEnvironment"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/delivery-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                projectId: components["parameters"]["ProjectId"];
+                appId: components["parameters"]["AppId"];
+                appEnvironmentId: components["parameters"]["AppEnvironmentId"];
+            };
+            cookie?: never;
+        };
+        get: operations["getAppEnvironmentDeliveryPolicy"];
+        put: operations["replaceAppEnvironmentDeliveryPolicy"];
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -790,6 +827,8 @@ export interface components {
         };
         BuildInput: {
             appEnvironmentId: string;
+            /** @description Optional immutable historical commit to rebuild. */
+            commitSha?: string;
         };
         Build: {
             id: string;
@@ -799,10 +838,17 @@ export interface components {
             repository: string;
             branch: string;
             commitSha: string;
+            commitTitle: string;
+            commitAuthorName: string;
+            commitAuthorLogin: string;
+            /** Format: date-time */
+            committedAt?: string;
+            /** @enum {string} */
+            trigger: "Manual" | "Push" | "Release";
             /** @enum {string} */
             platform: "linux/amd64";
             /** @enum {string} */
-            status: "Pending" | "Running" | "Succeeded" | "Failed";
+            status: "Pending" | "Running" | "Succeeded" | "Failed" | "Superseded" | "TimedOut";
             attempts: number;
             errorCode?: string;
             errorMessage?: string;
@@ -821,14 +867,38 @@ export interface components {
             id: string;
             projectId: string;
             appId: string;
+            appEnvironmentId: string;
             buildId: string;
             branch: string;
             commitSha: string;
+            commitTitle: string;
+            commitAuthorName: string;
+            commitAuthorLogin: string;
+            /** Format: date-time */
+            committedAt?: string;
+            /** @enum {string} */
+            trigger: "Manual" | "Push" | "Release";
             image: string;
             /** @enum {string} */
             platform: "linux/amd64";
+            /** @enum {string} */
+            availabilityStatus: "Available" | "Expired";
+            /** Format: date-time */
+            expiredAt?: string;
             /** Format: date-time */
             createdAt: string;
+        };
+        DeliveryPolicyInput: {
+            pushEnabled: boolean;
+            releaseEnabled: boolean;
+        };
+        DeliveryPolicy: {
+            appEnvironmentId: string;
+            pushEnabled: boolean;
+            releaseEnabled: boolean;
+            version: number;
+            /** Format: date-time */
+            updatedAt: string;
         };
         Variable: {
             name: string;
@@ -1159,6 +1229,7 @@ export interface components {
         /** @description Required for Secret parameter mutations; ignored for PlainText mutations. */
         OptionalIdempotencyKey: string;
         IfMatch: number;
+        DeliveryPolicyIfMatch: number;
     };
     requestBodies: never;
     headers: never;
@@ -2060,6 +2131,42 @@ export interface operations {
             503: components["responses"]["Unavailable"];
         };
     };
+    receiveGitHubWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description GitHub ping accepted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authenticated GitHub delivery accepted for asynchronous processing */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            409: components["responses"]["Conflict"];
+            /** @description Webhook payload exceeds the bounded receiver limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            503: components["responses"]["Unavailable"];
+        };
+    };
     listGitHubInstallations: {
         parameters: {
             query?: never;
@@ -2520,6 +2627,68 @@ export interface operations {
                     "application/json": components["schemas"]["Operation"];
                 };
             };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getAppEnvironmentDeliveryPolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                projectId: components["parameters"]["ProjectId"];
+                appId: components["parameters"]["AppId"];
+                appEnvironmentId: components["parameters"]["AppEnvironmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Continuous delivery policy for this App Environment */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryPolicy"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    replaceAppEnvironmentDeliveryPolicy: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match": components["parameters"]["DeliveryPolicyIfMatch"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                projectId: components["parameters"]["ProjectId"];
+                appId: components["parameters"]["AppId"];
+                appEnvironmentId: components["parameters"]["AppEnvironmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeliveryPolicyInput"];
+            };
+        };
+        responses: {
+            /** @description Replaced continuous delivery policy */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryPolicy"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];

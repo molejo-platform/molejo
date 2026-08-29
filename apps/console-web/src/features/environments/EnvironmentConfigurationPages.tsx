@@ -3,7 +3,7 @@ import { useBlocker, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 
 import { ApiRequestError, userFacingError } from "../../shared/api/errors";
-import type { AppEnvironment, Parameter, RuntimeConfiguration } from "../../shared/api/types";
+import type { AppEnvironment, DeliveryPolicy, Parameter, RuntimeConfiguration } from "../../shared/api/types";
 import { formatDateTime } from "../../shared/format";
 import { Alert } from "../../shared/ui/Alert";
 import { Button } from "../../shared/ui/Button";
@@ -11,7 +11,7 @@ import { ConfirmAction } from "../../shared/ui/ConfirmAction";
 import { Field, SelectField, TextareaField } from "../../shared/ui/Field";
 import { EmptyState, TabNav } from "../../shared/ui/Page";
 import { useSessionQuery } from "../auth/model";
-import { deleteAppEnvironment, listAppEnvironmentConfigurationVersions, updateAppEnvironment } from "../apps/api";
+import { deleteAppEnvironment, getAppEnvironmentDeliveryPolicy, listAppEnvironmentConfigurationVersions, replaceAppEnvironmentDeliveryPolicy, updateAppEnvironment } from "../apps/api";
 import { listParameters } from "../parameters/api";
 import { workspaceScopeKeys } from "../workspace/scope";
 import { EnvironmentAppLayout, type EnvironmentParams } from "./EnvironmentPages";
@@ -113,7 +113,20 @@ export function EnvironmentBuildConfigurationPage() {
   const session = useSessionQuery();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  return <EnvironmentAppLayout>{(target, params) => <section className="stack"><ConfigurationNav params={params}/><ConfigurationEditor target={target} params={params} section="build" title="Build e branch" description="A branch pertence a este App dentro deste Environment; cada build resolve e registra um SHA imutável." canMutate={session.data?.actor.role === "owner"} render={() => null}/>{session.data?.actor.role === "owner" && <RemoveFromEnvironment target={target} params={params} navigate={navigate} queryClient={queryClient}/>}</section>}</EnvironmentAppLayout>;
+  return <EnvironmentAppLayout>{(target, params) => <section className="stack"><ConfigurationNav params={params}/><ConfigurationEditor target={target} params={params} section="build" title="Build e branch" description="A branch pertence a este App dentro deste Environment; cada build resolve e registra um SHA imutável." canMutate={session.data?.actor.role === "owner"} render={() => null}/><DeliveryAutomation target={target} params={params} canMutate={session.data?.actor.role === "owner"}/>{session.data?.actor.role === "owner" && <RemoveFromEnvironment target={target} params={params} navigate={navigate} queryClient={queryClient}/>}</section>}</EnvironmentAppLayout>;
+}
+
+function DeliveryAutomation({ target, params, canMutate }: { target: AppEnvironment; params: EnvironmentParams; canMutate: boolean }) {
+  const queryClient = useQueryClient();
+  const key = workspaceScopeKeys.appEnvironmentDeliveryPolicy(params.workspaceId, params.projectId, target.appId, target.id);
+  const policy = useQuery({ queryKey: key, queryFn: () => getAppEnvironmentDeliveryPolicy(params.workspaceId, params.projectId, target.appId, target.id) });
+  const [draft, setDraft] = useState<Pick<DeliveryPolicy, "pushEnabled" | "releaseEnabled">>({ pushEnabled: false, releaseEnabled: false });
+  const [dirty, setDirty] = useState(false);
+  useEffect(() => { if (policy.data && !dirty) setDraft({ pushEnabled: policy.data.pushEnabled, releaseEnabled: policy.data.releaseEnabled }); }, [dirty, policy.data]);
+  const save = useMutation({ mutationFn: () => replaceAppEnvironmentDeliveryPolicy(params.workspaceId, params.projectId, target.appId, target.id, policy.data?.version ?? 0, draft), onSuccess: async () => { setDirty(false); await queryClient.invalidateQueries({ queryKey: key }); } });
+  if (policy.isPending) return <p className="muted" role="status">Carregando automação…</p>;
+  if (policy.isError) return <Alert>{userFacingError(policy.error)}</Alert>;
+  return <section className="panel stack" aria-labelledby="delivery-automation-title"><div><p className="eyebrow">Continuous Delivery</p><h2 id="delivery-automation-title">Gatilhos automáticos</h2><p className="muted">Eventos são distribuídos para todos os Apps no mesmo repositório e branch. A entrega manual permanece sempre disponível.</p></div>{save.isSuccess && <Alert tone="success">Política de entrega atualizada.</Alert>}{save.isError && <Alert>{userFacingError(save.error)}</Alert>}<Field type="checkbox" label={`Push em ${target.branch}`} helper="Constrói o SHA recebido e implanta a release usando a configuração desejada atual." checked={draft.pushEnabled} onChange={(event) => { setDraft({ ...draft, pushEnabled: event.target.checked }); setDirty(true); save.reset(); }} disabled={!canMutate}/><Field type="checkbox" label="Release publicada" helper="Drafts e prereleases não disparam entregas; a tag é resolvida para um SHA imutável." checked={draft.releaseEnabled} onChange={(event) => { setDraft({ ...draft, releaseEnabled: event.target.checked }); setDirty(true); save.reset(); }} disabled={!canMutate}/>{canMutate && <div className="form-actions"><Button type="button" loading={save.isPending} disabled={!dirty} onClick={() => save.mutate()}>Salvar automação</Button></div>}</section>;
 }
 
 function RemoveFromEnvironment({ target, params, navigate, queryClient }: { target: AppEnvironment; params: EnvironmentParams; navigate: ReturnType<typeof useNavigate>; queryClient: ReturnType<typeof useQueryClient> }) {

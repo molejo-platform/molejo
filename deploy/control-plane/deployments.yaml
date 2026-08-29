@@ -46,6 +46,8 @@ spec:
               value: /var/run/secrets/molejo/github-app/client-secret
             - name: GITHUB_APP_PRIVATE_KEY_FILE
               value: /var/run/secrets/molejo/github-app/private-key.pem
+            - name: GITHUB_WEBHOOK_SECRET_FILE
+              value: /var/run/secrets/molejo/github-webhook/secret
             - name: FRUTO_OPENBAO_CA_FILE
               value: /var/run/secrets/molejo/openbao/ca.crt
             - name: FRUTO_OPENBAO_SERVICE_ACCOUNT_TOKEN_FILE
@@ -55,6 +57,9 @@ spec:
           volumeMounts:
             - name: github-app
               mountPath: /var/run/secrets/molejo/github-app
+              readOnly: true
+            - name: github-webhook
+              mountPath: /var/run/secrets/molejo/github-webhook
               readOnly: true
             - name: openbao-ca
               mountPath: /var/run/secrets/molejo/openbao
@@ -94,6 +99,12 @@ spec:
             items:
               - { key: client-secret, path: client-secret }
               - { key: private-key.pem, path: private-key.pem }
+        - name: github-webhook
+          secret:
+            secretName: required-external-github-webhook-secret
+            defaultMode: 0440
+            items:
+              - { key: GITHUB_WEBHOOK_SECRET, path: secret }
         - name: openbao-ca
           configMap:
             name: required-external-openbao-ca-configmap
@@ -187,6 +198,67 @@ spec:
                   items:
                     - path: namespace
                       fieldRef: { apiVersion: v1, fieldPath: metadata.namespace }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: control-plane-delivery-worker
+  namespace: fruto-control-plane
+  labels:
+    app.kubernetes.io/name: control-plane-delivery-worker
+    app.kubernetes.io/part-of: fruto-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: control-plane-delivery-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: control-plane-delivery-worker
+        app.kubernetes.io/part-of: fruto-platform
+    spec:
+      serviceAccountName: control-plane-delivery-worker
+      automountServiceAccountToken: false
+      imagePullSecrets:
+        - name: registry-pull
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: worker
+          image: ghcr.io/fruto-platform/control-plane-api@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          imagePullPolicy: IfNotPresent
+          args: ["delivery-worker"]
+          envFrom:
+            - configMapRef: { name: control-plane-config }
+          env:
+            - name: FRUTO_DATABASE_URL
+              valueFrom:
+                secretKeyRef: { name: fruto-control-plane-db, key: database-url }
+            - name: GITHUB_APP_ID
+              valueFrom:
+                secretKeyRef: { name: molejo-github-app, key: GITHUB_APP_ID }
+            - name: GITHUB_APP_PRIVATE_KEY_FILE
+              value: /var/run/secrets/molejo/github-app/private-key.pem
+          volumeMounts:
+            - name: github-app
+              mountPath: /var/run/secrets/molejo/github-app
+              readOnly: true
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { cpu: 100m, memory: 128Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
+            readOnlyRootFilesystem: true
+      volumes:
+        - name: github-app
+          secret:
+            secretName: molejo-github-app
+            defaultMode: 0440
+            items:
+              - { key: private-key.pem, path: private-key.pem }
 ---
 apiVersion: apps/v1
 kind: Deployment

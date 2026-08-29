@@ -368,7 +368,7 @@ func (s *Store) CreateDeployment(ctx context.Context, workspaceID, actorID int64
 	}
 	var releaseID int64
 	var requestedBy string
-	if err = tx.QueryRow(ctx, `SELECT r.id,a.actor_key FROM releases r JOIN actors a ON a.id=$4 WHERE r.public_id=$1 AND r.workspace_id=$2 AND r.app_id=$3`, releasePublicID, workspaceID, appEnvironment.AppID, actorID).Scan(&releaseID, &requestedBy); errors.Is(err, pgx.ErrNoRows) {
+	if err = tx.QueryRow(ctx, `SELECT r.id,a.actor_key FROM releases r JOIN actors a ON a.id=$4 WHERE r.public_id=$1 AND r.workspace_id=$2 AND r.app_id=$3 AND r.availability_status='Available'`, releasePublicID, workspaceID, appEnvironment.AppID, actorID).Scan(&releaseID, &requestedBy); errors.Is(err, pgx.ErrNoRows) {
 		return domain.Deployment{}, domain.Operation{}, false, ErrNotFound
 	} else if err != nil {
 		return domain.Deployment{}, domain.Operation{}, false, err

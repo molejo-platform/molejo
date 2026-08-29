@@ -24,6 +24,7 @@ done
 if [[ "$MOLEJO_GITHUB_APP_SECRET" != molejo-github-app-unconfigured ]]; then
   kubectl --context "$context" -n fruto-control-plane get secret "$MOLEJO_GITHUB_APP_SECRET" >/dev/null
 fi
+kubectl --context "$context" -n fruto-control-plane get secret "$MOLEJO_GITHUB_WEBHOOK_SECRET" >/dev/null
 kubectl --context "$context" -n fruto-control-plane get configmap "$MOLEJO_OPENBAO_CA_CONFIGMAP" >/dev/null
 
 yq ea 'select(.kind != "Job")' "$release_file" |
@@ -47,6 +48,7 @@ yq ea 'select(.kind == "Deployment" or .kind == "HTTPRoute")' "$release_file" |
   kubectl --context "$context" apply --server-side -f - >/dev/null
 kubectl --context "$context" -n fruto-control-plane rollout status deployment/control-plane-api --timeout=300s
 kubectl --context "$context" -n fruto-control-plane rollout status deployment/control-plane-runtime-worker --timeout=300s
+kubectl --context "$context" -n fruto-control-plane rollout status deployment/control-plane-delivery-worker --timeout=300s
 kubectl --context "$context" -n fruto-control-plane rollout status deployment/control-plane-parameter-worker --timeout=300s
 kubectl --context "$context" -n fruto-control-plane rollout status deployment/console-web --timeout=300s
 

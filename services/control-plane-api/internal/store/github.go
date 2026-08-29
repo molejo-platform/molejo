@@ -64,6 +64,7 @@ func (s *Store) ConnectGitHubInstallation(ctx context.Context, publicID string, 
 			account_login=EXCLUDED.account_login,
 			account_type=EXCLUDED.account_type,
 			repository_selection=EXCLUDED.repository_selection,
+			status='Active',
 			updated_at=now()
 		WHERE github_installations.workspace_id=EXCLUDED.workspace_id
 		RETURNING id,public_id,workspace_id,github_installation_id,account_id,account_login,account_type,repository_selection,created_at`,
@@ -78,7 +79,7 @@ func (s *Store) ConnectGitHubInstallation(ctx context.Context, publicID string, 
 func (s *Store) ListGitHubInstallations(ctx context.Context, workspaceID int64) ([]domain.GitHubInstallation, error) {
 	rows, err := s.Pool.Query(ctx, `
 		SELECT id,public_id,workspace_id,github_installation_id,account_id,account_login,account_type,repository_selection,created_at
-		FROM github_installations WHERE workspace_id=$1 ORDER BY id DESC`, workspaceID)
+		FROM github_installations WHERE workspace_id=$1 AND status<>'Deleted' ORDER BY id DESC`, workspaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +137,7 @@ func (s *Store) SetAppGitHubSource(ctx context.Context, workspaceID int64, proje
 		SELECT a.id,i.id,$5,$6,$7,$8,$9
 		FROM apps a
 		JOIN projects p ON p.id=a.project_id
-		JOIN github_installations i ON i.workspace_id=p.workspace_id AND i.public_id=$4
+		JOIN github_installations i ON i.workspace_id=p.workspace_id AND i.public_id=$4 AND i.status='Active'
 		WHERE p.workspace_id=$1 AND p.public_id=$2 AND a.public_id=$3
 		  AND p.archived_at IS NULL AND a.archived_at IS NULL
 		ON CONFLICT (app_id) DO UPDATE SET

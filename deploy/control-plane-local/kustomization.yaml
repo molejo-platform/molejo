@@ -15,4 +15,5 @@ patches:
   - path: migrate-image-pull-policy.yaml
   - path: configmap.yaml
   - path: optional-external-secrets.yaml
+  - path: delete-delivery-worker.yaml
   - path: delete-bootstrap-job.yaml

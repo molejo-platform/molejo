@@ -62,7 +62,25 @@ if kubectl --context "$context" -n fruto-control-plane get secret molejo-github-
 else
   github_secret="molejo-github-app-unconfigured"
 fi
+webhook_secret_file="${MOLEJO_GITHUB_WEBHOOK_SECRET_FILE:-}"
+if [[ -n "$webhook_secret_file" ]]; then
+  [[ -s "$webhook_secret_file" ]] || { echo "MOLEJO_GITHUB_WEBHOOK_SECRET_FILE does not exist" >&2; exit 2; }
+  webhook_input="$(mktemp)"
+  trap 'rm -f "$webhook_input"' EXIT
+  kubectl --context "$context" -n fruto-control-plane create secret generic molejo-github-webhook \
+    --from-file=GITHUB_WEBHOOK_SECRET="$webhook_secret_file" --dry-run=client -o json >"$webhook_input"
+  webhook_secret="$(apply_versioned_object "$context" fruto-control-plane molejo-github-webhook github-webhook "$webhook_input")"
+  rm -f "$webhook_input"
+  trap - EXIT
+else
+  webhook_secret="$(kubectl --context "$context" -n fruto-control-plane get secret \
+    -l molejo.dev/configuration-family=github-webhook -o json | jq -er '.items | sort_by(.metadata.creationTimestamp) | last | .metadata.name')" || {
+      echo "set MOLEJO_GITHUB_WEBHOOK_SECRET_FILE to the protected webhook secret file" >&2
+      exit 2
+    }
+fi
 release_metadata_write "$release_dir/metadata/control-plane.env" \
-  "MOLEJO_GITHUB_APP_SECRET=$github_secret"
+  "MOLEJO_GITHUB_APP_SECRET=$github_secret" \
+  "MOLEJO_GITHUB_WEBHOOK_SECRET=$webhook_secret"
 
 printf 'prepared external Secrets and immutable GitHub credential version; owner password remains only at %s\n' "$owner_password"

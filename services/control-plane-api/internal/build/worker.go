@@ -60,7 +60,7 @@ func (w Worker) RunOnce(ctx context.Context, workerID string) (bool, error) {
 	}
 	timeout := w.Timeout
 	if timeout <= 0 {
-		timeout = 15 * time.Minute
+		timeout = 10 * time.Minute
 	}
 	workCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()

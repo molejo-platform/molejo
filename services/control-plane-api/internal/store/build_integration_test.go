@@ -60,3 +60,58 @@ func TestBuildFailureNeverPromotesAReleaseAndRetryCompletesImmutably(t *testing.
 		t.Fatalf("logs=%+v err=%v", logs, err)
 	}
 }
+
+func TestBuildRetentionKeepsOnlyThreeFreshReleasesPerAppEnvironment(t *testing.T) {
+	ctx := context.Background()
+	storage, workspaceID, actorID := newIntegrationFixture(t)
+	project, app, environment := createHierarchy(t, storage, workspaceID)
+	target, err := storage.CreateAppEnvironment(ctx, workspaceID, actorID, newID(t, "aev"), project.PublicID, app.PublicID, environment.PublicID, "main", integrationConfiguration("retention-target"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	installation, err := storage.ConnectGitHubInstallation(ctx, newID(t, "ghi"), workspaceID, actorID, 4242, 7, "molejo", "Organization", "selected")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = storage.SetAppGitHubSource(ctx, workspaceID, project.PublicID, app.PublicID, installation.PublicID, domain.GitHubRepository{ID: "99", Name: "platform", FullName: "molejo/platform", DefaultBranch: "main"}); err != nil {
+		t.Fatal(err)
+	}
+	for index, character := range []string{"a", "b", "c", "d"} {
+		build, reused, createErr := storage.CreateBuild(ctx, workspaceID, actorID, newID(t, "bld"), project.PublicID, app.PublicID, target.PublicID, "main", strings.Repeat(character, 40), domain.SHA256([]byte("retention-key-"+character)), domain.SHA256([]byte("retention-payload-"+character)))
+		if createErr != nil || reused {
+			t.Fatalf("build %d=%+v reused=%v err=%v", index, build, reused, createErr)
+		}
+		claimed, ok, claimErr := storage.ClaimNextBuild(ctx, "retention-worker", time.Minute)
+		if claimErr != nil || !ok || claimed.ID != build.ID {
+			t.Fatalf("claim %d=%+v ok=%v err=%v", index, claimed, ok, claimErr)
+		}
+		image := "registry.example/molejo/apps/" + app.PublicID + "@sha256:" + strings.Repeat(character, 64)
+		if _, completeErr := storage.CompleteBuild(ctx, claimed, newID(t, "rel"), image); completeErr != nil {
+			t.Fatalf("complete build %d: %v", index, completeErr)
+		}
+	}
+
+	releases, _, err := storage.ListReleases(ctx, workspaceID, project.PublicID, app.PublicID, 1<<62, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	available, expired := 0, 0
+	for _, release := range releases {
+		if release.AppEnvironmentPublicID != target.PublicID {
+			t.Fatalf("release crossed App Environment boundary: %+v", release)
+		}
+		switch release.AvailabilityStatus {
+		case domain.ReleaseAvailable:
+			available++
+		case domain.ReleaseExpired:
+			expired++
+		}
+	}
+	if available != 3 || expired != 1 {
+		t.Fatalf("available=%d expired=%d, want three fresh releases and one expired", available, expired)
+	}
+	var blocked int
+	if err = storage.Pool.QueryRow(ctx, `SELECT count(*) FROM release_gc_candidates WHERE status='Blocked'`).Scan(&blocked); err != nil || blocked != 1 {
+		t.Fatalf("blocked GC candidates=%d err=%v, want one until registry deletion is enabled", blocked, err)
+	}
+}

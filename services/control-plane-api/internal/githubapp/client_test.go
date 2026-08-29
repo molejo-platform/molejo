@@ -24,7 +24,7 @@ func TestClientResolvesAndDownloadsOnlyAnExactCommit(t *testing.T) {
 		case "/app/installations/42/access_tokens":
 			return jsonResponse(http.StatusCreated, `{"token":"ephemeral-installation-token"}`), nil
 		case "/repositories/99/commits/main":
-			return jsonResponse(http.StatusOK, `{"sha":"`+sha+`"}`), nil
+			return jsonResponse(http.StatusOK, `{"sha":"`+sha+`","commit":{"message":"Ship the webhook\n\nDetails","author":{"name":"Molejo Bot","date":"2026-08-29T12:00:00Z"}},"author":{"login":"molejo-bot"}}`), nil
 		case "/repositories/99/tarball/" + sha:
 			if r.Header.Get("Authorization") != "Bearer ephemeral-installation-token" {
 				t.Fatalf("archive authorization=%q", r.Header.Get("Authorization"))
@@ -38,11 +38,11 @@ func TestClientResolvesAndDownloadsOnlyAnExactCommit(t *testing.T) {
 	})}
 	client := newTestClient(t, "https://api.github.test", time.Now())
 	client.httpClient = httpClient
-	resolved, err := client.ResolveCommit(context.Background(), 42, 99, "main")
-	if err != nil || resolved != sha {
-		t.Fatalf("resolved=%q err=%v", resolved, err)
+	metadata, err := client.Commit(context.Background(), 42, 99, "main")
+	if err != nil || metadata.SHA != sha || metadata.Title != "Ship the webhook" || metadata.AuthorName != "Molejo Bot" || metadata.AuthorLogin != "molejo-bot" || metadata.CommittedAt == nil {
+		t.Fatalf("metadata=%+v err=%v", metadata, err)
 	}
-	if err = client.Archive(context.Background(), 42, 99, resolved, &archive); err != nil {
+	if err = client.Archive(context.Background(), 42, 99, metadata.SHA, &archive); err != nil {
 		t.Fatal(err)
 	}
 	if archive.String() != "archive-bytes" {

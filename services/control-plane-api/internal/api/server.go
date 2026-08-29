@@ -26,6 +26,7 @@ import (
 )
 
 const maxRequestBody = 128 << 10
+const maxGitHubWebhookBody = 10 << 20
 
 type Config struct {
 	Mode                            string
@@ -67,6 +68,7 @@ type Server struct {
 	Logger               *slog.Logger
 	Tracer               trace.Tracer
 	GitHub               githubapp.Service
+	GitHubWebhookSecret  []byte
 	ParameterSecrets     parameters.SecretValueStore
 	SecretFingerprintKey []byte
 	Observability        observability.Reader
@@ -214,11 +216,15 @@ func securityMiddleware(s *Server, next http.Handler) http.Handler {
 			writeError(w, http.StatusMisdirectedRequest, "host_not_allowed", "request host is not allowed", r)
 			return
 		}
-		if r.ContentLength > maxRequestBody {
+		requestLimit := int64(maxRequestBody)
+		if r.URL.Path == "/api/v1/github/webhooks" {
+			requestLimit = maxGitHubWebhookBody
+		}
+		if r.ContentLength > requestLimit {
 			writeError(w, http.StatusRequestEntityTooLarge, "request_too_large", "request body is too large", r)
 			return
 		}
-		r.Body = http.MaxBytesReader(w, r.Body, maxRequestBody)
+		r.Body = http.MaxBytesReader(w, r.Body, requestLimit)
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")

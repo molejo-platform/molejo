@@ -150,6 +150,15 @@ func (f *fakeGitHubService) ResolveCommit(_ context.Context, _ int64, _ int64, r
 	return "0123456789abcdef0123456789abcdef01234567", nil
 }
 
+func (f *fakeGitHubService) Commit(_ context.Context, _ int64, _ int64, ref string) (domain.CommitMetadata, error) {
+	f.resolvedRefs = append(f.resolvedRefs, ref)
+	sha := f.commitSHA
+	if sha == "" {
+		sha = "0123456789abcdef0123456789abcdef01234567"
+	}
+	return domain.CommitMetadata{SHA: sha, Title: "Test commit", AuthorName: "Molejo", AuthorLogin: "molejo"}, nil
+}
+
 func (f *fakeGitHubService) Archive(context.Context, int64, int64, string, io.Writer) error {
 	return nil
 }

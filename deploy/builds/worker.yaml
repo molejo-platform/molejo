@@ -52,9 +52,9 @@ spec:
             - name: FRUTO_BUILD_IMAGE_REPOSITORY
               value: CHANGE_ME
             - name: FRUTO_BUILD_TIMEOUT
-              value: 15m
+              value: 10m
             - name: FRUTO_BUILD_LEASE
-              value: 16m
+              value: 11m
             - name: FRUTO_BUILD_TEMP_ROOT
               value: /var/lib/molejo-builds
             - name: TMPDIR

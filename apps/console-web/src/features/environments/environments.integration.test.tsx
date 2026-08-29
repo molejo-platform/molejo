@@ -36,6 +36,7 @@ const mocks = vi.hoisted(() => ({
   updateAppEnvironment: vi.fn(),
   getAppBuild: vi.fn(),
   listAppBuildLogs: vi.fn(),
+  replaceAppEnvironmentDeliveryPolicy: vi.fn(),
   useBlocker: vi.fn(),
   listEnvironmentApps: vi.fn().mockResolvedValue({ items: [target], nextCursor: null }),
   listApps: vi.fn().mockResolvedValue({ items: [{ id: target.appId, name: target.appName, version: 1 }, { id: "app-bbbbbbbbbbbbbbbbbbbb", name: "Worker", version: 1 }], nextCursor: null }),
@@ -68,10 +69,12 @@ vi.mock("../apps/api", () => ({
   deleteAppEnvironment: vi.fn(),
   getAppSource: vi.fn().mockResolvedValue({ source: { repository: { fullName: "molejo/api" } } }),
   listAppBuilds: vi.fn().mockResolvedValue({ items: [], nextCursor: null }),
-  listAppReleases: vi.fn().mockResolvedValue({ items: [{ id: "rel-aaaaaaaaaaaaaaaaaaaa", branch: "main", commitSha: "5144c84100edfcc6a5447daca1d7f6a34a393364" }], nextCursor: null }),
+  listAppReleases: vi.fn().mockResolvedValue({ items: [{ id: "rel-aaaaaaaaaaaaaaaaaaaa", appEnvironmentId: target.id, branch: "main", commitSha: "5144c84100edfcc6a5447daca1d7f6a34a393364", commitTitle: "Ship delivery automation", availabilityStatus: "Available" }], nextCursor: null }),
   listAppEnvironmentDeployments: vi.fn().mockResolvedValue({ items: [], nextCursor: null }),
   listAppEnvironmentConfigurationVersions: vi.fn().mockResolvedValue({ items: [{ appEnvironmentId: target.id, version: 1, configuration: target.configuration, createdBy: "owner", createdAt: "2026-08-27T00:00:00Z" }] }),
   previewAppEnvironmentDeployment: vi.fn().mockResolvedValue({ target: { releaseId: "rel-aaaaaaaaaaaaaaaaaaaa", configurationVersion: 1 }, changes: ["InitialDeployment"], rolloutRequired: true }),
+  getAppEnvironmentDeliveryPolicy: vi.fn().mockResolvedValue({ appEnvironmentId: target.id, pushEnabled: false, releaseEnabled: false, version: 3, updatedAt: "2026-08-27T00:00:00Z" }),
+  replaceAppEnvironmentDeliveryPolicy: mocks.replaceAppEnvironmentDeliveryPolicy,
 }));
 
 import { EnvironmentAppBuildsPage, EnvironmentAppDeploymentsPage, EnvironmentAppOverviewPage, EnvironmentAppsPage, EnvironmentBuildDetailPage } from "./EnvironmentPages";
@@ -89,6 +92,7 @@ afterEach(() => {
   mocks.updateAppEnvironment.mockReset();
   mocks.getAppBuild.mockReset();
   mocks.listAppBuildLogs.mockReset();
+  mocks.replaceAppEnvironmentDeliveryPolicy.mockReset();
   mocks.useBlocker.mockReset();
 });
 
@@ -139,6 +143,18 @@ describe("Environment-first project experience", () => {
 
     renderWithQueryClient(<EnvironmentBuildConfigurationPage/>);
     expect((await screen.findByLabelText("Branch principal deste Environment") as HTMLInputElement).value).toBe("main");
+  });
+
+  it("configures push and release automation on the selected App Environment", async () => {
+    mocks.replaceAppEnvironmentDeliveryPolicy.mockResolvedValue({ appEnvironmentId: target.id, pushEnabled: true, releaseEnabled: true, version: 4, updatedAt: "2026-08-27T00:00:00Z" });
+    const user = userEvent.setup();
+    renderWithQueryClient(<EnvironmentBuildConfigurationPage/>);
+
+    await user.click(await screen.findByRole("checkbox", { name: "Push em main" }));
+    await user.click(screen.getByRole("checkbox", { name: "Release publicada" }));
+    await user.click(screen.getByRole("button", { name: "Salvar automação" }));
+
+    await waitFor(() => expect(mocks.replaceAppEnvironmentDeliveryPolicy).toHaveBeenCalledWith(params.workspaceId, params.projectId, target.appId, target.id, 3, { pushEnabled: true, releaseEnabled: true }));
   });
 
   it("builds and deploys only in the selected App Environment", async () => {

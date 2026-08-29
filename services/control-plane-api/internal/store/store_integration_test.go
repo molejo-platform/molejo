@@ -337,7 +337,7 @@ func createRelease(t *testing.T, storage *Store, workspaceID, actorID int64, pro
 	}
 	releaseID := newID(t, "rel")
 	image := "registry.apps.calouro.tech/molejo/apps/testkit@sha256:" + strings.Repeat("b", 64)
-	if _, err = storage.Pool.Exec(ctx, `INSERT INTO releases(public_id,workspace_id,project_id,app_id,build_id,commit_sha,image,platform) VALUES($1,$2,$3,$4,$5,$6,$7,'linux/amd64')`, releaseID, workspaceID, project.ID, app.ID, internalBuildID, commit, image); err != nil {
+	if _, err = storage.Pool.Exec(ctx, `INSERT INTO releases(public_id,workspace_id,project_id,app_id,app_environment_id,build_id,commit_sha,image,platform) VALUES($1,$2,$3,$4,$5,$6,$7,$8,'linux/amd64')`, releaseID, workspaceID, project.ID, app.ID, target.ID, internalBuildID, commit, image); err != nil {
 		t.Fatal(err)
 	}
 	return releaseID, image

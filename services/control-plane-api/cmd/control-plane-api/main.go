@@ -18,6 +18,7 @@ import (
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/api"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/auth"
 	controlbuild "github.com/fruto-platform/fruto/services/control-plane-api/internal/build"
+	controldelivery "github.com/fruto-platform/fruto/services/control-plane-api/internal/delivery"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/domain"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/githubapp"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/observability"
@@ -49,6 +50,8 @@ func run() error {
 		return runBuildWorker()
 	case "runtime-worker":
 		return runRuntimeWorker()
+	case "delivery-worker":
+		return runDeliveryWorker()
 	case "parameter-worker":
 		return runParameterWorker()
 	}
@@ -179,6 +182,10 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	server.GitHubWebhookSecret, err = readOptionalSecretFile("GITHUB_WEBHOOK_SECRET_FILE")
+	if err != nil {
+		return err
+	}
 	httpServer := &http.Server{Addr: env("FRUTO_HTTP_ADDR", ":8080"), Handler: server.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 20 * time.Second, WriteTimeout: 20 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
 	go func() {
 		<-ctx.Done()
@@ -269,6 +276,34 @@ func runParameterWorker() error {
 	return nil
 }
 
+func runDeliveryWorker() error {
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+	databaseURL := strings.TrimSpace(os.Getenv("FRUTO_DATABASE_URL"))
+	if databaseURL == "" {
+		return fmt.Errorf("FRUTO_DATABASE_URL is required")
+	}
+	s, err := store.New(ctx, databaseURL)
+	if err != nil {
+		return err
+	}
+	defer s.Close()
+	if err = s.SchemaReady(ctx); err != nil {
+		return fmt.Errorf("delivery schema is not ready: %w", err)
+	}
+	github, err := githubBuildService(15 * time.Second)
+	if err != nil {
+		return err
+	}
+	lease, err := durationEnv("FRUTO_DELIVERY_LEASE", time.Minute)
+	if err != nil {
+		return err
+	}
+	worker := controldelivery.Worker{Queue: s, GitHub: github, Lease: lease}
+	worker.Run(ctx, env("FRUTO_DELIVERY_WORKER_ID", "delivery-worker-1"))
+	return nil
+}
+
 func parameterSecretStore() (parameters.SecretValueStore, []byte, error) {
 	backend, err := openBaoStore()
 	if err != nil {
@@ -349,7 +384,7 @@ func runBuildWorker() error {
 	if err = s.SchemaReady(ctx); err != nil {
 		return fmt.Errorf("build schema is not ready: %w", err)
 	}
-	buildTimeout, err := durationEnv("FRUTO_BUILD_TIMEOUT", 15*time.Minute)
+	buildTimeout, err := durationEnv("FRUTO_BUILD_TIMEOUT", 10*time.Minute)
 	if err != nil {
 		return err
 	}
@@ -506,6 +541,22 @@ func readSecretFile(envName string) (string, error) {
 		return "", fmt.Errorf("%s is empty", envName)
 	}
 	return strings.TrimSpace(string(value)), nil
+}
+
+func readOptionalSecretFile(envName string) ([]byte, error) {
+	path := strings.TrimSpace(os.Getenv(envName))
+	if path == "" {
+		return nil, nil
+	}
+	value, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", envName, err)
+	}
+	value = []byte(strings.TrimSpace(string(value)))
+	if len(value) < 32 {
+		return nil, fmt.Errorf("%s must contain at least 32 bytes", envName)
+	}
+	return value, nil
 }
 
 func withStore(fn func(*store.Store) error) error {

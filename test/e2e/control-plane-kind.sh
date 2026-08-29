@@ -310,10 +310,10 @@ WITH refs AS (
     'linux/amd64','Succeeded',decode(repeat('01',32),'hex'),
     decode(repeat('02',32),'hex'),now()
   FROM refs
-  RETURNING id,workspace_id,project_id,app_id
+  RETURNING id,workspace_id,project_id,app_id,app_environment_id
 )
-INSERT INTO releases(public_id,workspace_id,project_id,app_id,build_id,commit_sha,image,platform)
-SELECT :'release_id',workspace_id,project_id,app_id,id,repeat('a',40),:'fixture_ref','linux/amd64'
+INSERT INTO releases(public_id,workspace_id,project_id,app_id,app_environment_id,build_id,commit_sha,image,platform)
+SELECT :'release_id',workspace_id,project_id,app_id,app_environment_id,id,repeat('a',40),:'fixture_ref','linux/amd64'
 FROM inserted_build;
 SQL
 }

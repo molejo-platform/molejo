@@ -42,6 +42,7 @@ func (h *generatedHandler) CreateAppBuild(w http.ResponseWriter, r *http.Request
 	payloadHash = scopedBuildPayloadHash(r, payloadHash)
 	var input struct {
 		AppEnvironmentID string `json:"appEnvironmentId"`
+		CommitSHA        string `json:"commitSha"`
 	}
 	if err := decodeJSON(r, &input); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_json", "request body is invalid", r)
@@ -67,10 +68,22 @@ func (h *generatedHandler) CreateAppBuild(w http.ResponseWriter, r *http.Request
 		return
 	}
 	branch := source.SourceBranch
-	commitSHA, err := h.server.GitHub.ResolveCommit(r.Context(), source.InstallationExternalID, source.RepositoryID, branch)
+	ref := branch
+	if input.CommitSHA != "" {
+		if err = domain.ValidateCommitSHA(input.CommitSHA); err != nil {
+			writeError(w, http.StatusBadRequest, "commit_invalid", err.Error(), r)
+			return
+		}
+		ref = input.CommitSHA
+	}
+	metadata, err := h.server.GitHub.Commit(r.Context(), source.InstallationExternalID, source.RepositoryID, ref)
 	if err != nil {
 		if errors.Is(err, githubapp.ErrNotFound) {
-			writeError(w, http.StatusBadRequest, "branch_not_found", "branch was not found in the repository", r)
+			if input.CommitSHA != "" {
+				writeError(w, http.StatusBadRequest, "commit_not_found", "commit was not found in the repository", r)
+			} else {
+				writeError(w, http.StatusBadRequest, "branch_not_found", "branch was not found in the repository", r)
+			}
 			return
 		}
 		h.server.logger().Warn("resolve GitHub build commit", "request_id", requestID(r), "app_id", source.AppPublicID, "error", err)
@@ -82,7 +95,7 @@ func (h *generatedHandler) CreateAppBuild(w http.ResponseWriter, r *http.Request
 		if idErr != nil {
 			break
 		}
-		build, _, createErr := h.server.Store.CreateBuild(r.Context(), workspace.ID, actor.ID, publicID, string(projectID), string(appID), input.AppEnvironmentID, branch, commitSHA, idempotencyHash, payloadHash)
+		build, _, createErr := h.server.Store.CreateBuildWithMetadata(r.Context(), workspace.ID, actor.ID, publicID, string(projectID), string(appID), input.AppEnvironmentID, branch, metadata, idempotencyHash, payloadHash)
 		if errors.Is(createErr, store.ErrPublicIDCollision) {
 			continue
 		}

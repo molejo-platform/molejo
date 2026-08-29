@@ -61,10 +61,12 @@ func (e BuildPlatform) Valid() bool {
 
 // Defines values for BuildStatus.
 const (
-	BuildStatusFailed    BuildStatus = "Failed"
-	BuildStatusPending   BuildStatus = "Pending"
-	BuildStatusRunning   BuildStatus = "Running"
-	BuildStatusSucceeded BuildStatus = "Succeeded"
+	BuildStatusFailed     BuildStatus = "Failed"
+	BuildStatusPending    BuildStatus = "Pending"
+	BuildStatusRunning    BuildStatus = "Running"
+	BuildStatusSucceeded  BuildStatus = "Succeeded"
+	BuildStatusSuperseded BuildStatus = "Superseded"
+	BuildStatusTimedOut   BuildStatus = "TimedOut"
 )
 
 // Valid indicates whether the value is a known member of the BuildStatus enum.
@@ -77,6 +79,31 @@ func (e BuildStatus) Valid() bool {
 	case BuildStatusRunning:
 		return true
 	case BuildStatusSucceeded:
+		return true
+	case BuildStatusSuperseded:
+		return true
+	case BuildStatusTimedOut:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for BuildTrigger.
+const (
+	BuildTriggerManual  BuildTrigger = "Manual"
+	BuildTriggerPush    BuildTrigger = "Push"
+	BuildTriggerRelease BuildTrigger = "Release"
+)
+
+// Valid indicates whether the value is a known member of the BuildTrigger enum.
+func (e BuildTrigger) Valid() bool {
+	switch e {
+	case BuildTriggerManual:
+		return true
+	case BuildTriggerPush:
+		return true
+	case BuildTriggerRelease:
 		return true
 	default:
 		return false
@@ -284,6 +311,24 @@ func (e ParameterInputType) Valid() bool {
 	}
 }
 
+// Defines values for ReleaseAvailabilityStatus.
+const (
+	ReleaseAvailabilityStatusAvailable ReleaseAvailabilityStatus = "Available"
+	ReleaseAvailabilityStatusExpired   ReleaseAvailabilityStatus = "Expired"
+)
+
+// Valid indicates whether the value is a known member of the ReleaseAvailabilityStatus enum.
+func (e ReleaseAvailabilityStatus) Valid() bool {
+	switch e {
+	case ReleaseAvailabilityStatusAvailable:
+		return true
+	case ReleaseAvailabilityStatusExpired:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ReleasePlatform.
 const (
 	ReleasePlatformLinuxamd64 ReleasePlatform = "linux/amd64"
@@ -293,6 +338,27 @@ const (
 func (e ReleasePlatform) Valid() bool {
 	switch e {
 	case ReleasePlatformLinuxamd64:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ReleaseTrigger.
+const (
+	ReleaseTriggerManual  ReleaseTrigger = "Manual"
+	ReleaseTriggerPush    ReleaseTrigger = "Push"
+	ReleaseTriggerRelease ReleaseTrigger = "Release"
+)
+
+// Valid indicates whether the value is a known member of the ReleaseTrigger enum.
+func (e ReleaseTrigger) Valid() bool {
+	switch e {
+	case ReleaseTriggerManual:
+		return true
+	case ReleaseTriggerPush:
+		return true
+	case ReleaseTriggerRelease:
 		return true
 	default:
 		return false
@@ -584,20 +650,25 @@ type AppEnvironmentInput struct {
 
 // Build defines model for Build.
 type Build struct {
-	AppEnvironmentId string        `json:"appEnvironmentId"`
-	AppId            string        `json:"appId"`
-	Attempts         int           `json:"attempts"`
-	Branch           string        `json:"branch"`
-	CommitSha        string        `json:"commitSha"`
-	CreatedAt        time.Time     `json:"createdAt"`
-	ErrorCode        *string       `json:"errorCode,omitempty"`
-	ErrorMessage     *string       `json:"errorMessage,omitempty"`
-	Id               string        `json:"id"`
-	Platform         BuildPlatform `json:"platform"`
-	ProjectId        string        `json:"projectId"`
-	Repository       string        `json:"repository"`
-	Status           BuildStatus   `json:"status"`
-	UpdatedAt        time.Time     `json:"updatedAt"`
+	AppEnvironmentId  string        `json:"appEnvironmentId"`
+	AppId             string        `json:"appId"`
+	Attempts          int           `json:"attempts"`
+	Branch            string        `json:"branch"`
+	CommitAuthorLogin string        `json:"commitAuthorLogin"`
+	CommitAuthorName  string        `json:"commitAuthorName"`
+	CommitSha         string        `json:"commitSha"`
+	CommitTitle       string        `json:"commitTitle"`
+	CommittedAt       *time.Time    `json:"committedAt,omitempty"`
+	CreatedAt         time.Time     `json:"createdAt"`
+	ErrorCode         *string       `json:"errorCode,omitempty"`
+	ErrorMessage      *string       `json:"errorMessage,omitempty"`
+	Id                string        `json:"id"`
+	Platform          BuildPlatform `json:"platform"`
+	ProjectId         string        `json:"projectId"`
+	Repository        string        `json:"repository"`
+	Status            BuildStatus   `json:"status"`
+	Trigger           BuildTrigger  `json:"trigger"`
+	UpdatedAt         time.Time     `json:"updatedAt"`
 }
 
 // BuildPlatform defines model for Build.Platform.
@@ -606,9 +677,15 @@ type BuildPlatform string
 // BuildStatus defines model for Build.Status.
 type BuildStatus string
 
+// BuildTrigger defines model for Build.Trigger.
+type BuildTrigger string
+
 // BuildInput defines model for BuildInput.
 type BuildInput struct {
 	AppEnvironmentId string `json:"appEnvironmentId"`
+
+	// CommitSha Optional immutable historical commit to rebuild.
+	CommitSha *string `json:"commitSha,omitempty"`
 }
 
 // BuildLog defines model for BuildLog.
@@ -625,6 +702,21 @@ type ConfigurationRevision struct {
 	CreatedAt        time.Time            `json:"createdAt"`
 	CreatedBy        string               `json:"createdBy"`
 	Version          int                  `json:"version"`
+}
+
+// DeliveryPolicy defines model for DeliveryPolicy.
+type DeliveryPolicy struct {
+	AppEnvironmentId string    `json:"appEnvironmentId"`
+	PushEnabled      bool      `json:"pushEnabled"`
+	ReleaseEnabled   bool      `json:"releaseEnabled"`
+	UpdatedAt        time.Time `json:"updatedAt"`
+	Version          int       `json:"version"`
+}
+
+// DeliveryPolicyInput defines model for DeliveryPolicyInput.
+type DeliveryPolicyInput struct {
+	PushEnabled    bool `json:"pushEnabled"`
+	ReleaseEnabled bool `json:"releaseEnabled"`
 }
 
 // Deployment defines model for Deployment.
@@ -817,19 +909,33 @@ type Project struct {
 
 // Release defines model for Release.
 type Release struct {
-	AppId     string          `json:"appId"`
-	Branch    string          `json:"branch"`
-	BuildId   string          `json:"buildId"`
-	CommitSha string          `json:"commitSha"`
-	CreatedAt time.Time       `json:"createdAt"`
-	Id        string          `json:"id"`
-	Image     string          `json:"image"`
-	Platform  ReleasePlatform `json:"platform"`
-	ProjectId string          `json:"projectId"`
+	AppEnvironmentId   string                    `json:"appEnvironmentId"`
+	AppId              string                    `json:"appId"`
+	AvailabilityStatus ReleaseAvailabilityStatus `json:"availabilityStatus"`
+	Branch             string                    `json:"branch"`
+	BuildId            string                    `json:"buildId"`
+	CommitAuthorLogin  string                    `json:"commitAuthorLogin"`
+	CommitAuthorName   string                    `json:"commitAuthorName"`
+	CommitSha          string                    `json:"commitSha"`
+	CommitTitle        string                    `json:"commitTitle"`
+	CommittedAt        *time.Time                `json:"committedAt,omitempty"`
+	CreatedAt          time.Time                 `json:"createdAt"`
+	ExpiredAt          *time.Time                `json:"expiredAt,omitempty"`
+	Id                 string                    `json:"id"`
+	Image              string                    `json:"image"`
+	Platform           ReleasePlatform           `json:"platform"`
+	ProjectId          string                    `json:"projectId"`
+	Trigger            ReleaseTrigger            `json:"trigger"`
 }
+
+// ReleaseAvailabilityStatus defines model for Release.AvailabilityStatus.
+type ReleaseAvailabilityStatus string
 
 // ReleasePlatform defines model for Release.Platform.
 type ReleasePlatform string
+
+// ReleaseTrigger defines model for Release.Trigger.
+type ReleaseTrigger string
 
 // ResourceValues defines model for ResourceValues.
 type ResourceValues struct {
@@ -1000,6 +1106,9 @@ type BuildId = string
 
 // Cursor defines model for Cursor.
 type Cursor = string
+
+// DeliveryPolicyIfMatch defines model for DeliveryPolicyIfMatch.
+type DeliveryPolicyIfMatch = int
 
 // DeploymentId defines model for DeploymentId.
 type DeploymentId = string
@@ -1184,6 +1293,11 @@ type ListAppEnvironmentConfigurationVersionsParams struct {
 	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
+// ReplaceAppEnvironmentDeliveryPolicyParams defines parameters for ReplaceAppEnvironmentDeliveryPolicy.
+type ReplaceAppEnvironmentDeliveryPolicyParams struct {
+	IfMatch DeliveryPolicyIfMatch `json:"If-Match"`
+}
+
 // ListAppEnvironmentDeploymentsParams defines parameters for ListAppEnvironmentDeployments.
 type ListAppEnvironmentDeploymentsParams struct {
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
@@ -1293,6 +1407,9 @@ type CreateAppEnvironmentJSONRequestBody = AppEnvironmentCreateInput
 // UpdateAppEnvironmentJSONRequestBody defines body for UpdateAppEnvironment for application/json ContentType.
 type UpdateAppEnvironmentJSONRequestBody = AppEnvironmentInput
 
+// ReplaceAppEnvironmentDeliveryPolicyJSONRequestBody defines body for ReplaceAppEnvironmentDeliveryPolicy for application/json ContentType.
+type ReplaceAppEnvironmentDeliveryPolicyJSONRequestBody = DeliveryPolicyInput
+
 // PreviewAppEnvironmentDeploymentJSONRequestBody defines body for PreviewAppEnvironmentDeployment for application/json ContentType.
 type PreviewAppEnvironmentDeploymentJSONRequestBody = DeploymentPreviewInput
 
@@ -1316,6 +1433,9 @@ type ServerInterface interface {
 
 	// (GET /api/v1/github/installations/callback)
 	CompleteGitHubInstallation(w http.ResponseWriter, r *http.Request, params CompleteGitHubInstallationParams)
+
+	// (POST /api/v1/github/webhooks)
+	ReceiveGitHubWebhook(w http.ResponseWriter, r *http.Request)
 
 	// (GET /api/v1/operations/{operationId})
 	GetOperation(w http.ResponseWriter, r *http.Request, operationId string)
@@ -1431,6 +1551,12 @@ type ServerInterface interface {
 	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/configuration-versions)
 	ListAppEnvironmentConfigurationVersions(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId, params ListAppEnvironmentConfigurationVersionsParams)
 
+	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/delivery-policy)
+	GetAppEnvironmentDeliveryPolicy(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId)
+
+	// (PUT /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/delivery-policy)
+	ReplaceAppEnvironmentDeliveryPolicy(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId, params ReplaceAppEnvironmentDeliveryPolicyParams)
+
 	// (POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/deployment-preview)
 	PreviewAppEnvironmentDeployment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId)
 
@@ -1500,6 +1626,11 @@ func (_ Unimplemented) CompleteGitHubAuthorization(w http.ResponseWriter, r *htt
 
 // (GET /api/v1/github/installations/callback)
 func (_ Unimplemented) CompleteGitHubInstallation(w http.ResponseWriter, r *http.Request, params CompleteGitHubInstallationParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /api/v1/github/webhooks)
+func (_ Unimplemented) ReceiveGitHubWebhook(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1693,6 +1824,16 @@ func (_ Unimplemented) ListAppEnvironmentConfigurationVersions(w http.ResponseWr
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/delivery-policy)
+func (_ Unimplemented) GetAppEnvironmentDeliveryPolicy(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (PUT /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/delivery-policy)
+func (_ Unimplemented) ReplaceAppEnvironmentDeliveryPolicy(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId, params ReplaceAppEnvironmentDeliveryPolicyParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // (POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/deployment-preview)
 func (_ Unimplemented) PreviewAppEnvironmentDeployment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -1880,6 +2021,20 @@ func (siw *ServerInterfaceWrapper) CompleteGitHubInstallation(w http.ResponseWri
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CompleteGitHubInstallation(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ReceiveGitHubWebhook operation middleware
+func (siw *ServerInterfaceWrapper) ReceiveGitHubWebhook(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReceiveGitHubWebhook(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3792,6 +3947,140 @@ func (siw *ServerInterfaceWrapper) ListAppEnvironmentConfigurationVersions(w htt
 	handler.ServeHTTP(w, r)
 }
 
+// GetAppEnvironmentDeliveryPolicy operation middleware
+func (siw *ServerInterfaceWrapper) GetAppEnvironmentDeliveryPolicy(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appId" -------------
+	var appId AppId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appId", chi.URLParam(r, "appId"), &appId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appEnvironmentId" -------------
+	var appEnvironmentId AppEnvironmentId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appEnvironmentId", chi.URLParam(r, "appEnvironmentId"), &appEnvironmentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appEnvironmentId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAppEnvironmentDeliveryPolicy(w, r, workspaceId, projectId, appId, appEnvironmentId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ReplaceAppEnvironmentDeliveryPolicy operation middleware
+func (siw *ServerInterfaceWrapper) ReplaceAppEnvironmentDeliveryPolicy(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appId" -------------
+	var appId AppId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appId", chi.URLParam(r, "appId"), &appId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appEnvironmentId" -------------
+	var appEnvironmentId AppEnvironmentId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appEnvironmentId", chi.URLParam(r, "appEnvironmentId"), &appEnvironmentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appEnvironmentId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ReplaceAppEnvironmentDeliveryPolicyParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch DeliveryPolicyIfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "integer", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReplaceAppEnvironmentDeliveryPolicy(w, r, workspaceId, projectId, appId, appEnvironmentId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // PreviewAppEnvironmentDeployment operation middleware
 func (siw *ServerInterfaceWrapper) PreviewAppEnvironmentDeployment(w http.ResponseWriter, r *http.Request) {
 
@@ -5314,6 +5603,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Get(options.BaseURL+"/api/v1/github/callback", wrapper.CompleteGitHubAuthorization)
 	})
 	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/github/webhooks", wrapper.ReceiveGitHubWebhook)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/github/installations", wrapper.ListGitHubInstallations)
 	})
 	r.Group(func(r chi.Router) {
@@ -5360,6 +5652,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Put(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}", wrapper.UpdateAppEnvironment)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/delivery-policy", wrapper.GetAppEnvironmentDeliveryPolicy)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/delivery-policy", wrapper.ReplaceAppEnvironmentDeliveryPolicy)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/deployments", wrapper.ListAppEnvironmentDeployments)
@@ -5536,6 +5834,93 @@ func (response CompleteGitHubInstallation403JSONResponse) VisitCompleteGitHubIns
 type CompleteGitHubInstallation503JSONResponse struct{ UnavailableJSONResponse }
 
 func (response CompleteGitHubInstallation503JSONResponse) VisitCompleteGitHubInstallationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReceiveGitHubWebhookRequestObject struct {
+}
+
+type ReceiveGitHubWebhookResponseObject interface {
+	VisitReceiveGitHubWebhookResponse(w http.ResponseWriter) error
+}
+
+type ReceiveGitHubWebhook200Response struct {
+}
+
+func (response ReceiveGitHubWebhook200Response) VisitReceiveGitHubWebhookResponse(w http.ResponseWriter) error {
+	w.WriteHeader(200)
+	return nil
+}
+
+type ReceiveGitHubWebhook202Response struct {
+}
+
+func (response ReceiveGitHubWebhook202Response) VisitReceiveGitHubWebhookResponse(w http.ResponseWriter) error {
+	w.WriteHeader(202)
+	return nil
+}
+
+type ReceiveGitHubWebhook400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response ReceiveGitHubWebhook400JSONResponse) VisitReceiveGitHubWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReceiveGitHubWebhook401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response ReceiveGitHubWebhook401JSONResponse) VisitReceiveGitHubWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReceiveGitHubWebhook409JSONResponse struct{ ConflictJSONResponse }
+
+func (response ReceiveGitHubWebhook409JSONResponse) VisitReceiveGitHubWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReceiveGitHubWebhook413Response struct {
+}
+
+func (response ReceiveGitHubWebhook413Response) VisitReceiveGitHubWebhookResponse(w http.ResponseWriter) error {
+	w.WriteHeader(413)
+	return nil
+}
+
+type ReceiveGitHubWebhook503JSONResponse struct{ UnavailableJSONResponse }
+
+func (response ReceiveGitHubWebhook503JSONResponse) VisitReceiveGitHubWebhookResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -7628,6 +8013,142 @@ func (response ListAppEnvironmentConfigurationVersions404JSONResponse) VisitList
 	return err
 }
 
+type GetAppEnvironmentDeliveryPolicyRequestObject struct {
+	WorkspaceId      WorkspaceId      `json:"workspaceId"`
+	ProjectId        ProjectId        `json:"projectId"`
+	AppId            AppId            `json:"appId"`
+	AppEnvironmentId AppEnvironmentId `json:"appEnvironmentId"`
+}
+
+type GetAppEnvironmentDeliveryPolicyResponseObject interface {
+	VisitGetAppEnvironmentDeliveryPolicyResponse(w http.ResponseWriter) error
+}
+
+type GetAppEnvironmentDeliveryPolicy200JSONResponse DeliveryPolicy
+
+func (response GetAppEnvironmentDeliveryPolicy200JSONResponse) VisitGetAppEnvironmentDeliveryPolicyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAppEnvironmentDeliveryPolicy403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response GetAppEnvironmentDeliveryPolicy403JSONResponse) VisitGetAppEnvironmentDeliveryPolicyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAppEnvironmentDeliveryPolicy404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response GetAppEnvironmentDeliveryPolicy404JSONResponse) VisitGetAppEnvironmentDeliveryPolicyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReplaceAppEnvironmentDeliveryPolicyRequestObject struct {
+	WorkspaceId      WorkspaceId      `json:"workspaceId"`
+	ProjectId        ProjectId        `json:"projectId"`
+	AppId            AppId            `json:"appId"`
+	AppEnvironmentId AppEnvironmentId `json:"appEnvironmentId"`
+	Params           ReplaceAppEnvironmentDeliveryPolicyParams
+	Body             *ReplaceAppEnvironmentDeliveryPolicyJSONRequestBody
+}
+
+type ReplaceAppEnvironmentDeliveryPolicyResponseObject interface {
+	VisitReplaceAppEnvironmentDeliveryPolicyResponse(w http.ResponseWriter) error
+}
+
+type ReplaceAppEnvironmentDeliveryPolicy200JSONResponse DeliveryPolicy
+
+func (response ReplaceAppEnvironmentDeliveryPolicy200JSONResponse) VisitReplaceAppEnvironmentDeliveryPolicyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReplaceAppEnvironmentDeliveryPolicy400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response ReplaceAppEnvironmentDeliveryPolicy400JSONResponse) VisitReplaceAppEnvironmentDeliveryPolicyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReplaceAppEnvironmentDeliveryPolicy403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response ReplaceAppEnvironmentDeliveryPolicy403JSONResponse) VisitReplaceAppEnvironmentDeliveryPolicyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReplaceAppEnvironmentDeliveryPolicy404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ReplaceAppEnvironmentDeliveryPolicy404JSONResponse) VisitReplaceAppEnvironmentDeliveryPolicyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReplaceAppEnvironmentDeliveryPolicy409JSONResponse struct{ ConflictJSONResponse }
+
+func (response ReplaceAppEnvironmentDeliveryPolicy409JSONResponse) VisitReplaceAppEnvironmentDeliveryPolicyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type PreviewAppEnvironmentDeploymentRequestObject struct {
 	WorkspaceId      WorkspaceId      `json:"workspaceId"`
 	ProjectId        ProjectId        `json:"projectId"`
@@ -8835,6 +9356,9 @@ type StrictServerInterface interface {
 	// (GET /api/v1/github/installations/callback)
 	CompleteGitHubInstallation(ctx context.Context, request CompleteGitHubInstallationRequestObject) (CompleteGitHubInstallationResponseObject, error)
 
+	// (POST /api/v1/github/webhooks)
+	ReceiveGitHubWebhook(ctx context.Context, request ReceiveGitHubWebhookRequestObject) (ReceiveGitHubWebhookResponseObject, error)
+
 	// (GET /api/v1/operations/{operationId})
 	GetOperation(ctx context.Context, request GetOperationRequestObject) (GetOperationResponseObject, error)
 
@@ -8948,6 +9472,12 @@ type StrictServerInterface interface {
 
 	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/configuration-versions)
 	ListAppEnvironmentConfigurationVersions(ctx context.Context, request ListAppEnvironmentConfigurationVersionsRequestObject) (ListAppEnvironmentConfigurationVersionsResponseObject, error)
+
+	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/delivery-policy)
+	GetAppEnvironmentDeliveryPolicy(ctx context.Context, request GetAppEnvironmentDeliveryPolicyRequestObject) (GetAppEnvironmentDeliveryPolicyResponseObject, error)
+
+	// (PUT /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/delivery-policy)
+	ReplaceAppEnvironmentDeliveryPolicy(ctx context.Context, request ReplaceAppEnvironmentDeliveryPolicyRequestObject) (ReplaceAppEnvironmentDeliveryPolicyResponseObject, error)
 
 	// (POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/deployment-preview)
 	PreviewAppEnvironmentDeployment(ctx context.Context, request PreviewAppEnvironmentDeploymentRequestObject) (PreviewAppEnvironmentDeploymentResponseObject, error)
@@ -9091,6 +9621,30 @@ func (sh *strictHandler) CompleteGitHubInstallation(w http.ResponseWriter, r *ht
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(CompleteGitHubInstallationResponseObject); ok {
 		if err := validResponse.VisitCompleteGitHubInstallationResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ReceiveGitHubWebhook operation middleware
+func (sh *strictHandler) ReceiveGitHubWebhook(w http.ResponseWriter, r *http.Request) {
+	var request ReceiveGitHubWebhookRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ReceiveGitHubWebhook(ctx, request.(ReceiveGitHubWebhookRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ReceiveGitHubWebhook")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ReceiveGitHubWebhookResponseObject); ok {
+		if err := validResponse.VisitReceiveGitHubWebhookResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -10214,6 +10768,72 @@ func (sh *strictHandler) ListAppEnvironmentConfigurationVersions(w http.Response
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ListAppEnvironmentConfigurationVersionsResponseObject); ok {
 		if err := validResponse.VisitListAppEnvironmentConfigurationVersionsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAppEnvironmentDeliveryPolicy operation middleware
+func (sh *strictHandler) GetAppEnvironmentDeliveryPolicy(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId) {
+	var request GetAppEnvironmentDeliveryPolicyRequestObject
+
+	request.WorkspaceId = workspaceId
+	request.ProjectId = projectId
+	request.AppId = appId
+	request.AppEnvironmentId = appEnvironmentId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAppEnvironmentDeliveryPolicy(ctx, request.(GetAppEnvironmentDeliveryPolicyRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAppEnvironmentDeliveryPolicy")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAppEnvironmentDeliveryPolicyResponseObject); ok {
+		if err := validResponse.VisitGetAppEnvironmentDeliveryPolicyResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ReplaceAppEnvironmentDeliveryPolicy operation middleware
+func (sh *strictHandler) ReplaceAppEnvironmentDeliveryPolicy(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId, params ReplaceAppEnvironmentDeliveryPolicyParams) {
+	var request ReplaceAppEnvironmentDeliveryPolicyRequestObject
+
+	request.WorkspaceId = workspaceId
+	request.ProjectId = projectId
+	request.AppId = appId
+	request.AppEnvironmentId = appEnvironmentId
+	request.Params = params
+
+	var body ReplaceAppEnvironmentDeliveryPolicyJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ReplaceAppEnvironmentDeliveryPolicy(ctx, request.(ReplaceAppEnvironmentDeliveryPolicyRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ReplaceAppEnvironmentDeliveryPolicy")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ReplaceAppEnvironmentDeliveryPolicyResponseObject); ok {
+		if err := validResponse.VisitReplaceAppEnvironmentDeliveryPolicyResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
