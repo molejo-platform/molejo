@@ -153,7 +153,9 @@ func (h *generatedHandler) StreamAppEnvironmentRuntimeLogs(w http.ResponseWriter
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
-	_, _ = fmt.Fprint(w, "retry: 5000\n\n")
+	if !writeSSE(w, flusher, "retry: 5000\n\n") {
+		return
+	}
 	seen := map[string]struct{}{}
 	if !writeLiveLogs(w, flusher, initial, seen) {
 		return
@@ -172,25 +174,23 @@ func (h *generatedHandler) StreamAppEnvironmentRuntimeLogs(w http.ResponseWriter
 		case <-r.Context().Done():
 			return
 		case <-timeout.C:
-			_, _ = fmt.Fprint(w, "event: end\ndata: {\"reason\":\"stream_ttl\"}\n\n")
-			flusher.Flush()
+			_ = writeSSE(w, flusher, "event: end\ndata: {\"reason\":\"stream_ttl\"}\n\n")
 			return
 		case <-heartbeat.C:
-			_, _ = fmt.Fprint(w, ": heartbeat\n\n")
-			flusher.Flush()
+			if !writeSSE(w, flusher, ": heartbeat\n\n") {
+				return
+			}
 		case <-reauthorize.C:
 			currentActor, _, authenticated := h.server.session(r)
 			currentWorkspace, authErr := h.server.Store.WorkspaceForActor(r.Context(), currentActor)
 			if !authenticated || currentActor != actor.ID || authErr != nil || currentWorkspace.ID != workspace.ID {
-				_, _ = fmt.Fprint(w, "event: end\ndata: {\"reason\":\"authorization_changed\"}\n\n")
-				flusher.Flush()
+				_ = writeSSE(w, flusher, "event: end\ndata: {\"reason\":\"authorization_changed\"}\n\n")
 				return
 			}
 		case now := <-ticker.C:
 			items, queryErr := h.server.Observability.Logs(r.Context(), runtimeScope(workspace, appEnvironment), observability.LogQuery{From: cursor.Add(-time.Second), To: now.UTC(), Search: search, Instance: instance, Limit: 200})
 			if queryErr != nil {
-				_, _ = fmt.Fprint(w, "event: error\ndata: {\"code\":\"observability_unavailable\"}\n\n")
-				flusher.Flush()
+				_ = writeSSE(w, flusher, "event: telemetry-error\ndata: {\"code\":\"observability_unavailable\"}\n\n")
 				return
 			}
 			if !writeLiveLogs(w, flusher, items, seen) {
@@ -230,7 +230,9 @@ func (h *generatedHandler) StreamAppEnvironmentRuntimeMetrics(w http.ResponseWri
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
-	_, _ = fmt.Fprint(w, "retry: 5000\n\n")
+	if !writeSSE(w, flusher, "retry: 5000\n\n") {
+		return
+	}
 	if !writeMetricSnapshot(w, flusher, snapshot) {
 		return
 	}
@@ -248,25 +250,23 @@ func (h *generatedHandler) StreamAppEnvironmentRuntimeMetrics(w http.ResponseWri
 		case <-r.Context().Done():
 			return
 		case <-timeout.C:
-			_, _ = fmt.Fprint(w, "event: end\ndata: {\"reason\":\"stream_ttl\"}\n\n")
-			flusher.Flush()
+			_ = writeSSE(w, flusher, "event: end\ndata: {\"reason\":\"stream_ttl\"}\n\n")
 			return
 		case <-heartbeat.C:
-			_, _ = fmt.Fprint(w, ": heartbeat\n\n")
-			flusher.Flush()
+			if !writeSSE(w, flusher, ": heartbeat\n\n") {
+				return
+			}
 		case <-reauthorize.C:
 			currentActor, _, authenticated := h.server.session(r)
 			currentWorkspace, authErr := h.server.Store.WorkspaceForActor(r.Context(), currentActor)
 			if !authenticated || currentActor != actor.ID || authErr != nil || currentWorkspace.ID != workspace.ID {
-				_, _ = fmt.Fprint(w, "event: end\ndata: {\"reason\":\"authorization_changed\"}\n\n")
-				flusher.Flush()
+				_ = writeSSE(w, flusher, "event: end\ndata: {\"reason\":\"authorization_changed\"}\n\n")
 				return
 			}
 		case now := <-poll.C:
 			next, queryErr := h.server.Observability.CurrentMetrics(r.Context(), runtimeScope(workspace, appEnvironment), now.UTC())
 			if queryErr != nil {
-				_, _ = fmt.Fprint(w, "event: error\ndata: {\"code\":\"observability_unavailable\"}\n\n")
-				flusher.Flush()
+				_ = writeSSE(w, flusher, "event: telemetry-error\ndata: {\"code\":\"observability_unavailable\"}\n\n")
 				return
 			}
 			if !writeMetricSnapshot(w, flusher, next) {
@@ -331,7 +331,6 @@ func operationEvents(operations []domain.Operation) []observability.Event {
 
 func writeLiveLogs(w http.ResponseWriter, flusher http.Flusher, items []observability.LogEntry, seen map[string]struct{}) bool {
 	sort.SliceStable(items, func(i, j int) bool { return items[i].Timestamp.Before(items[j].Timestamp) })
-	controller := http.NewResponseController(w)
 	for _, item := range items {
 		key := item.Timestamp.Format(time.RFC3339Nano) + "\x00" + item.Instance + "\x00" + item.Body
 		if _, exists := seen[key]; exists {
@@ -342,12 +341,10 @@ func writeLiveLogs(w http.ResponseWriter, flusher http.Flusher, items []observab
 		if err != nil {
 			continue
 		}
-		_ = controller.SetWriteDeadline(time.Now().Add(5 * time.Second))
-		if _, err = fmt.Fprintf(w, "event: log\ndata: %s\n\n", payload); err != nil {
+		if !writeSSE(w, flusher, fmt.Sprintf("event: log\ndata: %s\n\n", payload)) {
 			return false
 		}
 	}
-	flusher.Flush()
 	return true
 }
 
@@ -356,9 +353,14 @@ func writeMetricSnapshot(w http.ResponseWriter, flusher http.Flusher, snapshot o
 	if err != nil {
 		return false
 	}
+	return writeSSE(w, flusher, fmt.Sprintf("id: %d\nevent: metrics\ndata: %s\n\n", snapshot.ObservedAt.UnixMilli(), payload))
+}
+
+func writeSSE(w http.ResponseWriter, flusher http.Flusher, payload string) bool {
 	controller := http.NewResponseController(w)
 	_ = controller.SetWriteDeadline(time.Now().Add(5 * time.Second))
-	if _, err = fmt.Fprintf(w, "id: %d\nevent: metrics\ndata: %s\n\n", snapshot.ObservedAt.UnixMilli(), payload); err != nil {
+	defer func() { _ = controller.SetWriteDeadline(time.Time{}) }()
+	if _, err := fmt.Fprint(w, payload); err != nil {
 		return false
 	}
 	flusher.Flush()

@@ -25,10 +25,11 @@ const target = {
 } as never;
 const params = { workspaceId: "ws", projectId: "project", environmentId: "environment", appEnvironmentId: "target" };
 
-afterEach(() => { cleanup(); FakeEventSource.instances = []; vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); FakeEventSource.instances = []; vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 describe("runtime metrics stream", () => {
   it("keeps one visible stream, preserves unknown values and pauses in the background", () => {
+    vi.useFakeTimers();
     vi.stubGlobal("EventSource", FakeEventSource);
     let visibility = "visible";
     Object.defineProperty(document, "visibilityState", { configurable: true, get: () => visibility });
@@ -46,14 +47,22 @@ describe("runtime metrics stream", () => {
     expect(screen.getByText("2 / 3")).toBeTruthy();
     expect(screen.getByText("120 mCPU")).toBeTruthy();
     expect(screen.getByText("solicitado 300 · limite 1.500")).toBeTruthy();
+    expect(screen.getByText("Atualização automática ativa")).toBeTruthy();
 
     act(() => { FakeEventSource.instances[0].onerror?.(); });
-    expect(screen.getByText("Reconectando")).toBeTruthy();
+    expect(screen.getByText("Atualização automática ativa")).toBeTruthy();
+    act(() => vi.advanceTimersByTime(4_999));
+    expect(screen.getByText("Atualização automática ativa")).toBeTruthy();
+    act(() => vi.advanceTimersByTime(1));
+    expect(screen.getByText("Atualização temporariamente interrompida")).toBeTruthy();
     expect(FakeEventSource.instances[0].closed).toBe(false);
+
+    act(() => FakeEventSource.instances[0].onopen?.());
+    expect(screen.getByText("Atualização automática ativa")).toBeTruthy();
 
     act(() => { visibility = "hidden"; document.dispatchEvent(new Event("visibilitychange")); });
     expect(FakeEventSource.instances[0].closed).toBe(true);
-    expect(screen.getByText("Pausado em segundo plano")).toBeTruthy();
+    expect(screen.getByText("Atualização pausada")).toBeTruthy();
     act(() => { visibility = "visible"; document.dispatchEvent(new Event("visibilitychange")); });
     expect(FakeEventSource.instances).toHaveLength(2);
   });

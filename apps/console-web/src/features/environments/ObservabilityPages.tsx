@@ -72,7 +72,20 @@ export function RuntimeLogsPage({ target, params }: { target: AppEnvironment; pa
     if (!live) return;
     setLiveState("connecting");
     const source = new EventSource(streamURL);
-    source.onopen = () => setLiveState("connected");
+    let reconnectNotice: number | undefined;
+    const clearReconnectNotice = () => {
+      if (reconnectNotice !== undefined) window.clearTimeout(reconnectNotice);
+      reconnectNotice = undefined;
+    };
+    const connected = () => {
+      clearReconnectNotice();
+      setLiveState("connected");
+    };
+    const connectionInterrupted = () => {
+      clearReconnectNotice();
+      reconnectNotice = window.setTimeout(() => setLiveState("reconnecting"), 5_000);
+    };
+    source.onopen = connected;
     const receive = (event: Event) => {
       try {
         const item = JSON.parse((event as MessageEvent<string>).data) as RuntimeLog;
@@ -91,16 +104,12 @@ export function RuntimeLogsPage({ target, params }: { target: AppEnvironment; pa
           setLiveState("error");
           source.close();
           setLive(false);
-        } else {
-          setLiveState("reconnecting");
         }
       } catch { setLiveState("error"); }
     };
     source.addEventListener("end", end);
-    source.onerror = () => {
-      setLiveState("reconnecting");
-    };
-    return () => { source.removeEventListener("log", receive); source.removeEventListener("end", end); source.close(); };
+    source.onerror = connectionInterrupted;
+    return () => { clearReconnectNotice(); source.removeEventListener("log", receive); source.removeEventListener("end", end); source.close(); };
   }, [live, streamURL]);
 
   const items = useMemo(() => {
@@ -114,7 +123,7 @@ export function RuntimeLogsPage({ target, params }: { target: AppEnvironment; pa
     setFilters({ ...createRange(Number(hours)), search: search.trim() || undefined, instance: instance.trim() || undefined, limit: 300 });
   }
 
-  return <section className="stack"><ObservabilityNav params={params}/><div className="section-heading"><div><p className="eyebrow">Runtime</p><h2>Logs</h2><p className="muted">Pesquise o histórico por padrão. Ative o fluxo contínuo somente quando estiver acompanhando uma ocorrência.</p></div><Button type="button" variant={live ? "danger" : "secondary"} onClick={() => { setLiveState(live ? "idle" : "connecting"); setLive((value) => !value); }}>{live ? "Parar live" : "Ver ao vivo"}</Button></div><form className="panel observability-filters" onSubmit={applyFilters}><SelectField label="Período" value={hours} onChange={(event) => setHours(event.target.value)}>{ranges.map((range) => <option key={range.value} value={range.value}>{range.label}</option>)}</SelectField><Field label="Buscar no conteúdo" value={search} onChange={(event) => setSearch(event.target.value)} maxLength={200}/><Field label="Instância exata" value={instance} onChange={(event) => setInstance(event.target.value)} maxLength={253}/><Button type="submit" loading={logs.isFetching}>Aplicar filtros</Button></form>{liveState === "connecting" && <p className="live-status pending" role="status"><span aria-hidden="true"/>Conectando ao vivo…</p>}{liveState === "connected" && <p className="live-status" role="status"><span aria-hidden="true"/>Ao vivo conectado</p>}{liveState === "reconnecting" && <p className="live-status pending" role="status"><span aria-hidden="true"/>Reconectando ao vivo…</p>}{liveState === "error" && <Alert>O fluxo ao vivo foi encerrado. A consulta histórica continua disponível.</Alert>}{logs.isError ? <Alert>{userFacingError(logs.error)}</Alert> : logs.isPending ? <p className="muted" role="status">Carregando logs do runtime…</p> : items.length ? <RuntimeLogList items={items}/> : <EmptyState title="Nenhum log neste período" description="Amplie o período ou remova os filtros. Um resultado vazio é diferente de uma falha na consulta."/>}</section>;
+  return <section className="stack"><ObservabilityNav params={params}/><div className="section-heading"><div><p className="eyebrow">Runtime</p><h2>Logs</h2><p className="muted">Pesquise o histórico por padrão. Ative o fluxo contínuo somente quando estiver acompanhando uma ocorrência.</p></div><Button type="button" variant={live ? "danger" : "secondary"} onClick={() => { setLiveState(live ? "idle" : "connecting"); setLive((value) => !value); }}>{live ? "Parar live" : "Ver ao vivo"}</Button></div><form className="panel observability-filters" onSubmit={applyFilters}><SelectField label="Período" value={hours} onChange={(event) => setHours(event.target.value)}>{ranges.map((range) => <option key={range.value} value={range.value}>{range.label}</option>)}</SelectField><Field label="Buscar no conteúdo" value={search} onChange={(event) => setSearch(event.target.value)} maxLength={200}/><Field label="Instância exata" value={instance} onChange={(event) => setInstance(event.target.value)} maxLength={253}/><Button type="submit" loading={logs.isFetching}>Aplicar filtros</Button></form>{liveState === "connecting" && <p className="live-status pending" role="status"><span aria-hidden="true"/>Conectando ao vivo…</p>}{liveState === "connected" && <p className="live-status" role="status"><span aria-hidden="true"/>Ao vivo ativo</p>}{liveState === "reconnecting" && <p className="live-status pending" role="status"><span aria-hidden="true"/>Atualização temporariamente interrompida…</p>}{liveState === "error" && <Alert>O fluxo ao vivo foi encerrado. A consulta histórica continua disponível.</Alert>}{logs.isError ? <Alert>{userFacingError(logs.error)}</Alert> : logs.isPending ? <p className="muted" role="status">Carregando logs do runtime…</p> : items.length ? <RuntimeLogList items={items}/> : <EmptyState title="Nenhum log neste período" description="Amplie o período ou remova os filtros. Um resultado vazio é diferente de uma falha na consulta."/>}</section>;
 }
 
 export function RuntimeLogList({ items }: { items: RuntimeLog[] }) {
@@ -181,7 +190,7 @@ function latestSample(samples: RuntimeMetricSample[], name: RuntimeMetricSample[
 }
 
 function streamStateLabel(state: ReturnType<typeof useRuntimeMetrics>["state"]) {
-  return ({ connecting: "Conectando à telemetria", connected: "Atualização automática ativa", reconnecting: "Reconectando à telemetria", paused: "Pausado em segundo plano", unavailable: "Telemetria indisponível" })[state];
+  return ({ connecting: "Conectando à telemetria", connected: "Atualização automática ativa", reconnecting: "Atualização temporariamente interrompida", paused: "Atualização pausada", unavailable: "Telemetria indisponível" })[state];
 }
 
 function mergeMetricSnapshot(series: RuntimeMetricSeries[], samples: RuntimeMetricSample[], range: RuntimeRange) {

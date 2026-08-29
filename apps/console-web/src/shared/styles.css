@@ -121,7 +121,9 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .runtime-scoreboard { background: var(--color-brand); border-radius: var(--radius-lg); color: white; display: grid; gap: var(--space-4); padding: var(--space-4) var(--space-6); }
 .runtime-scoreboard-heading { align-items: center; display: flex; gap: var(--space-3); justify-content: space-between; }
 .runtime-scoreboard .status-badge { background: rgb(255 255 255 / 13%); color: white; }
-.telemetry-state { color: rgb(255 255 255 / 72%); font-size: .75rem; font-weight: 750; }
+.telemetry-state { color: rgb(255 255 255 / 72%); display: grid; font-size: .75rem; font-weight: 750; text-align: right; }
+.telemetry-state strong { font: inherit; }
+.runtime-scoreboard .telemetry-state small { color: inherit; font-size: .66rem; font-weight: 650; opacity: .8; }
 .telemetry-state.connected { color: #ccefd9; }
 .telemetry-state.reconnecting, .telemetry-state.stale { color: #ffe0a8; }
 .runtime-scoreboard dl { display: grid; gap: var(--space-4); grid-template-columns: repeat(6, minmax(0, 1fr)); margin: 0; }

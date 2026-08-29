@@ -29,6 +29,19 @@ export function useRuntimeMetricsStream(target: AppEnvironment, params: Environm
       return;
     }
     let source: EventSource | undefined;
+    let reconnectNotice: number | undefined;
+    const clearReconnectNotice = () => {
+      if (reconnectNotice !== undefined) window.clearTimeout(reconnectNotice);
+      reconnectNotice = undefined;
+    };
+    const connected = () => {
+      clearReconnectNotice();
+      setState("connected");
+    };
+    const connectionInterrupted = () => {
+      clearReconnectNotice();
+      reconnectNotice = window.setTimeout(() => setState("reconnecting"), 5_000);
+    };
     const connect = () => {
       if (document.visibilityState === "hidden" || source) {
         setState(document.visibilityState === "hidden" ? "paused" : "connecting");
@@ -36,12 +49,13 @@ export function useRuntimeMetricsStream(target: AppEnvironment, params: Environm
       }
       setState("connecting");
       source = new EventSource(runtimeMetricStreamURL(params.workspaceId, params.projectId, target.appId, target.id));
-      source.onopen = () => setState("connected");
-      source.onerror = () => setState("reconnecting");
+      source.onopen = connected;
+      source.onerror = connectionInterrupted;
       source.addEventListener("metrics", receiveMetrics);
       source.addEventListener("end", receiveEnd);
     };
     const disconnect = (nextState: RuntimeMetricsStreamState) => {
+      clearReconnectNotice();
       if (source) {
         source.onopen = null;
         source.onerror = null;
@@ -55,7 +69,7 @@ export function useRuntimeMetricsStream(target: AppEnvironment, params: Environm
     function receiveMetrics(event: Event) {
       try {
         setSnapshot(JSON.parse((event as MessageEvent<string>).data) as RuntimeMetricSnapshot);
-        setState("connected");
+        connected();
       } catch {
         disconnect("unavailable");
       }
@@ -63,8 +77,7 @@ export function useRuntimeMetricsStream(target: AppEnvironment, params: Environm
     function receiveEnd(event: Event) {
       try {
         const reason = (JSON.parse((event as MessageEvent<string>).data) as { reason?: string }).reason;
-        disconnect(reason === "authorization_changed" ? "unavailable" : "reconnecting");
-        if (reason !== "authorization_changed" && document.visibilityState !== "hidden") connect();
+        if (reason === "authorization_changed") disconnect("unavailable");
       } catch {
         disconnect("unavailable");
       }
@@ -77,6 +90,7 @@ export function useRuntimeMetricsStream(target: AppEnvironment, params: Environm
     connect();
     return () => {
       document.removeEventListener("visibilitychange", visibilityChanged);
+      clearReconnectNotice();
       if (source) {
         source.onopen = null;
         source.onerror = null;
@@ -107,10 +121,11 @@ export function RuntimeStatusStrip({ target }: { target: AppEnvironment }) {
   const restarts = sum(samples, "restarts");
   const replicas = target.configuration.replicas;
   const configurationSynced = target.currentConfigurationVersion === target.configurationVersion;
-  const connectionLabel = ({ connecting: "Conectando", connected: stale ? "Dados atrasados" : "Atualizado", reconnecting: "Reconectando", paused: "Pausado em segundo plano", unavailable: "Telemetria indisponível" } as const)[state];
+  const connectionLabel = stale ? "Dados desatualizados" : ({ connecting: "Conectando à telemetria", connected: "Atualização automática ativa", reconnecting: "Atualização temporariamente interrompida", paused: "Atualização pausada", unavailable: "Telemetria indisponível" } as const)[state];
+  const freshness = latestTimestamp > 0 ? formatFreshness(now - latestTimestamp) : "Aguardando primeira amostra";
 
   return <section className="runtime-scoreboard" aria-label="Saúde operacional">
-    <div className="runtime-scoreboard-heading"><StatusBadge status={target.state}/><span className={`telemetry-state ${state}${stale ? " stale" : ""}`}>{connectionLabel}</span></div>
+    <div className="runtime-scoreboard-heading"><StatusBadge status={target.state}/><span className={`telemetry-state ${state}${stale ? " stale" : ""}`}><strong>{connectionLabel}</strong><small>{freshness}</small></span></div>
     <dl>
       <Score label="Réplicas" value={available === undefined ? `— / ${desired}` : `${formatNumber(available)} / ${formatNumber(desired)}`} detail="disponíveis / desejadas"/>
       <Score label="CPU" value={has(samples, "cpu") ? `${formatNumber(cpu)} mCPU` : "—"} detail={`solicitado ${formatNumber(target.configuration.resources.requests.cpuMillis * replicas)} · limite ${formatNumber(target.configuration.resources.limits.cpuMillis * replicas)}`}/>
@@ -141,4 +156,12 @@ function maximum(samples: RuntimeMetricSample[], name: RuntimeMetricSample["name
 
 function formatNumber(value: number) {
   return value.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
+}
+
+function formatFreshness(age: number) {
+  const seconds = Math.max(0, Math.floor(age / 1_000));
+  if (seconds < 10) return "Atualizado agora";
+  if (seconds < 60) return `Atualizado há ${seconds} s`;
+  const minutes = Math.floor(seconds / 60);
+  return `Atualizado há ${minutes} min`;
 }

@@ -17,6 +17,16 @@ type recordingObservabilityReader struct {
 	scope observability.Scope
 }
 
+type deadlineRecorder struct {
+	*httptest.ResponseRecorder
+	deadlines []time.Time
+}
+
+func (r *deadlineRecorder) SetWriteDeadline(deadline time.Time) error {
+	r.deadlines = append(r.deadlines, deadline)
+	return nil
+}
+
 func (r *recordingObservabilityReader) Logs(_ context.Context, scope observability.Scope, _ observability.LogQuery) ([]observability.LogEntry, error) {
 	r.scope = scope
 	return []observability.LogEntry{}, nil
@@ -34,6 +44,18 @@ func (r *recordingObservabilityReader) CurrentMetrics(_ context.Context, scope o
 
 func (r *recordingObservabilityReader) Events(context.Context, observability.Scope, observability.EventQuery) ([]observability.Event, error) {
 	return []observability.Event{}, nil
+}
+
+func TestMetricSnapshotClearsTheWriteDeadlineAfterFlushing(t *testing.T) {
+	recorder := &deadlineRecorder{ResponseRecorder: httptest.NewRecorder()}
+	snapshot := observability.MetricSnapshot{ObservedAt: time.Now().UTC()}
+
+	if !writeMetricSnapshot(recorder, recorder, snapshot) {
+		t.Fatal("metric snapshot write failed")
+	}
+	if len(recorder.deadlines) != 2 || recorder.deadlines[0].IsZero() || !recorder.deadlines[1].IsZero() {
+		t.Fatalf("write deadlines were not bounded and cleared: %#v", recorder.deadlines)
+	}
 }
 
 func TestObservabilityRangeRejectsUnboundedQueries(t *testing.T) {

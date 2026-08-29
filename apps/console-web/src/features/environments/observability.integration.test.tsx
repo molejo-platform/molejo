@@ -31,7 +31,7 @@ class FakeEventSource {
   close() {}
 }
 
-afterEach(() => { cleanup(); mocks.listRuntimeLogs.mockReset(); FakeEventSource.instances = []; vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); mocks.listRuntimeLogs.mockReset(); FakeEventSource.instances = []; vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 describe("runtime observability", () => {
   it("distinguishes an empty log interval from a backend failure", async () => {
@@ -54,14 +54,21 @@ describe("runtime observability", () => {
   });
 
   it("keeps live logs enabled while EventSource reconnects", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.stubGlobal("EventSource", class extends FakeEventSource { constructor() { super(); FakeEventSource.instances.push(this); } });
     mocks.listRuntimeLogs.mockResolvedValue({ from: "2026-08-28T10:00:00Z", to: "2026-08-28T11:00:00Z", items: [] });
     renderWithQueryClient(<RuntimeLogsPage target={target} params={params}/>);
     const start = await screen.findByRole("button", { name: "Ver ao vivo" });
     act(() => start.click());
     expect(FakeEventSource.instances).toHaveLength(1);
+    act(() => FakeEventSource.instances[0].onopen?.());
+    expect(screen.getByText("Ao vivo ativo")).toBeTruthy();
     act(() => FakeEventSource.instances[0].onerror?.());
-    expect(screen.getByText("Reconectando ao vivo…")).toBeTruthy();
+    expect(screen.getByText("Ao vivo ativo")).toBeTruthy();
+    act(() => vi.advanceTimersByTime(5_000));
+    expect(screen.getByText("Atualização temporariamente interrompida…")).toBeTruthy();
+    act(() => FakeEventSource.instances[0].onopen?.());
+    expect(screen.getByText("Ao vivo ativo")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Parar live" })).toBeTruthy();
   });
 });
