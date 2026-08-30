@@ -11,9 +11,11 @@ import (
 )
 
 type appEnvironmentInput struct {
-	EnvironmentID string               `json:"environmentId"`
-	Branch        string               `json:"branch"`
-	Configuration domain.RuntimeConfig `json:"configuration"`
+	EnvironmentID string                `json:"environmentId"`
+	Branch        string                `json:"branch"`
+	WorkloadKind  domain.WorkloadKind   `json:"workloadKind"`
+	Volume        *domain.VolumeRequest `json:"volume"`
+	Configuration domain.RuntimeConfig  `json:"configuration"`
 }
 
 func (h *generatedHandler) ListAppEnvironments(w http.ResponseWriter, r *http.Request, workspaceID generated.WorkspaceId, projectID generated.ProjectId, appID generated.AppId, params generated.ListAppEnvironmentsParams) {
@@ -68,7 +70,7 @@ func (h *generatedHandler) CreateAppEnvironment(w http.ResponseWriter, r *http.R
 		if err != nil {
 			break
 		}
-		item, err := h.server.Store.CreateAppEnvironment(r.Context(), workspace.ID, actor.ID, publicID, string(projectID), string(appID), input.EnvironmentID, input.Branch, input.Configuration)
+		item, _, err := h.server.Store.CreateAppEnvironmentWithWorkload(r.Context(), workspace.ID, actor.ID, publicID, string(projectID), string(appID), input.EnvironmentID, input.Branch, input.WorkloadKind, input.Configuration, input.Volume)
 		if errors.Is(err, store.ErrPublicIDCollision) {
 			continue
 		}
@@ -287,6 +289,10 @@ func (h *generatedHandler) appEnvironmentInput(w http.ResponseWriter, r *http.Re
 			writeError(w, http.StatusBadRequest, "environment_invalid", "environmentId is invalid", r)
 			return appEnvironmentInput{}, false
 		}
+		if err := domain.ValidateWorkloadConfiguration(input.WorkloadKind, domain.NormalizeRuntimeConfig(input.Configuration), input.Volume); err != nil {
+			writeError(w, http.StatusBadRequest, "workload_invalid", err.Error(), r)
+			return appEnvironmentInput{}, false
+		}
 	}
 	branch, err := domain.NormalizeSourceBranch(input.Branch)
 	if err != nil {
@@ -321,6 +327,10 @@ func writeAppEnvironmentError(w http.ResponseWriter, r *http.Request, err error)
 		writeError(w, http.StatusConflict, "app_environment_conflict", "App Environment conflicts with existing state", r)
 	case errors.Is(err, store.ErrParameterBinding):
 		writeError(w, http.StatusBadRequest, "parameter_binding_invalid", "a Parameter binding is unavailable in this Workspace", r)
+	case errors.Is(err, store.ErrStorageProfileUnavailable):
+		writeError(w, http.StatusConflict, "storage_profile_unavailable", "the selected storage profile is unavailable", r)
+	case errors.Is(err, store.ErrStorageQuotaExceeded):
+		writeError(w, http.StatusConflict, "storage_quota_exceeded", "the requested storage capacity is unavailable", r)
 	default:
 		writeError(w, http.StatusInternalServerError, "storage_failed", "App Environment state could not be persisted", r)
 	}

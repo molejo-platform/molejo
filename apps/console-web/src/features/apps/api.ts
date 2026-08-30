@@ -1,11 +1,12 @@
 import { createIdempotencyKey, request } from "../../shared/api/http-client";
-import type { AppEnvironment, AppEnvironmentCreateInput, AppEnvironmentInput, Build, BuildInput, BuildLog, ConfigurationRevision, DeliveryPolicy, DeliveryPolicyInput, Deployment, DeploymentInput, DeploymentMutationAccepted, DeploymentPreview, DeploymentPreviewInput, GitHubSource, GitHubSourceInput, Operation, Release } from "../../shared/api/types";
+import type { AppEnvironment, AppEnvironmentCreateInput, AppEnvironmentInput, AppVolume, AppVolumeMutation, Build, BuildInput, BuildLog, ConfigurationRevision, DeliveryPolicy, DeliveryPolicyInput, Deployment, DeploymentInput, DeploymentMutationAccepted, DeploymentPreview, DeploymentPreviewInput, GitHubSource, GitHubSourceInput, Operation, Release, StorageProfile } from "../../shared/api/types";
 
 type ResourceList<T> = { items: T[]; nextCursor: string | null };
 const appBase = (workspaceId: string, projectId: string, appId: string) => `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/projects/${encodeURIComponent(projectId)}/apps/${encodeURIComponent(appId)}`;
 const sourceBase = (workspaceId: string, projectId: string, appId: string) => `${appBase(workspaceId, projectId, appId)}/source`;
 const buildBase = (workspaceId: string, projectId: string, appId: string) => `${appBase(workspaceId, projectId, appId)}/builds`;
 const appEnvironmentBase = (workspaceId: string, projectId: string, appId: string) => `${appBase(workspaceId, projectId, appId)}/environments`;
+const appVolumeBase = (workspaceId: string, projectId: string, appId: string, appEnvironmentId: string) => `${appEnvironmentBase(workspaceId, projectId, appId)}/${encodeURIComponent(appEnvironmentId)}/volume`;
 
 export const getAppSource = (workspaceId: string, projectId: string, appId: string) => request<{ source: GitHubSource | null }>(sourceBase(workspaceId, projectId, appId));
 export const setAppSource = (workspaceId: string, projectId: string, appId: string, input: GitHubSourceInput) => request<GitHubSource>(sourceBase(workspaceId, projectId, appId), { method: "PUT", body: JSON.stringify(input) });
@@ -26,3 +27,7 @@ export const previewAppEnvironmentDeployment = (workspaceId: string, projectId: 
 export const listAppEnvironmentConfigurationVersions = (workspaceId: string, projectId: string, appId: string, appEnvironmentId: string) => request<ResourceList<ConfigurationRevision>>(`${appEnvironmentBase(workspaceId, projectId, appId)}/${encodeURIComponent(appEnvironmentId)}/configuration-versions`);
 export const getAppEnvironmentDeliveryPolicy = (workspaceId: string, projectId: string, appId: string, appEnvironmentId: string) => request<DeliveryPolicy>(`${appEnvironmentBase(workspaceId, projectId, appId)}/${encodeURIComponent(appEnvironmentId)}/delivery-policy`);
 export const replaceAppEnvironmentDeliveryPolicy = (workspaceId: string, projectId: string, appId: string, appEnvironmentId: string, version: number, input: DeliveryPolicyInput) => request<DeliveryPolicy>(`${appEnvironmentBase(workspaceId, projectId, appId)}/${encodeURIComponent(appEnvironmentId)}/delivery-policy`, { method: "PUT", headers: { "If-Match": String(version) }, body: JSON.stringify(input) });
+export const listStorageProfiles = (workspaceId: string) => request<{ items: StorageProfile[] }>(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/storage-profiles`);
+export const getAppEnvironmentVolume = (workspaceId: string, projectId: string, appId: string, appEnvironmentId: string) => request<AppVolume>(appVolumeBase(workspaceId, projectId, appId, appEnvironmentId));
+export const expandAppEnvironmentVolume = (workspaceId: string, projectId: string, appId: string, appEnvironmentId: string, version: number, sizeGiB: number) => request<AppVolumeMutation>(appVolumeBase(workspaceId, projectId, appId, appEnvironmentId), { method: "PUT", headers: { "Idempotency-Key": createIdempotencyKey(), "If-Match": String(version) }, body: JSON.stringify({ sizeGiB }) });
+export const deleteAppEnvironmentVolume = (workspaceId: string, projectId: string, appId: string, appEnvironmentId: string, version: number) => request<AppVolumeMutation>(appVolumeBase(workspaceId, projectId, appId, appEnvironmentId), { method: "DELETE", headers: { "Idempotency-Key": createIdempotencyKey(), "If-Match": String(version) } });

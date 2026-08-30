@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -94,6 +95,172 @@ func TestAppEnvironmentOwnsBranchConfigurationAndUniquePair(t *testing.T) {
 	_, err = storage.CreateAppEnvironment(context.Background(), workspaceID, actorID, newID(t, "aev"), project.PublicID, app.PublicID, environment.PublicID, "main", integrationConfiguration("other"))
 	if !errors.Is(err, ErrConflict) {
 		t.Fatalf("duplicate App + Environment error = %v, want conflict", err)
+	}
+}
+
+func TestStatefulAppEnvironmentCreatesIndependentVolumeIntent(t *testing.T) {
+	ctx := context.Background()
+	storage, workspaceID, actorID := newIntegrationFixture(t)
+	if err := storage.ConfigureStorageProfile(ctx, StorageProfileInstallation{
+		ID: "persistent-standard", Name: "Persistent storage", MinimumSizeGiB: 1,
+		MaximumSizeGiB: 10, TotalCapacityGiB: 10, WorkspaceQuotaGiB: 5,
+		Expandable: true, Durability: "NodeLocal", RuntimeBinding: "test-storage", Enabled: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	project, app, environment := createHierarchy(t, storage, workspaceID)
+	target, volume, err := storage.CreateAppEnvironmentWithWorkload(
+		ctx, workspaceID, actorID, newID(t, "aev"), project.PublicID, app.PublicID,
+		environment.PublicID, "main", domain.WorkloadStateful, integrationConfiguration("stateful-target"),
+		&domain.VolumeRequest{StorageProfileID: "persistent-standard", SizeGiB: 2, MountPath: "/data"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if target.WorkloadKind != domain.WorkloadStateful || volume == nil || volume.AppEnvironmentPublicID != target.PublicID || volume.State != domain.VolumeStatePending {
+		t.Fatalf("stateful target=%+v volume=%+v", target, volume)
+	}
+	stored, err := storage.FindAppVolume(ctx, workspaceID, target.PublicID)
+	if err != nil || stored.PublicID != volume.PublicID || stored.SizeGiB != 2 || stored.MountPath != "/data" {
+		t.Fatalf("stored volume=%+v err=%v", stored, err)
+	}
+	operation, claimedTarget, _, ok, err := storage.ClaimNext(ctx, "volume-worker", time.Minute)
+	if err != nil || !ok || operation.Kind != domain.OperationEnsureVolume || operation.AppVolumePublicID != volume.PublicID || claimedTarget.PublicID != target.PublicID {
+		t.Fatalf("volume operation=%+v target=%+v ok=%v err=%v", operation, claimedTarget, ok, err)
+	}
+}
+
+func TestStatefulCapacityReservationRejectsWorkspaceQuotaOverflow(t *testing.T) {
+	ctx := context.Background()
+	storage, workspaceID, actorID := newIntegrationFixture(t)
+	if err := storage.ConfigureStorageProfile(ctx, StorageProfileInstallation{
+		ID: "persistent-standard", Name: "Persistent storage", MinimumSizeGiB: 1,
+		MaximumSizeGiB: 10, TotalCapacityGiB: 10, WorkspaceQuotaGiB: 2,
+		Expandable: true, Durability: "NodeLocal", RuntimeBinding: "test-storage", Enabled: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	project, firstApp, firstEnvironment := createHierarchy(t, storage, workspaceID)
+	secondApp, err := storage.CreateApp(ctx, workspaceID, project.PublicID, newID(t, "app"), "Second", "second")
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondEnvironment, err := storage.CreateEnvironment(ctx, workspaceID, project.PublicID, newID(t, "env"), "Second", "second")
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := &domain.VolumeRequest{StorageProfileID: "persistent-standard", SizeGiB: 2, MountPath: "/data"}
+	if _, _, err = storage.CreateAppEnvironmentWithWorkload(ctx, workspaceID, actorID, newID(t, "aev"), project.PublicID, firstApp.PublicID, firstEnvironment.PublicID, "main", domain.WorkloadStateful, integrationConfiguration("stateful-one"), request); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = storage.CreateAppEnvironmentWithWorkload(ctx, workspaceID, actorID, newID(t, "aev"), project.PublicID, secondApp.PublicID, secondEnvironment.PublicID, "main", domain.WorkloadStateful, integrationConfiguration("stateful-two"), request)
+	if !errors.Is(err, ErrStorageQuotaExceeded) {
+		t.Fatalf("quota overflow error=%v, want ErrStorageQuotaExceeded", err)
+	}
+}
+
+func TestConcurrentStatefulReservationsRespectQuotaAndWorkspaceIsolation(t *testing.T) {
+	ctx := context.Background()
+	storage, workspaceID, actorID := newIntegrationFixture(t)
+	if err := storage.ConfigureStorageProfile(ctx, StorageProfileInstallation{
+		ID: "persistent-standard", Name: "Persistent storage", MinimumSizeGiB: 1,
+		MaximumSizeGiB: 10, TotalCapacityGiB: 10, WorkspaceQuotaGiB: 2,
+		Expandable: true, Durability: "NodeLocal", RuntimeBinding: "test-storage", Enabled: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	project, firstApp, firstEnvironment := createHierarchy(t, storage, workspaceID)
+	secondApp, err := storage.CreateApp(ctx, workspaceID, project.PublicID, newID(t, "app"), "Second", "second")
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondEnvironment, err := storage.CreateEnvironment(ctx, workspaceID, project.PublicID, newID(t, "env"), "Second", "second")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	type target struct {
+		publicID      string
+		appID         string
+		environmentID string
+		slug          string
+	}
+	targets := []target{
+		{newID(t, "aev"), firstApp.PublicID, firstEnvironment.PublicID, "stateful-one"},
+		{newID(t, "aev"), secondApp.PublicID, secondEnvironment.PublicID, "stateful-two"},
+	}
+	request := &domain.VolumeRequest{StorageProfileID: "persistent-standard", SizeGiB: 2, MountPath: "/data"}
+	results := make(chan error, len(targets))
+	var workers sync.WaitGroup
+	for _, item := range targets {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			_, _, createErr := storage.CreateAppEnvironmentWithWorkload(ctx, workspaceID, actorID, item.publicID, project.PublicID, item.appID, item.environmentID, "main", domain.WorkloadStateful, integrationConfiguration(item.slug), request)
+			results <- createErr
+		}()
+	}
+	workers.Wait()
+	close(results)
+
+	var succeeded, rejected int
+	for result := range results {
+		switch {
+		case result == nil:
+			succeeded++
+		case errors.Is(result, ErrStorageQuotaExceeded):
+			rejected++
+		default:
+			t.Fatalf("concurrent reservation error=%v", result)
+		}
+	}
+	if succeeded != 1 || rejected != 1 {
+		t.Fatalf("concurrent reservations succeeded=%d rejected=%d", succeeded, rejected)
+	}
+	var created target
+	for _, item := range targets {
+		if _, findErr := storage.FindAppVolume(ctx, workspaceID, item.publicID); findErr == nil {
+			created = item
+		}
+	}
+	if created.publicID == "" {
+		t.Fatal("successful reservation did not create a volume")
+	}
+	if _, findErr := storage.FindAppVolume(ctx, workspaceID+1, created.publicID); !errors.Is(findErr, ErrNotFound) {
+		t.Fatalf("cross-workspace volume lookup error=%v, want not found", findErr)
+	}
+}
+
+func TestVolumeExpansionRetryReturnsTheOriginalOperation(t *testing.T) {
+	ctx := context.Background()
+	storage, workspaceID, actorID := newIntegrationFixture(t)
+	if err := storage.ConfigureStorageProfile(ctx, StorageProfileInstallation{
+		ID: "persistent-standard", Name: "Persistent storage", MinimumSizeGiB: 1,
+		MaximumSizeGiB: 10, TotalCapacityGiB: 10, WorkspaceQuotaGiB: 10,
+		Expandable: true, Durability: "NodeLocal", RuntimeBinding: "test-storage", Enabled: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	project, app, environment := createHierarchy(t, storage, workspaceID)
+	target, volume, err := storage.CreateAppEnvironmentWithWorkload(ctx, workspaceID, actorID, newID(t, "aev"), project.PublicID, app.PublicID, environment.PublicID, "main", domain.WorkloadStateful, integrationConfiguration("stateful-retry"), &domain.VolumeRequest{StorageProfileID: "persistent-standard", SizeGiB: 1, MountPath: "/data"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = storage.Pool.Exec(ctx, `UPDATE operations SET status='Succeeded',started_at=now(),completed_at=now(),updated_at=now() WHERE app_volume_id=$1 AND kind=$2`, volume.ID, domain.OperationEnsureVolume); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = storage.Pool.Exec(ctx, `UPDATE app_volumes SET observed_state='Ready',observed_size_gib=requested_size_gib,updated_at=now() WHERE id=$1`, volume.ID); err != nil {
+		t.Fatal(err)
+	}
+	idempotencyHash := domain.SHA256([]byte("expand-volume"))
+	payloadHash := domain.SHA256([]byte("expand-volume-to-two"))
+	updated, operation, retried, err := storage.ExpandAppVolume(ctx, workspaceID, actorID, target.PublicID, 2, volume.Version, idempotencyHash, payloadHash)
+	if err != nil || retried {
+		t.Fatalf("first expansion volume=%+v operation=%+v retried=%v err=%v", updated, operation, retried, err)
+	}
+	retriedVolume, retriedOperation, retried, err := storage.ExpandAppVolume(ctx, workspaceID, actorID, target.PublicID, 2, volume.Version, idempotencyHash, payloadHash)
+	if err != nil || !retried || retriedVolume.PublicID != updated.PublicID || retriedOperation.PublicID != operation.PublicID {
+		t.Fatalf("retried expansion volume=%+v operation=%+v retried=%v err=%v", retriedVolume, retriedOperation, retried, err)
 	}
 }
 

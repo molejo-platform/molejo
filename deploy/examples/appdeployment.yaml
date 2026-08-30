@@ -4,6 +4,9 @@ metadata:
   name: ap-example0001
   namespace: default
 spec:
+  workload:
+    kind: Stateless
+    stateless: {}
   # Replace this placeholder with an HTTP image pinned by its manifest digest.
   image: registry.example.com/fruto/http-app@sha256:0000000000000000000000000000000000000000000000000000000000000000
   port: 8080

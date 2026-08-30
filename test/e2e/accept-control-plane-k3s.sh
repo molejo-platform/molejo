@@ -9,6 +9,7 @@ context="${FRUTO_K3S_CONTEXT:-fruto-lab}"
 expected_uid="${FRUTO_EXPECTED_CLUSTER_UID:?set FRUTO_EXPECTED_CLUSTER_UID}"
 api_image="${FRUTO_API_IMAGE:?set FRUTO_API_IMAGE}"
 console_image="${FRUTO_CONSOLE_IMAGE:?set FRUTO_CONSOLE_IMAGE}"
+operator_image="${FRUTO_OPERATOR_IMAGE:?set FRUTO_OPERATOR_IMAGE}"
 
 actual_uid="$(kubectl --context "$context" get namespace kube-system -o jsonpath='{.metadata.uid}')"
 [[ "$actual_uid" == "$expected_uid" ]] || { echo "cluster UID does not match the approved target" >&2; exit 1; }
@@ -20,6 +21,15 @@ done
 [[ "$(kubectl --context "$context" -n fruto-control-plane get deployment control-plane-runtime-worker -o jsonpath='{.spec.template.spec.containers[0].image}')" == "$api_image" ]]
 [[ "$(kubectl --context "$context" -n fruto-control-plane get deployment control-plane-parameter-worker -o jsonpath='{.spec.template.spec.containers[0].image}')" == "$api_image" ]]
 [[ "$(kubectl --context "$context" -n fruto-control-plane get deployment console-web -o jsonpath='{.spec.template.spec.containers[0].image}')" == "$console_image" ]]
+[[ "$(kubectl --context "$context" -n fruto-system get deployment platform-operator -o jsonpath='{.spec.template.spec.containers[0].image}')" == "$operator_image" ]]
+
+for crd in appdeployments.platform.fruto.calouro.tech appvolumes.platform.fruto.calouro.tech; do
+  [[ "$(kubectl --context "$context" get crd "$crd" -o jsonpath='{.status.conditions[?(@.type=="Established")].status}')" == True ]]
+done
+
+control_plane_config="$(kubectl --context "$context" -n fruto-control-plane get deployment control-plane-api -o jsonpath='{.spec.template.spec.containers[0].envFrom[0].configMapRef.name}')"
+[[ "$(kubectl --context "$context" -n fruto-control-plane get configmap "$control_plane_config" -o jsonpath='{.data.FRUTO_STORAGE_PROFILE_ID}')" == persistent-standard ]]
+[[ "$(kubectl --context "$context" -n fruto-control-plane get configmap "$control_plane_config" -o jsonpath='{.data.FRUTO_STORAGE_PROFILE_RUNTIME_BINDING}')" == molejo-app-local ]]
 
 for route in control-plane-console; do
   conditions="$(kubectl --context "$context" -n fruto-control-plane get httproute "$route" -o json)"
@@ -34,7 +44,10 @@ parameter_worker_identity="system:serviceaccount:fruto-control-plane:control-pla
 [[ "$(kubectl --context "$context" auth can-i get secrets --as="$api_identity" -n fruto-workspaces)" == no ]]
 [[ "$(kubectl --context "$context" auth can-i get appdeployments.platform.fruto.calouro.tech --as="$worker_identity" -n fruto-workspaces)" == yes ]]
 [[ "$(kubectl --context "$context" auth can-i patch appdeployments.platform.fruto.calouro.tech --as="$worker_identity" -n fruto-workspaces)" == yes ]]
+[[ "$(kubectl --context "$context" auth can-i create appvolumes.platform.fruto.calouro.tech --as="$worker_identity" -n fruto-workspaces)" == yes ]]
+[[ "$(kubectl --context "$context" auth can-i patch appvolumes.platform.fruto.calouro.tech --as="$worker_identity" -n fruto-workspaces)" == yes ]]
 [[ "$(kubectl --context "$context" auth can-i update appdeployments.platform.fruto.calouro.tech/status --as="$worker_identity" -n fruto-workspaces)" == no ]]
+[[ "$(kubectl --context "$context" auth can-i update appvolumes.platform.fruto.calouro.tech/status --as="$worker_identity" -n fruto-workspaces)" == no ]]
 [[ "$(kubectl --context "$context" auth can-i create secrets --as="$worker_identity" -n fruto-workspaces)" == yes ]]
 [[ "$(kubectl --context "$context" auth can-i list configmaps --as="$worker_identity" -n fruto-workspaces)" == yes ]]
 [[ "$(kubectl --context "$context" auth can-i delete configmaps --as="$worker_identity" -n fruto-workspaces)" == yes ]]
@@ -43,6 +56,11 @@ parameter_worker_identity="system:serviceaccount:fruto-control-plane:control-pla
 [[ "$(kubectl --context "$context" auth can-i get secrets --as="$worker_identity" -n fruto-control-plane)" == no ]]
 [[ "$(kubectl --context "$context" auth can-i get deployments.apps --as="$worker_identity" -n fruto-workspaces)" == no ]]
 [[ "$(kubectl --context "$context" auth can-i get secrets --as="$parameter_worker_identity" -n fruto-workspaces)" == no ]]
+
+operator_identity="system:serviceaccount:fruto-system:platform-operator"
+[[ "$(kubectl --context "$context" auth can-i create persistentvolumeclaims --as="$operator_identity" -n fruto-workspaces)" == yes ]]
+[[ "$(kubectl --context "$context" auth can-i create statefulsets.apps --as="$operator_identity" -n fruto-workspaces)" == yes ]]
+[[ "$(kubectl --context "$context" auth can-i update appvolumes.platform.fruto.calouro.tech/status --as="$operator_identity" -n fruto-workspaces)" == yes ]]
 
 https_result="$(curl --silent --show-error --output /dev/null --write-out '%{http_code} %{ssl_verify_result}' --max-time 15 https://cloud.molejo.dev/)"
 [[ "$https_result" == "200 0" ]]

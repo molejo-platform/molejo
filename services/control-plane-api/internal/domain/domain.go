@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path"
 	"regexp"
 	"strings"
 	"time"
@@ -15,38 +16,97 @@ import (
 )
 
 const (
-	ExposurePrivate          = "Private"
-	ExposurePublic           = "Public"
-	StatePending             = "Pending"
-	StateProgressing         = "Progressing"
-	StateReady               = "Ready"
-	StateDegraded            = "Degraded"
-	StateUnknown             = "Unknown"
-	Unknown                  = StateUnknown
-	Progressing              = StateProgressing
-	Ready                    = StateReady
-	Degraded                 = StateDegraded
-	OperationPending         = "Pending"
-	OperationRunning         = "Running"
-	OperationSucceeded       = "Succeeded"
-	OperationFailed          = "Failed"
-	OperationEnsureWorkspace = "EnsureWorkspace"
-	OperationApplyDeployment = "ApplyDeployment"
-	OperationDeleteAppEnv    = "DeleteAppEnvironment"
-	ParameterPlainText       = "PlainText"
-	ParameterSecret          = "Secret"
+	ExposurePrivate                       = "Private"
+	ExposurePublic                        = "Public"
+	StatePending                          = "Pending"
+	StateProgressing                      = "Progressing"
+	StateReady                            = "Ready"
+	StateDegraded                         = "Degraded"
+	StateUnknown                          = "Unknown"
+	Unknown                               = StateUnknown
+	Progressing                           = StateProgressing
+	Ready                                 = StateReady
+	Degraded                              = StateDegraded
+	OperationPending                      = "Pending"
+	OperationRunning                      = "Running"
+	OperationSucceeded                    = "Succeeded"
+	OperationFailed                       = "Failed"
+	OperationEnsureWorkspace              = "EnsureWorkspace"
+	OperationApplyDeployment              = "ApplyDeployment"
+	OperationDeleteAppEnv                 = "DeleteAppEnvironment"
+	OperationEnsureVolume                 = "EnsureVolume"
+	OperationExpandVolume                 = "ExpandVolume"
+	OperationDeleteVolume                 = "DeleteVolume"
+	ParameterPlainText                    = "PlainText"
+	ParameterSecret                       = "Secret"
+	WorkloadStateless        WorkloadKind = "Stateless"
+	WorkloadStateful         WorkloadKind = "Stateful"
+	VolumeDesiredReady                    = "Ready"
+	VolumeDesiredDeleted                  = "Deleted"
+	VolumeStatePending                    = "Pending"
+	VolumeStateProvisioning               = "Provisioning"
+	VolumeStateReady                      = "Ready"
+	VolumeStateExpanding                  = "Expanding"
+	VolumeStateRetained                   = "Retained"
+	VolumeStateDegraded                   = "Degraded"
+	VolumeRetentionPreserve               = "Preserve"
 )
 
 var (
-	imagePattern         = regexp.MustCompile(`^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$`)
-	slugPattern          = regexp.MustCompile(`^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$`)
-	appIDPattern         = regexp.MustCompile(`^app-[a-z2-7]{20}$`)
-	envIDPattern         = regexp.MustCompile(`^env-[a-z2-7]{20}$`)
-	appEnvIDPattern      = regexp.MustCompile(`^aev-[a-z2-7]{20}$`)
-	variableNamePattern  = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
-	parameterIDPattern   = regexp.MustCompile(`^par-[a-z2-7]{20}$`)
-	parameterPathPattern = regexp.MustCompile(`^/[a-zA-Z0-9._/-]{1,254}$`)
+	imagePattern          = regexp.MustCompile(`^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$`)
+	slugPattern           = regexp.MustCompile(`^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$`)
+	appIDPattern          = regexp.MustCompile(`^app-[a-z2-7]{20}$`)
+	envIDPattern          = regexp.MustCompile(`^env-[a-z2-7]{20}$`)
+	appEnvIDPattern       = regexp.MustCompile(`^aev-[a-z2-7]{20}$`)
+	variableNamePattern   = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+	parameterIDPattern    = regexp.MustCompile(`^par-[a-z2-7]{20}$`)
+	parameterPathPattern  = regexp.MustCompile(`^/[a-zA-Z0-9._/-]{1,254}$`)
+	storageProfilePattern = regexp.MustCompile(`^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$`)
 )
+
+// WorkloadKind is the immutable runtime classification selected for one AppEnvironment.
+type WorkloadKind string
+
+// VolumeRequest is the public storage intent accepted when a Stateful AppEnvironment is created.
+type VolumeRequest struct {
+	StorageProfileID string `json:"storageProfileId"`
+	SizeGiB          int64  `json:"sizeGiB"`
+	MountPath        string `json:"mountPath"`
+}
+
+// StorageProfile exposes portable product capabilities without infrastructure bindings.
+type StorageProfile struct {
+	ID              string `json:"id"`
+	Name            string `json:"name"`
+	MinimumSizeGiB  int64  `json:"minimumSizeGiB"`
+	MaximumSizeGiB  int64  `json:"maximumSizeGiB"`
+	AvailableGiB    int64  `json:"availableGiB"`
+	Expandable      bool   `json:"expandable"`
+	Snapshots       bool   `json:"snapshots"`
+	AutomaticBackup bool   `json:"automaticBackup"`
+	Durability      string `json:"durability"`
+}
+
+// AppVolume is durable storage owned by an AppEnvironment, independent from releases.
+type AppVolume struct {
+	ID                     int64      `json:"-"`
+	PublicID               string     `json:"id"`
+	WorkspaceID            int64      `json:"-"`
+	AppEnvironmentID       int64      `json:"-"`
+	AppEnvironmentPublicID string     `json:"appEnvironmentId"`
+	StorageProfileID       string     `json:"storageProfileId"`
+	SizeGiB                int64      `json:"sizeGiB"`
+	MountPath              string     `json:"mountPath"`
+	RetentionPolicy        string     `json:"retentionPolicy"`
+	DesiredState           string     `json:"desiredState"`
+	State                  string     `json:"state"`
+	Message                string     `json:"message,omitempty"`
+	Attached               bool       `json:"attached"`
+	Version                int64      `json:"version"`
+	CreatedAt              time.Time  `json:"createdAt"`
+	UpdatedAt              time.Time  `json:"updatedAt"`
+	DeletionRequestedAt    *time.Time `json:"-"`
+}
 
 type ResourceValues struct {
 	CPUMillis int64 `json:"cpuMillis"`
@@ -142,18 +202,20 @@ type RuntimeConfig struct {
 }
 
 type Intent struct {
-	Image                string     `json:"image"`
-	Replicas             int32      `json:"replicas"`
-	Port                 int32      `json:"port"`
-	Resources            Resources  `json:"resources"`
-	Probes               Probes     `json:"probes"`
-	Exposure             string     `json:"exposure"`
-	Slug                 string     `json:"slug,omitempty"`
-	Variables            []Variable `json:"variables"`
-	ConfigMapRef         string     `json:"configMapRef,omitempty"`
-	SecretRef            string     `json:"secretRef,omitempty"`
-	SecretVariables      []Variable `json:"-"`
-	ConfigurationVersion int64      `json:"-"`
+	Image                string       `json:"image"`
+	Replicas             int32        `json:"replicas"`
+	Port                 int32        `json:"port"`
+	Resources            Resources    `json:"resources"`
+	Probes               Probes       `json:"probes"`
+	Exposure             string       `json:"exposure"`
+	Slug                 string       `json:"slug,omitempty"`
+	Variables            []Variable   `json:"variables"`
+	ConfigMapRef         string       `json:"configMapRef,omitempty"`
+	SecretRef            string       `json:"secretRef,omitempty"`
+	SecretVariables      []Variable   `json:"-"`
+	ConfigurationVersion int64        `json:"-"`
+	WorkloadKind         WorkloadKind `json:"workloadKind"`
+	Volume               *AppVolume   `json:"volume,omitempty"`
 }
 
 type Actor struct {
@@ -245,6 +307,7 @@ type AppEnvironment struct {
 	EnvironmentPublicID         string        `json:"environmentId"`
 	EnvironmentName             string        `json:"environmentName"`
 	SourceBranch                string        `json:"branch"`
+	WorkloadKind                WorkloadKind  `json:"workloadKind"`
 	RuntimeName                 string        `json:"-"`
 	Configuration               RuntimeConfig `json:"configuration"`
 	ConfigurationVersion        int64         `json:"configurationVersion"`
@@ -273,6 +336,8 @@ type Deployment struct {
 	Image                  string        `json:"-"`
 	ConfigurationVersion   int64         `json:"configurationVersion"`
 	Configuration          RuntimeConfig `json:"configuration"`
+	WorkloadKind           WorkloadKind  `json:"workloadKind"`
+	AppVolumePublicID      string        `json:"appVolumeId,omitempty"`
 	RequestedBy            string        `json:"requestedBy"`
 	State                  string        `json:"state"`
 	Message                string        `json:"message,omitempty"`
@@ -288,6 +353,8 @@ type Operation struct {
 	AppEnvironmentPublicID string     `json:"appEnvironmentId,omitempty"`
 	DeploymentID           int64      `json:"-"`
 	DeploymentPublicID     string     `json:"deploymentId,omitempty"`
+	AppVolumeID            int64      `json:"-"`
+	AppVolumePublicID      string     `json:"appVolumeId,omitempty"`
 	WorkspaceID            int64      `json:"-"`
 	ActorID                int64      `json:"-"`
 	Kind                   string     `json:"kind"`
@@ -489,6 +556,67 @@ func ValidateIntent(intent Intent, maxReplicas int32, maxCPU, maxMemory int64) e
 		return errors.New("image must use an immutable sha256 digest")
 	}
 	return ValidateRuntimeConfig(ConfigurationFromIntent(intent), maxReplicas, maxCPU, maxMemory)
+}
+
+// ValidateWorkloadConfiguration keeps Stateful and Stateless combinations explicit.
+func ValidateWorkloadConfiguration(kind WorkloadKind, configuration RuntimeConfig, volume *VolumeRequest) error {
+	switch kind {
+	case WorkloadStateless:
+		if volume != nil {
+			return errors.New("stateless workloads cannot declare persistent storage")
+		}
+	case WorkloadStateful:
+		if configuration.Replicas != 1 {
+			return errors.New("stateful workloads require exactly one replica")
+		}
+		if volume == nil {
+			return errors.New("stateful workloads require persistent storage")
+		}
+		if err := ValidateVolumeRequest(*volume); err != nil {
+			return err
+		}
+	default:
+		return errors.New("workloadKind must be Stateless or Stateful")
+	}
+	return nil
+}
+
+func ValidateVolumeRequest(volume VolumeRequest) error {
+	if !storageProfilePattern.MatchString(volume.StorageProfileID) || len(volume.StorageProfileID) > 63 {
+		return errors.New("storageProfileId must be a portable storage profile identifier")
+	}
+	if volume.SizeGiB < 1 {
+		return errors.New("sizeGiB must be positive")
+	}
+	if volume.MountPath == "" || len(volume.MountPath) > 255 || !strings.HasPrefix(volume.MountPath, "/") || path.Clean(volume.MountPath) != volume.MountPath || volume.MountPath == "/" {
+		return errors.New("mountPath must be an absolute normalized path below the filesystem root")
+	}
+	for _, reserved := range []string{"/dev", "/proc", "/sys"} {
+		if volume.MountPath == reserved || strings.HasPrefix(volume.MountPath, reserved+"/") {
+			return errors.New("mountPath uses a reserved runtime path")
+		}
+	}
+	return nil
+}
+
+func ValidateVolumeExpansion(currentSizeGiB, requestedSizeGiB, maximumSizeGiB int64) error {
+	if requestedSizeGiB <= currentSizeGiB {
+		return errors.New("volume size can only increase")
+	}
+	if requestedSizeGiB > maximumSizeGiB {
+		return errors.New("requested size exceeds the storage profile limit")
+	}
+	return nil
+}
+
+func ValidateVolumeRemoval(volume AppVolume) error {
+	if volume.DesiredState != VolumeDesiredDeleted {
+		return errors.New("volume removal was not requested")
+	}
+	if volume.Attached {
+		return errors.New("volume must be detached before removal")
+	}
+	return nil
 }
 
 func validPath(path string) bool {

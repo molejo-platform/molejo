@@ -176,6 +176,105 @@ func (e AppEnvironmentState) Valid() bool {
 	}
 }
 
+// Defines values for AppEnvironmentWorkloadKind.
+const (
+	AppEnvironmentWorkloadKindStateful  AppEnvironmentWorkloadKind = "Stateful"
+	AppEnvironmentWorkloadKindStateless AppEnvironmentWorkloadKind = "Stateless"
+)
+
+// Valid indicates whether the value is a known member of the AppEnvironmentWorkloadKind enum.
+func (e AppEnvironmentWorkloadKind) Valid() bool {
+	switch e {
+	case AppEnvironmentWorkloadKindStateful:
+		return true
+	case AppEnvironmentWorkloadKindStateless:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AppEnvironmentCreateInputWorkloadKind.
+const (
+	AppEnvironmentCreateInputWorkloadKindStateful  AppEnvironmentCreateInputWorkloadKind = "Stateful"
+	AppEnvironmentCreateInputWorkloadKindStateless AppEnvironmentCreateInputWorkloadKind = "Stateless"
+)
+
+// Valid indicates whether the value is a known member of the AppEnvironmentCreateInputWorkloadKind enum.
+func (e AppEnvironmentCreateInputWorkloadKind) Valid() bool {
+	switch e {
+	case AppEnvironmentCreateInputWorkloadKindStateful:
+		return true
+	case AppEnvironmentCreateInputWorkloadKindStateless:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AppVolumeDesiredState.
+const (
+	AppVolumeDesiredStateDeleted AppVolumeDesiredState = "Deleted"
+	AppVolumeDesiredStateReady   AppVolumeDesiredState = "Ready"
+)
+
+// Valid indicates whether the value is a known member of the AppVolumeDesiredState enum.
+func (e AppVolumeDesiredState) Valid() bool {
+	switch e {
+	case AppVolumeDesiredStateDeleted:
+		return true
+	case AppVolumeDesiredStateReady:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AppVolumeRetentionPolicy.
+const (
+	Preserve AppVolumeRetentionPolicy = "Preserve"
+)
+
+// Valid indicates whether the value is a known member of the AppVolumeRetentionPolicy enum.
+func (e AppVolumeRetentionPolicy) Valid() bool {
+	switch e {
+	case Preserve:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AppVolumeState.
+const (
+	AppVolumeStateDegraded     AppVolumeState = "Degraded"
+	AppVolumeStateExpanding    AppVolumeState = "Expanding"
+	AppVolumeStatePending      AppVolumeState = "Pending"
+	AppVolumeStateProvisioning AppVolumeState = "Provisioning"
+	AppVolumeStateReady        AppVolumeState = "Ready"
+	AppVolumeStateRetained     AppVolumeState = "Retained"
+)
+
+// Valid indicates whether the value is a known member of the AppVolumeState enum.
+func (e AppVolumeState) Valid() bool {
+	switch e {
+	case AppVolumeStateDegraded:
+		return true
+	case AppVolumeStateExpanding:
+		return true
+	case AppVolumeStatePending:
+		return true
+	case AppVolumeStateProvisioning:
+		return true
+	case AppVolumeStateReady:
+		return true
+	case AppVolumeStateRetained:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AuditEventOutcome.
 const (
 	AuditEventOutcomeDenied    AuditEventOutcome = "Denied"
@@ -281,6 +380,24 @@ func (e DeploymentState) Valid() bool {
 	case DeploymentStateProgressing:
 		return true
 	case DeploymentStateReady:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DeploymentWorkloadKind.
+const (
+	DeploymentWorkloadKindStateful  DeploymentWorkloadKind = "Stateful"
+	DeploymentWorkloadKindStateless DeploymentWorkloadKind = "Stateless"
+)
+
+// Valid indicates whether the value is a known member of the DeploymentWorkloadKind enum.
+func (e DeploymentWorkloadKind) Valid() bool {
+	switch e {
+	case DeploymentWorkloadKindStateful:
+		return true
+	case DeploymentWorkloadKindStateless:
 		return true
 	default:
 		return false
@@ -396,7 +513,10 @@ func (e MFAChallengeMfaRequired) Valid() bool {
 const (
 	ApplyDeployment      OperationKind = "ApplyDeployment"
 	DeleteAppEnvironment OperationKind = "DeleteAppEnvironment"
+	DeleteVolume         OperationKind = "DeleteVolume"
+	EnsureVolume         OperationKind = "EnsureVolume"
 	EnsureWorkspace      OperationKind = "EnsureWorkspace"
+	ExpandVolume         OperationKind = "ExpandVolume"
 )
 
 // Valid indicates whether the value is a known member of the OperationKind enum.
@@ -406,7 +526,13 @@ func (e OperationKind) Valid() bool {
 		return true
 	case DeleteAppEnvironment:
 		return true
+	case DeleteVolume:
+		return true
+	case EnsureVolume:
+		return true
 	case EnsureWorkspace:
+		return true
+	case ExpandVolume:
 		return true
 	default:
 		return false
@@ -758,6 +884,27 @@ func (e SessionWorkspaceMembershipsRole) Valid() bool {
 	}
 }
 
+// Defines values for StorageProfileDurability.
+const (
+	NodeLocal       StorageProfileDurability = "NodeLocal"
+	ProviderManaged StorageProfileDurability = "ProviderManaged"
+	Replicated      StorageProfileDurability = "Replicated"
+)
+
+// Valid indicates whether the value is a known member of the StorageProfileDurability enum.
+func (e StorageProfileDurability) Valid() bool {
+	switch e {
+	case NodeLocal:
+		return true
+	case ProviderManaged:
+		return true
+	case Replicated:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for UserStatus.
 const (
 	UserStatusActive   UserStatus = "Active"
@@ -1010,41 +1157,94 @@ type App struct {
 
 // AppEnvironment defines model for AppEnvironment.
 type AppEnvironment struct {
-	AppId                       string               `json:"appId"`
-	AppName                     string               `json:"appName"`
-	Branch                      string               `json:"branch"`
-	Configuration               RuntimeConfiguration `json:"configuration"`
-	ConfigurationVersion        int                  `json:"configurationVersion"`
-	CreatedAt                   time.Time            `json:"createdAt"`
-	CurrentConfigurationVersion *int                 `json:"currentConfigurationVersion,omitempty"`
-	CurrentDeploymentId         *string              `json:"currentDeploymentId,omitempty"`
-	CurrentReleaseId            *string              `json:"currentReleaseId,omitempty"`
-	DesiredConfigurationVersion *int                 `json:"desiredConfigurationVersion,omitempty"`
-	DesiredDeploymentId         *string              `json:"desiredDeploymentId,omitempty"`
-	EnvironmentId               string               `json:"environmentId"`
-	EnvironmentName             string               `json:"environmentName"`
-	Id                          string               `json:"id"`
-	Message                     *string              `json:"message,omitempty"`
-	ProjectId                   string               `json:"projectId"`
-	State                       AppEnvironmentState  `json:"state"`
-	UpdatedAt                   time.Time            `json:"updatedAt"`
-	Version                     int                  `json:"version"`
+	AppId                       string                     `json:"appId"`
+	AppName                     string                     `json:"appName"`
+	Branch                      string                     `json:"branch"`
+	Configuration               RuntimeConfiguration       `json:"configuration"`
+	ConfigurationVersion        int                        `json:"configurationVersion"`
+	CreatedAt                   time.Time                  `json:"createdAt"`
+	CurrentConfigurationVersion *int                       `json:"currentConfigurationVersion,omitempty"`
+	CurrentDeploymentId         *string                    `json:"currentDeploymentId,omitempty"`
+	CurrentReleaseId            *string                    `json:"currentReleaseId,omitempty"`
+	DesiredConfigurationVersion *int                       `json:"desiredConfigurationVersion,omitempty"`
+	DesiredDeploymentId         *string                    `json:"desiredDeploymentId,omitempty"`
+	EnvironmentId               string                     `json:"environmentId"`
+	EnvironmentName             string                     `json:"environmentName"`
+	Id                          string                     `json:"id"`
+	Message                     *string                    `json:"message,omitempty"`
+	ProjectId                   string                     `json:"projectId"`
+	State                       AppEnvironmentState        `json:"state"`
+	UpdatedAt                   time.Time                  `json:"updatedAt"`
+	Version                     int                        `json:"version"`
+	WorkloadKind                AppEnvironmentWorkloadKind `json:"workloadKind"`
 }
 
 // AppEnvironmentState defines model for AppEnvironment.State.
 type AppEnvironmentState string
 
+// AppEnvironmentWorkloadKind defines model for AppEnvironment.WorkloadKind.
+type AppEnvironmentWorkloadKind string
+
 // AppEnvironmentCreateInput defines model for AppEnvironmentCreateInput.
 type AppEnvironmentCreateInput struct {
-	Branch        string               `json:"branch"`
-	Configuration RuntimeConfiguration `json:"configuration"`
-	EnvironmentId string               `json:"environmentId"`
+	Branch        string                                `json:"branch"`
+	Configuration RuntimeConfiguration                  `json:"configuration"`
+	EnvironmentId string                                `json:"environmentId"`
+	Volume        *AppVolumeRequest                     `json:"volume,omitempty"`
+	WorkloadKind  AppEnvironmentCreateInputWorkloadKind `json:"workloadKind"`
 }
+
+// AppEnvironmentCreateInputWorkloadKind defines model for AppEnvironmentCreateInput.WorkloadKind.
+type AppEnvironmentCreateInputWorkloadKind string
 
 // AppEnvironmentInput defines model for AppEnvironmentInput.
 type AppEnvironmentInput struct {
 	Branch        string               `json:"branch"`
 	Configuration RuntimeConfiguration `json:"configuration"`
+}
+
+// AppVolume defines model for AppVolume.
+type AppVolume struct {
+	AppEnvironmentId string                   `json:"appEnvironmentId"`
+	Attached         bool                     `json:"attached"`
+	CreatedAt        time.Time                `json:"createdAt"`
+	DesiredState     AppVolumeDesiredState    `json:"desiredState"`
+	Id               string                   `json:"id"`
+	Message          *string                  `json:"message,omitempty"`
+	MountPath        string                   `json:"mountPath"`
+	RetentionPolicy  AppVolumeRetentionPolicy `json:"retentionPolicy"`
+	SizeGiB          int                      `json:"sizeGiB"`
+	State            AppVolumeState           `json:"state"`
+	StorageProfileId string                   `json:"storageProfileId"`
+	UpdatedAt        time.Time                `json:"updatedAt"`
+	Version          int                      `json:"version"`
+}
+
+// AppVolumeDesiredState defines model for AppVolume.DesiredState.
+type AppVolumeDesiredState string
+
+// AppVolumeRetentionPolicy defines model for AppVolume.RetentionPolicy.
+type AppVolumeRetentionPolicy string
+
+// AppVolumeState defines model for AppVolume.State.
+type AppVolumeState string
+
+// AppVolumeExpansionInput defines model for AppVolumeExpansionInput.
+type AppVolumeExpansionInput struct {
+	SizeGiB int `json:"sizeGiB"`
+}
+
+// AppVolumeMutation defines model for AppVolumeMutation.
+type AppVolumeMutation struct {
+	Operation Operation `json:"operation"`
+	Volume    AppVolume `json:"volume"`
+}
+
+// AppVolumeRequest defines model for AppVolumeRequest.
+type AppVolumeRequest struct {
+	MountPath        string `json:"mountPath"`
+	SizeGiB          int    `json:"sizeGiB"`
+	StorageProfileId string `json:"storageProfileId"`
 }
 
 // AuditEvent defines model for AuditEvent.
@@ -1144,20 +1344,25 @@ type DeliveryPolicyInput struct {
 
 // Deployment defines model for Deployment.
 type Deployment struct {
-	AppEnvironmentId     string               `json:"appEnvironmentId"`
-	Configuration        RuntimeConfiguration `json:"configuration"`
-	ConfigurationVersion int                  `json:"configurationVersion"`
-	CreatedAt            time.Time            `json:"createdAt"`
-	Id                   string               `json:"id"`
-	Message              *string              `json:"message,omitempty"`
-	ReleaseId            string               `json:"releaseId"`
-	RequestedBy          string               `json:"requestedBy"`
-	State                DeploymentState      `json:"state"`
-	UpdatedAt            time.Time            `json:"updatedAt"`
+	AppEnvironmentId     string                 `json:"appEnvironmentId"`
+	AppVolumeId          *string                `json:"appVolumeId,omitempty"`
+	Configuration        RuntimeConfiguration   `json:"configuration"`
+	ConfigurationVersion int                    `json:"configurationVersion"`
+	CreatedAt            time.Time              `json:"createdAt"`
+	Id                   string                 `json:"id"`
+	Message              *string                `json:"message,omitempty"`
+	ReleaseId            string                 `json:"releaseId"`
+	RequestedBy          string                 `json:"requestedBy"`
+	State                DeploymentState        `json:"state"`
+	UpdatedAt            time.Time              `json:"updatedAt"`
+	WorkloadKind         DeploymentWorkloadKind `json:"workloadKind"`
 }
 
 // DeploymentState defines model for Deployment.State.
 type DeploymentState string
+
+// DeploymentWorkloadKind defines model for Deployment.WorkloadKind.
+type DeploymentWorkloadKind string
 
 // DeploymentInput defines model for DeploymentInput.
 type DeploymentInput struct {
@@ -1281,6 +1486,7 @@ type MFAStatus struct {
 // Operation defines model for Operation.
 type Operation struct {
 	AppEnvironmentId *string         `json:"appEnvironmentId,omitempty"`
+	AppVolumeId      *string         `json:"appVolumeId,omitempty"`
 	Attempts         int             `json:"attempts"`
 	CreatedAt        *time.Time      `json:"createdAt,omitempty"`
 	DeploymentId     *string         `json:"deploymentId,omitempty"`
@@ -1573,6 +1779,22 @@ type SessionAssuranceLevel string
 
 // SessionWorkspaceMembershipsRole defines model for Session.WorkspaceMemberships.Role.
 type SessionWorkspaceMembershipsRole string
+
+// StorageProfile defines model for StorageProfile.
+type StorageProfile struct {
+	AutomaticBackup bool                     `json:"automaticBackup"`
+	AvailableGiB    int                      `json:"availableGiB"`
+	Durability      StorageProfileDurability `json:"durability"`
+	Expandable      bool                     `json:"expandable"`
+	Id              string                   `json:"id"`
+	MaximumSizeGiB  int                      `json:"maximumSizeGiB"`
+	MinimumSizeGiB  int                      `json:"minimumSizeGiB"`
+	Name            string                   `json:"name"`
+	Snapshots       bool                     `json:"snapshots"`
+}
+
+// StorageProfileDurability defines model for StorageProfile.Durability.
+type StorageProfileDurability string
 
 // TOTPChallengeInput defines model for TOTPChallengeInput.
 type TOTPChallengeInput struct {
@@ -2002,6 +2224,18 @@ type GetAppEnvironmentRuntimeMetricsParams struct {
 	To   *time.Time `form:"to,omitempty" json:"to,omitempty"`
 }
 
+// DeleteAppEnvironmentVolumeParams defines parameters for DeleteAppEnvironmentVolume.
+type DeleteAppEnvironmentVolumeParams struct {
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+	IfMatch        IfMatch        `json:"If-Match"`
+}
+
+// ExpandAppEnvironmentVolumeParams defines parameters for ExpandAppEnvironmentVolume.
+type ExpandAppEnvironmentVolumeParams struct {
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+	IfMatch        IfMatch        `json:"If-Match"`
+}
+
 // ListAppReleasesParams defines parameters for ListAppReleases.
 type ListAppReleasesParams struct {
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
@@ -2120,6 +2354,9 @@ type PreviewAppEnvironmentDeploymentJSONRequestBody = DeploymentPreviewInput
 
 // CreateAppEnvironmentDeploymentJSONRequestBody defines body for CreateAppEnvironmentDeployment for application/json ContentType.
 type CreateAppEnvironmentDeploymentJSONRequestBody = DeploymentInput
+
+// ExpandAppEnvironmentVolumeJSONRequestBody defines body for ExpandAppEnvironmentVolume for application/json ContentType.
+type ExpandAppEnvironmentVolumeJSONRequestBody = AppVolumeExpansionInput
 
 // SetAppSourceJSONRequestBody defines body for SetAppSource for application/json ContentType.
 type SetAppSourceJSONRequestBody = GitHubSourceInput
@@ -2382,6 +2619,15 @@ type ServerInterface interface {
 	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/observability/metrics/live)
 	StreamAppEnvironmentRuntimeMetrics(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId)
 
+	// (DELETE /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/volume)
+	DeleteAppEnvironmentVolume(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId, params DeleteAppEnvironmentVolumeParams)
+
+	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/volume)
+	GetAppEnvironmentVolume(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId)
+
+	// (PUT /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/volume)
+	ExpandAppEnvironmentVolume(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId, params ExpandAppEnvironmentVolumeParams)
+
 	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/releases)
 	ListAppReleases(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, params ListAppReleasesParams)
 
@@ -2411,6 +2657,9 @@ type ServerInterface interface {
 
 	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/environments/{environmentId}/apps)
 	ListEnvironmentApps(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, environmentId EnvironmentId, params ListEnvironmentAppsParams)
+
+	// (GET /api/v1/workspaces/{workspaceId}/storage-profiles)
+	ListStorageProfiles(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId)
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
@@ -2832,6 +3081,21 @@ func (_ Unimplemented) StreamAppEnvironmentRuntimeMetrics(w http.ResponseWriter,
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// (DELETE /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/volume)
+func (_ Unimplemented) DeleteAppEnvironmentVolume(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId, params DeleteAppEnvironmentVolumeParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/volume)
+func (_ Unimplemented) GetAppEnvironmentVolume(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (PUT /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/volume)
+func (_ Unimplemented) ExpandAppEnvironmentVolume(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId, params ExpandAppEnvironmentVolumeParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/releases)
 func (_ Unimplemented) ListAppReleases(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, params ListAppReleasesParams) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -2879,6 +3143,11 @@ func (_ Unimplemented) UpdateEnvironment(w http.ResponseWriter, r *http.Request,
 
 // (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/environments/{environmentId}/apps)
 func (_ Unimplemented) ListEnvironmentApps(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, environmentId EnvironmentId, params ListEnvironmentAppsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /api/v1/workspaces/{workspaceId}/storage-profiles)
+func (_ Unimplemented) ListStorageProfiles(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -6610,6 +6879,267 @@ func (siw *ServerInterfaceWrapper) StreamAppEnvironmentRuntimeMetrics(w http.Res
 	handler.ServeHTTP(w, r)
 }
 
+// DeleteAppEnvironmentVolume operation middleware
+func (siw *ServerInterfaceWrapper) DeleteAppEnvironmentVolume(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appId" -------------
+	var appId AppId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appId", chi.URLParam(r, "appId"), &appId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appEnvironmentId" -------------
+	var appEnvironmentId AppEnvironmentId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appEnvironmentId", chi.URLParam(r, "appEnvironmentId"), &appEnvironmentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appEnvironmentId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeleteAppEnvironmentVolumeParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch IfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "integer", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteAppEnvironmentVolume(w, r, workspaceId, projectId, appId, appEnvironmentId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAppEnvironmentVolume operation middleware
+func (siw *ServerInterfaceWrapper) GetAppEnvironmentVolume(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appId" -------------
+	var appId AppId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appId", chi.URLParam(r, "appId"), &appId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appEnvironmentId" -------------
+	var appEnvironmentId AppEnvironmentId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appEnvironmentId", chi.URLParam(r, "appEnvironmentId"), &appEnvironmentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appEnvironmentId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAppEnvironmentVolume(w, r, workspaceId, projectId, appId, appEnvironmentId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ExpandAppEnvironmentVolume operation middleware
+func (siw *ServerInterfaceWrapper) ExpandAppEnvironmentVolume(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appId" -------------
+	var appId AppId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appId", chi.URLParam(r, "appId"), &appId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appEnvironmentId" -------------
+	var appEnvironmentId AppEnvironmentId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appEnvironmentId", chi.URLParam(r, "appEnvironmentId"), &appEnvironmentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appEnvironmentId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ExpandAppEnvironmentVolumeParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch IfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "integer", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ExpandAppEnvironmentVolume(w, r, workspaceId, projectId, appId, appEnvironmentId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListAppReleases operation middleware
 func (siw *ServerInterfaceWrapper) ListAppReleases(w http.ResponseWriter, r *http.Request) {
 
@@ -7188,6 +7718,32 @@ func (siw *ServerInterfaceWrapper) ListEnvironmentApps(w http.ResponseWriter, r 
 	handler.ServeHTTP(w, r)
 }
 
+// ListStorageProfiles operation middleware
+func (siw *ServerInterfaceWrapper) ListStorageProfiles(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListStorageProfiles(w, r, workspaceId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 type UnescapedCookieParamError struct {
 	ParamName string
 	Err       error
@@ -7540,6 +8096,18 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Put(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}", wrapper.UpdateAppEnvironment)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/storage-profiles", wrapper.ListStorageProfiles)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/volume", wrapper.DeleteAppEnvironmentVolume)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/volume", wrapper.GetAppEnvironmentVolume)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/volume", wrapper.ExpandAppEnvironmentVolume)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/delivery-policy", wrapper.GetAppEnvironmentDeliveryPolicy)
@@ -11927,6 +12495,210 @@ func (response StreamAppEnvironmentRuntimeMetrics503JSONResponse) VisitStreamApp
 	return err
 }
 
+type DeleteAppEnvironmentVolumeRequestObject struct {
+	WorkspaceId      WorkspaceId      `json:"workspaceId"`
+	ProjectId        ProjectId        `json:"projectId"`
+	AppId            AppId            `json:"appId"`
+	AppEnvironmentId AppEnvironmentId `json:"appEnvironmentId"`
+	Params           DeleteAppEnvironmentVolumeParams
+}
+
+type DeleteAppEnvironmentVolumeResponseObject interface {
+	VisitDeleteAppEnvironmentVolumeResponse(w http.ResponseWriter) error
+}
+
+type DeleteAppEnvironmentVolume202JSONResponse AppVolumeMutation
+
+func (response DeleteAppEnvironmentVolume202JSONResponse) VisitDeleteAppEnvironmentVolumeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(202)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteAppEnvironmentVolume403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response DeleteAppEnvironmentVolume403JSONResponse) VisitDeleteAppEnvironmentVolumeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteAppEnvironmentVolume404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response DeleteAppEnvironmentVolume404JSONResponse) VisitDeleteAppEnvironmentVolumeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteAppEnvironmentVolume409JSONResponse struct{ ConflictJSONResponse }
+
+func (response DeleteAppEnvironmentVolume409JSONResponse) VisitDeleteAppEnvironmentVolumeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAppEnvironmentVolumeRequestObject struct {
+	WorkspaceId      WorkspaceId      `json:"workspaceId"`
+	ProjectId        ProjectId        `json:"projectId"`
+	AppId            AppId            `json:"appId"`
+	AppEnvironmentId AppEnvironmentId `json:"appEnvironmentId"`
+}
+
+type GetAppEnvironmentVolumeResponseObject interface {
+	VisitGetAppEnvironmentVolumeResponse(w http.ResponseWriter) error
+}
+
+type GetAppEnvironmentVolume200JSONResponse AppVolume
+
+func (response GetAppEnvironmentVolume200JSONResponse) VisitGetAppEnvironmentVolumeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAppEnvironmentVolume403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response GetAppEnvironmentVolume403JSONResponse) VisitGetAppEnvironmentVolumeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAppEnvironmentVolume404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response GetAppEnvironmentVolume404JSONResponse) VisitGetAppEnvironmentVolumeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ExpandAppEnvironmentVolumeRequestObject struct {
+	WorkspaceId      WorkspaceId      `json:"workspaceId"`
+	ProjectId        ProjectId        `json:"projectId"`
+	AppId            AppId            `json:"appId"`
+	AppEnvironmentId AppEnvironmentId `json:"appEnvironmentId"`
+	Params           ExpandAppEnvironmentVolumeParams
+	Body             *ExpandAppEnvironmentVolumeJSONRequestBody
+}
+
+type ExpandAppEnvironmentVolumeResponseObject interface {
+	VisitExpandAppEnvironmentVolumeResponse(w http.ResponseWriter) error
+}
+
+type ExpandAppEnvironmentVolume202JSONResponse AppVolumeMutation
+
+func (response ExpandAppEnvironmentVolume202JSONResponse) VisitExpandAppEnvironmentVolumeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(202)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ExpandAppEnvironmentVolume400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response ExpandAppEnvironmentVolume400JSONResponse) VisitExpandAppEnvironmentVolumeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ExpandAppEnvironmentVolume403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response ExpandAppEnvironmentVolume403JSONResponse) VisitExpandAppEnvironmentVolumeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ExpandAppEnvironmentVolume404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ExpandAppEnvironmentVolume404JSONResponse) VisitExpandAppEnvironmentVolumeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ExpandAppEnvironmentVolume409JSONResponse struct{ ConflictJSONResponse }
+
+func (response ExpandAppEnvironmentVolume409JSONResponse) VisitExpandAppEnvironmentVolumeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListAppReleasesRequestObject struct {
 	WorkspaceId WorkspaceId `json:"workspaceId"`
 	ProjectId   ProjectId   `json:"projectId"`
@@ -12480,6 +13252,58 @@ func (response ListEnvironmentApps404JSONResponse) VisitListEnvironmentAppsRespo
 	return err
 }
 
+type ListStorageProfilesRequestObject struct {
+	WorkspaceId WorkspaceId `json:"workspaceId"`
+}
+
+type ListStorageProfilesResponseObject interface {
+	VisitListStorageProfilesResponse(w http.ResponseWriter) error
+}
+
+type ListStorageProfiles200JSONResponse struct {
+	Items []StorageProfile `json:"items"`
+}
+
+func (response ListStorageProfiles200JSONResponse) VisitListStorageProfilesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListStorageProfiles403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response ListStorageProfiles403JSONResponse) VisitListStorageProfilesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListStorageProfiles404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ListStorageProfiles404JSONResponse) VisitListStorageProfilesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 
@@ -12732,6 +13556,15 @@ type StrictServerInterface interface {
 	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/observability/metrics/live)
 	StreamAppEnvironmentRuntimeMetrics(ctx context.Context, request StreamAppEnvironmentRuntimeMetricsRequestObject) (StreamAppEnvironmentRuntimeMetricsResponseObject, error)
 
+	// (DELETE /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/volume)
+	DeleteAppEnvironmentVolume(ctx context.Context, request DeleteAppEnvironmentVolumeRequestObject) (DeleteAppEnvironmentVolumeResponseObject, error)
+
+	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/volume)
+	GetAppEnvironmentVolume(ctx context.Context, request GetAppEnvironmentVolumeRequestObject) (GetAppEnvironmentVolumeResponseObject, error)
+
+	// (PUT /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/volume)
+	ExpandAppEnvironmentVolume(ctx context.Context, request ExpandAppEnvironmentVolumeRequestObject) (ExpandAppEnvironmentVolumeResponseObject, error)
+
 	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/releases)
 	ListAppReleases(ctx context.Context, request ListAppReleasesRequestObject) (ListAppReleasesResponseObject, error)
 
@@ -12761,6 +13594,9 @@ type StrictServerInterface interface {
 
 	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/environments/{environmentId}/apps)
 	ListEnvironmentApps(ctx context.Context, request ListEnvironmentAppsRequestObject) (ListEnvironmentAppsResponseObject, error)
+
+	// (GET /api/v1/workspaces/{workspaceId}/storage-profiles)
+	ListStorageProfiles(ctx context.Context, request ListStorageProfilesRequestObject) (ListStorageProfilesResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -15245,6 +16081,102 @@ func (sh *strictHandler) StreamAppEnvironmentRuntimeMetrics(w http.ResponseWrite
 	}
 }
 
+// DeleteAppEnvironmentVolume operation middleware
+func (sh *strictHandler) DeleteAppEnvironmentVolume(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId, params DeleteAppEnvironmentVolumeParams) {
+	var request DeleteAppEnvironmentVolumeRequestObject
+
+	request.WorkspaceId = workspaceId
+	request.ProjectId = projectId
+	request.AppId = appId
+	request.AppEnvironmentId = appEnvironmentId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteAppEnvironmentVolume(ctx, request.(DeleteAppEnvironmentVolumeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteAppEnvironmentVolume")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteAppEnvironmentVolumeResponseObject); ok {
+		if err := validResponse.VisitDeleteAppEnvironmentVolumeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAppEnvironmentVolume operation middleware
+func (sh *strictHandler) GetAppEnvironmentVolume(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId) {
+	var request GetAppEnvironmentVolumeRequestObject
+
+	request.WorkspaceId = workspaceId
+	request.ProjectId = projectId
+	request.AppId = appId
+	request.AppEnvironmentId = appEnvironmentId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAppEnvironmentVolume(ctx, request.(GetAppEnvironmentVolumeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAppEnvironmentVolume")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAppEnvironmentVolumeResponseObject); ok {
+		if err := validResponse.VisitGetAppEnvironmentVolumeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ExpandAppEnvironmentVolume operation middleware
+func (sh *strictHandler) ExpandAppEnvironmentVolume(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, appEnvironmentId AppEnvironmentId, params ExpandAppEnvironmentVolumeParams) {
+	var request ExpandAppEnvironmentVolumeRequestObject
+
+	request.WorkspaceId = workspaceId
+	request.ProjectId = projectId
+	request.AppId = appId
+	request.AppEnvironmentId = appEnvironmentId
+	request.Params = params
+
+	var body ExpandAppEnvironmentVolumeJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ExpandAppEnvironmentVolume(ctx, request.(ExpandAppEnvironmentVolumeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ExpandAppEnvironmentVolume")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ExpandAppEnvironmentVolumeResponseObject); ok {
+		if err := validResponse.VisitExpandAppEnvironmentVolumeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // ListAppReleases operation middleware
 func (sh *strictHandler) ListAppReleases(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, params ListAppReleasesParams) {
 	var request ListAppReleasesRequestObject
@@ -15542,6 +16474,32 @@ func (sh *strictHandler) ListEnvironmentApps(w http.ResponseWriter, r *http.Requ
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ListEnvironmentAppsResponseObject); ok {
 		if err := validResponse.VisitListEnvironmentAppsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListStorageProfiles operation middleware
+func (sh *strictHandler) ListStorageProfiles(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId) {
+	var request ListStorageProfilesRequestObject
+
+	request.WorkspaceId = workspaceId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListStorageProfiles(ctx, request.(ListStorageProfilesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListStorageProfiles")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListStorageProfilesResponseObject); ok {
+		if err := validResponse.VisitListStorageProfilesResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

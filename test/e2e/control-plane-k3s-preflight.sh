@@ -15,7 +15,7 @@ certificate_namespace="${FRUTO_CERTIFICATE_NAMESPACE:-traefik-system}"
 certificate_name="${FRUTO_CERTIFICATE_NAME:-molejo-public-tls}"
 certificate_secret="${FRUTO_CERTIFICATE_SECRET:-molejo-public-tls}"
 
-for variable in FRUTO_API_IMAGE FRUTO_CONSOLE_IMAGE FRUTO_TESTKIT_IMAGE; do
+for variable in FRUTO_API_IMAGE FRUTO_CONSOLE_IMAGE FRUTO_OPERATOR_IMAGE FRUTO_TESTKIT_IMAGE; do
   reference="${!variable:-}"
   [[ "$reference" =~ ^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$ ]] || {
     echo "$variable must be an immutable image reference" >&2
@@ -59,7 +59,7 @@ actual_certificate_secret="$(kubectl --context "$target_context" -n "$certificat
 tls_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 10 https://cloud.molejo.dev/)"
 [[ "$tls_status" != 000 ]] || { echo "public TLS handshake failed" >&2; exit 1; }
 
-for reference in "$FRUTO_API_IMAGE" "$FRUTO_CONSOLE_IMAGE" "$FRUTO_TESTKIT_IMAGE"; do
+for reference in "$FRUTO_API_IMAGE" "$FRUTO_CONSOLE_IMAGE" "$FRUTO_OPERATOR_IMAGE" "$FRUTO_TESTKIT_IMAGE"; do
   docker buildx imagetools inspect "$reference" >/dev/null
 done
 

@@ -26,8 +26,7 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: AppDeployment represents an immutable application release projected
-          onto Kubernetes.
+        description: AppDeployment represents the stable runtime intent for one AppEnvironment.
         properties:
           apiVersion:
             description: |-
@@ -199,17 +198,63 @@ spec:
                 x-kubernetes-list-map-keys:
                 - name
                 x-kubernetes-list-type: map
+              workload:
+                description: Workload selects exactly one workload renderer.
+                properties:
+                  kind:
+                    description: AppDeploymentWorkloadKind discriminates the workload
+                      renderer.
+                    enum:
+                    - Stateless
+                    - Stateful
+                    type: string
+                  stateful:
+                    description: StatefulWorkload attaches one durable AppVolume to
+                      the workload.
+                    properties:
+                      mountPath:
+                        description: MountPath is the absolute path made writable
+                          in the workload container.
+                        maxLength: 255
+                        minLength: 2
+                        pattern: ^/[^[:cntrl:]]+$
+                        type: string
+                      volumeRef:
+                        description: VolumeRef is the namespaced AppVolume identity.
+                        maxLength: 63
+                        pattern: ^vol-[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$
+                        type: string
+                    required:
+                    - mountPath
+                    - volumeRef
+                    type: object
+                  stateless:
+                    description: StatelessWorkload marks a workload without persistent
+                      storage.
+                    type: object
+                required:
+                - kind
+                type: object
+                x-kubernetes-validations:
+                - message: Stateless requires only the stateless branch
+                  rule: self.kind != 'Stateless' || (has(self.stateless) && !has(self.stateful))
+                - message: Stateful requires only the stateful branch
+                  rule: self.kind != 'Stateful' || (has(self.stateful) && !has(self.stateless))
             required:
             - image
             - port
             - probes
             - resources
+            - workload
             type: object
             x-kubernetes-validations:
             - message: slug is required for public exposure
               rule: self.exposure != 'Public' || has(self.slug)
             - message: slug must be omitted for private exposure
               rule: self.exposure != 'Private' || !has(self.slug)
+            - message: Stateful workloads require exactly one replica
+              rule: self.workload.kind != 'Stateful' || !has(self.replicas) || self.replicas
+                == 1
           status:
             description: AppDeploymentStatus reports the observed workload state.
             properties:

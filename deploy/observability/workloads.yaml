@@ -53,6 +53,7 @@ spec:
     - metadata: { name: data }
       spec:
         accessModes: [ReadWriteOnce]
+        storageClassName: molejo-platform-local
         resources: { requests: { storage: 20Gi } }
 ---
 apiVersion: apps/v1
@@ -109,6 +110,7 @@ spec:
     - metadata: { name: data }
       spec:
         accessModes: [ReadWriteOnce]
+        storageClassName: molejo-platform-local
         resources: { requests: { storage: 10Gi } }
 ---
 apiVersion: apps/v1

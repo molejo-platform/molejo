@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -74,6 +75,25 @@ func TestGraphQLTransport(t *testing.T) {
 	}
 	if payload.Data.Status != "ok" || payload.Data.Version != version {
 		t.Fatalf("unexpected GraphQL payload: %#v", payload)
+	}
+}
+
+func TestPersistentMarker(t *testing.T) {
+	t.Setenv("FIXTURE_STATE_FILE", filepath.Join(t.TempDir(), "marker"))
+	handler := newHandler()
+
+	writeRequest := httptest.NewRequest(http.MethodPut, "/state", strings.NewReader("stateful-marker"))
+	writeResponse := httptest.NewRecorder()
+	handler.ServeHTTP(writeResponse, writeRequest)
+	if writeResponse.Code != http.StatusNoContent {
+		t.Fatalf("write status = %d, want %d: %s", writeResponse.Code, http.StatusNoContent, writeResponse.Body.String())
+	}
+
+	readRequest := httptest.NewRequest(http.MethodGet, "/state", nil)
+	readResponse := httptest.NewRecorder()
+	handler.ServeHTTP(readResponse, readRequest)
+	if readResponse.Code != http.StatusOK || strings.TrimSpace(readResponse.Body.String()) != "stateful-marker" {
+		t.Fatalf("read status = %d body = %q", readResponse.Code, readResponse.Body.String())
 	}
 }
 

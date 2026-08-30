@@ -98,8 +98,8 @@ revisar sus logs. Un runtime ausente o indisponible se muestra como `Unknown`,
 nunca como deployment exitoso. Esta instalación no declara HA ni DR.
 
 Antes de la aceptación en k3s, `just ci` debe pasar desde un checkout limpio.
-Registrá el commit de origen, `linux/amd64` y los digests de API, Consola y
-Testkit en un manifiesto externo de release; reemplazá los placeholders de UID
+Registrá el commit de origen, `linux/amd64` y los digests de API, Consola,
+platform operator y Testkit en un manifiesto externo de release; reemplazá los placeholders de UID
 del cluster y proxy confiable; creá Secrets de base y bootstrap fuera de Git; y
 declará si la base es descartable. Si no lo es, generá y verificá una exportación
 manual cifrada antes del rollout. Rollback significa reaplicar digests
@@ -118,7 +118,7 @@ separada.
 
 Usá un checkout limpio y con commit y un directorio externo con modo `0700`. El
 overlay de laboratorio fija PostgreSQL 17.6 por el digest del manifiesto
-`linux/amd64`, lo agenda en `fruto-data-01`, solicita un volumen `local-path` de
+`linux/amd64`, lo agenda en `fruto-data-01`, solicita un volumen `molejo-platform-local` de
 2 GiB y marca servicio y storage como fixtures pre-alpha descartables. Esto no
 es HA ni una base administrada.
 

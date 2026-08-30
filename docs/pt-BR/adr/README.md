@@ -25,3 +25,5 @@
   — Draft
 - [ADR-0010: Immutable Platform Configuration Releases](0010-immutable-platform-configuration-releases.md)
   — Draft
+- [ADR-0011: Portable Stateful Runtime and Volume Lifecycle](0011-portable-stateful-runtime-and-volume-lifecycle.md)
+  — Draft

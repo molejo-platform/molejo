@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -115,6 +116,58 @@ func TestWorkerRetriesAppEnvironmentDeletionUntilRuntimeAbsenceIsObserved(t *tes
 	}
 }
 
+func TestWorkerRetriesVolumeProvisioningAfterATemporaryRuntimeFailure(t *testing.T) {
+	ctx := context.Background()
+	s, workspaceID, actorID, workspaceNamespace := newExecutorIntegrationFixture(t)
+	if err := s.ConfigureStorageProfile(ctx, store.StorageProfileInstallation{
+		ID: "persistent-standard", Name: "Persistent storage", MinimumSizeGiB: 1,
+		MaximumSizeGiB: 10, TotalCapacityGiB: 10, WorkspaceQuotaGiB: 10,
+		Expandable: true, Durability: "NodeLocal", RuntimeBinding: "test-storage", Enabled: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	project, err := s.CreateProject(ctx, workspaceID, mustAPIID(t, "prj"), "Platform", "platform")
+	if err != nil {
+		t.Fatal(err)
+	}
+	app, err := s.CreateApp(ctx, workspaceID, project.PublicID, mustAPIID(t, "app"), "API", "api")
+	if err != nil {
+		t.Fatal(err)
+	}
+	environment, err := s.CreateEnvironment(ctx, workspaceID, project.PublicID, mustAPIID(t, "env"), "Production", "production")
+	if err != nil {
+		t.Fatal(err)
+	}
+	target, volume, err := s.CreateAppEnvironmentWithWorkload(ctx, workspaceID, actorID, mustAPIID(t, "aev"), project.PublicID, app.PublicID, environment.PublicID, "main", domain.WorkloadStateful, apiRuntimeConfiguration("stateful-api"), &domain.VolumeRequest{StorageProfileID: "persistent-standard", SizeGiB: 1, MountPath: "/data"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtimeClient := &recordingRuntime{volumeApplyErr: errors.New("temporary runtime failure")}
+	server := NewServer(s, runtimeClient, Config{OperationLease: time.Minute, WorkspaceNamespace: workspaceNamespace}, nil)
+	if processed, runErr := server.RunOnce(ctx, "volume-worker"); runErr != nil || !processed {
+		t.Fatalf("failed volume attempt: processed=%v err=%v", processed, runErr)
+	}
+	var operationID int64
+	var status string
+	if err = s.Pool.QueryRow(ctx, `SELECT id,status FROM operations WHERE app_volume_id=$1 AND kind=$2`, volume.ID, domain.OperationEnsureVolume).Scan(&operationID, &status); err != nil {
+		t.Fatal(err)
+	}
+	if status != domain.OperationPending {
+		t.Fatalf("operation status after temporary failure=%s", status)
+	}
+	runtimeClient.volumeApplyErr = nil
+	if _, err = s.Pool.Exec(ctx, `UPDATE operations SET next_attempt_at=now() WHERE id=$1`, operationID); err != nil {
+		t.Fatal(err)
+	}
+	if processed, runErr := server.RunOnce(ctx, "volume-worker"); runErr != nil || !processed {
+		t.Fatalf("retried volume attempt: processed=%v err=%v", processed, runErr)
+	}
+	current, err := s.FindAppVolume(ctx, workspaceID, target.PublicID)
+	if err != nil || current.State != domain.VolumeStateReady {
+		t.Fatalf("volume after retry=%+v err=%v", current, err)
+	}
+}
+
 func TestSessionReadKeepsTheExistingSessionStable(t *testing.T) {
 	ctx := context.Background()
 	s, _, actorID, _ := newExecutorIntegrationFixture(t)
@@ -167,9 +220,18 @@ type recordingRuntime struct {
 	intent             domain.Intent
 	exists             bool
 	garbageCollections int
+	volumeApplyErr     error
 }
 
 func (r *recordingRuntime) EnsureWorkspace(context.Context, string) error { return nil }
+
+func (r *recordingRuntime) ApplyVolume(context.Context, string, string, controlruntime.VolumeIntent) error {
+	return r.volumeApplyErr
+}
+
+func (r *recordingRuntime) ObserveVolume(context.Context, string, string) (controlruntime.VolumeObservation, error) {
+	return controlruntime.VolumeObservation{Exists: true, State: domain.VolumeStateReady, ObservedSizeGiB: 1}, nil
+}
 
 func (r *recordingRuntime) ApplyDeployment(_ context.Context, _, name string, intent domain.Intent) error {
 	r.name = name

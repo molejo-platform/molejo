@@ -1,5 +1,6 @@
 export const workspaceScopeKeys = {
   parameters: (workspaceId: string) => ["workspaces", workspaceId, "parameters", "list"] as const,
+  storageProfiles: (workspaceId: string) => ["workspaces", workspaceId, "storage-profiles"] as const,
   projects: (workspaceId: string) => ["workspaces", workspaceId, "projects", "list"] as const,
   project: (workspaceId: string, projectId: string) => ["workspaces", workspaceId, "projects", "detail", projectId] as const,
   environments: (workspaceId: string, projectId: string) => ["workspaces", workspaceId, "projects", projectId, "environments", "list"] as const,
@@ -18,6 +19,7 @@ export const workspaceScopeKeys = {
   appEnvironmentDeployments: (workspaceId: string, projectId: string, appId: string, appEnvironmentId: string) => ["workspaces", workspaceId, "projects", projectId, "apps", appId, "environments", appEnvironmentId, "deployments"] as const,
   appEnvironmentConfigurationVersions: (workspaceId: string, projectId: string, appId: string, appEnvironmentId: string) => ["workspaces", workspaceId, "projects", projectId, "apps", appId, "environments", appEnvironmentId, "configuration-versions"] as const,
   appEnvironmentDeliveryPolicy: (workspaceId: string, projectId: string, appId: string, appEnvironmentId: string) => ["workspaces", workspaceId, "projects", projectId, "apps", appId, "environments", appEnvironmentId, "delivery-policy"] as const,
+  appEnvironmentVolume: (workspaceId: string, projectId: string, appId: string, appEnvironmentId: string) => ["workspaces", workspaceId, "projects", projectId, "apps", appId, "environments", appEnvironmentId, "volume"] as const,
   appEnvironmentRuntimeLogs: (workspaceId: string, projectId: string, appId: string, appEnvironmentId: string, filters: object) => ["workspaces", workspaceId, "projects", projectId, "apps", appId, "environments", appEnvironmentId, "observability", "logs", filters] as const,
   appEnvironmentRuntimeMetrics: (workspaceId: string, projectId: string, appId: string, appEnvironmentId: string, filters: object) => ["workspaces", workspaceId, "projects", projectId, "apps", appId, "environments", appEnvironmentId, "observability", "metrics", filters] as const,
   appEnvironmentRuntimeEvents: (workspaceId: string, projectId: string, appId: string, appEnvironmentId: string, filters: object) => ["workspaces", workspaceId, "projects", projectId, "apps", appId, "environments", appEnvironmentId, "observability", "events", filters] as const,

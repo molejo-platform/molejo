@@ -1094,6 +1094,70 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/workspaces/{workspaceId}/storage-profiles:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+    get:
+      operationId: listStorageProfiles
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Portable storage profiles available to the Workspace
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                additionalProperties: false
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/StorageProfile' } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/volume:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/AppId' }
+      - { $ref: '#/components/parameters/AppEnvironmentId' }
+    get:
+      operationId: getAppEnvironmentVolume
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Persistent volume attached to this App Environment
+          content: { application/json: { schema: { $ref: '#/components/schemas/AppVolume' } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      operationId: expandAppEnvironmentVolume
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+        - { $ref: '#/components/parameters/IfMatch' }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AppVolumeExpansionInput' } } }
+      responses:
+        '202':
+          description: Volume expansion accepted
+          content: { application/json: { schema: { $ref: '#/components/schemas/AppVolumeMutation' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      operationId: deleteAppEnvironmentVolume
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+        - { $ref: '#/components/parameters/IfMatch' }
+      responses:
+        '202':
+          description: Volume retention accepted after runtime detach
+          content: { application/json: { schema: { $ref: '#/components/schemas/AppVolumeMutation' } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
   /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/delivery-policy:
     parameters:
       - { $ref: '#/components/parameters/WorkspaceId' }
@@ -1980,15 +2044,17 @@ components:
         configuration: { $ref: '#/components/schemas/RuntimeConfiguration' }
     AppEnvironmentCreateInput:
       type: object
-      required: [environmentId, branch, configuration]
+      required: [environmentId, branch, workloadKind, configuration]
       additionalProperties: false
       properties:
         environmentId: { type: string, pattern: '^env-[a-z2-7]{20}$' }
         branch: { type: string, minLength: 1, maxLength: 255 }
+        workloadKind: { type: string, enum: [Stateless, Stateful] }
+        volume: { $ref: '#/components/schemas/AppVolumeRequest' }
         configuration: { $ref: '#/components/schemas/RuntimeConfiguration' }
     AppEnvironment:
       type: object
-      required: [id, projectId, appId, appName, environmentId, environmentName, branch, configuration, configurationVersion, version, state, createdAt, updatedAt]
+      required: [id, projectId, appId, appName, environmentId, environmentName, branch, workloadKind, configuration, configurationVersion, version, state, createdAt, updatedAt]
       additionalProperties: false
       properties:
         id: { type: string, pattern: '^aev-[a-z2-7]{20}$' }
@@ -1998,6 +2064,7 @@ components:
         environmentId: { type: string, pattern: '^env-[a-z2-7]{20}$' }
         environmentName: { type: string, minLength: 1, maxLength: 80 }
         branch: { type: string, minLength: 1, maxLength: 255 }
+        workloadKind: { type: string, enum: [Stateless, Stateful] }
         configuration: { $ref: '#/components/schemas/RuntimeConfiguration' }
         configurationVersion: { type: integer, minimum: 1 }
         version: { type: integer, minimum: 1 }
@@ -2010,6 +2077,59 @@ components:
         message: { type: string }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
+    AppVolumeRequest:
+      type: object
+      required: [storageProfileId, sizeGiB, mountPath]
+      additionalProperties: false
+      properties:
+        storageProfileId: { type: string, minLength: 1, maxLength: 63, pattern: '^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$' }
+        sizeGiB: { type: integer, minimum: 1 }
+        mountPath: { type: string, minLength: 2, maxLength: 255, pattern: '^/[^[:cntrl:]]+$' }
+    AppVolumeExpansionInput:
+      type: object
+      required: [sizeGiB]
+      additionalProperties: false
+      properties:
+        sizeGiB: { type: integer, minimum: 1 }
+    StorageProfile:
+      type: object
+      required: [id, name, minimumSizeGiB, maximumSizeGiB, availableGiB, expandable, snapshots, automaticBackup, durability]
+      additionalProperties: false
+      properties:
+        id: { type: string, minLength: 1, maxLength: 63 }
+        name: { type: string, minLength: 1, maxLength: 80 }
+        minimumSizeGiB: { type: integer, minimum: 1 }
+        maximumSizeGiB: { type: integer, minimum: 1 }
+        availableGiB: { type: integer, minimum: 0 }
+        expandable: { type: boolean }
+        snapshots: { type: boolean }
+        automaticBackup: { type: boolean }
+        durability: { type: string, enum: [NodeLocal, Replicated, ProviderManaged] }
+    AppVolume:
+      type: object
+      required: [id, appEnvironmentId, storageProfileId, sizeGiB, mountPath, retentionPolicy, desiredState, state, attached, version, createdAt, updatedAt]
+      additionalProperties: false
+      properties:
+        id: { type: string, pattern: '^vol-[a-z2-7]{20}$' }
+        appEnvironmentId: { type: string, pattern: '^aev-[a-z2-7]{20}$' }
+        storageProfileId: { type: string, minLength: 1, maxLength: 63 }
+        sizeGiB: { type: integer, minimum: 1 }
+        mountPath: { type: string, minLength: 2, maxLength: 255 }
+        retentionPolicy: { type: string, enum: [Preserve] }
+        desiredState: { type: string, enum: [Ready, Deleted] }
+        state: { type: string, enum: [Pending, Provisioning, Ready, Expanding, Retained, Degraded] }
+        message: { type: string }
+        attached: { type: boolean }
+        version: { type: integer, minimum: 1 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    AppVolumeMutation:
+      type: object
+      required: [volume, operation]
+      additionalProperties: false
+      properties:
+        volume: { $ref: '#/components/schemas/AppVolume' }
+        operation: { $ref: '#/components/schemas/Operation' }
     DeploymentInput:
       type: object
       required: [releaseId, configurationVersion, currentDeploymentId]
@@ -2073,12 +2193,14 @@ components:
         path: { type: string, maxLength: 2048, pattern: '^/' }
     Deployment:
       type: object
-      required: [id, appEnvironmentId, releaseId, configurationVersion, configuration, requestedBy, state, createdAt, updatedAt]
+      required: [id, appEnvironmentId, releaseId, workloadKind, configurationVersion, configuration, requestedBy, state, createdAt, updatedAt]
       additionalProperties: false
       properties:
         id: { type: string, pattern: '^dpl-[a-z2-7]{20}$' }
         appEnvironmentId: { type: string, pattern: '^aev-[a-z2-7]{20}$' }
         releaseId: { type: string, pattern: '^rel-[a-z2-7]{20}$' }
+        workloadKind: { type: string, enum: [Stateless, Stateful] }
+        appVolumeId: { type: string, pattern: '^vol-[a-z2-7]{20}$' }
         configurationVersion: { type: integer, minimum: 1 }
         configuration: { $ref: '#/components/schemas/RuntimeConfiguration' }
         requestedBy: { type: string, minLength: 1 }
@@ -2093,7 +2215,8 @@ components:
         id: { type: string, pattern: '^op-' }
         appEnvironmentId: { type: string, pattern: '^aev-[a-z2-7]{20}$' }
         deploymentId: { type: string, pattern: '^dpl-[a-z2-7]{20}$' }
-        kind: { type: string, enum: [ApplyDeployment, DeleteAppEnvironment, EnsureWorkspace] }
+        appVolumeId: { type: string, pattern: '^vol-[a-z2-7]{20}$' }
+        kind: { type: string, enum: [ApplyDeployment, DeleteAppEnvironment, EnsureWorkspace, EnsureVolume, ExpandVolume, DeleteVolume] }
         status: { type: string, enum: [Pending, Running, Succeeded, Failed] }
         desiredVersion: { type: integer, minimum: 1 }
         attempts: { type: integer, minimum: 0 }

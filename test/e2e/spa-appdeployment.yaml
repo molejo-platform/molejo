@@ -4,6 +4,9 @@ metadata:
   name: ap-spa000001
   namespace: ws-spa-e2e
 spec:
+  workload:
+    kind: Stateless
+    stateless: {}
   image: __SPA_IMAGE__
   port: 8080
   resources:

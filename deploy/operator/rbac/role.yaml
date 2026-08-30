@@ -14,6 +14,18 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - persistentvolumeclaims
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
   - services
   verbs:
   - create
@@ -26,8 +38,10 @@ rules:
   - apps
   resources:
   - deployments
+  - statefulsets
   verbs:
   - create
+  - delete
   - get
   - list
   - patch
@@ -69,6 +83,7 @@ rules:
   - platform.fruto.calouro.tech
   resources:
   - appdeployments
+  - appvolumes
   verbs:
   - get
   - list
@@ -77,6 +92,7 @@ rules:
   - platform.fruto.calouro.tech
   resources:
   - appdeployments/status
+  - appvolumes/status
   verbs:
   - get
   - patch

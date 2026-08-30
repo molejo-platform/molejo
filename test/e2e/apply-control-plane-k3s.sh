@@ -30,7 +30,13 @@ kubectl --context "$context" -n fruto-control-plane get configmap "$MOLEJO_OPENB
 yq ea 'select(.kind != "Job")' "$release_file" |
   kubectl --context "$context" apply --server-side --dry-run=server -f - >/dev/null
 
-yq ea 'select(.kind != "Deployment" and .kind != "Job" and .kind != "HTTPRoute")' "$release_file" |
+yq ea 'select(.kind == "CustomResourceDefinition")' "$release_file" |
+  kubectl --context "$context" apply --server-side -f - >/dev/null
+for crd in appdeployments.platform.fruto.calouro.tech appvolumes.platform.fruto.calouro.tech; do
+  kubectl --context "$context" wait --for=condition=Established "crd/$crd" --timeout=120s
+done
+
+yq ea 'select(.kind != "CustomResourceDefinition" and .kind != "Deployment" and .kind != "Job" and .kind != "HTTPRoute")' "$release_file" |
   kubectl --context "$context" apply --server-side -f - >/dev/null
 kubectl --context "$context" -n fruto-control-plane rollout status statefulset/fruto-control-plane-postgres --timeout=300s
 
@@ -51,6 +57,7 @@ kubectl --context "$context" -n fruto-control-plane rollout status deployment/co
 kubectl --context "$context" -n fruto-control-plane rollout status deployment/control-plane-delivery-worker --timeout=300s
 kubectl --context "$context" -n fruto-control-plane rollout status deployment/control-plane-parameter-worker --timeout=300s
 kubectl --context "$context" -n fruto-control-plane rollout status deployment/console-web --timeout=300s
+kubectl --context "$context" -n fruto-system rollout status deployment/platform-operator --timeout=300s
 
 for route in control-plane-console; do
   for _ in $(seq 1 60); do

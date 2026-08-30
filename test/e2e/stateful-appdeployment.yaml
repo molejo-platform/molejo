@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ws-stateful-e2e
+---
+apiVersion: platform.fruto.calouro.tech/v1alpha1
+kind: AppVolume
+metadata:
+  name: vol-statefule2e01
+  namespace: ws-stateful-e2e
+spec:
+  storageClassName: standard
+  sizeGiB: 1
+  retentionPolicy: Preserve
+  desiredState: Ready
+---
+apiVersion: platform.fruto.calouro.tech/v1alpha1
+kind: AppDeployment
+metadata:
+  name: ap-statefule2e01
+  namespace: ws-stateful-e2e
+spec:
+  workload:
+    kind: Stateful
+    stateful:
+      volumeRef: vol-statefule2e01
+      mountPath: /data
+  image: __APP_IMAGE__
+  replicas: 1
+  port: 8080
+  variables:
+    - name: FIXTURE_STATE_FILE
+      value: /data/marker
+  resources:
+    requests:
+      cpuMillis: 25
+      memoryMiB: 32
+    limits:
+      cpuMillis: 250
+      memoryMiB: 96
+  probes:
+    liveness:
+      path: /healthz
+    readiness:
+      path: /readyz

@@ -105,6 +105,12 @@ func run() error {
 	}).SetupWithManager(manager); err != nil {
 		return fmt.Errorf("register AppDeployment controller: %w", err)
 	}
+	if err := (&controller.AppVolumeReconciler{
+		Client: manager.GetClient(),
+		Scheme: manager.GetScheme(),
+	}).SetupWithManager(manager); err != nil {
+		return fmt.Errorf("register AppVolume controller: %w", err)
+	}
 
 	if err := manager.AddHealthzCheck("healthz", livenessChecker()); err != nil {
 		return fmt.Errorf("configure health check: %w", err)

@@ -9,6 +9,7 @@ trap 'rm -rf "${temporary_directory}"' EXIT
 generated_files=(
   "apps/console-web/src/shared/api/generated/control-plane.ts"
   "deploy/crds/platform.fruto.calouro.tech_appdeployments.yaml"
+  "deploy/crds/platform.fruto.calouro.tech_appvolumes.yaml"
   "deploy/operator/rbac/role.yaml"
   "packages/kubernetes-api/apis/platform/v1alpha1/zz_generated.deepcopy.go"
   "services/control-plane-api/internal/api/generated/control-plane.gen.go"

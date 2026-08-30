@@ -62,7 +62,7 @@ func init() {
 	controllermetrics.Registry.MustRegister(stateTransitions)
 }
 
-// AppDeploymentReconciler projects AppDeployment resources into Kubernetes Deployments.
+// AppDeploymentReconciler projects AppDeployment resources into typed Kubernetes workloads.
 type AppDeploymentReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
@@ -70,14 +70,14 @@ type AppDeploymentReconciler struct {
 	Tracer   trace.Tracer
 }
 
-// +kubebuilder:rbac:groups=platform.fruto.calouro.tech,resources=appdeployments,verbs=get;list;watch
+// +kubebuilder:rbac:groups=platform.fruto.calouro.tech,resources=appdeployments;appvolumes,verbs=get;list;watch
 // +kubebuilder:rbac:groups=platform.fruto.calouro.tech,resources=appdeployments/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch
+// +kubebuilder:rbac:groups=apps,resources=deployments;statefulsets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways,verbs=get;list;watch
 
-// Reconcile converges one AppDeployment and its owned Deployment.
+// Reconcile converges one AppDeployment and its selected workload kind.
 func (r *AppDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	tracer := r.tracer()
 	ctx, span := tracer.Start(ctx, "platform-operator.appdeployment.reconcile",
@@ -121,21 +121,42 @@ func (r *AppDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, nil
 	}
 
-	applyCtx, applySpan := tracer.Start(ctx, "kubernetes.deployment.apply")
-	deployment, deploymentOperation, deploymentVersionBefore, err := r.applyDeployment(applyCtx, appDeployment)
-	finishSpan(applySpan, err)
-	if err != nil {
-		return r.handleProjectionFailure(ctx, span, appDeployment, err)
+	var deployment *appsv1.Deployment
+	var decision workloadDecision
+	if appDeployment.Spec.Workload.Kind == platformv1alpha1.WorkloadStateful {
+		applyCtx, applySpan := tracer.Start(ctx, "kubernetes.statefulset.apply")
+		statefulSet, _, _, applyErr := r.applyStatefulSet(applyCtx, appDeployment)
+		finishSpan(applySpan, applyErr)
+		if applyErr != nil {
+			return r.handleProjectionFailure(ctx, span, appDeployment, applyErr)
+		}
+		decision = evaluateWorkload(snapshotStatefulSet(statefulSet))
+		deployment = &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: statefulSet.Name, Namespace: statefulSet.Namespace}}
+		if cleanupErr := r.deleteOwnedDeployment(ctx, appDeployment); cleanupErr != nil {
+			return r.handleProjectionFailure(ctx, span, appDeployment, cleanupErr)
+		}
+	} else {
+		applyCtx, applySpan := tracer.Start(ctx, "kubernetes.deployment.apply")
+		var deploymentOperation controllerutil.OperationResult
+		var deploymentVersionBefore string
+		deployment, deploymentOperation, deploymentVersionBefore, err = r.applyDeployment(applyCtx, appDeployment)
+		finishSpan(applySpan, err)
+		if err != nil {
+			return r.handleProjectionFailure(ctx, span, appDeployment, err)
+		}
+		decision = evaluateWorkload(snapshotDeployment(deployment, desiredReplicas(appDeployment)))
+		r.recordDeploymentOperation(ctx, appDeployment, deploymentOperation, deploymentVersionBefore,
+			deployment.ResourceVersion, decision)
+		if cleanupErr := r.deleteOwnedStatefulSet(ctx, appDeployment); cleanupErr != nil {
+			return r.handleProjectionFailure(ctx, span, appDeployment, cleanupErr)
+		}
 	}
-	_, evaluateSpan := tracer.Start(ctx, "domain.deployment.evaluate")
-	decision := evaluateWorkload(snapshotDeployment(deployment, desiredReplicas(appDeployment)))
+	_, evaluateSpan := tracer.Start(ctx, "domain.workload.evaluate")
 	evaluateSpan.SetAttributes(
 		attribute.String("fruto.reconciliation.state", string(decision.state)),
 		attribute.String("fruto.reconciliation.reason", decision.reason),
 	)
 	evaluateSpan.End()
-	r.recordDeploymentOperation(ctx, appDeployment, deploymentOperation, deploymentVersionBefore,
-		deployment.ResourceVersion, decision)
 
 	serviceCtx, serviceSpan := tracer.Start(ctx, "kubernetes.service.apply")
 	service, serviceOperation, serviceVersionBefore, err := r.applyService(serviceCtx, appDeployment)
@@ -183,10 +204,31 @@ func (r *AppDeploymentReconciler) SetupWithManager(manager ctrl.Manager) error {
 		Named("appdeployment").
 		For(&platformv1alpha1.AppDeployment{}).
 		Owns(&appsv1.Deployment{}).
+		Owns(&appsv1.StatefulSet{}).
 		Owns(&corev1.Service{}).
 		Owns(&gatewayv1.HTTPRoute{}).
 		Watches(&gatewayv1.Gateway{}, handler.EnqueueRequestsFromMapFunc(r.mapGatewayToAppDeployments)).
+		Watches(&platformv1alpha1.AppVolume{}, handler.EnqueueRequestsFromMapFunc(r.mapVolumeToAppDeployments)).
 		Complete(r)
+}
+
+func (r *AppDeploymentReconciler) mapVolumeToAppDeployments(ctx context.Context, object client.Object) []reconcile.Request {
+	volume, ok := object.(*platformv1alpha1.AppVolume)
+	if !ok {
+		return nil
+	}
+	items := &platformv1alpha1.AppDeploymentList{}
+	if err := r.List(ctx, items, client.InNamespace(volume.Namespace)); err != nil {
+		return nil
+	}
+	requests := make([]reconcile.Request, 0)
+	for index := range items.Items {
+		item := &items.Items[index]
+		if item.Spec.Workload.Stateful != nil && item.Spec.Workload.Stateful.VolumeRef == volume.Name {
+			requests = append(requests, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(item)})
+		}
+	}
+	return requests
 }
 
 func (r *AppDeploymentReconciler) mapGatewayToAppDeployments(
@@ -665,6 +707,122 @@ func (r *AppDeploymentReconciler) applyDeployment(
 		return nil
 	})
 	return deployment, operation, resourceVersionBefore, err
+}
+
+func (r *AppDeploymentReconciler) applyStatefulSet(
+	ctx context.Context,
+	appDeployment *platformv1alpha1.AppDeployment,
+) (*appsv1.StatefulSet, controllerutil.OperationResult, string, error) {
+	statefulIntent := appDeployment.Spec.Workload.Stateful
+	if statefulIntent == nil {
+		return nil, controllerutil.OperationResultNone, "", errors.New("stateful workload intent is missing")
+	}
+	volume := &platformv1alpha1.AppVolume{}
+	if err := r.Get(ctx, types.NamespacedName{Namespace: appDeployment.Namespace, Name: statefulIntent.VolumeRef}, volume); err != nil {
+		return nil, controllerutil.OperationResultNone, "", fmt.Errorf("get AppVolume: %w", err)
+	}
+	if volume.Spec.DesiredState == platformv1alpha1.VolumeDesiredDeleted || !volume.DeletionTimestamp.IsZero() {
+		return nil, controllerutil.OperationResultNone, "", errors.New("referenced AppVolume is not available")
+	}
+
+	statefulSet := &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: appDeployment.Name, Namespace: appDeployment.Namespace}}
+	var resourceVersionBefore string
+	operation, err := controllerutil.CreateOrPatch(ctx, r.Client, statefulSet, func() error {
+		resourceVersionBefore = statefulSet.ResourceVersion
+		if !statefulSet.CreationTimestamp.IsZero() && !metav1.IsControlledBy(statefulSet, appDeployment) {
+			return errOwnershipConflict
+		}
+		if err := controllerutil.SetControllerReference(appDeployment, statefulSet, r.Scheme); err != nil {
+			return fmt.Errorf("set StatefulSet owner reference: %w", err)
+		}
+		if statefulSet.Labels == nil {
+			statefulSet.Labels = map[string]string{}
+		}
+		statefulSet.Labels[appDeploymentLabel] = appDeployment.Name
+		statefulSet.Labels[managedByLabel] = managedByValue
+		labels := desiredSelectorLabels(appDeployment)
+		replicas := int32(1)
+		revisionHistoryLimit := int32(10)
+		statefulSet.Spec.ServiceName = appDeployment.Name
+		statefulSet.Spec.Replicas = &replicas
+		statefulSet.Spec.Selector = &metav1.LabelSelector{MatchLabels: labels}
+		statefulSet.Spec.PodManagementPolicy = appsv1.OrderedReadyPodManagement
+		statefulSet.Spec.UpdateStrategy = appsv1.StatefulSetUpdateStrategy{Type: appsv1.RollingUpdateStatefulSetStrategyType}
+		statefulSet.Spec.RevisionHistoryLimit = &revisionHistoryLimit
+		statefulSet.Spec.VolumeClaimTemplates = nil
+		statefulSet.Spec.PersistentVolumeClaimRetentionPolicy = nil
+		statefulSet.Spec.Template = desiredPodTemplate(appDeployment)
+		fsGroup := int64(65532)
+		fsGroupChangePolicy := corev1.FSGroupChangeOnRootMismatch
+		statefulSet.Spec.Template.Spec.SecurityContext.FSGroup = &fsGroup
+		statefulSet.Spec.Template.Spec.SecurityContext.FSGroupChangePolicy = &fsGroupChangePolicy
+		statefulSet.Spec.Template.Spec.Volumes = []corev1.Volume{{
+			Name: "app-data",
+			VolumeSource: corev1.VolumeSource{PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+				ClaimName: statefulIntent.VolumeRef,
+			}},
+		}}
+		statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts = []corev1.VolumeMount{{Name: "app-data", MountPath: statefulIntent.MountPath}}
+		return nil
+	})
+	return statefulSet, operation, resourceVersionBefore, err
+}
+
+func desiredPodTemplate(appDeployment *platformv1alpha1.AppDeployment) corev1.PodTemplateSpec {
+	runAsNonRoot := true
+	allowPrivilegeEscalation := false
+	readOnlyRootFilesystem := true
+	automountServiceAccountToken := false
+	environment := make([]corev1.EnvVar, 0, len(appDeployment.Spec.Variables))
+	for _, variable := range appDeployment.Spec.Variables {
+		environment = append(environment, corev1.EnvVar{Name: variable.Name, Value: variable.Value})
+	}
+	environmentFrom := []corev1.EnvFromSource{}
+	if appDeployment.Spec.ConfigMapRef != "" {
+		environmentFrom = append(environmentFrom, corev1.EnvFromSource{ConfigMapRef: &corev1.ConfigMapEnvSource{LocalObjectReference: corev1.LocalObjectReference{Name: appDeployment.Spec.ConfigMapRef}}})
+	}
+	if appDeployment.Spec.SecretRef != "" {
+		environmentFrom = append(environmentFrom, corev1.EnvFromSource{SecretRef: &corev1.SecretEnvSource{LocalObjectReference: corev1.LocalObjectReference{Name: appDeployment.Spec.SecretRef}}})
+	}
+	return corev1.PodTemplateSpec{
+		ObjectMeta: metav1.ObjectMeta{Labels: desiredSelectorLabels(appDeployment)},
+		Spec: corev1.PodSpec{
+			SecurityContext:              &corev1.PodSecurityContext{RunAsNonRoot: &runAsNonRoot, SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault}},
+			AutomountServiceAccountToken: &automountServiceAccountToken,
+			Containers: []corev1.Container{{
+				Name: containerName, Image: appDeployment.Spec.Image, ImagePullPolicy: corev1.PullIfNotPresent,
+				Env: environment, EnvFrom: environmentFrom,
+				Ports:           []corev1.ContainerPort{{Name: httpPortName, ContainerPort: appDeployment.Spec.Port, Protocol: corev1.ProtocolTCP}},
+				Resources:       desiredResourceRequirements(appDeployment),
+				StartupProbe:    desiredHTTPProbe(appDeployment.Spec.Probes.Readiness.Path, 2, 30),
+				ReadinessProbe:  desiredHTTPProbe(appDeployment.Spec.Probes.Readiness.Path, 5, 3),
+				LivenessProbe:   desiredHTTPProbe(appDeployment.Spec.Probes.Liveness.Path, 10, 3),
+				SecurityContext: &corev1.SecurityContext{AllowPrivilegeEscalation: &allowPrivilegeEscalation, ReadOnlyRootFilesystem: &readOnlyRootFilesystem, Capabilities: &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}}},
+			}},
+		},
+	}
+}
+
+func (r *AppDeploymentReconciler) deleteOwnedDeployment(ctx context.Context, owner *platformv1alpha1.AppDeployment) error {
+	deployment := &appsv1.Deployment{}
+	if err := r.Get(ctx, client.ObjectKeyFromObject(owner), deployment); err != nil {
+		return client.IgnoreNotFound(err)
+	}
+	if !metav1.IsControlledBy(deployment, owner) {
+		return errOwnershipConflict
+	}
+	return client.IgnoreNotFound(r.Delete(ctx, deployment))
+}
+
+func (r *AppDeploymentReconciler) deleteOwnedStatefulSet(ctx context.Context, owner *platformv1alpha1.AppDeployment) error {
+	statefulSet := &appsv1.StatefulSet{}
+	if err := r.Get(ctx, client.ObjectKeyFromObject(owner), statefulSet); err != nil {
+		return client.IgnoreNotFound(err)
+	}
+	if !metav1.IsControlledBy(statefulSet, owner) {
+		return errOwnershipConflict
+	}
+	return client.IgnoreNotFound(r.Delete(ctx, statefulSet))
 }
 
 func (r *AppDeploymentReconciler) applyService(

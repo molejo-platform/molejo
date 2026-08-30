@@ -92,7 +92,7 @@ inspecting its logs. A missing or unavailable runtime is shown as `Unknown`; it 
 treated as a successful deployment. This installation does not claim HA or DR.
 
 Before a k3s acceptance, `just ci` must pass from a clean checkout. Record the
-source commit, `linux/amd64`, API, Console and Testkit digests in an external
+source commit, `linux/amd64`, API, Console, platform operator, and Testkit digests in an external
 release manifest; replace the cluster UID and trusted-proxy placeholders;
 create database and bootstrap Secrets outside Git; and decide whether the
 database is explicitly disposable. If it is not disposable, create and verify
@@ -112,7 +112,7 @@ cluster mutation remains a separately authorized manual step.
 
 Use a clean committed checkout and an external directory with mode `0700`. The
 lab overlay pins PostgreSQL 17.6 to its `linux/amd64` manifest digest, schedules
-it on `fruto-data-01`, requests a 2 GiB `local-path` volume, and marks both the
+it on `fruto-data-01`, requests a 2 GiB `molejo-platform-local` volume, and marks both the
 service and storage as disposable pre-alpha fixtures. It is not HA or a managed
 database.
 

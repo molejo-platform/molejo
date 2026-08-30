@@ -55,6 +55,7 @@ type AppEnvironment struct {
 	ArchivedAt           pgtype.Timestamptz `json:"archived_at"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	WorkloadKind         string             `json:"workload_kind"`
 }
 
 type AppEnvironmentConfigurationRevision struct {
@@ -94,6 +95,25 @@ type AppGithubSource struct {
 	DefaultBranch        string             `json:"default_branch"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+}
+
+type AppVolume struct {
+	ID                  int64              `json:"id"`
+	PublicID            string             `json:"public_id"`
+	WorkspaceID         int64              `json:"workspace_id"`
+	AppEnvironmentID    int64              `json:"app_environment_id"`
+	StorageProfileID    string             `json:"storage_profile_id"`
+	RequestedSizeGib    int64              `json:"requested_size_gib"`
+	ObservedSizeGib     int64              `json:"observed_size_gib"`
+	MountPath           string             `json:"mount_path"`
+	RetentionPolicy     string             `json:"retention_policy"`
+	DesiredState        string             `json:"desired_state"`
+	ObservedState       string             `json:"observed_state"`
+	Message             string             `json:"message"`
+	Version             int64              `json:"version"`
+	DeletionRequestedAt pgtype.Timestamptz `json:"deletion_requested_at"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
 }
 
 type AuditEvent struct {
@@ -217,6 +237,8 @@ type Deployment struct {
 	CompletedAt          pgtype.Timestamptz `json:"completed_at"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	WorkloadKind         string             `json:"workload_kind"`
+	AppVolumeID          pgtype.Int8        `json:"app_volume_id"`
 }
 
 type Environment struct {
@@ -314,6 +336,7 @@ type Operation struct {
 	CompletedAt       pgtype.Timestamptz `json:"completed_at"`
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	AppVolumeID       pgtype.Int8        `json:"app_volume_id"`
 }
 
 type Parameter struct {
@@ -437,6 +460,24 @@ type Session struct {
 	AssuranceLevel string             `json:"assurance_level"`
 	LastSeenAt     pgtype.Timestamptz `json:"last_seen_at"`
 	IdleExpiresAt  pgtype.Timestamptz `json:"idle_expires_at"`
+}
+
+type StorageProfile struct {
+	ID                string             `json:"id"`
+	DisplayName       string             `json:"display_name"`
+	MinimumSizeGib    int64              `json:"minimum_size_gib"`
+	MaximumSizeGib    int64              `json:"maximum_size_gib"`
+	TotalCapacityGib  int64              `json:"total_capacity_gib"`
+	WorkspaceQuotaGib int64              `json:"workspace_quota_gib"`
+	Expandable        bool               `json:"expandable"`
+	Snapshots         bool               `json:"snapshots"`
+	AutomaticBackup   bool               `json:"automatic_backup"`
+	Durability        string             `json:"durability"`
+	RuntimeBinding    string             `json:"runtime_binding"`
+	Enabled           bool               `json:"enabled"`
+	Version           int64              `json:"version"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
 }
 
 type TotpCredential struct {

@@ -17,6 +17,10 @@ const (
 	ReasonDeploymentProgressing = "DeploymentProgressing"
 	// ReasonDeploymentAvailable reports that the managed Deployment completed its rollout.
 	ReasonDeploymentAvailable = "DeploymentAvailable"
+	// ReasonStatefulSetProgressing reports that the managed StatefulSet is converging.
+	ReasonStatefulSetProgressing = "StatefulSetProgressing"
+	// ReasonStatefulSetAvailable reports that the managed StatefulSet completed its rollout.
+	ReasonStatefulSetAvailable = "StatefulSetAvailable"
 	// ReasonProgressDeadlineExceeded reports that the managed Deployment stalled.
 	ReasonProgressDeadlineExceeded = "ProgressDeadlineExceeded"
 	// ReasonReplicaFailure reports that the managed Deployment cannot create or retain replicas.
@@ -40,16 +44,54 @@ const (
 	ExposurePrivate AppDeploymentExposure = "Private"
 	// ExposurePublic publishes an AppDeployment through the shared HTTPS Gateway.
 	ExposurePublic AppDeploymentExposure = "Public"
+	// WorkloadStateless projects an AppDeployment into a Deployment.
+	WorkloadStateless AppDeploymentWorkloadKind = "Stateless"
+	// WorkloadStateful projects an AppDeployment into a single-replica StatefulSet.
+	WorkloadStateful AppDeploymentWorkloadKind = "Stateful"
 )
 
 // AppDeploymentExposure declares whether the workload has a public route.
 // +kubebuilder:validation:Enum=Private;Public
 type AppDeploymentExposure string
 
+// AppDeploymentWorkloadKind discriminates the workload renderer.
+// +kubebuilder:validation:Enum=Stateless;Stateful
+type AppDeploymentWorkloadKind string
+
+// AppDeploymentWorkload is a closed union for Stateless and Stateful intent.
+// +kubebuilder:validation:XValidation:rule="self.kind != 'Stateless' || (has(self.stateless) && !has(self.stateful))",message="Stateless requires only the stateless branch"
+// +kubebuilder:validation:XValidation:rule="self.kind != 'Stateful' || (has(self.stateful) && !has(self.stateless))",message="Stateful requires only the stateful branch"
+type AppDeploymentWorkload struct {
+	Kind      AppDeploymentWorkloadKind `json:"kind"`
+	Stateless *StatelessWorkload        `json:"stateless,omitempty"`
+	Stateful  *StatefulWorkload         `json:"stateful,omitempty"`
+}
+
+// StatelessWorkload marks a workload without persistent storage.
+type StatelessWorkload struct{}
+
+// StatefulWorkload attaches one durable AppVolume to the workload.
+type StatefulWorkload struct {
+	// VolumeRef is the namespaced AppVolume identity.
+	// +kubebuilder:validation:Pattern="^vol-[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$"
+	// +kubebuilder:validation:MaxLength=63
+	VolumeRef string `json:"volumeRef"`
+
+	// MountPath is the absolute path made writable in the workload container.
+	// +kubebuilder:validation:Pattern="^/[^[:cntrl:]]+$"
+	// +kubebuilder:validation:MinLength=2
+	// +kubebuilder:validation:MaxLength=255
+	MountPath string `json:"mountPath"`
+}
+
 // AppDeploymentSpec declares the minimum workload intent understood by the platform operator.
 // +kubebuilder:validation:XValidation:rule="self.exposure != 'Public' || has(self.slug)",message="slug is required for public exposure"
 // +kubebuilder:validation:XValidation:rule="self.exposure != 'Private' || !has(self.slug)",message="slug must be omitted for private exposure"
+// +kubebuilder:validation:XValidation:rule="self.workload.kind != 'Stateful' || !has(self.replicas) || self.replicas == 1",message="Stateful workloads require exactly one replica"
 type AppDeploymentSpec struct {
+	// Workload selects exactly one workload renderer.
+	Workload AppDeploymentWorkload `json:"workload"`
+
 	// Image is an immutable OCI image reference.
 	// +kubebuilder:validation:Pattern="^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$"
 	Image string `json:"image"`
@@ -171,7 +213,7 @@ type AppDeploymentStatus struct {
 // +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].status`
 // +kubebuilder:validation:XValidation:rule="self.metadata.name.matches('^ap-[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$') && size(self.metadata.name) <= 63",message="metadata.name must start with ap- and contain at most 63 lowercase DNS-compatible characters"
 
-// AppDeployment represents an immutable application release projected onto Kubernetes.
+// AppDeployment represents the stable runtime intent for one AppEnvironment.
 type AppDeployment struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

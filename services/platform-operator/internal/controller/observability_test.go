@@ -272,7 +272,7 @@ func TestObservabilitySignalsAreCorrelatedAndIdempotent(t *testing.T) {
 		"kubernetes.appdeployment.get":              false,
 		"kubernetes.deployment.apply":               false,
 		"kubernetes.service.apply":                  false,
-		"domain.deployment.evaluate":                false,
+		"domain.workload.evaluate":                  false,
 		"kubernetes.appdeployment.status.patch":     false,
 	}
 	for _, span := range spans {

@@ -8,6 +8,8 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -17,6 +19,7 @@ const (
 	maxUpstreamBodyBytes = 64 * 1024
 	maxGraphQLBodyBytes  = 16 * 1024
 	maxWebSocketBytes    = 4 * 1024
+	maxStateBytes        = 4 * 1024
 )
 
 var version = "devel"
@@ -55,7 +58,53 @@ func newHandler() http.Handler {
 	mux.HandleFunc("/graphql", graphQL)
 	mux.HandleFunc("/events", exactGET("/events", events))
 	mux.HandleFunc("/ws", webSocket)
+	if stateFile := strings.TrimSpace(os.Getenv("FIXTURE_STATE_FILE")); stateFile != "" {
+		mux.HandleFunc("/state", persistentState(stateFile))
+	}
 	return mux
+}
+
+func persistentState(path string) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/state" {
+			http.NotFound(writer, request)
+			return
+		}
+		switch request.Method {
+		case http.MethodGet:
+			body, err := os.ReadFile(path)
+			if errors.Is(err, os.ErrNotExist) {
+				http.NotFound(writer, request)
+				return
+			}
+			if err != nil {
+				http.Error(writer, "read persistent state", http.StatusInternalServerError)
+				return
+			}
+			writer.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			_, _ = writer.Write(body)
+		case http.MethodPut:
+			request.Body = http.MaxBytesReader(writer, request.Body, maxStateBytes)
+			body, err := io.ReadAll(request.Body)
+			if err != nil {
+				var maxBytesError *http.MaxBytesError
+				if errors.As(err, &maxBytesError) {
+					http.Error(writer, "request body too large", http.StatusRequestEntityTooLarge)
+					return
+				}
+				http.Error(writer, "read persistent state", http.StatusBadRequest)
+				return
+			}
+			if err = os.WriteFile(path, body, 0o600); err != nil {
+				http.Error(writer, "write persistent state", http.StatusInternalServerError)
+				return
+			}
+			writer.WriteHeader(http.StatusNoContent)
+		default:
+			writer.Header().Set("Allow", "GET, PUT")
+			http.Error(writer, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	}
 }
 
 func exactGET(path string, handler http.HandlerFunc) http.HandlerFunc {

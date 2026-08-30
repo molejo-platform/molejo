@@ -19,6 +19,7 @@ const target = vi.hoisted(() => ({
   environmentId: "env-aaaaaaaaaaaaaaaaaaaa",
   environmentName: "Production",
   branch: "main",
+  workloadKind: "Stateless",
   configuration: { replicas: 1, port: 8080, resources: { requests: { cpuMillis: 50, memoryMiB: 64 }, limits: { cpuMillis: 250, memoryMiB: 128 } }, probes: { liveness: { path: "/healthz" }, readiness: { path: "/readyz" } }, exposure: "Private", variables: [], parameters: [] },
   configurationVersion: 1,
   version: 1,
@@ -37,6 +38,9 @@ const mocks = vi.hoisted(() => ({
   getAppBuild: vi.fn(),
   listAppBuildLogs: vi.fn(),
   replaceAppEnvironmentDeliveryPolicy: vi.fn(),
+  getAppEnvironmentVolume: vi.fn().mockResolvedValue({ id: "vol-aaaaaaaaaaaaaaaaaaaa", appEnvironmentId: target.id, storageProfileId: "persistent-standard", sizeGiB: 2, mountPath: "/data", retentionPolicy: "Preserve", desiredState: "Ready", state: "Ready", attached: true, version: 2, createdAt: "2026-08-27T00:00:00Z", updatedAt: "2026-08-27T00:00:00Z" }),
+  expandAppEnvironmentVolume: vi.fn(),
+  listStorageProfiles: vi.fn().mockResolvedValue({ items: [{ id: "persistent-standard", name: "Persistent storage", minimumSizeGiB: 1, maximumSizeGiB: 10, availableGiB: 10, expandable: true, snapshots: false, automaticBackup: false, durability: "NodeLocal" }] }),
   useBlocker: vi.fn(),
   listEnvironmentApps: vi.fn().mockResolvedValue({ items: [target], nextCursor: null }),
   listApps: vi.fn().mockResolvedValue({ items: [{ id: target.appId, name: target.appName, version: 1 }, { id: "app-bbbbbbbbbbbbbbbbbbbb", name: "Worker", version: 1 }], nextCursor: null }),
@@ -75,10 +79,14 @@ vi.mock("../apps/api", () => ({
   previewAppEnvironmentDeployment: vi.fn().mockResolvedValue({ target: { releaseId: "rel-aaaaaaaaaaaaaaaaaaaa", configurationVersion: 1 }, changes: ["InitialDeployment"], rolloutRequired: true }),
   getAppEnvironmentDeliveryPolicy: vi.fn().mockResolvedValue({ appEnvironmentId: target.id, pushEnabled: false, releaseEnabled: false, version: 3, updatedAt: "2026-08-27T00:00:00Z" }),
   replaceAppEnvironmentDeliveryPolicy: mocks.replaceAppEnvironmentDeliveryPolicy,
+  listStorageProfiles: mocks.listStorageProfiles,
+  getAppEnvironmentVolume: mocks.getAppEnvironmentVolume,
+  expandAppEnvironmentVolume: mocks.expandAppEnvironmentVolume,
+  deleteAppEnvironmentVolume: vi.fn(),
 }));
 
 import { EnvironmentAppBuildsPage, EnvironmentAppDeploymentsPage, EnvironmentAppOverviewPage, EnvironmentAppsPage, EnvironmentBuildDetailPage } from "./EnvironmentPages";
-import { EnvironmentBuildConfigurationPage, EnvironmentVariablesPage } from "./EnvironmentConfigurationPages";
+import { EnvironmentBuildConfigurationPage, EnvironmentStoragePage, EnvironmentVariablesPage } from "./EnvironmentConfigurationPages";
 import { ProjectEntryPage } from "./ProjectEntryPage";
 import { renderWithQueryClient } from "../../test/render";
 
@@ -133,6 +141,47 @@ describe("Environment-first project experience", () => {
 
     await waitFor(() => expect(mocks.createApp).toHaveBeenCalledWith(params.workspaceId, params.projectId, { name: "Frontend" }));
     expect(mocks.createAppEnvironment).toHaveBeenCalledWith(params.workspaceId, params.projectId, "app-cccccccccccccccccccc", expect.objectContaining({ environmentId: params.environmentId }));
+  });
+
+  it("creates a Stateful App with an explicit portable volume", async () => {
+    mocks.createAppEnvironment.mockResolvedValue({ ...target, workloadKind: "Stateful" });
+    const user = userEvent.setup();
+    renderWithQueryClient(<EnvironmentAppsPage/>);
+
+    await user.click(await screen.findByRole("button", { name: "Adicionar App" }));
+    await user.selectOptions(screen.getByLabelText("Tipo de execução"), "Stateful");
+    expect(screen.getByLabelText("Perfil de armazenamento")).toBeTruthy();
+    await user.clear(screen.getByLabelText("Capacidade (GiB)"));
+    await user.type(screen.getByLabelText("Capacidade (GiB)"), "2");
+    await user.clear(screen.getByLabelText("Caminho de montagem"));
+    await user.type(screen.getByLabelText("Caminho de montagem"), "/var/lib/app");
+    await user.click(screen.getByRole("button", { name: "Adicionar ao Environment" }));
+
+    await waitFor(() => expect(mocks.createAppEnvironment).toHaveBeenCalledWith(
+      params.workspaceId,
+      params.projectId,
+      "app-bbbbbbbbbbbbbbbbbbbb",
+      expect.objectContaining({
+        workloadKind: "Stateful",
+        volume: { storageProfileId: "persistent-standard", sizeGiB: 2, mountPath: "/var/lib/app" },
+      }),
+    ));
+  });
+
+  it("manages the retained volume without exposing infrastructure details", async () => {
+    mocks.listEnvironmentApps.mockResolvedValueOnce({ items: [{ ...target, workloadKind: "Stateful" }], nextCursor: null });
+    mocks.expandAppEnvironmentVolume.mockResolvedValue({ volume: { ...await mocks.getAppEnvironmentVolume(), sizeGiB: 3, version: 3 }, operation: { id: "op-aaaaaaaaaaaaaaaaaaaa" } });
+    const user = userEvent.setup();
+    renderWithQueryClient(<EnvironmentStoragePage/>);
+
+    expect(await screen.findByText("Armazenamento persistente")).toBeTruthy();
+    expect(screen.getByText("/data")).toBeTruthy();
+    expect(screen.queryByText(/StorageClass|CSI/)).toBeNull();
+    await user.clear(screen.getByLabelText("Nova capacidade (GiB)"));
+    await user.type(screen.getByLabelText("Nova capacidade (GiB)"), "3");
+    await user.click(screen.getByRole("button", { name: "Expandir volume" }));
+
+    await waitFor(() => expect(mocks.expandAppEnvironmentVolume).toHaveBeenCalledWith(params.workspaceId, params.projectId, target.appId, target.id, 2, 3));
   });
 
   it("keeps operational status separate from runtime configuration", async () => {

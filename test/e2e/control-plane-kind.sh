@@ -343,7 +343,11 @@ kubectl --kubeconfig "$kubeconfig" apply --server-side -f "$gateway_api_manifest
 kubectl --kubeconfig "$kubeconfig" wait --for=condition=Established \
   crd/gateways.gateway.networking.k8s.io crd/httproutes.gateway.networking.k8s.io --timeout=60s
 
-kubectl --kubeconfig "$kubeconfig" apply -f deploy/crds/platform.fruto.calouro.tech_appdeployments.yaml
+kubectl --kubeconfig "$kubeconfig" apply -k deploy/crds
+kubectl --kubeconfig "$kubeconfig" wait --for=condition=Established \
+  crd/appdeployments.platform.fruto.calouro.tech \
+  crd/appvolumes.platform.fruto.calouro.tech \
+  --timeout=60s
 kubectl kustomize deploy/operator |
   sed "s|image: ghcr.io/fruto-platform/platform-operator@sha256:0000000000000000000000000000000000000000000000000000000000000000|image: $operator_image|" >"$operator_manifest"
 grep -Fq "image: $operator_image" "$operator_manifest"
@@ -399,7 +403,7 @@ app_response="$(curl --fail --silent --show-error -b "$host_cookie_jar" \
   -H 'Content-Type: application/json' -d '{"name":"E2E App"}' \
   "$api_base/workspaces/$workspace_id/projects/$project_id/apps")"
 app_id="$(jq -er '.id' <<<"$app_response")"
-configuration="$(jq -cn --arg environment "$environment_id" '{environmentId:$environment,branch:"main",configuration:{replicas:1,port:8080,resources:{requests:{cpuMillis:50,memoryMiB:64},limits:{cpuMillis:250,memoryMiB:128}},probes:{liveness:{path:"/healthz"},readiness:{path:"/readyz"}},exposure:"Private",variables:[],parameters:[]}}')"
+configuration="$(jq -cn --arg environment "$environment_id" '{environmentId:$environment,branch:"main",workloadKind:"Stateless",configuration:{replicas:1,port:8080,resources:{requests:{cpuMillis:50,memoryMiB:64},limits:{cpuMillis:250,memoryMiB:128}},probes:{liveness:{path:"/healthz"},readiness:{path:"/readyz"}},exposure:"Private",variables:[],parameters:[]}}')"
 app_environment_response="$(curl --fail --silent --show-error -b "$host_cookie_jar" \
   -H "Origin: http://127.0.0.1:${vite_port}" -H "X-CSRF-Token: $csrf_token" \
   -H 'Content-Type: application/json' -d "$configuration" \

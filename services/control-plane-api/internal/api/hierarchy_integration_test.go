@@ -116,7 +116,7 @@ func TestHierarchyAPIEnforcesMembershipRoleAndDeploymentAncestry(t *testing.T) {
 		t.Fatalf("cross-project mutation status=%d body=%s", response.Code, response.Body.String())
 	}
 
-	configuration := fmt.Sprintf(`{"environmentId":%q,"branch":"main","configuration":{"replicas":1,"port":8080,"resources":{"requests":{"cpuMillis":50,"memoryMiB":64},"limits":{"cpuMillis":250,"memoryMiB":128}},"probes":{"liveness":{"path":"/healthz"},"readiness":{"path":"/readyz"}},"exposure":"Private"}}`, environment.PublicID)
+	configuration := fmt.Sprintf(`{"environmentId":%q,"branch":"main","workloadKind":"Stateless","configuration":{"replicas":1,"port":8080,"resources":{"requests":{"cpuMillis":50,"memoryMiB":64},"limits":{"cpuMillis":250,"memoryMiB":128}},"probes":{"liveness":{"path":"/healthz"},"readiness":{"path":"/readyz"}},"exposure":"Private"}}`, environment.PublicID)
 	response = hierarchyRequest(t, server, owner, http.MethodPost, "/api/v1/workspaces/"+workspace.PublicID+"/projects/"+project.PublicID+"/apps/"+app.PublicID+"/environments", configuration, nil)
 	if response.Code != http.StatusCreated {
 		t.Fatalf("create App Environment status=%d body=%s", response.Code, response.Body.String())

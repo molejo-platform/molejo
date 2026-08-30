@@ -131,6 +131,30 @@ func TestApplyDeploymentKeepsTheRuntimeNameStableAcrossIntentUpdates(t *testing.
 	}
 }
 
+func TestApplyVolumeChangesOnlyThePrivateInstallationBinding(t *testing.T) {
+	for _, binding := range []string{"molejo-app-local", "ebs-csi-binding", "do-block-storage-binding"} {
+		t.Run(binding, func(t *testing.T) {
+			scheme := runtime.NewScheme()
+			if err := platformv1alpha1.AddToScheme(scheme); err != nil {
+				t.Fatal(err)
+			}
+			kubernetesClient := &KubernetesClient{client: fake.NewClientBuilder().WithScheme(scheme).Build(), fieldManager: "test-control-plane", applyTimeout: time.Second}
+			name := "vol-portability01"
+			intent := VolumeIntent{RuntimeBinding: binding, SizeGiB: 2, RetentionPolicy: domain.VolumeRetentionPreserve, DesiredState: domain.VolumeDesiredReady}
+			if err := kubernetesClient.ApplyVolume(context.Background(), "fruto-workspaces", name, intent); err != nil {
+				t.Fatal(err)
+			}
+			current := &platformv1alpha1.AppVolume{}
+			if err := kubernetesClient.client.Get(context.Background(), client.ObjectKey{Namespace: "fruto-workspaces", Name: name}, current); err != nil {
+				t.Fatal(err)
+			}
+			if current.Spec.StorageClassName != binding || current.Spec.SizeGiB != intent.SizeGiB || current.Spec.RetentionPolicy != platformv1alpha1.VolumeRetentionPreserve {
+				t.Fatalf("projected volume = %+v", current.Spec)
+			}
+		})
+	}
+}
+
 func TestGarbageCollectConfigurationKeepsOnlyCurrentOwnedObjects(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := corev1.AddToScheme(scheme); err != nil {

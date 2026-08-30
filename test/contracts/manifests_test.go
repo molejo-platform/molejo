@@ -75,6 +75,10 @@ func TestLabPostgresIsExplicitlyDisposableAndBounded(t *testing.T) {
 	if requests["storage"] != "2Gi" {
 		t.Fatalf("lab PostgreSQL storage=%q", requests["storage"])
 	}
+	storageClass, _, _ := unstructured.NestedString(template, "spec", "storageClassName")
+	if storageClass != "molejo-platform-local" {
+		t.Fatalf("lab PostgreSQL storageClassName=%q", storageClass)
+	}
 }
 
 func TestLabParameterWorkerUsesThePrivateRegistryCredential(t *testing.T) {
@@ -96,6 +100,27 @@ func TestPasswordResetSecretParticipatesInTheReleaseContract(t *testing.T) {
 		"test/e2e/prepare-control-plane-k3s.sh":    {"MOLEJO_PASSWORD_RESET_SECRET", "apply_versioned_object", "password-reset-key"},
 		"test/e2e/render-control-plane-release.sh": {"required-external-password-reset-secret", "MOLEJO_PASSWORD_RESET_SECRET"},
 		"test/e2e/apply-control-plane-k3s.sh":      {"MOLEJO_PASSWORD_RESET_SECRET"},
+	}
+	for path, fragments := range required {
+		contents, err := os.ReadFile(filepath.Join("..", "..", path))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, fragment := range fragments {
+			if !strings.Contains(string(contents), fragment) {
+				t.Fatalf("%s is missing release contract fragment %q", path, fragment)
+			}
+		}
+	}
+}
+
+func TestControlPlaneReleaseIncludesTheOperatorAndStatefulContracts(t *testing.T) {
+	required := map[string][]string{
+		"deploy/control-plane-release/kustomization.yaml": {"../crds", "../operator", "../control-plane-lab"},
+		"test/e2e/build-control-plane-release.sh":         {"FRUTO_OPERATOR_IMAGE", "services/platform-operator/Dockerfile", "operator.json"},
+		"test/e2e/render-control-plane-release.sh":        {"FRUTO_OPERATOR_IMAGE", "control-plane-release", "platform-operator@sha256"},
+		"test/e2e/apply-control-plane-k3s.sh":             {"appvolumes.platform.fruto.calouro.tech", "deployment/platform-operator"},
+		"test/e2e/accept-control-plane-k3s.sh":            {"FRUTO_OPERATOR_IMAGE", "persistent-standard", "molejo-app-local"},
 	}
 	for path, fragments := range required {
 		contents, err := os.ReadFile(filepath.Join("..", "..", path))
@@ -147,6 +172,11 @@ func TestObservabilityPlaneIsInternalBoundedAndDigestPinned(t *testing.T) {
 		if err != nil || !found || len(templates) != 1 {
 			t.Fatalf("%s volumeClaimTemplates=%v found=%v err=%v", name, templates, found, err)
 		}
+		template := templates[0].(map[string]any)
+		storageClass, _, _ := unstructured.NestedString(template, "spec", "storageClassName")
+		if storageClass != "molejo-platform-local" {
+			t.Fatalf("%s storageClassName=%q", name, storageClass)
+		}
 	}
 }
 
@@ -179,6 +209,39 @@ func TestObservabilityIngestionIsRuntimeScopedAndQueriesAreBounded(t *testing.T)
 	} {
 		if !strings.Contains(text, required) {
 			t.Fatalf("VictoriaMetrics workload is missing %q", required)
+		}
+	}
+}
+
+func TestOpenEBSCapacityScrapeDropsVolumeCardinality(t *testing.T) {
+	config, err := os.ReadFile(filepath.Join("..", "..", "deploy/observability/config/otel-cluster.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(config)
+	for _, required := range []string{
+		"job_name: openebs-lvm-capacity",
+		"openebs-lvm-lvm-localpv-node-service.openebs.svc:9500",
+		"lvm_vg_(free_size_bytes|total_size_bytes|missing_pv_count|lv_count)",
+		"target_label: volume_group",
+		"regex: name",
+	} {
+		if !strings.Contains(text, required) {
+			t.Fatalf("OpenEBS capacity scrape is missing %q", required)
+		}
+	}
+	for _, forbidden := range []string{"lvm_lv_", "openebs_size_of_volume", "volumename"} {
+		if strings.Contains(text, forbidden) {
+			t.Fatalf("OpenEBS capacity scrape exposes high-cardinality metric fragment %q", forbidden)
+		}
+	}
+	network, err := os.ReadFile(filepath.Join("..", "..", "deploy/observability/network-policies.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, required := range []string{"kubernetes.io/metadata.name: openebs", "app: openebs-lvm-node", "port: 9500"} {
+		if !strings.Contains(string(network), required) {
+			t.Fatalf("OpenEBS capacity scrape network policy is missing %q", required)
 		}
 	}
 }

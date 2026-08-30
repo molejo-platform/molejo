@@ -20,7 +20,7 @@ type rowQuerier interface {
 const appEnvironmentColumns = `
 	ae.id,ae.public_id,ae.workspace_id,ae.project_id,p.public_id,ae.app_id,a.public_id,a.name,
 	ae.environment_id,e.public_id,e.name,ae.source_branch,ae.runtime_name,
-	ae.configuration_json::text,ae.configuration_version,ae.version,
+	ae.workload_kind,ae.configuration_json::text,ae.configuration_version,ae.version,
 	COALESCE(dd.public_id,''),COALESCE(cd.public_id,''),COALESCE(cr.public_id,''),
 	COALESCE(dd.configuration_version,0),COALESCE(cd.configuration_version,0),
 	ae.last_state,ae.last_message,ae.deletion_requested_at,ae.archived_at,ae.created_at,ae.updated_at`
@@ -39,7 +39,7 @@ func scanAppEnvironment(row pgx.Row) (domain.AppEnvironment, error) {
 	err := row.Scan(
 		&item.ID, &item.PublicID, &item.WorkspaceID, &item.ProjectID, &item.ProjectPublicID,
 		&item.AppID, &item.AppPublicID, &item.AppName, &item.EnvironmentID, &item.EnvironmentPublicID,
-		&item.EnvironmentName, &item.SourceBranch, &item.RuntimeName, &configuration,
+		&item.EnvironmentName, &item.SourceBranch, &item.RuntimeName, &item.WorkloadKind, &configuration,
 		&item.ConfigurationVersion, &item.Version, &item.DesiredDeploymentPublicID,
 		&item.CurrentDeploymentPublicID, &item.CurrentReleasePublicID, &item.DesiredConfigurationVersion,
 		&item.CurrentConfigurationVersion, &item.State, &item.Message,
@@ -56,19 +56,27 @@ func scanAppEnvironment(row pgx.Row) (domain.AppEnvironment, error) {
 }
 
 func (s *Store) CreateAppEnvironment(ctx context.Context, workspaceID, actorID int64, publicID, projectPublicID, appPublicID, environmentPublicID, branch string, configuration domain.RuntimeConfig) (domain.AppEnvironment, error) {
+	item, _, err := s.CreateAppEnvironmentWithWorkload(ctx, workspaceID, actorID, publicID, projectPublicID, appPublicID, environmentPublicID, branch, domain.WorkloadStateless, configuration, nil)
+	return item, err
+}
+
+func (s *Store) CreateAppEnvironmentWithWorkload(ctx context.Context, workspaceID, actorID int64, publicID, projectPublicID, appPublicID, environmentPublicID, branch string, workloadKind domain.WorkloadKind, configuration domain.RuntimeConfig, volumeRequest *domain.VolumeRequest) (domain.AppEnvironment, *domain.AppVolume, error) {
 	configuration = domain.NormalizeRuntimeConfig(configuration)
+	if err := domain.ValidateWorkloadConfiguration(workloadKind, configuration, volumeRequest); err != nil {
+		return domain.AppEnvironment{}, nil, err
+	}
 	configurationJSON, err := domain.CanonicalJSON(configuration)
 	if err != nil {
-		return domain.AppEnvironment{}, err
+		return domain.AppEnvironment{}, nil, err
 	}
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
-		return domain.AppEnvironment{}, err
+		return domain.AppEnvironment{}, nil, err
 	}
 	defer tx.Rollback(ctx)
 	query := `WITH inserted AS (
-		INSERT INTO app_environments(public_id,workspace_id,project_id,app_id,environment_id,source_branch,runtime_name,configuration_json)
-		SELECT $1,p.workspace_id,p.id,a.id,e.id,$6,$7,$8
+		INSERT INTO app_environments(public_id,workspace_id,project_id,app_id,environment_id,source_branch,runtime_name,workload_kind,configuration_json)
+		SELECT $1,p.workspace_id,p.id,a.id,e.id,$6,$7,$8,$9
 		FROM projects p
 		JOIN apps a ON a.project_id=p.id
 		JOIN environments e ON e.project_id=p.id
@@ -76,23 +84,33 @@ func (s *Store) CreateAppEnvironment(ctx context.Context, workspaceID, actorID i
 		  AND p.archived_at IS NULL AND a.archived_at IS NULL AND e.archived_at IS NULL
 		RETURNING *
 	) SELECT ` + appEnvironmentColumns + ` FROM inserted ae ` + appEnvironmentJoins
-	item, err := scanAppEnvironment(tx.QueryRow(ctx, query, publicID, workspaceID, projectPublicID, appPublicID, environmentPublicID, branch, domain.RuntimeName(publicID), configurationJSON))
+	item, err := scanAppEnvironment(tx.QueryRow(ctx, query, publicID, workspaceID, projectPublicID, appPublicID, environmentPublicID, branch, domain.RuntimeName(publicID), workloadKind, configurationJSON))
 	if errors.Is(err, pgx.ErrNoRows) {
-		return domain.AppEnvironment{}, ErrNotFound
+		return domain.AppEnvironment{}, nil, ErrNotFound
 	}
 	if uniqueConstraint(err) == "app_environments_public_id_key" {
-		return domain.AppEnvironment{}, ErrPublicIDCollision
+		return domain.AppEnvironment{}, nil, ErrPublicIDCollision
 	}
 	if err != nil {
-		return domain.AppEnvironment{}, translateDBError(err)
+		return domain.AppEnvironment{}, nil, translateDBError(err)
 	}
 	if err = replaceParameterBindings(ctx, tx, item.ID, workspaceID, configuration.Parameters); err != nil {
-		return domain.AppEnvironment{}, err
+		return domain.AppEnvironment{}, nil, err
 	}
 	if _, err = tx.Exec(ctx, `INSERT INTO app_environment_configuration_revisions(app_environment_id,version,configuration_json,created_by_user_id) VALUES($1,$2,$3,$4)`, item.ID, item.ConfigurationVersion, configurationJSON, actorID); err != nil {
-		return domain.AppEnvironment{}, err
+		return domain.AppEnvironment{}, nil, err
 	}
-	return item, tx.Commit(ctx)
+	var volume *domain.AppVolume
+	if workloadKind == domain.WorkloadStateful {
+		created, createErr := createAppVolume(ctx, tx, workspaceID, actorID, item, *volumeRequest)
+		if createErr != nil {
+			return domain.AppEnvironment{}, nil, createErr
+		}
+		volume = &created
+		item.State = domain.StateProgressing
+		item.Message = "persistent storage is being prepared"
+	}
+	return item, volume, tx.Commit(ctx)
 }
 
 func (s *Store) UpdateAppEnvironment(ctx context.Context, workspaceID, actorID int64, publicID, branch string, configuration domain.RuntimeConfig, version int64) (domain.AppEnvironment, error) {
@@ -389,13 +407,22 @@ func (s *Store) CreateDeployment(ctx context.Context, workspaceID, actorID int64
 		return domain.Deployment{}, domain.Operation{}, false, err
 	}
 	var deployment domain.Deployment
+	var appVolumeID int64
+	var appVolumePublicID string
+	if appEnvironment.WorkloadKind == domain.WorkloadStateful {
+		if err = tx.QueryRow(ctx, `SELECT id,public_id FROM app_volumes WHERE app_environment_id=$1 AND desired_state='Ready' AND observed_state='Ready' AND deletion_requested_at IS NULL`, appEnvironment.ID).Scan(&appVolumeID, &appVolumePublicID); errors.Is(err, pgx.ErrNoRows) {
+			return domain.Deployment{}, domain.Operation{}, false, ErrConflict
+		} else if err != nil {
+			return domain.Deployment{}, domain.Operation{}, false, err
+		}
+	}
 	err = tx.QueryRow(ctx, `
-		INSERT INTO deployments(public_id,workspace_id,app_environment_id,app_id,release_id,requested_by_user_id,configuration_version,configuration_json)
-		VALUES($1,$2,$3,$4,$5,$6,$7,$8)
-		RETURNING id,public_id,workspace_id,app_environment_id,app_id,configuration_version,configuration_json::text,status,message,observed_release,created_at,updated_at`,
-		deploymentPublicID, workspaceID, appEnvironment.ID, appEnvironment.AppID, releaseID, actorID, revision.Version, configurationJSON).
+		INSERT INTO deployments(public_id,workspace_id,app_environment_id,app_id,release_id,requested_by_user_id,configuration_version,configuration_json,workload_kind,app_volume_id)
+		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,NULLIF($10,0))
+		RETURNING id,public_id,workspace_id,app_environment_id,app_id,configuration_version,configuration_json::text,workload_kind,status,message,observed_release,created_at,updated_at`,
+		deploymentPublicID, workspaceID, appEnvironment.ID, appEnvironment.AppID, releaseID, actorID, revision.Version, configurationJSON, appEnvironment.WorkloadKind, appVolumeID).
 		Scan(&deployment.ID, &deployment.PublicID, &deployment.WorkspaceID, &deployment.AppEnvironmentID, &deployment.AppID,
-			&deployment.ConfigurationVersion, &configurationJSON, &deployment.State, &deployment.Message, &deployment.ObservedRelease,
+			&deployment.ConfigurationVersion, &configurationJSON, &deployment.WorkloadKind, &deployment.State, &deployment.Message, &deployment.ObservedRelease,
 			&deployment.CreatedAt, &deployment.UpdatedAt)
 	if uniqueConstraint(err) == "deployments_public_id_key" {
 		return domain.Deployment{}, domain.Operation{}, false, ErrPublicIDCollision
@@ -407,6 +434,7 @@ func (s *Store) CreateDeployment(ctx context.Context, workspaceID, actorID int64
 	deployment.ReleasePublicID = releasePublicID
 	deployment.Configuration = revision.Configuration
 	deployment.RequestedBy = requestedBy
+	deployment.AppVolumePublicID = appVolumePublicID
 	var desiredVersion int64
 	if err = tx.QueryRow(ctx, `UPDATE app_environments SET desired_deployment_id=$1,last_state='Progressing',last_message='',version=version+1,updated_at=now() WHERE id=$2 RETURNING version`, deployment.ID, appEnvironment.ID).Scan(&desiredVersion); err != nil {
 		return domain.Deployment{}, domain.Operation{}, false, err
@@ -464,8 +492,8 @@ func (s *Store) ListDeployments(ctx context.Context, workspaceID int64, appEnvir
 	if beforeID == 0 {
 		beforeID = math.MaxInt64
 	}
-	rows, err := s.Pool.Query(ctx, `SELECT d.id,d.public_id,d.workspace_id,d.app_environment_id,d.app_id,ae.public_id,r.public_id,r.image,d.configuration_version,d.configuration_json::text,u.username,d.status,d.message,d.observed_release,d.created_at,d.updated_at
-		FROM deployments d JOIN app_environments ae ON ae.id=d.app_environment_id JOIN releases r ON r.id=d.release_id JOIN users u ON u.id=d.requested_by_user_id
+	rows, err := s.Pool.Query(ctx, `SELECT d.id,d.public_id,d.workspace_id,d.app_environment_id,d.app_id,ae.public_id,r.public_id,r.image,d.configuration_version,d.configuration_json::text,d.workload_kind,COALESCE(av.public_id,''),u.username,d.status,d.message,d.observed_release,d.created_at,d.updated_at
+		FROM deployments d JOIN app_environments ae ON ae.id=d.app_environment_id JOIN releases r ON r.id=d.release_id JOIN users u ON u.id=d.requested_by_user_id LEFT JOIN app_volumes av ON av.id=d.app_volume_id
 		WHERE d.workspace_id=$1 AND d.app_environment_id=$2 AND d.id < $3 ORDER BY d.id DESC LIMIT $4`, workspaceID, appEnvironmentID, beforeID, limit+1)
 	if err != nil {
 		return nil, "", err
@@ -490,8 +518,8 @@ func (s *Store) ListDeployments(ctx context.Context, workspaceID int64, appEnvir
 }
 
 func (s *Store) FindDeployment(ctx context.Context, workspaceID, appEnvironmentID int64, publicID string) (domain.Deployment, error) {
-	item, err := scanDeployment(s.Pool.QueryRow(ctx, `SELECT d.id,d.public_id,d.workspace_id,d.app_environment_id,d.app_id,ae.public_id,r.public_id,r.image,d.configuration_version,d.configuration_json::text,u.username,d.status,d.message,d.observed_release,d.created_at,d.updated_at
-		FROM deployments d JOIN app_environments ae ON ae.id=d.app_environment_id JOIN releases r ON r.id=d.release_id JOIN users u ON u.id=d.requested_by_user_id
+	item, err := scanDeployment(s.Pool.QueryRow(ctx, `SELECT d.id,d.public_id,d.workspace_id,d.app_environment_id,d.app_id,ae.public_id,r.public_id,r.image,d.configuration_version,d.configuration_json::text,d.workload_kind,COALESCE(av.public_id,''),u.username,d.status,d.message,d.observed_release,d.created_at,d.updated_at
+		FROM deployments d JOIN app_environments ae ON ae.id=d.app_environment_id JOIN releases r ON r.id=d.release_id JOIN users u ON u.id=d.requested_by_user_id LEFT JOIN app_volumes av ON av.id=d.app_volume_id
 		WHERE d.workspace_id=$1 AND d.app_environment_id=$2 AND d.public_id=$3`, workspaceID, appEnvironmentID, publicID))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.Deployment{}, ErrNotFound
@@ -534,7 +562,7 @@ func scanDeployment(row pgx.Row) (domain.Deployment, error) {
 	var item domain.Deployment
 	var configuration []byte
 	err := row.Scan(&item.ID, &item.PublicID, &item.WorkspaceID, &item.AppEnvironmentID, &item.AppID,
-		&item.AppEnvironmentPublicID, &item.ReleasePublicID, &item.Image, &item.ConfigurationVersion, &configuration, &item.RequestedBy,
+		&item.AppEnvironmentPublicID, &item.ReleasePublicID, &item.Image, &item.ConfigurationVersion, &configuration, &item.WorkloadKind, &item.AppVolumePublicID, &item.RequestedBy,
 		&item.State, &item.Message, &item.ObservedRelease, &item.CreatedAt, &item.UpdatedAt)
 	if err != nil {
 		return domain.Deployment{}, err
@@ -548,11 +576,11 @@ func scanDeployment(row pgx.Row) (domain.Deployment, error) {
 
 func (s *Store) GetOperationForUser(ctx context.Context, userID int64, publicID string) (domain.Operation, error) {
 	var item domain.Operation
-	err := s.Pool.QueryRow(ctx, `SELECT o.id,o.public_id,o.workspace_id,COALESCE(o.app_environment_id,0),COALESCE(ae.public_id,''),COALESCE(o.deployment_id,0),COALESCE(d.public_id,''),o.requested_by_user_id,o.kind,o.status,o.desired_version,o.attempts,o.error_code,o.error_message,o.created_at,o.updated_at
-		FROM operations o LEFT JOIN app_environments ae ON ae.id=o.app_environment_id LEFT JOIN deployments d ON d.id=o.deployment_id
+	err := s.Pool.QueryRow(ctx, `SELECT o.id,o.public_id,o.workspace_id,COALESCE(o.app_environment_id,0),COALESCE(ae.public_id,''),COALESCE(o.deployment_id,0),COALESCE(d.public_id,''),COALESCE(o.app_volume_id,0),COALESCE(av.public_id,''),o.requested_by_user_id,o.kind,o.status,o.desired_version,o.attempts,o.error_code,o.error_message,o.created_at,o.updated_at
+		FROM operations o LEFT JOIN app_environments ae ON ae.id=o.app_environment_id LEFT JOIN deployments d ON d.id=o.deployment_id LEFT JOIN app_volumes av ON av.id=o.app_volume_id
 		JOIN workspace_memberships wm ON wm.workspace_id=o.workspace_id WHERE wm.user_id=$1 AND wm.status='Active' AND o.public_id=$2`, userID, publicID).
 		Scan(&item.ID, &item.PublicID, &item.WorkspaceID, &item.AppEnvironmentID, &item.AppEnvironmentPublicID,
-			&item.DeploymentID, &item.DeploymentPublicID, &item.ActorID, &item.Kind, &item.Status,
+			&item.DeploymentID, &item.DeploymentPublicID, &item.AppVolumeID, &item.AppVolumePublicID, &item.ActorID, &item.Kind, &item.Status,
 			&item.DesiredVersion, &item.Attempts, &item.ErrorCode, &item.ErrorMessage, &item.CreatedAt, &item.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.Operation{}, ErrNotFound
@@ -561,8 +589,8 @@ func (s *Store) GetOperationForUser(ctx context.Context, userID int64, publicID 
 }
 
 func (s *Store) ListAppEnvironmentOperations(ctx context.Context, workspaceID, appEnvironmentID int64, from, to time.Time, limit int) ([]domain.Operation, error) {
-	rows, err := s.Pool.Query(ctx, `SELECT o.id,o.public_id,o.workspace_id,o.app_environment_id,ae.public_id,COALESCE(o.deployment_id,0),COALESCE(d.public_id,''),o.requested_by_user_id,o.kind,o.status,o.desired_version,o.attempts,o.error_code,o.error_message,o.created_at,o.updated_at
-		FROM operations o JOIN app_environments ae ON ae.id=o.app_environment_id LEFT JOIN deployments d ON d.id=o.deployment_id
+	rows, err := s.Pool.Query(ctx, `SELECT o.id,o.public_id,o.workspace_id,o.app_environment_id,ae.public_id,COALESCE(o.deployment_id,0),COALESCE(d.public_id,''),COALESCE(o.app_volume_id,0),COALESCE(av.public_id,''),o.requested_by_user_id,o.kind,o.status,o.desired_version,o.attempts,o.error_code,o.error_message,o.created_at,o.updated_at
+		FROM operations o JOIN app_environments ae ON ae.id=o.app_environment_id LEFT JOIN deployments d ON d.id=o.deployment_id LEFT JOIN app_volumes av ON av.id=o.app_volume_id
 		WHERE o.workspace_id=$1 AND o.app_environment_id=$2 AND o.created_at >= $3 AND o.created_at <= $4
 		ORDER BY o.created_at DESC,o.id DESC LIMIT $5`, workspaceID, appEnvironmentID, from, to, limit)
 	if err != nil {
@@ -573,7 +601,7 @@ func (s *Store) ListAppEnvironmentOperations(ctx context.Context, workspaceID, a
 	for rows.Next() {
 		var item domain.Operation
 		if err = rows.Scan(&item.ID, &item.PublicID, &item.WorkspaceID, &item.AppEnvironmentID, &item.AppEnvironmentPublicID,
-			&item.DeploymentID, &item.DeploymentPublicID, &item.ActorID, &item.Kind, &item.Status,
+			&item.DeploymentID, &item.DeploymentPublicID, &item.AppVolumeID, &item.AppVolumePublicID, &item.ActorID, &item.Kind, &item.Status,
 			&item.DesiredVersion, &item.Attempts, &item.ErrorCode, &item.ErrorMessage, &item.CreatedAt, &item.UpdatedAt); err != nil {
 			return nil, err
 		}
@@ -595,8 +623,8 @@ func (s *Store) ClaimNext(ctx context.Context, worker string, lease time.Duratio
 	) UPDATE operations o SET status='Running',attempts=attempts+1,started_at=COALESCE(started_at,now()),
 		lease_until=now()+$1::interval,worker_id=$2,fencing_token=fencing_token+1,updated_at=now()
 	FROM candidate c WHERE o.id=c.id
-	RETURNING o.id,o.public_id,o.workspace_id,COALESCE(o.app_environment_id,0),COALESCE(o.deployment_id,0),o.requested_by_user_id,o.kind,o.status,o.desired_version,o.attempts,o.worker_id,o.fencing_token,o.lease_until,o.created_at,o.updated_at`, fmt.Sprintf("%f seconds", lease.Seconds()), worker).
-		Scan(&operation.ID, &operation.PublicID, &operation.WorkspaceID, &operation.AppEnvironmentID, &operation.DeploymentID,
+	RETURNING o.id,o.public_id,o.workspace_id,COALESCE(o.app_environment_id,0),COALESCE(o.deployment_id,0),COALESCE(o.app_volume_id,0),o.requested_by_user_id,o.kind,o.status,o.desired_version,o.attempts,o.worker_id,o.fencing_token,o.lease_until,o.created_at,o.updated_at`, fmt.Sprintf("%f seconds", lease.Seconds()), worker).
+		Scan(&operation.ID, &operation.PublicID, &operation.WorkspaceID, &operation.AppEnvironmentID, &operation.DeploymentID, &operation.AppVolumeID,
 			&operation.ActorID, &operation.Kind, &operation.Status, &operation.DesiredVersion, &operation.Attempts,
 			&operation.WorkerID, &operation.FencingToken, &operation.LeaseUntil, &operation.CreatedAt, &operation.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -616,6 +644,20 @@ func (s *Store) ClaimNext(ctx context.Context, worker string, lease time.Duratio
 		return domain.Operation{}, domain.AppEnvironment{}, domain.Deployment{}, false, err
 	}
 	operation.AppEnvironmentPublicID = appEnvironment.PublicID
+	if operation.AppVolumeID != 0 {
+		volume, volumeErr := appVolumeByID(ctx, tx, operation.AppVolumeID)
+		if volumeErr != nil {
+			return domain.Operation{}, domain.AppEnvironment{}, domain.Deployment{}, false, volumeErr
+		}
+		operation.AppVolumePublicID = volume.PublicID
+		state := domain.VolumeStateProvisioning
+		if operation.Kind == domain.OperationExpandVolume {
+			state = domain.VolumeStateExpanding
+		}
+		if _, err = tx.Exec(ctx, `UPDATE app_volumes SET observed_state=$1,updated_at=now() WHERE id=$2`, state, volume.ID); err != nil {
+			return domain.Operation{}, domain.AppEnvironment{}, domain.Deployment{}, false, err
+		}
+	}
 	var deployment domain.Deployment
 	if operation.Kind == domain.OperationApplyDeployment {
 		deployment, err = deploymentByID(ctx, tx, operation.DeploymentID)
@@ -721,6 +763,11 @@ func (s *Store) Fail(ctx context.Context, operation domain.Operation, code, mess
 			}
 		case domain.OperationDeleteAppEnv:
 			_, err = tx.Exec(ctx, `UPDATE app_environments SET last_state='Degraded',last_message=$1,updated_at=now() WHERE id=$2`, message, operation.AppEnvironmentID)
+		case domain.OperationEnsureVolume, domain.OperationExpandVolume, domain.OperationDeleteVolume:
+			_, err = tx.Exec(ctx, `UPDATE app_volumes SET observed_state='Degraded',message=$1,updated_at=now() WHERE id=$2`, message, operation.AppVolumeID)
+			if err == nil {
+				_, err = tx.Exec(ctx, `UPDATE app_environments SET last_state='Degraded',last_message=$1,updated_at=now() WHERE id=$2 AND archived_at IS NULL`, message, operation.AppEnvironmentID)
+			}
 		}
 		if err != nil {
 			return err
@@ -770,11 +817,11 @@ func insertOperation(ctx context.Context, tx pgx.Tx, workspaceID, appEnvironment
 func operationByIdempotency(ctx context.Context, tx pgx.Tx, workspaceID, actorID int64, idempotencyHash, payloadHash []byte) (domain.Operation, bool, error) {
 	var item domain.Operation
 	var storedPayload []byte
-	err := tx.QueryRow(ctx, `SELECT o.id,o.public_id,o.workspace_id,COALESCE(o.app_environment_id,0),COALESCE(ae.public_id,''),COALESCE(o.deployment_id,0),COALESCE(d.public_id,''),o.requested_by_user_id,o.kind,o.status,o.desired_version,o.attempts,o.error_code,o.error_message,o.created_at,o.updated_at,o.payload_hash
-		FROM operations o LEFT JOIN app_environments ae ON ae.id=o.app_environment_id LEFT JOIN deployments d ON d.id=o.deployment_id
+	err := tx.QueryRow(ctx, `SELECT o.id,o.public_id,o.workspace_id,COALESCE(o.app_environment_id,0),COALESCE(ae.public_id,''),COALESCE(o.deployment_id,0),COALESCE(d.public_id,''),COALESCE(o.app_volume_id,0),COALESCE(av.public_id,''),o.requested_by_user_id,o.kind,o.status,o.desired_version,o.attempts,o.error_code,o.error_message,o.created_at,o.updated_at,o.payload_hash
+		FROM operations o LEFT JOIN app_environments ae ON ae.id=o.app_environment_id LEFT JOIN deployments d ON d.id=o.deployment_id LEFT JOIN app_volumes av ON av.id=o.app_volume_id
 		WHERE o.workspace_id=$1 AND o.requested_by_user_id=$2 AND o.idempotency_hash=$3`, workspaceID, actorID, idempotencyHash).
 		Scan(&item.ID, &item.PublicID, &item.WorkspaceID, &item.AppEnvironmentID, &item.AppEnvironmentPublicID,
-			&item.DeploymentID, &item.DeploymentPublicID, &item.ActorID, &item.Kind, &item.Status,
+			&item.DeploymentID, &item.DeploymentPublicID, &item.AppVolumeID, &item.AppVolumePublicID, &item.ActorID, &item.Kind, &item.Status,
 			&item.DesiredVersion, &item.Attempts, &item.ErrorCode, &item.ErrorMessage, &item.CreatedAt, &item.UpdatedAt, &storedPayload)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.Operation{}, false, nil
@@ -804,8 +851,8 @@ func appEnvironmentByID(ctx context.Context, query rowQuerier, id int64) (domain
 }
 
 func deploymentByID(ctx context.Context, query rowQuerier, id int64) (domain.Deployment, error) {
-	return scanDeployment(query.QueryRow(ctx, `SELECT d.id,d.public_id,d.workspace_id,d.app_environment_id,d.app_id,ae.public_id,r.public_id,r.image,d.configuration_version,d.configuration_json::text,u.username,d.status,d.message,d.observed_release,d.created_at,d.updated_at
-		FROM deployments d JOIN app_environments ae ON ae.id=d.app_environment_id JOIN releases r ON r.id=d.release_id JOIN users u ON u.id=d.requested_by_user_id WHERE d.id=$1`, id))
+	return scanDeployment(query.QueryRow(ctx, `SELECT d.id,d.public_id,d.workspace_id,d.app_environment_id,d.app_id,ae.public_id,r.public_id,r.image,d.configuration_version,d.configuration_json::text,d.workload_kind,COALESCE(av.public_id,''),u.username,d.status,d.message,d.observed_release,d.created_at,d.updated_at
+		FROM deployments d JOIN app_environments ae ON ae.id=d.app_environment_id JOIN releases r ON r.id=d.release_id JOIN users u ON u.id=d.requested_by_user_id LEFT JOIN app_volumes av ON av.id=d.app_volume_id WHERE d.id=$1`, id))
 }
 
 func jsonUnmarshal(raw []byte, target any) error {

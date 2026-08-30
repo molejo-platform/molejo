@@ -4,6 +4,9 @@ metadata:
   name: ap-static000001
   namespace: ws-static-e2e
 spec:
+  workload:
+    kind: Stateless
+    stateless: {}
   image: __STATIC_IMAGE__
   port: 8080
   resources:

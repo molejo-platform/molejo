@@ -70,6 +70,9 @@ func run() error {
 			return err
 		}
 	}
+	if err = configureStorageProfile(ctx, s); err != nil {
+		return err
+	}
 	cfg := api.DefaultConfig()
 	cfg.Mode = env("FRUTO_MODE", cfg.Mode)
 	cfg.PublicURL = env("FRUTO_PUBLIC_URL", cfg.PublicURL)
@@ -223,6 +226,9 @@ func runRuntimeWorker() error {
 	defer s.Close()
 	if err = s.SchemaReady(ctx); err != nil {
 		return fmt.Errorf("runtime schema is not ready: %w", err)
+	}
+	if err = configureStorageProfile(ctx, s); err != nil {
+		return err
 	}
 	rt, err := runtimeClient(10 * time.Second)
 	if err != nil {
@@ -566,6 +572,42 @@ func readOptionalSecretFile(envName string) ([]byte, error) {
 		return nil, fmt.Errorf("%s must contain at least 32 bytes", envName)
 	}
 	return value, nil
+}
+
+func configureStorageProfile(ctx context.Context, storage *store.Store) error {
+	id := strings.TrimSpace(os.Getenv("FRUTO_STORAGE_PROFILE_ID"))
+	if id == "" {
+		return nil
+	}
+	minimum, err := int64Env("FRUTO_STORAGE_PROFILE_MIN_GIB", 1)
+	if err != nil {
+		return err
+	}
+	maximum, err := int64Env("FRUTO_STORAGE_PROFILE_MAX_GIB", 10)
+	if err != nil {
+		return err
+	}
+	total, err := int64Env("FRUTO_STORAGE_PROFILE_TOTAL_GIB", maximum)
+	if err != nil {
+		return err
+	}
+	workspaceQuota, err := int64Env("FRUTO_STORAGE_PROFILE_WORKSPACE_QUOTA_GIB", total)
+	if err != nil {
+		return err
+	}
+	profile := store.StorageProfileInstallation{
+		ID: id, Name: env("FRUTO_STORAGE_PROFILE_NAME", "Persistent storage"),
+		MinimumSizeGiB: minimum, MaximumSizeGiB: maximum, TotalCapacityGiB: total, WorkspaceQuotaGiB: workspaceQuota,
+		Expandable:      os.Getenv("FRUTO_STORAGE_PROFILE_EXPANDABLE") == "true",
+		Snapshots:       os.Getenv("FRUTO_STORAGE_PROFILE_SNAPSHOTS") == "true",
+		AutomaticBackup: os.Getenv("FRUTO_STORAGE_PROFILE_AUTOMATIC_BACKUP") == "true",
+		Durability:      env("FRUTO_STORAGE_PROFILE_DURABILITY", "NodeLocal"),
+		RuntimeBinding:  strings.TrimSpace(os.Getenv("FRUTO_STORAGE_PROFILE_RUNTIME_BINDING")), Enabled: true,
+	}
+	if err = storage.ConfigureStorageProfile(ctx, profile); err != nil {
+		return fmt.Errorf("configure storage profile: %w", err)
+	}
+	return nil
 }
 
 func withStore(fn func(*store.Store) error) error {

@@ -169,7 +169,7 @@ func TestObservabilityAPIResolvesScopeOnlyAfterFullAncestryAuthorization(t *test
 	appResponse := hierarchyRequest(t, server, owner, http.MethodPost, "/api/v1/workspaces/"+workspace.PublicID+"/projects/"+project.PublicID+"/apps", `{"name":"API"}`, nil)
 	var app domain.App
 	decodeResponse(t, appResponse, &app)
-	configuration := fmt.Sprintf(`{"environmentId":%q,"branch":"main","configuration":{"replicas":1,"port":8080,"resources":{"requests":{"cpuMillis":50,"memoryMiB":64},"limits":{"cpuMillis":250,"memoryMiB":128}},"probes":{"liveness":{"path":"/healthz"},"readiness":{"path":"/readyz"}},"exposure":"Private"}}`, environment.PublicID)
+	configuration := fmt.Sprintf(`{"environmentId":%q,"branch":"main","workloadKind":"Stateless","configuration":{"replicas":1,"port":8080,"resources":{"requests":{"cpuMillis":50,"memoryMiB":64},"limits":{"cpuMillis":250,"memoryMiB":128}},"probes":{"liveness":{"path":"/healthz"},"readiness":{"path":"/readyz"}},"exposure":"Private"}}`, environment.PublicID)
 	appEnvironmentResponse := hierarchyRequest(t, server, owner, http.MethodPost, "/api/v1/workspaces/"+workspace.PublicID+"/projects/"+project.PublicID+"/apps/"+app.PublicID+"/environments", configuration, nil)
 	var appEnvironment domain.AppEnvironment
 	decodeResponse(t, appEnvironmentResponse, &appEnvironment)

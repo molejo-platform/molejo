@@ -95,7 +95,7 @@ da inspeção dos logs. Runtime ausente ou indisponível aparece como `Unknown` 
 nunca como deployment bem-sucedido. Esta instalação não declara HA ou DR.
 
 Antes do aceite no k3s, `just ci` precisa passar a partir de checkout limpo.
-Registre commit de origem, `linux/amd64` e digests da API, Console e Testkit em
+Registre commit de origem, `linux/amd64` e digests da API, Console, platform operator e Testkit em
 manifesto externo de release; substitua os placeholders de UID do cluster e
 proxy confiável; crie Secrets de banco e bootstrap fora do Git; e declare se o
 banco é descartável. Se não for, gere e verifique uma exportação manual
@@ -114,7 +114,7 @@ a mutação do cluster continua sendo uma etapa manual com autorização separad
 
 Use um checkout limpo e commitado e um diretório externo com modo `0700`. O
 overlay de laboratório pina o PostgreSQL 17.6 pelo digest do manifesto
-`linux/amd64`, agenda-o em `fruto-data-01`, solicita um volume `local-path` de
+`linux/amd64`, agenda-o em `fruto-data-01`, solicita um volume `molejo-platform-local` de
 2 GiB e marca serviço e storage como fixtures pre-alpha descartáveis. Isso não é
 HA nem banco gerenciado.
 

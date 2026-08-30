@@ -21,6 +21,7 @@ readonly SPA_IMAGE_V1_FULL="docker.io/library/${SPA_IMAGE_V1_TAG}"
 readonly SPA_IMAGE_V2_FULL="docker.io/library/${SPA_IMAGE_V2_TAG}"
 readonly KUBECONFIG_FILE="$(mktemp)"
 readonly APP_MANIFEST_FILE="$(mktemp)"
+readonly STATEFUL_MANIFEST_FILE="$(mktemp)"
 readonly STATIC_MANIFEST_FILE="$(mktemp)"
 readonly SPA_MANIFEST_FILE="$(mktemp)"
 readonly OPERATOR_MANIFEST_FILE="$(mktemp)"
@@ -322,6 +323,7 @@ finish() {
   rm -f \
     "${KUBECONFIG_FILE}" \
     "${APP_MANIFEST_FILE}" \
+    "${STATEFUL_MANIFEST_FILE}" \
     "${STATIC_MANIFEST_FILE}" \
     "${SPA_MANIFEST_FILE}" \
     "${OPERATOR_MANIFEST_FILE}" \
@@ -456,6 +458,10 @@ kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
   --for=condition=Established \
   crd/appdeployments.platform.fruto.calouro.tech \
   --timeout=60s
+kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
+  --for=condition=Established \
+  crd/appvolumes.platform.fruto.calouro.tech \
+  --timeout=60s
 kubectl kustomize deploy/operator |
   sed "s|image: ghcr.io/fruto-platform/platform-operator@sha256:0000000000000000000000000000000000000000000000000000000000000000|image: ${OPERATOR_IMAGE}|" >"${OPERATOR_MANIFEST_FILE}"
 grep -Fq "image: ${OPERATOR_IMAGE}" "${OPERATOR_MANIFEST_FILE}"
@@ -467,17 +473,23 @@ kubectl --kubeconfig "${KUBECONFIG_FILE}" rollout status \
 
 for verb in get list watch; do
   assert_can_i "${verb}" appdeployments.platform.fruto.calouro.tech -n fruto-system
+  assert_can_i "${verb}" appvolumes.platform.fruto.calouro.tech -n fruto-system
 done
 for verb in get patch update; do
   assert_can_i "${verb}" appdeployments.platform.fruto.calouro.tech \
     --subresource=status -n fruto-system
+  assert_can_i "${verb}" appvolumes.platform.fruto.calouro.tech \
+    --subresource=status -n fruto-system
 done
-for resource in deployments.apps services; do
-  for verb in create get list patch update watch; do
+for resource in deployments.apps statefulsets.apps persistentvolumeclaims; do
+  for verb in create get list patch update watch delete; do
     assert_can_i "${verb}" "${resource}" -n fruto-system
   done
-  assert_cannot_i delete "${resource}" -n fruto-system
 done
+for verb in create get list patch update watch; do
+  assert_can_i "${verb}" services -n fruto-system
+done
+assert_cannot_i delete services -n fruto-system
 for verb in create get list patch update watch delete; do
   assert_can_i "${verb}" httproutes.gateway.networking.k8s.io -n fruto-system
 done
@@ -489,6 +501,7 @@ assert_can_i create subjectaccessreviews.authorization.k8s.io -A
 
 for verb in create patch update delete; do
   assert_cannot_i "${verb}" appdeployments.platform.fruto.calouro.tech -n fruto-system
+  assert_cannot_i "${verb}" appvolumes.platform.fruto.calouro.tech -n fruto-system
 done
 assert_cannot_i get secrets -n fruto-system
 assert_cannot_i get pods --subresource=log -n fruto-system
@@ -921,6 +934,104 @@ kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
 
 stop_port_forward "${APP_FORWARD_PID}"
 APP_FORWARD_PID=""
+
+sed "s|__APP_IMAGE__|${FIXTURE_IMAGE_V1}|" \
+  test/e2e/stateful-appdeployment.yaml >"${STATEFUL_MANIFEST_FILE}"
+kubectl --kubeconfig "${KUBECONFIG_FILE}" apply -f "${STATEFUL_MANIFEST_FILE}"
+kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
+  --for=condition=Ready \
+  appvolume/vol-statefule2e01 \
+  -n ws-stateful-e2e \
+  --timeout=120s
+kubectl --kubeconfig "${KUBECONFIG_FILE}" rollout status \
+  statefulset/ap-statefule2e01 \
+  -n ws-stateful-e2e \
+  --timeout=180s
+kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
+  --for=condition=Ready \
+  appdeployment/ap-statefule2e01 \
+  -n ws-stateful-e2e \
+  --timeout=120s
+start_port_forward ws-stateful-e2e service/ap-statefule2e01 8080 "${APP_FORWARD_LOG}" \
+  APP_FORWARD_PID APP_LOCAL_PORT
+curl --fail --silent --show-error --request PUT \
+  --data 'stateful-marker' \
+  "http://127.0.0.1:${APP_LOCAL_PORT}/state"
+marker="$(curl_json "http://127.0.0.1:${APP_LOCAL_PORT}/state")"
+if [[ ${marker} != "stateful-marker" ]]; then
+  echo "stateful marker was not written to the mounted volume" >&2
+  exit 1
+fi
+
+kubectl --kubeconfig "${KUBECONFIG_FILE}" patch \
+  appdeployment/ap-statefule2e01 \
+  -n ws-stateful-e2e \
+  --type=merge \
+  --patch "{\"spec\":{\"image\":\"${FIXTURE_IMAGE_V2}\"}}"
+kubectl --kubeconfig "${KUBECONFIG_FILE}" rollout status \
+  statefulset/ap-statefule2e01 \
+  -n ws-stateful-e2e \
+  --timeout=180s
+stop_port_forward "${APP_FORWARD_PID}"
+APP_FORWARD_PID=""
+start_port_forward ws-stateful-e2e service/ap-statefule2e01 8080 "${APP_FORWARD_LOG}" \
+  APP_FORWARD_PID APP_LOCAL_PORT
+updated_stateful_response="$(curl_json "http://127.0.0.1:${APP_LOCAL_PORT}/")"
+grep -q '"version":"v2"' <<<"${updated_stateful_response}"
+marker="$(curl_json "http://127.0.0.1:${APP_LOCAL_PORT}/state")"
+if [[ ${marker} != "stateful-marker" ]]; then
+  echo "stateful marker did not survive the release update" >&2
+  exit 1
+fi
+
+stop_port_forward "${APP_FORWARD_PID}"
+APP_FORWARD_PID=""
+stateful_pod="$(kubectl --kubeconfig "${KUBECONFIG_FILE}" get pod \
+  -n ws-stateful-e2e \
+  -l platform.fruto.calouro.tech/app-deployment=ap-statefule2e01 \
+  -o jsonpath='{.items[0].metadata.name}')"
+kubectl --kubeconfig "${KUBECONFIG_FILE}" delete pod \
+  "${stateful_pod}" \
+  -n ws-stateful-e2e \
+  --wait=true
+kubectl --kubeconfig "${KUBECONFIG_FILE}" rollout status \
+  statefulset/ap-statefule2e01 \
+  -n ws-stateful-e2e \
+  --timeout=180s
+start_port_forward ws-stateful-e2e service/ap-statefule2e01 8080 "${APP_FORWARD_LOG}" \
+  APP_FORWARD_PID APP_LOCAL_PORT
+marker="$(curl_json "http://127.0.0.1:${APP_LOCAL_PORT}/state")"
+if [[ ${marker} != "stateful-marker" ]]; then
+  echo "stateful marker did not survive Pod recreation" >&2
+  exit 1
+fi
+stop_port_forward "${APP_FORWARD_PID}"
+APP_FORWARD_PID=""
+
+kubectl --kubeconfig "${KUBECONFIG_FILE}" delete \
+  appdeployment/ap-statefule2e01 \
+  -n ws-stateful-e2e \
+  --wait=true
+kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
+  --for=delete \
+  statefulset/ap-statefule2e01 \
+  -n ws-stateful-e2e \
+  --timeout=120s
+kubectl --kubeconfig "${KUBECONFIG_FILE}" get \
+  persistentvolumeclaim/vol-statefule2e01 \
+  -n ws-stateful-e2e >/dev/null
+kubectl --kubeconfig "${KUBECONFIG_FILE}" patch \
+  appvolume/vol-statefule2e01 \
+  -n ws-stateful-e2e \
+  --type=merge \
+  --patch '{"spec":{"desiredState":"Deleted"}}'
+wait_for_jsonpath appvolume ws-stateful-e2e vol-statefule2e01 \
+  '{.status.state}' Retained
+kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
+  --for=delete \
+  persistentvolumeclaim/vol-statefule2e01 \
+  -n ws-stateful-e2e \
+  --timeout=120s
 
 kubectl --kubeconfig "${KUBECONFIG_FILE}" create namespace ws-static-e2e
 sed "s|__STATIC_IMAGE__|${STATIC_IMAGE}|" \

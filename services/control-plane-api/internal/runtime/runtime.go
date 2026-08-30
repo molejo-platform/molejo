@@ -43,8 +43,24 @@ type Observation struct {
 	ObservedRelease    string
 }
 
+type VolumeIntent struct {
+	RuntimeBinding  string
+	SizeGiB         int64
+	RetentionPolicy string
+	DesiredState    string
+}
+
+type VolumeObservation struct {
+	Exists          bool
+	State           string
+	Message         string
+	ObservedSizeGiB int64
+}
+
 type Client interface {
 	EnsureWorkspace(context.Context, string) error
+	ApplyVolume(context.Context, string, string, VolumeIntent) error
+	ObserveVolume(context.Context, string, string) (VolumeObservation, error)
 	ApplyDeployment(context.Context, string, string, domain.Intent) error
 	ObserveDeployment(context.Context, string, string) (Observation, error)
 	DeleteDeployment(context.Context, string, string) error
@@ -155,8 +171,8 @@ func (k *KubernetesClient) EnsureWorkspace(ctx context.Context, namespace string
 
 func workspaceRuntimeRules() []rbacv1.PolicyRule {
 	return []rbacv1.PolicyRule{
-		{APIGroups: []string{"platform.fruto.calouro.tech"}, Resources: []string{"appdeployments"}, Verbs: []string{"get", "list", "watch", "create", "patch", "delete"}},
-		{APIGroups: []string{"platform.fruto.calouro.tech"}, Resources: []string{"appdeployments/status"}, Verbs: []string{"get"}},
+		{APIGroups: []string{"platform.fruto.calouro.tech"}, Resources: []string{"appdeployments", "appvolumes"}, Verbs: []string{"get", "list", "watch", "create", "patch", "delete"}},
+		{APIGroups: []string{"platform.fruto.calouro.tech"}, Resources: []string{"appdeployments/status", "appvolumes/status"}, Verbs: []string{"get"}},
 		{APIGroups: []string{""}, Resources: []string{"configmaps", "secrets"}, Verbs: []string{"get", "list", "create", "delete"}},
 	}
 }
@@ -267,7 +283,14 @@ func (k *KubernetesClient) ApplyDeployment(ctx context.Context, namespace, name 
 			variables = append(variables, platformv1alpha1.AppDeploymentVariable{Name: variable.Name, Value: variable.Value})
 		}
 	}
-	obj := &platformv1alpha1.AppDeployment{TypeMeta: metav1.TypeMeta{APIVersion: "platform.fruto.calouro.tech/v1alpha1", Kind: "AppDeployment"}, ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, Annotations: map[string]string{controlPlaneOwnerAnnotation: name}}, Spec: platformv1alpha1.AppDeploymentSpec{Image: intent.Image, Replicas: &replicas, Port: intent.Port, Resources: resourceSpec, Probes: platformv1alpha1.AppDeploymentProbes{Liveness: platformv1alpha1.AppDeploymentHTTPProbe{Path: intent.Probes.Liveness.Path}, Readiness: platformv1alpha1.AppDeploymentHTTPProbe{Path: intent.Probes.Readiness.Path}}, Exposure: platformv1alpha1.AppDeploymentExposure(intent.Exposure), Slug: intent.Slug, Variables: variables, ConfigMapRef: configMapRef, SecretRef: secretRef}}
+	workload := platformv1alpha1.AppDeploymentWorkload{Kind: platformv1alpha1.WorkloadStateless, Stateless: &platformv1alpha1.StatelessWorkload{}}
+	if intent.WorkloadKind == domain.WorkloadStateful {
+		if intent.Volume == nil {
+			return errors.New("stateful deployment requires an AppVolume")
+		}
+		workload = platformv1alpha1.AppDeploymentWorkload{Kind: platformv1alpha1.WorkloadStateful, Stateful: &platformv1alpha1.StatefulWorkload{VolumeRef: intent.Volume.PublicID, MountPath: intent.Volume.MountPath}}
+	}
+	obj := &platformv1alpha1.AppDeployment{TypeMeta: metav1.TypeMeta{APIVersion: "platform.fruto.calouro.tech/v1alpha1", Kind: "AppDeployment"}, ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, Annotations: map[string]string{controlPlaneOwnerAnnotation: name}}, Spec: platformv1alpha1.AppDeploymentSpec{Workload: workload, Image: intent.Image, Replicas: &replicas, Port: intent.Port, Resources: resourceSpec, Probes: platformv1alpha1.AppDeploymentProbes{Liveness: platformv1alpha1.AppDeploymentHTTPProbe{Path: intent.Probes.Liveness.Path}, Readiness: platformv1alpha1.AppDeploymentHTTPProbe{Path: intent.Probes.Readiness.Path}}, Exposure: platformv1alpha1.AppDeploymentExposure(intent.Exposure), Slug: intent.Slug, Variables: variables, ConfigMapRef: configMapRef, SecretRef: secretRef}}
 	if !exists {
 		if err := k.client.Create(applyCtx, obj, client.FieldOwner(k.fieldManager)); err != nil {
 			if apierrors.IsAlreadyExists(err) {
@@ -281,6 +304,54 @@ func (k *KubernetesClient) ApplyDeployment(ctx context.Context, namespace, name 
 		return fmt.Errorf("apply AppDeployment: %w", err)
 	}
 	return nil
+}
+
+func (k *KubernetesClient) ApplyVolume(ctx context.Context, namespace, name string, intent VolumeIntent) error {
+	applyCtx, cancel := context.WithTimeout(ctx, k.applyTimeout)
+	defer cancel()
+	current := &platformv1alpha1.AppVolume{}
+	err := k.client.Get(applyCtx, types.NamespacedName{Namespace: namespace, Name: name}, current)
+	if err == nil && current.Annotations[controlPlaneOwnerAnnotation] != name {
+		return fmt.Errorf("%w: AppVolume %s/%s", ErrOwnershipConflict, namespace, name)
+	}
+	if err != nil && !apierrors.IsNotFound(err) {
+		return err
+	}
+	desiredState := platformv1alpha1.VolumeDesiredReady
+	if intent.DesiredState == domain.VolumeDesiredDeleted {
+		desiredState = platformv1alpha1.VolumeDesiredDeleted
+	}
+	obj := &platformv1alpha1.AppVolume{
+		TypeMeta:   metav1.TypeMeta{APIVersion: "platform.fruto.calouro.tech/v1alpha1", Kind: "AppVolume"},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, Annotations: map[string]string{controlPlaneOwnerAnnotation: name}},
+		Spec:       platformv1alpha1.AppVolumeSpec{StorageClassName: intent.RuntimeBinding, SizeGiB: intent.SizeGiB, RetentionPolicy: platformv1alpha1.VolumeRetentionPreserve, DesiredState: desiredState},
+	}
+	if apierrors.IsNotFound(err) {
+		if desiredState == platformv1alpha1.VolumeDesiredDeleted {
+			return nil
+		}
+		return k.client.Create(applyCtx, obj, client.FieldOwner(k.fieldManager))
+	}
+	return k.client.Patch(applyCtx, obj, client.Apply, client.FieldOwner(k.fieldManager), client.ForceOwnership)
+}
+
+func (k *KubernetesClient) ObserveVolume(ctx context.Context, namespace, name string) (VolumeObservation, error) {
+	observeCtx, cancel := context.WithTimeout(ctx, k.applyTimeout)
+	defer cancel()
+	obj := &platformv1alpha1.AppVolume{}
+	if err := k.client.Get(observeCtx, types.NamespacedName{Namespace: namespace, Name: name}, obj); err != nil {
+		if apierrors.IsNotFound(err) {
+			return VolumeObservation{State: domain.VolumeStatePending, Message: "persistent storage intent not found"}, nil
+		}
+		return VolumeObservation{}, err
+	}
+	message := "persistent storage reconciliation pending"
+	for _, condition := range obj.Status.Conditions {
+		if condition.Message != "" {
+			message = condition.Message
+		}
+	}
+	return VolumeObservation{Exists: true, State: string(obj.Status.State), Message: message, ObservedSizeGiB: obj.Status.ObservedSizeGiB}, nil
 }
 
 func (k *KubernetesClient) materializeConfiguration(ctx context.Context, namespace, owner string, version int64, plain, secret []domain.Variable) (string, string, error) {

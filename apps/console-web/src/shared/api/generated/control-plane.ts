@@ -886,6 +886,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspaceId}/storage-profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        get: operations["listStorageProfiles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/volume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                projectId: components["parameters"]["ProjectId"];
+                appId: components["parameters"]["AppId"];
+                appEnvironmentId: components["parameters"]["AppEnvironmentId"];
+            };
+            cookie?: never;
+        };
+        get: operations["getAppEnvironmentVolume"];
+        put: operations["expandAppEnvironmentVolume"];
+        post?: never;
+        delete: operations["deleteAppEnvironmentVolume"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/delivery-policy": {
         parameters: {
             query?: never;
@@ -1522,6 +1561,9 @@ export interface components {
         AppEnvironmentCreateInput: {
             environmentId: string;
             branch: string;
+            /** @enum {string} */
+            workloadKind: "Stateless" | "Stateful";
+            volume?: components["schemas"]["AppVolumeRequest"];
             configuration: components["schemas"]["RuntimeConfiguration"];
         };
         AppEnvironment: {
@@ -1532,6 +1574,8 @@ export interface components {
             environmentId: string;
             environmentName: string;
             branch: string;
+            /** @enum {string} */
+            workloadKind: "Stateless" | "Stateful";
             configuration: components["schemas"]["RuntimeConfiguration"];
             configurationVersion: number;
             version: number;
@@ -1547,6 +1591,50 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
+        };
+        AppVolumeRequest: {
+            storageProfileId: string;
+            sizeGiB: number;
+            mountPath: string;
+        };
+        AppVolumeExpansionInput: {
+            sizeGiB: number;
+        };
+        StorageProfile: {
+            id: string;
+            name: string;
+            minimumSizeGiB: number;
+            maximumSizeGiB: number;
+            availableGiB: number;
+            expandable: boolean;
+            snapshots: boolean;
+            automaticBackup: boolean;
+            /** @enum {string} */
+            durability: "NodeLocal" | "Replicated" | "ProviderManaged";
+        };
+        AppVolume: {
+            id: string;
+            appEnvironmentId: string;
+            storageProfileId: string;
+            sizeGiB: number;
+            mountPath: string;
+            /** @enum {string} */
+            retentionPolicy: "Preserve";
+            /** @enum {string} */
+            desiredState: "Ready" | "Deleted";
+            /** @enum {string} */
+            state: "Pending" | "Provisioning" | "Ready" | "Expanding" | "Retained" | "Degraded";
+            message?: string;
+            attached: boolean;
+            version: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        AppVolumeMutation: {
+            volume: components["schemas"]["AppVolume"];
+            operation: components["schemas"]["Operation"];
         };
         DeploymentInput: {
             releaseId: string;
@@ -1586,6 +1674,9 @@ export interface components {
             id: string;
             appEnvironmentId: string;
             releaseId: string;
+            /** @enum {string} */
+            workloadKind: "Stateless" | "Stateful";
+            appVolumeId?: string;
             configurationVersion: number;
             configuration: components["schemas"]["RuntimeConfiguration"];
             requestedBy: string;
@@ -1601,8 +1692,9 @@ export interface components {
             id: string;
             appEnvironmentId?: string;
             deploymentId?: string;
+            appVolumeId?: string;
             /** @enum {string} */
-            kind: "ApplyDeployment" | "DeleteAppEnvironment" | "EnsureWorkspace";
+            kind: "ApplyDeployment" | "DeleteAppEnvironment" | "EnsureWorkspace" | "EnsureVolume" | "ExpandVolume" | "DeleteVolume";
             /** @enum {string} */
             status: "Pending" | "Running" | "Succeeded" | "Failed";
             desiredVersion: number;
@@ -3971,6 +4063,126 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Operation"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listStorageProfiles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Portable storage profiles available to the Workspace */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["StorageProfile"][];
+                    };
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getAppEnvironmentVolume: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                projectId: components["parameters"]["ProjectId"];
+                appId: components["parameters"]["AppId"];
+                appEnvironmentId: components["parameters"]["AppEnvironmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Persistent volume attached to this App Environment */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppVolume"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    expandAppEnvironmentVolume: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                projectId: components["parameters"]["ProjectId"];
+                appId: components["parameters"]["AppId"];
+                appEnvironmentId: components["parameters"]["AppEnvironmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AppVolumeExpansionInput"];
+            };
+        };
+        responses: {
+            /** @description Volume expansion accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppVolumeMutation"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    deleteAppEnvironmentVolume: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                projectId: components["parameters"]["ProjectId"];
+                appId: components["parameters"]["AppId"];
+                appEnvironmentId: components["parameters"]["AppEnvironmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Volume retention accepted after runtime detach */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppVolumeMutation"];
                 };
             };
             403: components["responses"]["Forbidden"];

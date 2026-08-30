@@ -86,7 +86,7 @@ spec:
           molejo.dev/disposable: "true"
       spec:
         accessModes: [ReadWriteOnce]
-        storageClassName: local-path
+        storageClassName: molejo-platform-local
         resources:
           requests:
             storage: 2Gi

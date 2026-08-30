@@ -54,8 +54,9 @@ func TestAppDeploymentSchema(t *testing.T) {
 				"namespace": namespace,
 			},
 			"spec": map[string]any{
-				"image": testImage,
-				"port":  int64(8080),
+				"workload": map[string]any{"kind": "Stateless", "stateless": map[string]any{}},
+				"image":    testImage,
+				"port":     int64(8080),
 				"resources": map[string]any{
 					"requests": map[string]any{"cpuMillis": int64(50), "memoryMiB": int64(64)},
 					"limits":   map[string]any{"cpuMillis": int64(500), "memoryMiB": int64(256)},
@@ -198,8 +199,9 @@ func TestAppDeploymentSchema(t *testing.T) {
 				"namespace": namespace,
 			},
 			"spec": map[string]any{
-				"image": testImage,
-				"port":  int64(8080),
+				"workload": map[string]any{"kind": "Stateless", "stateless": map[string]any{}},
+				"image":    testImage,
+				"port":     int64(8080),
 				"resources": map[string]any{
 					"requests": map[string]any{"cpuMillis": int64(50), "memoryMiB": int64(64)},
 					"limits":   map[string]any{"cpuMillis": int64(500), "memoryMiB": int64(256)},
@@ -235,8 +237,9 @@ func TestAppDeploymentSchema(t *testing.T) {
 				"namespace": namespace,
 			},
 			"spec": map[string]any{
-				"image": testImage,
-				"port":  int64(8080),
+				"workload": map[string]any{"kind": "Stateless", "stateless": map[string]any{}},
+				"image":    testImage,
+				"port":     int64(8080),
 				"resources": map[string]any{
 					"requests": map[string]any{"cpuMillis": int64(50), "memoryMiB": int64(64)},
 					"limits":   map[string]any{"cpuMillis": int64(500), "memoryMiB": int64(256)},
@@ -925,6 +928,10 @@ func newAppDeployment(namespace string, name string, image string) *platformv1al
 		},
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 		Spec: platformv1alpha1.AppDeploymentSpec{
+			Workload: platformv1alpha1.AppDeploymentWorkload{
+				Kind:      platformv1alpha1.WorkloadStateless,
+				Stateless: &platformv1alpha1.StatelessWorkload{},
+			},
 			Image:        image,
 			Port:         8080,
 			ConfigMapRef: name + "-c1",

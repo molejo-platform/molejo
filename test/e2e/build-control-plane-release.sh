@@ -32,19 +32,24 @@ mkdir -p "$release_dir"
 
 api_tag="$registry/control-plane-api:$commit"
 console_tag="$registry/console-web:$commit"
+operator_tag="$registry/platform-operator:$commit"
 docker buildx build --platform linux/amd64 --file services/control-plane-api/Dockerfile --tag "$api_tag" --push --metadata-file "$temporary/api.json" .
 docker buildx build --platform linux/amd64 --file apps/console-web/Dockerfile --tag "$console_tag" --push --metadata-file "$temporary/console.json" .
+docker buildx build --platform linux/amd64 --file services/platform-operator/Dockerfile --tag "$operator_tag" --push --metadata-file "$temporary/operator.json" .
 
 api_digest="$(jq -er '."containerimage.digest"' "$temporary/api.json")"
 console_digest="$(jq -er '."containerimage.digest"' "$temporary/console.json")"
+operator_digest="$(jq -er '."containerimage.digest"' "$temporary/operator.json")"
 api_image="${api_tag%:*}@$api_digest"
 console_image="${console_tag%:*}@$console_digest"
+operator_image="${operator_tag%:*}@$operator_digest"
 
 images_file="$temporary/images.env"
 {
   printf 'FRUTO_SOURCE_COMMIT=%q\n' "$commit"
   printf 'FRUTO_API_IMAGE=%q\n' "$api_image"
   printf 'FRUTO_CONSOLE_IMAGE=%q\n' "$console_image"
+  printf 'FRUTO_OPERATOR_IMAGE=%q\n' "$operator_image"
   printf 'FRUTO_TESTKIT_IMAGE=%q\n' "$testkit_image"
 } >"$images_file"
 install -m 0600 "$images_file" "$release_dir/images.env"

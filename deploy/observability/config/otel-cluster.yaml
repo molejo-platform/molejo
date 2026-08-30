@@ -20,6 +20,20 @@ receivers:
             - targets:
                 - 127.0.0.1:8888
                 - otel-gateway.molejo-observability.svc:8888
+        - job_name: openebs-lvm-capacity
+          scrape_interval: 30s
+          static_configs:
+            - targets:
+                - openebs-lvm-lvm-localpv-node-service.openebs.svc:9500
+          metric_relabel_configs:
+            - source_labels: [__name__]
+              regex: lvm_vg_(free_size_bytes|total_size_bytes|missing_pv_count|lv_count)
+              action: keep
+            - source_labels: [name]
+              target_label: volume_group
+              action: replace
+            - regex: name
+              action: labeldrop
 processors:
   memory_limiter:
     check_interval: 5s
