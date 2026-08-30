@@ -206,8 +206,8 @@ func TestWorkerAllowsFirstStatefulDeploymentToBindAWaitingVolume(t *testing.T) {
 		t.Fatalf("prepared volume=%+v err=%v", currentVolume, err)
 	}
 	target, err = s.FindAppEnvironment(ctx, workspaceID, target.PublicID)
-	if err != nil {
-		t.Fatal(err)
+	if err != nil || target.State != domain.StatePending {
+		t.Fatalf("App Environment waiting for first deployment=%+v err=%v", target, err)
 	}
 	releaseID, image := createExecutorRelease(t, s, workspaceID, actorID, project, app, target)
 	deployment, _, _, err := s.CreateDeployment(ctx, workspaceID, actorID, target.PublicID, mustAPIID(t, "dpl"), releaseID, target.ConfigurationVersion, target.Version, "", domain.SHA256([]byte("first-stateful-deploy")), domain.SHA256([]byte("first-stateful-deploy-payload")))

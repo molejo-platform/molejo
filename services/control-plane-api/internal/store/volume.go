@@ -301,6 +301,10 @@ func (s *Store) CompleteVolume(ctx context.Context, operation domain.Operation, 
 		if _, err = tx.Exec(ctx, `UPDATE app_environments SET last_state=CASE WHEN current_deployment_id IS NULL THEN 'Pending' ELSE 'Ready' END,last_message=CASE WHEN current_deployment_id IS NULL THEN 'persistent storage is ready; no release is deployed' ELSE '' END,updated_at=now() WHERE id=$1 AND archived_at IS NULL`, operation.AppEnvironmentID); err != nil {
 			return err
 		}
+	} else if state == domain.VolumeStateProvisioning {
+		if _, err = tx.Exec(ctx, `UPDATE app_environments SET last_state='Pending',last_message='persistent storage will bind during the first deployment',updated_at=now() WHERE id=$1 AND archived_at IS NULL`, operation.AppEnvironmentID); err != nil {
+			return err
+		}
 	}
 	return tx.Commit(ctx)
 }
