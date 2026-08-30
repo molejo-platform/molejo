@@ -66,6 +66,7 @@ func init() {
 // AppDeploymentReconciler projects AppDeployment resources into typed Kubernetes workloads.
 type AppDeploymentReconciler struct {
 	client.Client
+	APIReader           client.Reader
 	Scheme              *runtime.Scheme
 	Recorder            record.EventRecorder
 	Tracer              trace.Tracer
@@ -916,7 +917,11 @@ func (r *AppDeploymentReconciler) replaceStaleUnreadyStatefulPod(ctx context.Con
 	}
 	pod := &corev1.Pod{}
 	key := types.NamespacedName{Namespace: statefulSet.Namespace, Name: statefulSet.Name + "-0"}
-	if err := r.Get(ctx, key, pod); err != nil {
+	reader := r.APIReader
+	if reader == nil {
+		reader = r.Client
+	}
+	if err := reader.Get(ctx, key, pod); err != nil {
 		if apierrors.IsNotFound(err) {
 			return false, nil
 		}

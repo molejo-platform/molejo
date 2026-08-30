@@ -105,6 +105,7 @@ func run() error {
 
 	if err := (&controller.AppDeploymentReconciler{
 		Client:              manager.GetClient(),
+		APIReader:           manager.GetAPIReader(),
 		Scheme:              manager.GetScheme(),
 		Recorder:            manager.GetEventRecorderFor("platform-operator"),
 		Tracer:              tracerProvider.Tracer("github.com/fruto-platform/fruto/services/platform-operator"),
