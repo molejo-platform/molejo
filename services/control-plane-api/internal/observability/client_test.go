@@ -84,9 +84,7 @@ func TestVictoriaMetricsAlwaysScopesEveryMetricQuery(t *testing.T) {
 		t.Fatalf("got %d series and %d queries", len(response.Series), len(queries))
 	}
 	for _, query := range queries {
-		if !strings.Contains(query, `k8s_namespace_name="workspace-a"`) || !strings.Contains(query, `k8s_deployment_name="runtime-a"`) {
-			t.Fatalf("metric query is not tenant and runtime scoped: %s", query)
-		}
+		assertRuntimeScopedMetricQuery(t, query)
 		if strings.Contains(query, "k8s_pod_name") {
 			t.Fatalf("metric query exposes Kubernetes pod identity: %s", query)
 		}
@@ -124,12 +122,35 @@ func TestVictoriaMetricsCurrentMetricsUsesInstantScopedQueries(t *testing.T) {
 		if path != "/api/v1/query" {
 			t.Fatalf("path[%d] = %q", index, path)
 		}
-		if !strings.Contains(queries[index], `k8s_namespace_name="workspace-a"`) || !strings.Contains(queries[index], `k8s_deployment_name="runtime-a"`) {
-			t.Fatalf("metric query is not tenant and runtime scoped: %s", queries[index])
-		}
+		assertRuntimeScopedMetricQuery(t, queries[index])
 	}
 	if snapshot.Samples[0].Name != "cpu" || snapshot.Samples[0].Value != 1.5 {
 		t.Fatalf("unexpected sample: %#v", snapshot.Samples[0])
+	}
+}
+
+func assertRuntimeScopedMetricQuery(t *testing.T, query string) {
+	t.Helper()
+	if !strings.Contains(query, `k8s_namespace_name="workspace-a"`) {
+		t.Fatalf("metric query is not namespace scoped: %s", query)
+	}
+	if strings.Contains(query, "k8s_deployment_available") {
+		if !strings.Contains(query, `k8s_deployment_name="runtime-a"`) || !strings.Contains(query, `k8s_statefulset_name="runtime-a"`) || !strings.Contains(query, "k8s_statefulset_ready_pods") || !strings.Contains(query, " or ") {
+			t.Fatalf("available replicas query does not cover Deployment and StatefulSet: %s", query)
+		}
+		return
+	}
+	if strings.Contains(query, "k8s_deployment_desired") {
+		if !strings.Contains(query, `k8s_deployment_name="runtime-a"`) || !strings.Contains(query, `k8s_statefulset_name="runtime-a"`) || !strings.Contains(query, "k8s_statefulset_desired_pods") || !strings.Contains(query, " or ") {
+			t.Fatalf("desired replicas query does not cover Deployment and StatefulSet: %s", query)
+		}
+		return
+	}
+	if !strings.Contains(query, `molejo_app_environment_runtime="runtime-a"`) {
+		t.Fatalf("pod metric query is not scoped by the product runtime label: %s", query)
+	}
+	if strings.Contains(query, "k8s_deployment_name") || strings.Contains(query, "k8s_statefulset_name") {
+		t.Fatalf("pod metric query is coupled to a Kubernetes workload kind: %s", query)
 	}
 }
 

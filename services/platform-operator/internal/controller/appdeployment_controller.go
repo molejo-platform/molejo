@@ -75,6 +75,7 @@ type AppDeploymentReconciler struct {
 // +kubebuilder:rbac:groups=platform.fruto.calouro.tech,resources=appdeployments;appvolumes,verbs=get;list;watch
 // +kubebuilder:rbac:groups=platform.fruto.calouro.tech,resources=appdeployments/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=apps,resources=deployments;statefulsets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=pods,verbs=get;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=tcproutes,verbs=get;list;watch;create;update;patch;delete
@@ -133,7 +134,15 @@ func (r *AppDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		if applyErr != nil {
 			return r.handleProjectionFailure(ctx, span, appDeployment, applyErr)
 		}
-		decision = evaluateWorkload(snapshotStatefulSet(statefulSet))
+		replaced, replaceErr := r.replaceStaleUnreadyStatefulPod(ctx, statefulSet)
+		if replaceErr != nil {
+			return r.handleProjectionFailure(ctx, span, appDeployment, replaceErr)
+		}
+		if replaced {
+			decision = workloadDecision{state: workloadStateProgressing, reason: "StatefulSetReplacingStalePod", message: "The managed StatefulSet is replacing an unhealthy Pod from an obsolete revision."}
+		} else {
+			decision = evaluateWorkload(snapshotStatefulSet(statefulSet))
+		}
 		deployment = &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: statefulSet.Name, Namespace: statefulSet.Namespace}}
 		if cleanupErr := r.deleteOwnedDeployment(ctx, appDeployment); cleanupErr != nil {
 			return r.handleProjectionFailure(ctx, span, appDeployment, cleanupErr)
@@ -899,6 +908,40 @@ func (r *AppDeploymentReconciler) applyStatefulSet(
 		return nil
 	})
 	return statefulSet, operation, resourceVersionBefore, err
+}
+
+func (r *AppDeploymentReconciler) replaceStaleUnreadyStatefulPod(ctx context.Context, statefulSet *appsv1.StatefulSet) (bool, error) {
+	if statefulSet.Status.UpdateRevision == "" {
+		return false, nil
+	}
+	pod := &corev1.Pod{}
+	key := types.NamespacedName{Namespace: statefulSet.Namespace, Name: statefulSet.Name + "-0"}
+	if err := r.Get(ctx, key, pod); err != nil {
+		if apierrors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("get StatefulSet Pod: %w", err)
+	}
+	if !pod.DeletionTimestamp.IsZero() || !metav1.IsControlledBy(pod, statefulSet) || pod.Labels[appsv1.ControllerRevisionHashLabelKey] == "" || pod.Labels[appsv1.ControllerRevisionHashLabelKey] == statefulSet.Status.UpdateRevision {
+		return false, nil
+	}
+	for _, condition := range pod.Status.Conditions {
+		if condition.Type == corev1.PodReady && condition.Status == corev1.ConditionTrue {
+			return false, nil
+		}
+	}
+	if err := r.Delete(ctx, pod); err != nil && !apierrors.IsNotFound(err) {
+		return false, fmt.Errorf("replace stale StatefulSet Pod: %w", err)
+	}
+	ctrl.LoggerFrom(ctx).Info("replacing unhealthy StatefulSet Pod from obsolete revision",
+		"namespace", statefulSet.Namespace,
+		"statefulSet", statefulSet.Name,
+		"pod", pod.Name,
+	)
+	if r.Recorder != nil {
+		r.Recorder.Event(statefulSet, corev1.EventTypeNormal, "StalePodReplaced", "An unhealthy Pod from an obsolete revision was replaced.")
+	}
+	return true, nil
 }
 
 func desiredPodTemplate(appDeployment *platformv1alpha1.AppDeployment) corev1.PodTemplateSpec {

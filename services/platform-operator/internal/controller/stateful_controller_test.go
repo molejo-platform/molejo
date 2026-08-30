@@ -6,6 +6,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -133,5 +134,79 @@ func TestStatefulSchedulingDoesNotAffectStatelessDeployment(t *testing.T) {
 	}
 	if len(deployment.Spec.Template.Spec.Tolerations) != 0 {
 		t.Fatalf("stateless tolerations = %#v", deployment.Spec.Template.Spec.Tolerations)
+	}
+}
+
+func TestStatefulRollbackDeletesOwnedUnreadyPodFromObsoleteRevision(t *testing.T) {
+	ctx := context.Background()
+	namespace := createTestNamespace(t, "stateful-rollback")
+	statefulSet := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "ap-statefulrollback", Namespace: namespace, UID: types.UID("statefulset-owner")},
+		Status:     appsv1.StatefulSetStatus{UpdateRevision: "revision-fixed"},
+	}
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      statefulSet.Name + "-0",
+			Namespace: namespace,
+			Labels:    map[string]string{appsv1.ControllerRevisionHashLabelKey: "revision-broken"},
+			OwnerReferences: []metav1.OwnerReference{{
+				APIVersion: "apps/v1", Kind: "StatefulSet", Name: statefulSet.Name, UID: statefulSet.UID, Controller: pointerTo(true),
+			}},
+		},
+		Spec:   corev1.PodSpec{Containers: []corev1.Container{{Name: "app", Image: testImage}}},
+		Status: corev1.PodStatus{Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionFalse}}},
+	}
+	if err := testClient.Create(ctx, pod); err != nil {
+		t.Fatalf("create stale Pod: %v", err)
+	}
+	reconciler := &AppDeploymentReconciler{Client: testClient, Scheme: testScheme}
+	replaced, err := reconciler.replaceStaleUnreadyStatefulPod(ctx, statefulSet)
+	if err != nil || !replaced {
+		t.Fatalf("replaced=%v err=%v", replaced, err)
+	}
+	if err := testClient.Get(ctx, types.NamespacedName{Name: pod.Name, Namespace: namespace}, &corev1.Pod{}); !apierrors.IsNotFound(err) {
+		t.Fatalf("stale Pod still exists or lookup failed: %v", err)
+	}
+}
+
+func TestStatefulRollbackPreservesPodsWithoutSafeReplacementSignal(t *testing.T) {
+	ctx := context.Background()
+	namespace := createTestNamespace(t, "stateful-rollback-safe")
+	for _, test := range []struct {
+		name       string
+		slug       string
+		revision   string
+		ready      corev1.ConditionStatus
+		controlled bool
+	}{
+		{name: "ready stale Pod", slug: "ready", revision: "revision-broken", ready: corev1.ConditionTrue, controlled: true},
+		{name: "current unready Pod", slug: "current", revision: "revision-fixed", ready: corev1.ConditionFalse, controlled: true},
+		{name: "unowned stale Pod", slug: "unowned", revision: "revision-broken", ready: corev1.ConditionFalse, controlled: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			statefulSet := &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: "ap-stateful-" + test.slug, Namespace: namespace, UID: types.UID("owner-" + test.slug)}, Status: appsv1.StatefulSetStatus{UpdateRevision: "revision-fixed"}}
+			pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: statefulSet.Name + "-0", Namespace: namespace, Labels: map[string]string{appsv1.ControllerRevisionHashLabelKey: test.revision}}, Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "app", Image: testImage}}}, Status: corev1.PodStatus{Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: test.ready}}}}
+			if test.controlled {
+				pod.OwnerReferences = []metav1.OwnerReference{{APIVersion: "apps/v1", Kind: "StatefulSet", Name: statefulSet.Name, UID: statefulSet.UID, Controller: pointerTo(true)}}
+			}
+			if err := testClient.Create(ctx, pod); err != nil {
+				t.Fatalf("create Pod: %v", err)
+			}
+			pod.Status.Conditions = []corev1.PodCondition{{Type: corev1.PodReady, Status: test.ready}}
+			if err := testClient.Status().Update(ctx, pod); err != nil {
+				t.Fatalf("update Pod status: %v", err)
+			}
+			reconciler := &AppDeploymentReconciler{Client: testClient, Scheme: testScheme}
+			replaced, err := reconciler.replaceStaleUnreadyStatefulPod(ctx, statefulSet)
+			if err != nil || replaced {
+				t.Fatalf("replaced=%v err=%v", replaced, err)
+			}
+			if err := testClient.Get(ctx, types.NamespacedName{Name: pod.Name, Namespace: namespace}, &corev1.Pod{}); err != nil {
+				t.Fatalf("preserved Pod lookup failed: %v", err)
+			}
+			if err := testClient.Delete(ctx, pod); err != nil {
+				t.Fatalf("delete fixture Pod: %v", err)
+			}
+		})
 	}
 }

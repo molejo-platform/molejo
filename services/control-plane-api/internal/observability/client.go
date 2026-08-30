@@ -436,17 +436,28 @@ type VictoriaMetricsClient struct {
 }
 
 type metricDefinition struct {
-	Name  string
-	Unit  string
-	Query string
+	Name          string
+	Unit          string
+	Query         string
+	StatefulQuery string
 }
 
 var metricDefinitions = []metricDefinition{
 	{Name: "cpu", Unit: "cores", Query: `sum(k8s_pod_cpu_usage{%s})`},
 	{Name: "memory", Unit: "bytes", Query: `sum(k8s_pod_memory_working_set_bytes{%s})`},
 	{Name: "restarts", Unit: "count", Query: `sum(k8s_container_restarts{%s})`},
-	{Name: "available", Unit: "replicas", Query: `max(k8s_deployment_available{%s})`},
-	{Name: "desired", Unit: "replicas", Query: `max(k8s_deployment_desired{%s})`},
+	{Name: "available", Unit: "replicas", Query: `max(k8s_deployment_available{%s})`, StatefulQuery: `max(k8s_statefulset_ready_pods{%s})`},
+	{Name: "desired", Unit: "replicas", Query: `max(k8s_deployment_desired{%s})`, StatefulQuery: `max(k8s_statefulset_desired_pods{%s})`},
+}
+
+func (definition metricDefinition) expression(scope Scope) string {
+	namespace := fmt.Sprintf(`k8s_namespace_name=%q`, scope.Namespace)
+	if definition.StatefulQuery != "" {
+		deployment := fmt.Sprintf(definition.Query, fmt.Sprintf(`%s,k8s_deployment_name=%q`, namespace, scope.RuntimeName))
+		stateful := fmt.Sprintf(definition.StatefulQuery, fmt.Sprintf(`%s,k8s_statefulset_name=%q`, namespace, scope.RuntimeName))
+		return deployment + " or " + stateful
+	}
+	return fmt.Sprintf(definition.Query, fmt.Sprintf(`%s,molejo_app_environment_runtime=%q`, namespace, scope.RuntimeName))
 }
 
 func NewVictoriaMetricsClient(endpoint string, httpClient *http.Client) (*VictoriaMetricsClient, error) {
@@ -462,7 +473,6 @@ func NewVictoriaMetricsClient(endpoint string, httpClient *http.Client) (*Victor
 
 func (c *VictoriaMetricsClient) Metrics(ctx context.Context, scope Scope, query MetricQuery) (Metrics, error) {
 	result := Metrics{From: query.From, To: query.To, Step: query.Step.String(), ResolutionSeconds: int(query.Step.Seconds()), Unavailable: []string{}, Series: make([]MetricSeries, 0, len(metricDefinitions))}
-	selector := fmt.Sprintf(`k8s_namespace_name=%q,k8s_deployment_name=%q`, scope.Namespace, scope.RuntimeName)
 	type metricResult struct {
 		series []MetricSeries
 		err    error
@@ -473,7 +483,7 @@ func (c *VictoriaMetricsClient) Metrics(ctx context.Context, scope Scope, query 
 		group.Add(1)
 		go func() {
 			defer group.Done()
-			results[index].series, results[index].err = c.queryRange(ctx, fmt.Sprintf(definition.Query, selector), query)
+			results[index].series, results[index].err = c.queryRange(ctx, definition.expression(scope), query)
 		}()
 	}
 	group.Wait()
@@ -505,7 +515,6 @@ func (c *VictoriaMetricsClient) Metrics(ctx context.Context, scope Scope, query 
 
 func (c *VictoriaMetricsClient) CurrentMetrics(ctx context.Context, scope Scope, at time.Time) (MetricSnapshot, error) {
 	result := MetricSnapshot{ObservedAt: at.UTC(), Unavailable: []string{}, Samples: make([]MetricSample, 0, len(metricDefinitions))}
-	selector := fmt.Sprintf(`k8s_namespace_name=%q,k8s_deployment_name=%q`, scope.Namespace, scope.RuntimeName)
 	type sampleResult struct {
 		samples []MetricSample
 		err     error
@@ -516,7 +525,7 @@ func (c *VictoriaMetricsClient) CurrentMetrics(ctx context.Context, scope Scope,
 		group.Add(1)
 		go func() {
 			defer group.Done()
-			results[index].samples, results[index].err = c.queryInstant(ctx, fmt.Sprintf(definition.Query, selector), at)
+			results[index].samples, results[index].err = c.queryInstant(ctx, definition.expression(scope), at)
 		}()
 	}
 	group.Wait()
