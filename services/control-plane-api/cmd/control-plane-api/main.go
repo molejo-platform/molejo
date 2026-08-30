@@ -82,6 +82,15 @@ func run() error {
 	cfg.TrustedProxyCIDRs = csvEnv("FRUTO_TRUSTED_PROXY_CIDRS", nil)
 	cfg.CookieSecure = os.Getenv("FRUTO_COOKIE_SECURE") == "true"
 	cfg.TOTPEnabled = os.Getenv("FRUTO_TOTP_ENABLED") == "true"
+	cfg.PublicDomain = env("FRUTO_PUBLIC_DOMAIN", cfg.PublicDomain)
+	cfg.PublicTCPEnabled = os.Getenv("FRUTO_PUBLIC_TCP_ENABLED") == "true"
+	cfg.PublicTCPAddress = os.Getenv("FRUTO_PUBLIC_TCP_ADDRESS")
+	if cfg.PublicTCPMinimumPort, err = int32Env("FRUTO_PUBLIC_TCP_MIN_PORT", cfg.PublicTCPMinimumPort); err != nil {
+		return err
+	}
+	if cfg.PublicTCPMaximumPort, err = int32Env("FRUTO_PUBLIC_TCP_MAX_PORT", cfg.PublicTCPMaximumPort); err != nil {
+		return err
+	}
 	cfg.WorkspaceNamespace = env("FRUTO_WORKSPACE_NAMESPACE", cfg.WorkspaceNamespace)
 	if cfg.MaxReplicas, err = int32Env("FRUTO_MAX_REPLICAS", cfg.MaxReplicas); err != nil {
 		return err
@@ -247,6 +256,8 @@ func runRuntimeWorker() error {
 		return err
 	}
 	cfg := api.DefaultConfig()
+	cfg.PublicDomain = env("FRUTO_PUBLIC_DOMAIN", cfg.PublicDomain)
+	s.Publication.Domain = cfg.PublicDomain
 	if value := os.Getenv("FRUTO_OPERATION_LEASE"); value != "" {
 		cfg.OperationLease, err = durationEnv("FRUTO_OPERATION_LEASE", cfg.OperationLease)
 		if err != nil {

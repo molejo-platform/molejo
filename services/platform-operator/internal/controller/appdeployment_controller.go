@@ -29,6 +29,7 @@ import (
 	controllermetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	platformv1alpha1 "github.com/fruto-platform/fruto/packages/kubernetes-api/apis/platform/v1alpha1"
 )
@@ -76,6 +77,7 @@ type AppDeploymentReconciler struct {
 // +kubebuilder:rbac:groups=apps,resources=deployments;statefulsets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=tcproutes,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways,verbs=get;list;watch
 
 // Reconcile converges one AppDeployment and its selected workload kind.
@@ -175,7 +177,7 @@ func (r *AppDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return r.handleProjectionFailure(ctx, span, appDeployment, err)
 	}
 	decision = evaluatePublication(appDeployment, route, decision)
-	if appDeployment.Spec.Exposure == platformv1alpha1.ExposurePublic {
+	if _, public := publicEndpoint(appDeployment, platformv1alpha1.AppDeploymentPublicEndpointType("HTTP")); public {
 		gatewayCtx, gatewaySpan := tracer.Start(ctx, "kubernetes.gateway.get")
 		gateway, gatewayErr := r.getPublicationGateway(gatewayCtx)
 		finishSpan(gatewaySpan, gatewayErr)
@@ -186,11 +188,21 @@ func (r *AppDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 	r.recordHTTPRouteOperation(ctx, appDeployment, routeOperation, routeVersionBefore, route, decision)
 
+	tcpRoute, err := r.applyTCPPublication(ctx, appDeployment)
+	if err != nil {
+		return r.handleProjectionFailure(ctx, span, appDeployment, err)
+	}
+	tcpDecision, tcpStatus := evaluateTCPPublication(appDeployment, tcpRoute)
+	if tcpDecision != nil && decision.state != workloadStateDegraded {
+		decision = *tcpDecision
+	}
+	endpointStatuses := publicationStatuses(appDeployment, route, tcpStatus)
+
 	span.SetAttributes(
 		attribute.String("fruto.reconciliation.state", string(decision.state)),
 		attribute.String("fruto.reconciliation.reason", decision.reason),
 	)
-	if err := r.updateStatus(ctx, appDeployment, deployment, decision, true); err != nil {
+	if err := r.updateStatus(ctx, appDeployment, deployment, decision, true, endpointStatuses); err != nil {
 		markReconcileFailure(span, err)
 		logReconcileFailure(ctx, appDeployment, err)
 		return ctrl.Result{}, err
@@ -208,6 +220,7 @@ func (r *AppDeploymentReconciler) SetupWithManager(manager ctrl.Manager) error {
 		Owns(&appsv1.StatefulSet{}).
 		Owns(&corev1.Service{}).
 		Owns(&gatewayv1.HTTPRoute{}).
+		Owns(&gatewayv1alpha2.TCPRoute{}).
 		Watches(&gatewayv1.Gateway{}, handler.EnqueueRequestsFromMapFunc(r.mapGatewayToAppDeployments)).
 		Watches(&platformv1alpha1.AppVolume{}, handler.EnqueueRequestsFromMapFunc(r.mapVolumeToAppDeployments)).
 		Complete(r)
@@ -247,7 +260,7 @@ func (r *AppDeploymentReconciler) mapGatewayToAppDeployments(
 	requests := make([]reconcile.Request, 0, len(appDeployments.Items))
 	for index := range appDeployments.Items {
 		appDeployment := &appDeployments.Items[index]
-		if appDeployment.Spec.Exposure != platformv1alpha1.ExposurePublic {
+		if _, public := publicEndpoint(appDeployment, platformv1alpha1.AppDeploymentPublicEndpointType("HTTP")); !public {
 			continue
 		}
 		requests = append(requests, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(appDeployment)})
@@ -262,7 +275,8 @@ func (r *AppDeploymentReconciler) applyPublication(
 	route := &gatewayv1.HTTPRoute{ObjectMeta: metav1.ObjectMeta{
 		Name: appDeployment.Name, Namespace: appDeployment.Namespace,
 	}}
-	if appDeployment.Spec.Exposure != platformv1alpha1.ExposurePublic {
+	endpoint, public := publicEndpoint(appDeployment, platformv1alpha1.AppDeploymentPublicEndpointType("HTTP"))
+	if !public {
 		if err := r.Get(ctx, client.ObjectKeyFromObject(route), route); err != nil {
 			if apierrors.IsNotFound(err) {
 				return nil, controllerutil.OperationResultNone, "", nil
@@ -279,13 +293,15 @@ func (r *AppDeploymentReconciler) applyPublication(
 		return nil, controllerutil.OperationResultUpdated, resourceVersion, nil
 	}
 
-	if err := r.ensureHostnameAvailable(ctx, appDeployment); err != nil {
-		if errors.Is(err, errHostnameConflict) {
-			if cleanupErr := r.deleteOwnedHTTPRoute(ctx, appDeployment, route); cleanupErr != nil {
-				return nil, controllerutil.OperationResultNone, "", cleanupErr
+	if len(appDeployment.Spec.PublicEndpoints) == 0 {
+		if err := r.ensureHostnameAvailable(ctx, appDeployment); err != nil {
+			if errors.Is(err, errHostnameConflict) {
+				if cleanupErr := r.deleteOwnedHTTPRoute(ctx, appDeployment, route); cleanupErr != nil {
+					return nil, controllerutil.OperationResultNone, "", cleanupErr
+				}
 			}
+			return nil, controllerutil.OperationResultNone, "", err
 		}
-		return nil, controllerutil.OperationResultNone, "", err
 	}
 
 	var resourceVersionBefore string
@@ -307,7 +323,11 @@ func (r *AppDeploymentReconciler) applyPublication(
 		gatewayKind := gatewayv1.Kind("Gateway")
 		gatewayNamespace := gatewayv1.Namespace(sharedGatewayNamespace)
 		httpsSection := gatewayv1.SectionName(sharedGatewaySection)
-		backendPort := gatewayv1.PortNumber(appDeployment.Spec.Port)
+		port, found := portByName(appDeployment, endpoint.PortName)
+		if !found {
+			return fmt.Errorf("public HTTP endpoint references an unknown port")
+		}
+		backendPort := gatewayv1.PortNumber(port)
 		backendGroup := gatewayv1.Group("")
 		serviceKind := gatewayv1.Kind("Service")
 		pathType := gatewayv1.PathMatchPathPrefix
@@ -318,7 +338,7 @@ func (r *AppDeploymentReconciler) applyPublication(
 				Group: &gatewayGroup, Kind: &gatewayKind, Name: sharedGatewayName,
 				Namespace: &gatewayNamespace, SectionName: &httpsSection,
 			}}},
-			Hostnames: []gatewayv1.Hostname{gatewayv1.Hostname(publicHostname(appDeployment.Spec.Slug))},
+			Hostnames: []gatewayv1.Hostname{gatewayv1.Hostname(publicHostname(endpoint.HostnameLabel))},
 			Rules: []gatewayv1.HTTPRouteRule{{
 				Matches: []gatewayv1.HTTPRouteMatch{{Path: &gatewayv1.HTTPPathMatch{
 					Type: &pathType, Value: &pathValue,
@@ -334,6 +354,118 @@ func (r *AppDeploymentReconciler) applyPublication(
 		return nil
 	})
 	return route, operation, resourceVersionBefore, err
+}
+
+func (r *AppDeploymentReconciler) applyTCPPublication(ctx context.Context, appDeployment *platformv1alpha1.AppDeployment) (*gatewayv1alpha2.TCPRoute, error) {
+	route := &gatewayv1alpha2.TCPRoute{ObjectMeta: metav1.ObjectMeta{Name: appDeployment.Name, Namespace: appDeployment.Namespace}}
+	endpoint, public := publicEndpoint(appDeployment, platformv1alpha1.AppDeploymentPublicEndpointType("TCP"))
+	if !public {
+		if err := r.Get(ctx, client.ObjectKeyFromObject(route), route); err != nil {
+			return nil, client.IgnoreNotFound(err)
+		}
+		if !metav1.IsControlledBy(route, appDeployment) {
+			return nil, errOwnershipConflict
+		}
+		return nil, client.IgnoreNotFound(r.Delete(ctx, route))
+	}
+	if endpoint.ExternalPort == nil {
+		return nil, fmt.Errorf("public TCP endpoint has no allocated external port")
+	}
+	backendPort, found := portByName(appDeployment, endpoint.PortName)
+	if !found {
+		return nil, fmt.Errorf("public TCP endpoint references an unknown port")
+	}
+	_, err := controllerutil.CreateOrPatch(ctx, r.Client, route, func() error {
+		if !route.CreationTimestamp.IsZero() && !metav1.IsControlledBy(route, appDeployment) {
+			return errOwnershipConflict
+		}
+		if err := controllerutil.SetControllerReference(appDeployment, route, r.Scheme); err != nil {
+			return fmt.Errorf("set TCPRoute owner reference: %w", err)
+		}
+		if route.Labels == nil {
+			route.Labels = map[string]string{}
+		}
+		route.Labels[appDeploymentLabel] = appDeployment.Name
+		route.Labels[managedByLabel] = managedByValue
+		gatewayGroup := gatewayv1.Group(gatewayv1.GroupName)
+		gatewayKind := gatewayv1.Kind("Gateway")
+		gatewayNamespace := gatewayv1.Namespace(sharedGatewayNamespace)
+		section := gatewayv1.SectionName(fmt.Sprintf("tcp-%d", *endpoint.ExternalPort))
+		serviceGroup := gatewayv1.Group("")
+		serviceKind := gatewayv1.Kind("Service")
+		servicePort := gatewayv1.PortNumber(backendPort)
+		weight := int32(1)
+		route.Spec = gatewayv1alpha2.TCPRouteSpec{
+			CommonRouteSpec: gatewayv1.CommonRouteSpec{ParentRefs: []gatewayv1.ParentReference{{Group: &gatewayGroup, Kind: &gatewayKind, Name: sharedGatewayName, Namespace: &gatewayNamespace, SectionName: &section}}},
+			Rules:           []gatewayv1alpha2.TCPRouteRule{{BackendRefs: []gatewayv1.BackendRef{{BackendObjectReference: gatewayv1.BackendObjectReference{Group: &serviceGroup, Kind: &serviceKind, Name: gatewayv1.ObjectName(appDeployment.Name), Port: &servicePort}, Weight: &weight}}}},
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return route, nil
+}
+
+func evaluateTCPPublication(appDeployment *platformv1alpha1.AppDeployment, route *gatewayv1alpha2.TCPRoute) (*workloadDecision, *platformv1alpha1.AppDeploymentEndpointStatus) {
+	endpoint, public := publicEndpoint(appDeployment, platformv1alpha1.AppDeploymentPublicEndpointType("TCP"))
+	if !public {
+		return nil, nil
+	}
+	status := &platformv1alpha1.AppDeploymentEndpointStatus{Name: endpoint.Name, Type: endpoint.Type, Reason: "TCPRouteProgressing"}
+	progressing := &workloadDecision{state: workloadStateProgressing, reason: "TCPRouteProgressing", message: "The public TCP route is awaiting Gateway acceptance."}
+	if route == nil {
+		return progressing, status
+	}
+	conditions := tcpPublicationParentConditions(route, endpoint.ExternalPort)
+	accepted := meta.FindStatusCondition(conditions, string(gatewayv1.RouteConditionAccepted))
+	resolved := meta.FindStatusCondition(conditions, string(gatewayv1.RouteConditionResolvedRefs))
+	if conditionIsCurrent(accepted, route.Generation) && accepted.Status == metav1.ConditionFalse || conditionIsCurrent(resolved, route.Generation) && resolved.Status == metav1.ConditionFalse {
+		status.Reason = platformv1alpha1.ReasonPublicationRejected
+		return &workloadDecision{state: workloadStateDegraded, reason: platformv1alpha1.ReasonPublicationRejected, message: "The shared Gateway rejected the public TCP route."}, status
+	}
+	if conditionIsCurrent(accepted, route.Generation) && accepted.Status == metav1.ConditionTrue && conditionIsCurrent(resolved, route.Generation) && resolved.Status == metav1.ConditionTrue {
+		status.Ready = true
+		status.Reason = "TCPRouteAccepted"
+		return nil, status
+	}
+	return progressing, status
+}
+
+func tcpPublicationParentConditions(route *gatewayv1alpha2.TCPRoute, externalPort *int32) []metav1.Condition {
+	if externalPort == nil {
+		return nil
+	}
+	section := gatewayv1.SectionName(fmt.Sprintf("tcp-%d", *externalPort))
+	for _, parent := range route.Status.Parents {
+		if parent.ParentRef.Name == sharedGatewayName && parent.ParentRef.SectionName != nil && *parent.ParentRef.SectionName == section {
+			return parent.Conditions
+		}
+	}
+	return nil
+}
+
+func publicationStatuses(appDeployment *platformv1alpha1.AppDeployment, httpRoute *gatewayv1.HTTPRoute, tcpStatus *platformv1alpha1.AppDeploymentEndpointStatus) []platformv1alpha1.AppDeploymentEndpointStatus {
+	statuses := make([]platformv1alpha1.AppDeploymentEndpointStatus, 0, len(appDeployment.Spec.PublicEndpoints))
+	if endpoint, public := publicEndpoint(appDeployment, platformv1alpha1.AppDeploymentPublicEndpointType("HTTP")); public {
+		status := platformv1alpha1.AppDeploymentEndpointStatus{Name: endpoint.Name, Type: endpoint.Type, Reason: platformv1alpha1.ReasonHTTPRouteProgressing}
+		if httpRoute != nil {
+			conditions := publicationParentConditions(httpRoute)
+			accepted := meta.FindStatusCondition(conditions, string(gatewayv1.RouteConditionAccepted))
+			resolved := meta.FindStatusCondition(conditions, string(gatewayv1.RouteConditionResolvedRefs))
+			if conditionIsCurrent(accepted, httpRoute.Generation) && accepted.Status == metav1.ConditionTrue && conditionIsCurrent(resolved, httpRoute.Generation) && resolved.Status == metav1.ConditionTrue {
+				status.Ready = true
+				status.Reason = "HTTPRouteAccepted"
+			} else if conditionIsCurrent(accepted, httpRoute.Generation) && accepted.Status == metav1.ConditionFalse || conditionIsCurrent(resolved, httpRoute.Generation) && resolved.Status == metav1.ConditionFalse {
+				status.Reason = platformv1alpha1.ReasonHTTPRouteRejected
+			}
+		}
+		statuses = append(statuses, status)
+	}
+	if tcpStatus != nil {
+		statuses = append(statuses, *tcpStatus)
+	}
+	return statuses
 }
 
 func (r *AppDeploymentReconciler) deleteOwnedHTTPRoute(
@@ -424,6 +556,18 @@ func publicHostname(slug string) string {
 	return slug + ".molejo.dev"
 }
 
+func publicEndpoint(appDeployment *platformv1alpha1.AppDeployment, endpointType platformv1alpha1.AppDeploymentPublicEndpointType) (platformv1alpha1.AppDeploymentPublicEndpoint, bool) {
+	for _, endpoint := range appDeployment.Spec.PublicEndpoints {
+		if endpoint.Type == endpointType {
+			return endpoint, true
+		}
+	}
+	if endpointType == "HTTP" && appDeployment.Spec.Exposure == platformv1alpha1.ExposurePublic {
+		return platformv1alpha1.AppDeploymentPublicEndpoint{Name: "web", Type: "HTTP", PortName: httpPortName, HostnameLabel: appDeployment.Spec.Slug}, true
+	}
+	return platformv1alpha1.AppDeploymentPublicEndpoint{}, false
+}
+
 func (r *AppDeploymentReconciler) getPublicationGateway(ctx context.Context) (*gatewayv1.Gateway, error) {
 	gateway := &gatewayv1.Gateway{}
 	err := r.Get(ctx, client.ObjectKey{Namespace: sharedGatewayNamespace, Name: sharedGatewayName}, gateway)
@@ -441,7 +585,7 @@ func evaluatePublication(
 	route *gatewayv1.HTTPRoute,
 	workload workloadDecision,
 ) workloadDecision {
-	if appDeployment.Spec.Exposure != platformv1alpha1.ExposurePublic {
+	if _, public := publicEndpoint(appDeployment, platformv1alpha1.AppDeploymentPublicEndpointType("HTTP")); !public {
 		return workload
 	}
 	if workload.state == workloadStateDegraded {
@@ -675,27 +819,11 @@ func (r *AppDeploymentReconciler) applyDeployment(
 			ImagePullPolicy: corev1.PullIfNotPresent,
 			Env:             environment,
 			EnvFrom:         environmentFrom,
-			Ports: []corev1.ContainerPort{{
-				Name:          httpPortName,
-				ContainerPort: appDeployment.Spec.Port,
-				Protocol:      corev1.ProtocolTCP,
-			}},
-			Resources: desiredResourceRequirements(appDeployment),
-			StartupProbe: desiredHTTPProbe(
-				appDeployment.Spec.Probes.Readiness.Path,
-				2,
-				30,
-			),
-			ReadinessProbe: desiredHTTPProbe(
-				appDeployment.Spec.Probes.Readiness.Path,
-				5,
-				3,
-			),
-			LivenessProbe: desiredHTTPProbe(
-				appDeployment.Spec.Probes.Liveness.Path,
-				10,
-				3,
-			),
+			Ports:           desiredContainerPorts(appDeployment),
+			Resources:       desiredResourceRequirements(appDeployment),
+			StartupProbe:    desiredProbe(effectiveStartupProbe(appDeployment), 2, 30),
+			ReadinessProbe:  desiredProbe(appDeployment.Spec.Probes.Readiness, 5, 3),
+			LivenessProbe:   desiredProbe(appDeployment.Spec.Probes.Liveness, 10, 3),
 			SecurityContext: &corev1.SecurityContext{
 				AllowPrivilegeEscalation: &allowPrivilegeEscalation,
 				ReadOnlyRootFilesystem:   &readOnlyRootFilesystem,
@@ -797,11 +925,11 @@ func desiredPodTemplate(appDeployment *platformv1alpha1.AppDeployment) corev1.Po
 			Containers: []corev1.Container{{
 				Name: containerName, Image: appDeployment.Spec.Image, ImagePullPolicy: corev1.PullIfNotPresent,
 				Env: environment, EnvFrom: environmentFrom,
-				Ports:           []corev1.ContainerPort{{Name: httpPortName, ContainerPort: appDeployment.Spec.Port, Protocol: corev1.ProtocolTCP}},
+				Ports:           desiredContainerPorts(appDeployment),
 				Resources:       desiredResourceRequirements(appDeployment),
-				StartupProbe:    desiredHTTPProbe(appDeployment.Spec.Probes.Readiness.Path, 2, 30),
-				ReadinessProbe:  desiredHTTPProbe(appDeployment.Spec.Probes.Readiness.Path, 5, 3),
-				LivenessProbe:   desiredHTTPProbe(appDeployment.Spec.Probes.Liveness.Path, 10, 3),
+				StartupProbe:    desiredProbe(effectiveStartupProbe(appDeployment), 2, 30),
+				ReadinessProbe:  desiredProbe(appDeployment.Spec.Probes.Readiness, 5, 3),
+				LivenessProbe:   desiredProbe(appDeployment.Spec.Probes.Liveness, 10, 3),
 				SecurityContext: &corev1.SecurityContext{AllowPrivilegeEscalation: &allowPrivilegeEscalation, ReadOnlyRootFilesystem: &readOnlyRootFilesystem, Capabilities: &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}}},
 			}},
 		},
@@ -855,12 +983,11 @@ func (r *AppDeploymentReconciler) applyService(
 		service.Labels[managedByLabel] = managedByValue
 		service.Spec.Type = corev1.ServiceTypeClusterIP
 		service.Spec.Selector = desiredSelectorLabels(appDeployment)
-		service.Spec.Ports = []corev1.ServicePort{{
-			Name:       httpPortName,
-			Protocol:   corev1.ProtocolTCP,
-			Port:       appDeployment.Spec.Port,
-			TargetPort: intstr.FromString(httpPortName),
-		}}
+		ports := effectivePorts(appDeployment)
+		service.Spec.Ports = make([]corev1.ServicePort, 0, len(ports))
+		for _, port := range ports {
+			service.Spec.Ports = append(service.Spec.Ports, corev1.ServicePort{Name: port.Name, Protocol: corev1.ProtocolTCP, Port: port.ContainerPort, TargetPort: intstr.FromString(port.Name)})
+		}
 		service.Spec.ExternalIPs = nil
 		service.Spec.ExternalName = ""
 		service.Spec.LoadBalancerIP = ""
@@ -897,7 +1024,7 @@ func (r *AppDeploymentReconciler) handleProjectionFailure(
 			attribute.String("fruto.reconciliation.state", string(decision.state)),
 			attribute.String("fruto.reconciliation.reason", decision.reason),
 		)
-		if statusErr := r.updateStatus(ctx, appDeployment, nil, decision, false); statusErr != nil {
+		if statusErr := r.updateStatus(ctx, appDeployment, nil, decision, false, nil); statusErr != nil {
 			markReconcileFailure(span, statusErr)
 			logReconcileFailure(ctx, appDeployment, statusErr)
 			return ctrl.Result{}, statusErr
@@ -914,7 +1041,7 @@ func (r *AppDeploymentReconciler) handleProjectionFailure(
 			attribute.String("fruto.reconciliation.state", string(decision.state)),
 			attribute.String("fruto.reconciliation.reason", decision.reason),
 		)
-		if statusErr := r.updateStatus(ctx, appDeployment, nil, decision, false); statusErr != nil {
+		if statusErr := r.updateStatus(ctx, appDeployment, nil, decision, false, nil); statusErr != nil {
 			markReconcileFailure(span, statusErr)
 			logReconcileFailure(ctx, appDeployment, statusErr)
 			return ctrl.Result{}, statusErr
@@ -930,7 +1057,7 @@ func (r *AppDeploymentReconciler) handleProjectionFailure(
 			reason:  platformv1alpha1.ReasonReconcileFailed,
 			message: "A required Kubernetes child could not be reconciled.",
 		}
-		if statusErr := r.updateStatus(ctx, appDeployment, nil, decision, false); statusErr != nil {
+		if statusErr := r.updateStatus(ctx, appDeployment, nil, decision, false, nil); statusErr != nil {
 			markReconcileFailure(span, statusErr)
 			logReconcileFailure(ctx, appDeployment, statusErr)
 			return ctrl.Result{}, statusErr
@@ -961,18 +1088,58 @@ func desiredResourceRequirements(
 	}
 }
 
-func desiredHTTPProbe(path string, periodSeconds int32, failureThreshold int32) *corev1.Probe {
+func desiredProbe(probe platformv1alpha1.AppDeploymentProbe, periodSeconds int32, failureThreshold int32) *corev1.Probe {
+	portName := probe.PortName
+	if portName == "" {
+		portName = httpPortName
+	}
+	handler := corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Path: probe.Path, Port: intstr.FromString(portName), Scheme: corev1.URISchemeHTTP}}
+	if probe.Type == "TCP" {
+		handler = corev1.ProbeHandler{TCPSocket: &corev1.TCPSocketAction{Port: intstr.FromString(portName)}}
+	}
 	return &corev1.Probe{
-		ProbeHandler: corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{
-			Path:   path,
-			Port:   intstr.FromString(httpPortName),
-			Scheme: corev1.URISchemeHTTP,
-		}},
+		ProbeHandler:     handler,
 		TimeoutSeconds:   2,
 		PeriodSeconds:    periodSeconds,
 		SuccessThreshold: 1,
 		FailureThreshold: failureThreshold,
 	}
+}
+
+func desiredHTTPProbe(path string, periodSeconds int32, failureThreshold int32) *corev1.Probe {
+	return desiredProbe(platformv1alpha1.AppDeploymentProbe{Type: "HTTP", PortName: httpPortName, Path: path}, periodSeconds, failureThreshold)
+}
+
+func effectivePorts(appDeployment *platformv1alpha1.AppDeployment) []platformv1alpha1.AppDeploymentPort {
+	if len(appDeployment.Spec.Ports) > 0 {
+		return appDeployment.Spec.Ports
+	}
+	return []platformv1alpha1.AppDeploymentPort{{Name: httpPortName, ContainerPort: appDeployment.Spec.Port, Protocol: corev1.ProtocolTCP}}
+}
+
+func desiredContainerPorts(appDeployment *platformv1alpha1.AppDeployment) []corev1.ContainerPort {
+	ports := effectivePorts(appDeployment)
+	result := make([]corev1.ContainerPort, 0, len(ports))
+	for _, port := range ports {
+		result = append(result, corev1.ContainerPort{Name: port.Name, ContainerPort: port.ContainerPort, Protocol: corev1.ProtocolTCP})
+	}
+	return result
+}
+
+func effectiveStartupProbe(appDeployment *platformv1alpha1.AppDeployment) platformv1alpha1.AppDeploymentProbe {
+	if appDeployment.Spec.Probes.Startup != nil {
+		return *appDeployment.Spec.Probes.Startup
+	}
+	return appDeployment.Spec.Probes.Readiness
+}
+
+func portByName(appDeployment *platformv1alpha1.AppDeployment, name string) (int32, bool) {
+	for _, port := range effectivePorts(appDeployment) {
+		if port.Name == name {
+			return port.ContainerPort, true
+		}
+	}
+	return 0, false
 }
 
 func desiredReplicas(appDeployment *platformv1alpha1.AppDeployment) int32 {
@@ -988,6 +1155,7 @@ func (r *AppDeploymentReconciler) updateStatus(
 	deployment *appsv1.Deployment,
 	decision workloadDecision,
 	advanceObserved bool,
+	endpointStatuses []platformv1alpha1.AppDeploymentEndpointStatus,
 ) error {
 	before := appDeployment.DeepCopy()
 	transitioned := stateTransitioned(before, decision)
@@ -996,6 +1164,9 @@ func (r *AppDeploymentReconciler) updateStatus(
 		appDeployment.Status.ObservedGeneration = appDeployment.Generation
 		appDeployment.Status.ObservedRelease = appDeployment.Spec.Image
 		appDeployment.Status.WorkloadRef = &corev1.LocalObjectReference{Name: deployment.Name}
+	}
+	if endpointStatuses != nil {
+		appDeployment.Status.EndpointStatuses = endpointStatuses
 	}
 	applyDecision(appDeployment, decision)
 

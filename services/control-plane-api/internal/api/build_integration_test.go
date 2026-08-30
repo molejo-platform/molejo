@@ -97,7 +97,7 @@ func TestBuildAPIUsesTheAppEnvironmentBranchAndDeploysAReleaseSnapshot(t *testin
 		Deployment domain.Deployment `json:"deployment"`
 	}
 	decodeResponse(t, response, &accepted)
-	if accepted.Deployment.ReleasePublicID != release.PublicID || accepted.Deployment.AppEnvironmentPublicID != target.PublicID || accepted.Deployment.Configuration.Slug != "api-production" {
+	if accepted.Deployment.ReleasePublicID != release.PublicID || accepted.Deployment.AppEnvironmentPublicID != target.PublicID || len(accepted.Deployment.Configuration.PublicEndpoints) != 1 || accepted.Deployment.Configuration.PublicEndpoints[0].HostnameLabel != "api-production" {
 		t.Fatalf("deployment=%+v", accepted.Deployment)
 	}
 }
@@ -105,15 +105,18 @@ func TestBuildAPIUsesTheAppEnvironmentBranchAndDeploysAReleaseSnapshot(t *testin
 func apiRuntimeConfiguration(slug string) domain.RuntimeConfig {
 	return domain.RuntimeConfig{
 		Replicas: 1,
-		Port:     8080,
+		Ports:    []domain.RuntimePort{{Name: "http", ContainerPort: 8080, Protocol: domain.PortProtocolTCP}},
 		Resources: domain.Resources{
 			Requests: domain.ResourceValues{CPUMillis: 50, MemoryMiB: 64},
 			Limits:   domain.ResourceValues{CPUMillis: 250, MemoryMiB: 128},
 		},
-		Probes:    domain.Probes{Liveness: domain.Probe{Path: "/healthz"}, Readiness: domain.Probe{Path: "/readyz"}},
-		Exposure:  domain.ExposurePrivate,
-		Slug:      slug,
-		Variables: []domain.Variable{{Name: "APP_MODE", Value: "production"}},
+		Probes: domain.Probes{
+			Startup:   domain.Probe{Type: domain.ProbeHTTP, PortName: "http", Path: "/readyz"},
+			Liveness:  domain.Probe{Type: domain.ProbeHTTP, PortName: "http", Path: "/healthz"},
+			Readiness: domain.Probe{Type: domain.ProbeHTTP, PortName: "http", Path: "/readyz"},
+		},
+		PublicEndpoints: []domain.PublicEndpoint{{Name: "web", Type: domain.EndpointHTTP, PortName: "http", HostnameLabel: slug}},
+		Variables:       []domain.Variable{{Name: "APP_MODE", Value: "production"}},
 	}
 }
 

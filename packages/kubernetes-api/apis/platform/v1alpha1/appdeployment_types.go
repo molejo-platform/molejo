@@ -37,20 +37,19 @@ const (
 	ReasonGatewayProgressing = "GatewayProgressing"
 	// ReasonGatewayRejected reports that the shared Gateway or HTTPS listener is unavailable.
 	ReasonGatewayRejected = "GatewayRejected"
-	// ReasonHostnameConflict reports that another AppDeployment owns the requested public hostname.
-	ReasonHostnameConflict = "HostnameConflict"
+	// ReasonPublicationRejected reports that a public endpoint was rejected by the shared Gateway.
+	ReasonPublicationRejected                       = "PublicationRejected"
+	ReasonHostnameConflict                          = "HostnameConflict"
+	ExposurePrivate           AppDeploymentExposure = "Private"
+	ExposurePublic            AppDeploymentExposure = "Public"
 
-	// ExposurePrivate keeps an AppDeployment reachable only through its ClusterIP Service.
-	ExposurePrivate AppDeploymentExposure = "Private"
-	// ExposurePublic publishes an AppDeployment through the shared HTTPS Gateway.
-	ExposurePublic AppDeploymentExposure = "Public"
 	// WorkloadStateless projects an AppDeployment into a Deployment.
 	WorkloadStateless AppDeploymentWorkloadKind = "Stateless"
 	// WorkloadStateful projects an AppDeployment into a single-replica StatefulSet.
 	WorkloadStateful AppDeploymentWorkloadKind = "Stateful"
 )
 
-// AppDeploymentExposure declares whether the workload has a public route.
+// AppDeploymentExposure is retained only while existing v1alpha1 objects are migrated.
 // +kubebuilder:validation:Enum=Private;Public
 type AppDeploymentExposure string
 
@@ -85,8 +84,9 @@ type StatefulWorkload struct {
 }
 
 // AppDeploymentSpec declares the minimum workload intent understood by the platform operator.
-// +kubebuilder:validation:XValidation:rule="self.exposure != 'Public' || has(self.slug)",message="slug is required for public exposure"
-// +kubebuilder:validation:XValidation:rule="self.exposure != 'Private' || !has(self.slug)",message="slug must be omitted for private exposure"
+// +kubebuilder:validation:XValidation:rule="!has(self.exposure) || self.exposure != 'Public' || has(self.slug)",message="legacy public exposure requires a slug"
+// +kubebuilder:validation:XValidation:rule="!has(self.exposure) || self.exposure != 'Private' || !has(self.slug)",message="legacy private exposure omits the slug"
+// +kubebuilder:validation:XValidation:rule="has(self.port) || has(self.ports)",message="at least one legacy or named port is required"
 // +kubebuilder:validation:XValidation:rule="self.workload.kind != 'Stateful' || !has(self.replicas) || self.replicas == 1",message="Stateful workloads require exactly one replica"
 type AppDeploymentSpec struct {
 	// Workload selects exactly one workload renderer.
@@ -101,22 +101,38 @@ type AppDeploymentSpec struct {
 	// +kubebuilder:validation:Minimum=1
 	Replicas *int32 `json:"replicas,omitempty"`
 
-	// Port is the private HTTP port exposed by the workload.
+	// Ports are stable, named TCP ports exposed by the workload Service.
+	// +listType=map
+	// +listMapKey=name
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=8
+	Ports []AppDeploymentPort `json:"ports,omitempty"`
+
+	// Deprecated compatibility projection for pre-multiport v1alpha1 objects.
+	// +optional
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=65535
-	Port int32 `json:"port"`
+	Port int32 `json:"port,omitempty"`
 
 	// Resources declares the required compute requests and limits.
 	Resources AppDeploymentResources `json:"resources"`
 
-	// Probes declares the HTTP health endpoints exposed by the workload.
+	// Probes declares health checks against named workload ports.
 	Probes AppDeploymentProbes `json:"probes"`
 
-	// Exposure controls whether the workload is reachable through the shared HTTPS Gateway.
+	// PublicEndpoints are allocation results produced by the control plane.
+	// +listType=map
+	// +listMapKey=name
+	// +kubebuilder:validation:MaxItems=2
+	PublicEndpoints []AppDeploymentPublicEndpoint `json:"publicEndpoints,omitempty"`
+
+	// Deprecated compatibility projection for pre-multiport v1alpha1 objects.
+	// +optional
 	// +kubebuilder:default=Private
 	Exposure AppDeploymentExposure `json:"exposure,omitempty"`
 
-	// Slug is the globally unique DNS label used for public exposure.
+	// Deprecated compatibility projection for pre-multiport v1alpha1 objects.
+	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=63
 	// +kubebuilder:validation:Pattern="^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$"
@@ -135,6 +151,50 @@ type AppDeploymentSpec struct {
 	// SecretRef names an immutable Secret prepared by the control plane.
 	// +optional
 	SecretRef string `json:"secretRef,omitempty"`
+}
+
+// AppDeploymentPort is one named TCP port exposed by the workload.
+type AppDeploymentPort struct {
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=15
+	// +kubebuilder:validation:Pattern="^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$"
+	Name string `json:"name"`
+
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
+	ContainerPort int32 `json:"containerPort"`
+
+	// +kubebuilder:validation:Enum=TCP
+	Protocol corev1.Protocol `json:"protocol"`
+}
+
+// AppDeploymentPublicEndpointType selects the shared publication path.
+// +kubebuilder:validation:Enum=HTTP;TCP
+type AppDeploymentPublicEndpointType string
+
+// AppDeploymentPublicEndpoint is a bounded public route allocated by the control plane.
+// +kubebuilder:validation:XValidation:rule="self.type != 'TCP' || has(self.externalPort)",message="TCP publication requires an allocated external port"
+// +kubebuilder:validation:XValidation:rule="self.type != 'HTTP' || !has(self.externalPort)",message="HTTP publication does not use an external port"
+type AppDeploymentPublicEndpoint struct {
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=15
+	// +kubebuilder:validation:Pattern="^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$"
+	Name string `json:"name"`
+
+	Type AppDeploymentPublicEndpointType `json:"type"`
+
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=15
+	// +kubebuilder:validation:Pattern="^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$"
+	PortName string `json:"portName"`
+
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	HostnameLabel string `json:"hostnameLabel"`
+
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
+	ExternalPort *int32 `json:"externalPort,omitempty"`
 }
 
 // AppDeploymentVariable declares one non-secret environment variable.
@@ -171,22 +231,52 @@ type AppDeploymentResourceValues struct {
 	MemoryMiB int64 `json:"memoryMiB"`
 }
 
-// AppDeploymentProbes declares the private HTTP health contract.
+// AppDeploymentProbes declares startup, readiness, and liveness checks.
 type AppDeploymentProbes struct {
+	// Startup is optional for compatibility with existing v1alpha1 objects. The
+	// operator falls back to readiness until the control plane rewrites them.
+	// +optional
+	Startup *AppDeploymentProbe `json:"startup,omitempty"`
+
 	// Liveness identifies the endpoint used to detect an unhealthy process.
-	Liveness AppDeploymentHTTPProbe `json:"liveness"`
+	Liveness AppDeploymentProbe `json:"liveness"`
 
 	// Readiness identifies the endpoint used to admit the process to the Service.
-	Readiness AppDeploymentHTTPProbe `json:"readiness"`
+	Readiness AppDeploymentProbe `json:"readiness"`
 }
 
-// AppDeploymentHTTPProbe identifies one HTTP endpoint on the declared workload port.
-type AppDeploymentHTTPProbe struct {
+// AppDeploymentProbe identifies one HTTP or TCP check on a named port.
+// +kubebuilder:validation:XValidation:rule="has(self.type) && self.type == 'TCP' || has(self.path)",message="HTTP and legacy probes require a path"
+// +kubebuilder:validation:XValidation:rule="!has(self.type) || self.type != 'TCP' || !has(self.path)",message="TCP probes do not accept a path"
+type AppDeploymentProbe struct {
+	// Type defaults to HTTP only for existing v1alpha1 objects.
+	// +optional
+	// +kubebuilder:validation:Enum=HTTP;TCP
+	Type string `json:"type,omitempty"`
+
+	// PortName defaults to the legacy http port only for existing v1alpha1 objects.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=15
+	// +kubebuilder:validation:Pattern="^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$"
+	PortName string `json:"portName,omitempty"`
+
 	// Path is an absolute HTTP path served by the workload.
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=2048
 	// +kubebuilder:validation:Pattern="^/.*$"
-	Path string `json:"path"`
+	Path string `json:"path,omitempty"`
+}
+
+// AppDeploymentHTTPProbe is a source-compatible alias for the previous v1alpha1 name.
+type AppDeploymentHTTPProbe = AppDeploymentProbe
+
+// AppDeploymentEndpointStatus reports one independently reconciled publication.
+type AppDeploymentEndpointStatus struct {
+	Name   string                          `json:"name"`
+	Type   AppDeploymentPublicEndpointType `json:"type"`
+	Ready  bool                            `json:"ready"`
+	Reason string                          `json:"reason,omitempty"`
 }
 
 // AppDeploymentStatus reports the observed workload state.
@@ -204,6 +294,11 @@ type AppDeploymentStatus struct {
 	// +listType=map
 	// +listMapKey=type
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// EndpointStatuses keep HTTP and TCP publication outcomes independent.
+	// +listType=map
+	// +listMapKey=name
+	EndpointStatuses []AppDeploymentEndpointStatus `json:"endpointStatuses,omitempty"`
 }
 
 // +kubebuilder:object:root=true

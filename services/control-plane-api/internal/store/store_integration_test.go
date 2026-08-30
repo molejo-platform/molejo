@@ -89,7 +89,7 @@ func TestAppEnvironmentOwnsBranchConfigurationAndUniquePair(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if item.SourceBranch != "develop" || item.Configuration.Slug != "testkit-dev" || item.ConfigurationVersion != 1 {
+	if item.SourceBranch != "develop" || len(item.Configuration.PublicEndpoints) != 1 || item.Configuration.PublicEndpoints[0].HostnameLabel != "testkit-dev" || item.ConfigurationVersion != 1 {
 		t.Fatalf("App Environment did not preserve its configuration: %+v", item)
 	}
 	_, err = storage.CreateAppEnvironment(context.Background(), workspaceID, actorID, newID(t, "aev"), project.PublicID, app.PublicID, environment.PublicID, "main", integrationConfiguration("other"))
@@ -460,15 +460,63 @@ func TestDeploymentRejectsAReleaseFromAnotherApp(t *testing.T) {
 func integrationConfiguration(slug string) domain.RuntimeConfig {
 	return domain.RuntimeConfig{
 		Replicas: 1,
-		Port:     8080,
+		Ports:    []domain.RuntimePort{{Name: "http", ContainerPort: 8080, Protocol: domain.PortProtocolTCP}},
 		Resources: domain.Resources{
 			Requests: domain.ResourceValues{CPUMillis: 50, MemoryMiB: 64},
 			Limits:   domain.ResourceValues{CPUMillis: 250, MemoryMiB: 128},
 		},
-		Probes:    domain.Probes{Liveness: domain.Probe{Path: "/healthz"}, Readiness: domain.Probe{Path: "/readyz"}},
-		Exposure:  domain.ExposurePublic,
-		Slug:      slug,
-		Variables: []domain.Variable{{Name: "APP_MODE", Value: "test"}},
+		Probes: domain.Probes{
+			Startup:   domain.Probe{Type: domain.ProbeHTTP, PortName: "http", Path: "/readyz"},
+			Liveness:  domain.Probe{Type: domain.ProbeHTTP, PortName: "http", Path: "/healthz"},
+			Readiness: domain.Probe{Type: domain.ProbeHTTP, PortName: "http", Path: "/readyz"},
+		},
+		PublicEndpoints: []domain.PublicEndpoint{{Name: "web", Type: domain.EndpointHTTP, PortName: "http", HostnameLabel: slug}},
+		Variables:       []domain.Variable{{Name: "APP_MODE", Value: "test"}},
+	}
+}
+
+func TestPublicationClaimsRejectDuplicateHostnameAcrossApps(t *testing.T) {
+	ctx := context.Background()
+	storage, workspaceID, actorID := newIntegrationFixture(t)
+	project, firstApp, environment := createHierarchy(t, storage, workspaceID)
+	if _, err := storage.CreateAppEnvironment(ctx, workspaceID, actorID, newID(t, "aev"), project.PublicID, firstApp.PublicID, environment.PublicID, "main", integrationConfiguration("shared-host")); err != nil {
+		t.Fatal(err)
+	}
+	secondApp, err := storage.CreateApp(ctx, workspaceID, project.PublicID, newID(t, "app"), "Second", "second")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = storage.CreateAppEnvironment(ctx, workspaceID, actorID, newID(t, "aev"), project.PublicID, secondApp.PublicID, environment.PublicID, "main", integrationConfiguration("shared-host"))
+	if !errors.Is(err, ErrPublicationConflict) {
+		t.Fatalf("duplicate hostname error=%v, want publication conflict", err)
+	}
+}
+
+func TestPublicationClaimsAllocateTCPPoolTransactionally(t *testing.T) {
+	ctx := context.Background()
+	storage, workspaceID, actorID := newIntegrationFixture(t)
+	storage.Publication = PublicationPolicy{Domain: "molejo.dev", TCPEnabled: true, TCPMinimumPort: 20000, TCPMaximumPort: 20000}
+	project, firstApp, environment := createHierarchy(t, storage, workspaceID)
+	configuration := integrationConfiguration("first-http")
+	configuration.Ports = append(configuration.Ports, domain.RuntimePort{Name: "postgres", ContainerPort: 5432, Protocol: domain.PortProtocolTCP})
+	configuration.PublicEndpoints = append(configuration.PublicEndpoints, domain.PublicEndpoint{Name: "database", Type: domain.EndpointTCP, PortName: "postgres", HostnameLabel: "first-db"})
+	first, err := storage.CreateAppEnvironment(ctx, workspaceID, actorID, newID(t, "aev"), project.PublicID, firstApp.PublicID, environment.PublicID, "main", configuration)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Configuration.PublicEndpoints[1].ExternalPort != 20000 {
+		t.Fatalf("allocated port=%d, want 20000", first.Configuration.PublicEndpoints[1].ExternalPort)
+	}
+	secondApp, err := storage.CreateApp(ctx, workspaceID, project.PublicID, newID(t, "app"), "Second", "second")
+	if err != nil {
+		t.Fatal(err)
+	}
+	configuration.PublicEndpoints[0].HostnameLabel = "second-http"
+	configuration.PublicEndpoints[1].HostnameLabel = "second-db"
+	configuration.PublicEndpoints[1].ExternalPort = 0
+	_, err = storage.CreateAppEnvironment(ctx, workspaceID, actorID, newID(t, "aev"), project.PublicID, secondApp.PublicID, environment.PublicID, "main", configuration)
+	if !errors.Is(err, ErrPublicationUnavailable) {
+		t.Fatalf("exhausted pool error=%v, want unavailable", err)
 	}
 }
 

@@ -20,6 +20,7 @@ rules:
       - gatewayclasses
       - gateways
       - httproutes
+      - tcproutes
       - grpcroutes
       - tlsroutes
       - backendtlspolicies
@@ -27,7 +28,7 @@ rules:
       - listenersets
     verbs: ["get", "list", "watch"]
   - apiGroups: ["gateway.networking.k8s.io"]
-    resources: ["gatewayclasses/status", "gateways/status", "httproutes/status", "grpcroutes/status"]
+    resources: ["gatewayclasses/status", "gateways/status", "httproutes/status", "tcproutes/status", "grpcroutes/status"]
     verbs: ["patch", "update"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -77,6 +78,8 @@ spec:
             - --entrypoints.websecure.transport.respondingtimeouts.idletimeout=0s
             - --entrypoints.admin.address=:9000
             - --providers.kubernetesgateway=true
+            - --providers.kubernetesgateway.experimentalchannel=true
+            - --entrypoints.tcp20000.address=:20000
             - --ping=true
             - --ping.entrypoint=admin
             - --log.level=INFO
@@ -85,6 +88,8 @@ spec:
               containerPort: 8443
             - name: admin
               containerPort: 9000
+            - name: tcp20000
+              containerPort: 20000
           readinessProbe:
             httpGet:
               path: /ping
@@ -127,6 +132,9 @@ spec:
     - name: https-molejo
       port: 8443
       targetPort: websecure
+    - name: tcp-20000
+      port: 20000
+      targetPort: tcp20000
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: GatewayClass
@@ -152,6 +160,12 @@ spec:
         certificateRefs:
           - kind: Secret
             name: fruto-e2e-wildcard-tls
+      allowedRoutes:
+        namespaces:
+          from: All
+    - name: tcp-20000
+      port: 20000
+      protocol: TCP
       allowedRoutes:
         namespaces:
           from: All

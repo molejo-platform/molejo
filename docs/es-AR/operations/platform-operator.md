@@ -31,26 +31,28 @@ comportamiento de Kubernetes.
 
 ## Contrato de runtime privado
 
-Cada `AppDeployment` posee exactamente un Deployment y un Service ClusterIP con
-el mismo nombre y namespace. El Service apunta al puerto `http` del container y
-permanece privado aun cuando un HTTPRoute publica el workload. El spec exige un
-digest inmutable de imagen, puerto,
-requests y limits en millicores de CPU y MiB, además de los paths de liveness y
-readiness. Los requests no pueden superar los limits.
+Cada `AppDeployment` posee exactamente un workload y un Service ClusterIP con el
+mismo nombre y namespace. El Service expone entre uno y ocho puertos TCP del
+container con nombre y permanece privado cuando HTTPRoute o TCPRoute publica
+puertos seleccionados. El spec exige un digest inmutable de imagen, requests y
+limits en millicores de CPU y MiB y probes HTTP o TCP de startup, readiness y
+liveness que referencian un puerto con nombre. Los requests no pueden superar los
+limits.
 
 El workload se ejecuta como non-root, con seccomp `RuntimeDefault`, sin privilege
-escalation ni capabilities y con root filesystem de solo lectura. Startup usa el
-path de readiness con una ventana de 60 segundos; readiness se ejecuta cada cinco
-segundos y liveness cada diez. El operator no lee Pods ni EndpointSlices; el
-status del Deployment sigue siendo la fuente del rollout.
+escalation ni capabilities y con root filesystem de solo lectura. Startup tiene
+una ventana de 60 segundos; readiness se ejecuta cada cinco segundos y liveness
+cada diez. El operator no lee Pods ni EndpointSlices; el status del workload
+sigue siendo la fuente del rollout.
 
 ## Contrato de publicación
 
-`spec.exposure` tiene como default `Private`. Un workload privado no posee un
-HTTPRoute y continúa accesible mediante su Service ClusterIP. Un workload público
-requiere un label DNS en `spec.slug` y posee un HTTPRoute con el mismo nombre para
-`{slug}.molejo.dev`. La ruta se conecta al listener `https-molejo` del Gateway
-compartido `fruto`, en `fruto-system`, y reenvía al Service con el mismo nombre.
+`spec.publicEndpoints` contiene como máximo una publicación HTTP y una TCP
+experimental. HTTP se conecta al listener `https-molejo` y sirve
+`{hostnameLabel}.molejo.dev`. TCP se conecta al listener preasignado
+`tcp-{externalPort}`. Ambas rutas reenvían a un puerto con nombre del Service con
+el mismo nombre. Una lista vacía mantiene privado al workload. `spec.exposure`,
+`spec.slug` y `spec.port` se conservan solamente para migración legada.
 
 El operator considera que la publicación convergió solamente cuando el parent
 esperado de la ruta tiene Conditions `Accepted=True` y `ResolvedRefs=True` de la
@@ -67,8 +69,8 @@ determinístico; el perdedor elimina solo su propia ruta, informa
 `HostnameConflict`, preserva los campos de la release observada y vuelve a
 intentar después de cinco minutos.
 
-Cambiar un workload a `Private` elimina su HTTPRoute controlado sin eliminar el
-Deployment ni el Service. Los objetos en eliminación no se reconcilian, y el
+Eliminar un endpoint elimina solamente su Route controlada sin eliminar el
+workload ni el Service. Los objetos en eliminación no se reconcilian, y el
 garbage collector de Kubernetes administra sus hijos controlados.
 
 ## Flujo de diagnóstico
@@ -83,6 +85,7 @@ kubectl describe deployment ap-example -n ws-example
 kubectl get service ap-example -n ws-example -o yaml
 kubectl get httproute ap-example -n ws-example -o yaml
 kubectl describe httproute ap-example -n ws-example
+kubectl get tcproute ap-example -n ws-example -o yaml
 kubectl get gateway fruto -n fruto-system -o yaml
 kubectl get pods -n ws-example -o wide
 kubectl get events -n ws-example --sort-by=.metadata.creationTimestamp

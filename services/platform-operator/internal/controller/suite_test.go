@@ -16,6 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 	"sigs.k8s.io/yaml"
 
 	platformv1alpha1 "github.com/fruto-platform/fruto/packages/kubernetes-api/apis/platform/v1alpha1"
@@ -43,6 +44,10 @@ func TestMain(m *testing.M) {
 	}
 	if err := gatewayv1.Install(testScheme); err != nil {
 		fmt.Fprintf(os.Stderr, "add Gateway API to test scheme: %v\n", err)
+		os.Exit(1)
+	}
+	if err := gatewayv1alpha2.Install(testScheme); err != nil {
+		fmt.Fprintf(os.Stderr, "add experimental Gateway API to test scheme: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -88,10 +93,11 @@ func gatewayAPICRDs() ([]*apiextensionsv1.CustomResourceDefinition, error) {
 	if err != nil {
 		return nil, err
 	}
-	crdDirectory := filepath.Join(strings.TrimSpace(string(moduleDirectory)), "config", "crd", "standard")
+	crdDirectory := filepath.Join(strings.TrimSpace(string(moduleDirectory)), "config", "crd", "experimental")
 	files := []string{
 		"gateway.networking.k8s.io_gateways.yaml",
 		"gateway.networking.k8s.io_httproutes.yaml",
+		"gateway.networking.k8s.io_tcproutes.yaml",
 	}
 	crds := make([]*apiextensionsv1.CustomResourceDefinition, 0, len(files))
 	for _, name := range files {

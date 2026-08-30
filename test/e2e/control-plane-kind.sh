@@ -336,12 +336,12 @@ fixture_image_built=true
 kind_cli load docker-image --name "$cluster_name" "$operator_image" "$api_image" "$console_image" "$fixture_image"
 
 curl -L --fail --silent --show-error \
-  https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/standard-install.yaml \
+  https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/experimental-install.yaml \
   --output "$gateway_api_manifest"
-echo "751002b3b91a87f7ae3bd2517c79a47a8d7ed6702901808a1cf9bd97d284f9b8  $gateway_api_manifest" | shasum -a 256 --check
+echo "64ec76609a6ac885e0405dea79ca509c229fa019d342f0857aa8b6bdc8b8ba92  $gateway_api_manifest" | shasum -a 256 --check
 kubectl --kubeconfig "$kubeconfig" apply --server-side -f "$gateway_api_manifest"
 kubectl --kubeconfig "$kubeconfig" wait --for=condition=Established \
-  crd/gateways.gateway.networking.k8s.io crd/httproutes.gateway.networking.k8s.io --timeout=60s
+  crd/gateways.gateway.networking.k8s.io crd/httproutes.gateway.networking.k8s.io crd/tcproutes.gateway.networking.k8s.io --timeout=60s
 
 kubectl --kubeconfig "$kubeconfig" apply -k deploy/crds
 kubectl --kubeconfig "$kubeconfig" wait --for=condition=Established \

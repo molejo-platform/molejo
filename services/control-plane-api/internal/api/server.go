@@ -59,10 +59,15 @@ type Config struct {
 	ObservabilityMetricsLivePoll    time.Duration
 	ObservabilityMetricsLivePerUser int
 	TOTPEnabled                     bool
+	PublicDomain                    string
+	PublicTCPEnabled                bool
+	PublicTCPAddress                string
+	PublicTCPMinimumPort            int32
+	PublicTCPMaximumPort            int32
 }
 
 func DefaultConfig() Config {
-	return Config{Mode: "development", PublicURL: "http://127.0.0.1:8080", CookieName: "fruto_session", AllowedOrigin: "http://127.0.0.1:8080", AllowedHosts: []string{"127.0.0.1:8080", "localhost:8080"}, AllowedRegistries: []string{"ghcr.io"}, MaxReplicas: 5, MaxCPU: 2000, MaxMemory: 2048, SessionTTL: 12 * time.Hour, SessionIdleTTL: 2 * time.Hour, OperationLease: 30 * time.Second, ParameterRetention: 7 * 24 * time.Hour, ParameterMutationTimeout: 5 * time.Minute, WorkspaceNamespace: "fruto-workspaces", GitHubStateTTL: 10 * time.Minute, GitHubCookieName: "molejo_github_state", ObservabilityLogMaxWindow: 24 * time.Hour, ObservabilityMetricMaxWindow: 30 * 24 * time.Hour, ObservabilityEventMaxWindow: 7 * 24 * time.Hour, ObservabilityLiveTTL: 10 * time.Minute, ObservabilityLivePoll: 2 * time.Second, ObservabilityLivePerUser: 3, ObservabilityMetricsLivePoll: 30 * time.Second, ObservabilityMetricsLivePerUser: 2}
+	return Config{Mode: "development", PublicURL: "http://127.0.0.1:8080", CookieName: "fruto_session", AllowedOrigin: "http://127.0.0.1:8080", AllowedHosts: []string{"127.0.0.1:8080", "localhost:8080"}, AllowedRegistries: []string{"ghcr.io"}, MaxReplicas: 5, MaxCPU: 2000, MaxMemory: 2048, SessionTTL: 12 * time.Hour, SessionIdleTTL: 2 * time.Hour, OperationLease: 30 * time.Second, ParameterRetention: 7 * 24 * time.Hour, ParameterMutationTimeout: 5 * time.Minute, WorkspaceNamespace: "fruto-workspaces", GitHubStateTTL: 10 * time.Minute, GitHubCookieName: "molejo_github_state", ObservabilityLogMaxWindow: 24 * time.Hour, ObservabilityMetricMaxWindow: 30 * 24 * time.Hour, ObservabilityEventMaxWindow: 7 * 24 * time.Hour, ObservabilityLiveTTL: 10 * time.Minute, ObservabilityLivePoll: 2 * time.Second, ObservabilityLivePerUser: 3, ObservabilityMetricsLivePoll: 30 * time.Second, ObservabilityMetricsLivePerUser: 2, PublicDomain: "molejo.dev", PublicTCPMinimumPort: 20000, PublicTCPMaximumPort: 20015}
 }
 
 type Server struct {
@@ -97,6 +102,18 @@ func NewServer(s *store.Store, r runtime.Client, cfg Config, logger *slog.Logger
 	}
 	if cfg.SessionIdleTTL <= 0 || cfg.SessionIdleTTL > cfg.SessionTTL {
 		cfg.SessionIdleTTL = min(2*time.Hour, cfg.SessionTTL)
+	}
+	if s != nil {
+		publication := s.Publication
+		if cfg.PublicDomain != "" {
+			publication.Domain = cfg.PublicDomain
+		}
+		if cfg.PublicTCPMinimumPort > 0 || cfg.PublicTCPMaximumPort > 0 || cfg.PublicTCPEnabled {
+			publication.TCPEnabled = cfg.PublicTCPEnabled
+			publication.TCPMinimumPort = cfg.PublicTCPMinimumPort
+			publication.TCPMaximumPort = cfg.PublicTCPMaximumPort
+		}
+		s.Publication = publication
 	}
 	return &Server{Store: s, Runtime: r, Config: cfg, Logger: logger, Tracer: noop.NewTracerProvider().Tracer("github.com/fruto-platform/fruto/services/control-plane-api"), ParameterSecrets: parameters.UnavailableStore{}, AuthenticationSecrets: parameters.UnavailableStore{}, Observability: observability.UnavailableReader{}, logLiveLimiter: &concurrencyLimiter{active: map[int64]int{}}, metricsLiveLimiter: &concurrencyLimiter{active: map[int64]int{}}, metricSnapshots: newMetricSnapshotCache(cfg.ObservabilityMetricsLivePoll), token: randomToken, deploymentID: func() (string, error) { return domain.NewPublicID("dpl") }, parameterID: func() (string, error) { return domain.NewPublicID("par") }, dummyPasswordHash: dummyHash}
 }
@@ -256,11 +273,15 @@ func (s *Server) writeSession(w http.ResponseWriter, user identity.User, assuran
 		workspaceMemberships = append(workspaceMemberships, map[string]string{"workspaceId": workspaceID, "role": role})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"user":                     user,
-		"assuranceLevel":           assuranceLevel,
-		"csrfToken":                csrf,
-		"installationCapabilities": map[string]bool{"manageUsers": installationAdmin, "createWorkspace": installationAdmin},
-		"workspaceMemberships":     workspaceMemberships,
+		"user":           user,
+		"assuranceLevel": assuranceLevel,
+		"csrfToken":      csrf,
+		"installationCapabilities": map[string]any{
+			"manageUsers":     installationAdmin,
+			"createWorkspace": installationAdmin,
+			"publicTCP":       map[string]any{"enabled": s.Config.PublicTCPEnabled, "address": s.Config.PublicTCPAddress, "minimumPort": s.Config.PublicTCPMinimumPort, "maximumPort": s.Config.PublicTCPMaximumPort},
+		},
+		"workspaceMemberships": workspaceMemberships,
 	})
 }
 

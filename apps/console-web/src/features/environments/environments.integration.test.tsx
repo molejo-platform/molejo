@@ -20,7 +20,7 @@ const target = vi.hoisted(() => ({
   environmentName: "Production",
   branch: "main",
   workloadKind: "Stateless",
-  configuration: { replicas: 1, port: 8080, resources: { requests: { cpuMillis: 50, memoryMiB: 64 }, limits: { cpuMillis: 250, memoryMiB: 128 } }, probes: { liveness: { path: "/healthz" }, readiness: { path: "/readyz" } }, exposure: "Private", variables: [], parameters: [] },
+  configuration: { replicas: 1, ports: [{ name: "http", containerPort: 8080, protocol: "TCP" }], resources: { requests: { cpuMillis: 50, memoryMiB: 64 }, limits: { cpuMillis: 250, memoryMiB: 128 } }, probes: { startup: { type: "HTTP", portName: "http", path: "/readyz" }, liveness: { type: "HTTP", portName: "http", path: "/healthz" }, readiness: { type: "HTTP", portName: "http", path: "/readyz" } }, publicEndpoints: [], variables: [], parameters: [] },
   configurationVersion: 1,
   version: 1,
   state: "Ready",

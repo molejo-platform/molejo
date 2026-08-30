@@ -29,26 +29,27 @@ not use an admission webhook to change this Kubernetes behavior.
 
 ## Private runtime contract
 
-Each `AppDeployment` owns exactly one Deployment and one same-named ClusterIP
-Service in its namespace. The Service targets the named `http` container port and
-itself remains private even when an HTTPRoute publishes the workload. The spec
-requires an immutable image digest, port,
-resource requests and limits in CPU millicores and MiB, and liveness/readiness
-paths. Requests must not exceed limits.
+Each `AppDeployment` owns exactly one workload and one same-named ClusterIP
+Service in its namespace. The Service exposes one to eight named TCP container
+ports and remains private when HTTPRoute or TCPRoute publishes selected ports.
+The spec requires an immutable image digest, resource requests and limits in CPU
+millicores and MiB, and startup/readiness/liveness HTTP or TCP probes that
+reference a named port. Requests must not exceed limits.
 
 The workload runs as non-root with `RuntimeDefault` seccomp, no privilege
-escalation or capabilities, and a read-only root filesystem. Startup uses the
-readiness path with a 60-second window; readiness runs every five seconds and
-liveness every ten seconds. The operator does not read Pods or EndpointSlices;
-Deployment status remains the rollout source of truth.
+escalation or capabilities, and a read-only root filesystem. Startup has a
+60-second window; readiness runs every five seconds and liveness every ten
+seconds. The operator does not read Pods or EndpointSlices; workload status
+remains the rollout source of truth.
 
 ## Publication contract
 
-`spec.exposure` defaults to `Private`. A private workload owns no HTTPRoute and
-remains reachable through its ClusterIP Service. A public workload requires a DNS
-label in `spec.slug` and owns a same-named HTTPRoute for
-`{slug}.molejo.dev`. The route attaches to the `https-molejo` listener of the
-shared `fruto` Gateway in `fruto-system` and forwards to the same-named Service.
+`spec.publicEndpoints` contains at most one HTTP and one experimental TCP
+publication. HTTP attaches to `https-molejo` and serves
+`{hostnameLabel}.molejo.dev`. TCP attaches to the preallocated
+`tcp-{externalPort}` listener. Both routes forward to a named port on the
+same-named Service. Empty publication keeps the workload private. Legacy
+`spec.exposure`, `spec.slug`, and `spec.port` remain migration-only fields.
 
 The operator considers publication converged only when the expected route parent
 has current-generation `Accepted=True` and `ResolvedRefs=True` conditions, the
@@ -64,9 +65,9 @@ one deterministic owner; a loser removes only its own route, reports
 `HostnameConflict`, preserves observed release fields, and retries after five
 minutes.
 
-Changing a workload back to `Private` removes its owned HTTPRoute without
-removing the Deployment or Service. Objects already being deleted are not
-reconciled, and Kubernetes garbage collection handles their owned children.
+Removing an endpoint removes only its owned Route without removing the workload
+or Service. Objects already being deleted are not reconciled, and Kubernetes
+garbage collection handles their owned children.
 
 ## Diagnostic workflow
 
@@ -80,6 +81,7 @@ kubectl describe deployment ap-example -n ws-example
 kubectl get service ap-example -n ws-example -o yaml
 kubectl get httproute ap-example -n ws-example -o yaml
 kubectl describe httproute ap-example -n ws-example
+kubectl get tcproute ap-example -n ws-example -o yaml
 kubectl get gateway fruto -n fruto-system -o yaml
 kubectl get pods -n ws-example -o wide
 kubectl get events -n ws-example --sort-by=.metadata.creationTimestamp

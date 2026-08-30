@@ -94,6 +94,18 @@ func (s *Store) CreateAppEnvironmentWithWorkload(ctx context.Context, workspaceI
 	if err != nil {
 		return domain.AppEnvironment{}, nil, translateDBError(err)
 	}
+	configuration, err = s.reservePublicationClaims(ctx, tx, item.ID, item.ConfigurationVersion, configuration)
+	if err != nil {
+		return domain.AppEnvironment{}, nil, err
+	}
+	configurationJSON, err = domain.CanonicalJSON(configuration)
+	if err != nil {
+		return domain.AppEnvironment{}, nil, err
+	}
+	if _, err = tx.Exec(ctx, `UPDATE app_environments SET configuration_json=$2 WHERE id=$1`, item.ID, configurationJSON); err != nil {
+		return domain.AppEnvironment{}, nil, err
+	}
+	item.Configuration = configuration
 	if err = replaceParameterBindings(ctx, tx, item.ID, workspaceID, configuration.Parameters); err != nil {
 		return domain.AppEnvironment{}, nil, err
 	}
@@ -115,10 +127,6 @@ func (s *Store) CreateAppEnvironmentWithWorkload(ctx context.Context, workspaceI
 
 func (s *Store) UpdateAppEnvironment(ctx context.Context, workspaceID, actorID int64, publicID, branch string, configuration domain.RuntimeConfig, version int64) (domain.AppEnvironment, error) {
 	configuration = domain.NormalizeRuntimeConfig(configuration)
-	configurationJSON, err := domain.CanonicalJSON(configuration)
-	if err != nil {
-		return domain.AppEnvironment{}, err
-	}
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return domain.AppEnvironment{}, err
@@ -130,6 +138,11 @@ func (s *Store) UpdateAppEnvironment(ctx context.Context, workspaceID, actorID i
 	}
 	if current.Version != version || current.DeletionRequestedAt != nil {
 		return domain.AppEnvironment{}, ErrVersionConflict
+	}
+	configuration = inheritAllocatedPorts(configuration, current.Configuration)
+	configurationJSON, err := domain.CanonicalJSON(configuration)
+	if err != nil {
+		return domain.AppEnvironment{}, err
 	}
 	currentJSON, err := domain.CanonicalJSON(current.Configuration)
 	if err != nil {
@@ -166,6 +179,18 @@ func (s *Store) UpdateAppEnvironment(ctx context.Context, workspaceID, actorID i
 		return domain.AppEnvironment{}, translateDBError(err)
 	}
 	if configurationChanged {
+		configuration, err = s.reservePublicationClaims(ctx, tx, item.ID, item.ConfigurationVersion, configuration)
+		if err != nil {
+			return domain.AppEnvironment{}, err
+		}
+		configurationJSON, err = domain.CanonicalJSON(configuration)
+		if err != nil {
+			return domain.AppEnvironment{}, err
+		}
+		if _, err = tx.Exec(ctx, `UPDATE app_environments SET configuration_json=$2 WHERE id=$1`, item.ID, configurationJSON); err != nil {
+			return domain.AppEnvironment{}, err
+		}
+		item.Configuration = configuration
 		if err = replaceParameterBindings(ctx, tx, item.ID, workspaceID, configuration.Parameters); err != nil {
 			return domain.AppEnvironment{}, err
 		}
@@ -399,6 +424,11 @@ func (s *Store) CreateDeployment(ctx context.Context, workspaceID, actorID int64
 		return domain.Deployment{}, domain.Operation{}, false, ErrConflict
 	}
 	revision, err := configurationRevision(ctx, tx, workspaceID, appEnvironment.ID, configurationVersion)
+	if err != nil {
+		return domain.Deployment{}, domain.Operation{}, false, err
+	}
+	revision.Configuration = inheritAllocatedPorts(revision.Configuration, appEnvironment.Configuration)
+	revision.Configuration, err = s.reservePublicationClaims(ctx, tx, appEnvironment.ID, revision.Version, revision.Configuration)
 	if err != nil {
 		return domain.Deployment{}, domain.Operation{}, false, err
 	}
@@ -695,6 +725,10 @@ func (s *Store) completeDeployment(ctx context.Context, operation domain.Operati
 	if err = completeOperationLease(ctx, tx, operation); err != nil {
 		return err
 	}
+	deployed, err := deploymentByID(ctx, tx, operation.DeploymentID)
+	if err != nil {
+		return err
+	}
 	tag, err := tx.Exec(ctx, `UPDATE deployments SET status='Ready',message=$1,observed_release=$2,completed_at=now(),updated_at=now() WHERE id=$3 AND app_environment_id=$4`, message, observedRelease, operation.DeploymentID, operation.AppEnvironmentID)
 	if err != nil || tag.RowsAffected() != 1 {
 		return ErrLeaseLost
@@ -711,6 +745,9 @@ func (s *Store) completeDeployment(ctx context.Context, operation domain.Operati
 			return ErrLeaseLost
 		}
 	}
+	if err = activatePublicationClaims(ctx, tx, operation.AppEnvironmentID, deployed.ConfigurationVersion, deployed.Configuration, s.Publication.Domain); err != nil {
+		return err
+	}
 	return tx.Commit(ctx)
 }
 
@@ -726,6 +763,9 @@ func (s *Store) CompleteAppEnvironmentDeletion(ctx context.Context, operation do
 	tag, err := tx.Exec(ctx, `UPDATE app_environments SET archived_at=now(),last_message=$1,updated_at=now() WHERE id=$2 AND deletion_requested_at IS NOT NULL AND archived_at IS NULL`, message, operation.AppEnvironmentID)
 	if err != nil || tag.RowsAffected() != 1 {
 		return ErrLeaseLost
+	}
+	if _, err = tx.Exec(ctx, `DELETE FROM publication_claims WHERE app_environment_id=$1`, operation.AppEnvironmentID); err != nil {
+		return err
 	}
 	return tx.Commit(ctx)
 }

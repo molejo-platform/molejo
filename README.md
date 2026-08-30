@@ -16,14 +16,14 @@ The current vertical slice implements this reconciliation loop:
 
 ```text
 AppDeployment v1alpha1 -> platform-operator -> Deployment + ClusterIP Service
-                                             -> optional HTTPRoute -> shared HTTPS Gateway
+                                             -> optional HTTPRoute/TCPRoute -> shared Gateway
                                              -> status
 ```
 
 The operator creates and maintains one Kubernetes Deployment and one private
-ClusterIP Service for each `AppDeployment`. Public workloads additionally receive
-a same-named HTTPRoute at `{slug}.molejo.dev`; private workloads keep only
-their internal Service. The operator projects immutable images, resources, probes,
+ClusterIP Service for each `AppDeployment`. Workloads may declare up to eight
+named TCP ports and publish at most one HTTP and one experimental TCP endpoint;
+private workloads keep only their internal Service. The operator projects immutable images, resources, probes,
 and a restricted container runtime, reports rollout and publication state through
 Conditions, and exposes protected metrics plus optional OpenTelemetry tracing.
 The repository also proves static HTML and Vite/React SPA image contracts that

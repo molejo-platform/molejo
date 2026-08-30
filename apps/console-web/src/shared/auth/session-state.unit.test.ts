@@ -6,7 +6,7 @@ import type { Session } from "../api/types";
 import { applySessionState, clearSessionState, sessionQueryKey } from "./session-state";
 
 function session(id: string, csrfToken: string): Session {
-  return { user: { id, username: id, displayName: id, status: "Active", version: 1, createdAt: "2026-08-29T00:00:00Z", updatedAt: "2026-08-29T00:00:00Z" }, assuranceLevel: "AAL1", csrfToken, installationCapabilities: { manageUsers: false, createWorkspace: false }, workspaceMemberships: [] };
+  return { user: { id, username: id, displayName: id, status: "Active", version: 1, createdAt: "2026-08-29T00:00:00Z", updatedAt: "2026-08-29T00:00:00Z" }, assuranceLevel: "AAL1", csrfToken, installationCapabilities: { manageUsers: false, createWorkspace: false, publicTCP: { enabled: false } }, workspaceMemberships: [] };
 }
 const owner = session("usr-aaaaaaaaaaaaaaaaaaaa", "owner-csrf");
 const tester = session("usr-bbbbbbbbbbbbbbbbbbbb", "tester-csrf");

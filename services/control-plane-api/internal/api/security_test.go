@@ -8,12 +8,22 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/auth"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/domain"
+	"github.com/fruto-platform/fruto/services/control-plane-api/internal/store"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
+
+func TestNewServerWithPartialConfigPreservesStorePublicationPolicy(t *testing.T) {
+	storage := &store.Store{Publication: store.PublicationPolicy{Domain: "molejo.dev", TCPEnabled: true, TCPMinimumPort: 20000, TCPMaximumPort: 20015}}
+	NewServer(storage, nil, Config{OperationLease: time.Minute}, nil)
+	if storage.Publication.Domain != "molejo.dev" || !storage.Publication.TCPEnabled || storage.Publication.TCPMinimumPort != 20000 || storage.Publication.TCPMaximumPort != 20015 {
+		t.Fatalf("publication policy=%+v", storage.Publication)
+	}
+}
 
 func TestHandlerPropagatesARequestID(t *testing.T) {
 	s := NewServer(nil, nil, DefaultConfig(), nil)

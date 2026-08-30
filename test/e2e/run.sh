@@ -4,8 +4,8 @@ set -euo pipefail
 
 readonly KIND_VERSION="v0.32.0"
 readonly KIND_NODE_IMAGE="kindest/node:v1.36.1@sha256:3489c7674813ba5d8b1a9977baea8a6e553784dab7b84759d1014dbd78f7ebd5"
-readonly GATEWAY_API_URL="https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/standard-install.yaml"
-readonly GATEWAY_API_SHA256="751002b3b91a87f7ae3bd2517c79a47a8d7ed6702901808a1cf9bd97d284f9b8"
+readonly GATEWAY_API_URL="https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/experimental-install.yaml"
+readonly GATEWAY_API_SHA256="64ec76609a6ac885e0405dea79ca509c229fa019d342f0857aa8b6bdc8b8ba92"
 readonly PERSISTENT_TRANSPORT_SECONDS=11
 readonly CLUSTER_NAME="fruto-e2e-$$"
 readonly OPERATOR_IMAGE="fruto-platform-operator:e2e-$$"
@@ -40,6 +40,7 @@ readonly HEALTH_FORWARD_LOG="${KUBECONFIG_FILE}.health-port-forward.log"
 readonly METRICS_FORWARD_LOG="${KUBECONFIG_FILE}.metrics-port-forward.log"
 readonly APP_FORWARD_LOG="${KUBECONFIG_FILE}.app-port-forward.log"
 readonly GATEWAY_FORWARD_LOG="${KUBECONFIG_FILE}.gateway-port-forward.log"
+readonly TCP_GATEWAY_FORWARD_LOG="${KUBECONFIG_FILE}.tcp-gateway-port-forward.log"
 readonly OPERATOR_IDENTITY="system:serviceaccount:fruto-system:platform-operator"
 readonly PUBLIC_EGRESS_URL="${E2E_PUBLIC_EGRESS_URL:-}"
 
@@ -49,11 +50,13 @@ HEALTH_FORWARD_PID=""
 METRICS_FORWARD_PID=""
 APP_FORWARD_PID=""
 GATEWAY_FORWARD_PID=""
+TCP_GATEWAY_FORWARD_PID=""
 PUBLIC_SSE_PID=""
 HEALTH_LOCAL_PORT=""
 METRICS_LOCAL_PORT=""
 APP_LOCAL_PORT=""
 GATEWAY_LOCAL_PORT=""
+TCP_GATEWAY_LOCAL_PORT=""
 FIXTURE_IMAGE_V1=""
 FIXTURE_IMAGE_V2=""
 STATIC_IMAGE=""
@@ -171,6 +174,7 @@ stop_port_forward() {
 
 restart_gateway_forward() {
   stop_port_forward "${GATEWAY_FORWARD_PID}"
+  stop_port_forward "${TCP_GATEWAY_FORWARD_PID}"
   GATEWAY_FORWARD_PID=""
   start_port_forward fruto-system service/traefik-e2e 8443 "${GATEWAY_FORWARD_LOG}" \
     GATEWAY_FORWARD_PID GATEWAY_LOCAL_PORT
@@ -306,6 +310,7 @@ finish() {
   stop_port_forward "${METRICS_FORWARD_PID}"
   stop_port_forward "${APP_FORWARD_PID}"
   stop_port_forward "${GATEWAY_FORWARD_PID}"
+  stop_port_forward "${TCP_GATEWAY_FORWARD_PID}"
   stop_port_forward "${PUBLIC_SSE_PID}"
 
   if [[ ${exit_code} -ne 0 ]]; then
@@ -341,7 +346,8 @@ finish() {
     "${HEALTH_FORWARD_LOG}" \
     "${METRICS_FORWARD_LOG}" \
     "${APP_FORWARD_LOG}" \
-    "${GATEWAY_FORWARD_LOG}"
+    "${GATEWAY_FORWARD_LOG}" \
+    "${TCP_GATEWAY_FORWARD_LOG}"
   exit "${exit_code}"
 }
 trap finish EXIT
@@ -361,6 +367,7 @@ kubectl --kubeconfig "${KUBECONFIG_FILE}" apply --server-side \
 kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
   --for=condition=Established \
   crd/httproutes.gateway.networking.k8s.io \
+  crd/tcproutes.gateway.networking.k8s.io \
   --timeout=60s
 kubectl --kubeconfig "${KUBECONFIG_FILE}" create namespace fruto-system
 openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
@@ -492,6 +499,7 @@ done
 assert_cannot_i delete services -n fruto-system
 for verb in create get list patch update watch delete; do
   assert_can_i "${verb}" httproutes.gateway.networking.k8s.io -n fruto-system
+  assert_can_i "${verb}" tcproutes.gateway.networking.k8s.io -n fruto-system
 done
 for verb in create patch; do
   assert_can_i "${verb}" events -n fruto-system
@@ -637,11 +645,16 @@ kubectl --kubeconfig "${KUBECONFIG_FILE}" patch \
   appdeployment/ap-e2e000001 \
   -n ws-e2e \
   --type=merge \
-  --patch '{"spec":{"exposure":"Public","slug":"runtime-e2e"}}'
+  --patch '{"spec":{"ports":[{"name":"http","containerPort":8080,"protocol":"TCP"}],"probes":{"startup":{"type":"HTTP","portName":"http","path":"/readyz"},"readiness":{"type":"HTTP","portName":"http","path":"/readyz"},"liveness":{"type":"HTTP","portName":"http","path":"/healthz"}},"publicEndpoints":[{"name":"web","type":"HTTP","portName":"http","hostnameLabel":"runtime-e2e"},{"name":"tcp","type":"TCP","portName":"http","hostnameLabel":"runtime-tcp-e2e","externalPort":20000}],"exposure":"Public","slug":"runtime-e2e"}}'
 wait_for_resource httproute.gateway.networking.k8s.io ws-e2e ap-e2e000001
+wait_for_resource tcproute.gateway.networking.k8s.io ws-e2e ap-e2e000001
 wait_for_jsonpath httproute ws-e2e ap-e2e000001 \
   '{.status.parents[0].conditions[?(@.type=="Accepted")].status}' True
 wait_for_jsonpath httproute ws-e2e ap-e2e000001 \
+  '{.status.parents[0].conditions[?(@.type=="ResolvedRefs")].status}' True
+wait_for_jsonpath tcproute ws-e2e ap-e2e000001 \
+  '{.status.parents[0].conditions[?(@.type=="Accepted")].status}' True
+wait_for_jsonpath tcproute ws-e2e ap-e2e000001 \
   '{.status.parents[0].conditions[?(@.type=="ResolvedRefs")].status}' True
 kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
   --for=condition=Ready \
@@ -654,6 +667,11 @@ public_rest="$(curl_success --noproxy '*' --cacert "${WILDCARD_CERT_FILE}" --fai
   --resolve "runtime-e2e.molejo.dev:${GATEWAY_LOCAL_PORT}:127.0.0.1" \
   "${public_base_url}/")"
 grep -q '"status":"ok"' <<<"${public_rest}"
+start_port_forward fruto-system service/traefik-e2e 20000 "${TCP_GATEWAY_FORWARD_LOG}" \
+  TCP_GATEWAY_FORWARD_PID TCP_GATEWAY_LOCAL_PORT
+tcp_rest="$(curl_success --noproxy '*' --fail --silent --show-error \
+  "http://127.0.0.1:${TCP_GATEWAY_LOCAL_PORT}/")"
+grep -q '"status":"ok"' <<<"${tcp_rest}"
 public_graphql="$(curl_success --noproxy '*' --cacert "${WILDCARD_CERT_FILE}" --fail --silent --show-error \
   --resolve "runtime-e2e.molejo.dev:${GATEWAY_LOCAL_PORT}:127.0.0.1" \
   --header 'Content-Type: application/json' \
@@ -700,11 +718,16 @@ GOCACHE=/tmp/fruto-go-cache go run ./test/fixtures/transport-client \
 kubectl --kubeconfig "${KUBECONFIG_FILE}" patch \
   appdeployment/ap-e2e000001 \
   -n ws-e2e \
-  --type=json \
-  --patch '[{"op":"replace","path":"/spec/exposure","value":"Private"},{"op":"remove","path":"/spec/slug"}]'
+  --type=merge \
+  --patch '{"spec":{"publicEndpoints":[],"exposure":"Private","slug":null}}'
 kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
   --for=delete \
   httproute/ap-e2e000001 \
+  -n ws-e2e \
+  --timeout=120s
+kubectl --kubeconfig "${KUBECONFIG_FILE}" wait \
+  --for=delete \
+  tcproute/ap-e2e000001 \
   -n ws-e2e \
   --timeout=120s
 wait_for_public_status 404 runtime-e2e.molejo.dev "${public_base_url}/"

@@ -22,8 +22,8 @@ ejecución, se la corrige a partir de evidencia real y solo entonces se la ampl�
 
 El repositorio ahora contiene un corte vertical ejecutable: API de producto y
 Consola pre-alpha, un contrato `AppDeployment`, un operator de Kubernetes, un
-Service ClusterIP privado, publicación opcional mediante HTTPRoute y un Gateway
-HTTPS compartido, fuentes de repositorio mediante GitHub App, Builds de commit
+Service ClusterIP privado, puertos con nombre limitados, publicación opcional
+mediante HTTPRoute o TCPRoute experimental y un Gateway compartido, fuentes de repositorio mediante GitHub App, Builds de commit
 exacto, Releases inmutables fijadas por digest y pruebas reproducibles de
 integración y end-to-end. El primer contrato de build acepta un `Dockerfile` en
 la raíz para `linux/amd64` mediante un servicio BuildKit rootless separado.

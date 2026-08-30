@@ -55,8 +55,8 @@ spec:
                 type: string
               exposure:
                 default: Private
-                description: Exposure controls whether the workload is reachable through
-                  the shared HTTPS Gateway.
+                description: Deprecated compatibility projection for pre-multiport
+                  v1alpha1 objects.
                 enum:
                 - Private
                 - Public
@@ -66,14 +66,49 @@ spec:
                 pattern: ^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$
                 type: string
               port:
-                description: Port is the private HTTP port exposed by the workload.
+                description: Deprecated compatibility projection for pre-multiport
+                  v1alpha1 objects.
                 format: int32
                 maximum: 65535
                 minimum: 1
                 type: integer
+              ports:
+                description: Ports are stable, named TCP ports exposed by the workload
+                  Service.
+                items:
+                  description: AppDeploymentPort is one named TCP port exposed by
+                    the workload.
+                  properties:
+                    containerPort:
+                      format: int32
+                      maximum: 65535
+                      minimum: 1
+                      type: integer
+                    name:
+                      maxLength: 15
+                      minLength: 1
+                      pattern: ^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$
+                      type: string
+                    protocol:
+                      description: Protocol defines network protocols supported for
+                        things like container ports.
+                      enum:
+                      - TCP
+                      type: string
+                  required:
+                  - containerPort
+                  - name
+                  - protocol
+                  type: object
+                maxItems: 8
+                minItems: 1
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
               probes:
-                description: Probes declares the HTTP health endpoints exposed by
-                  the workload.
+                description: Probes declares health checks against named workload
+                  ports.
                 properties:
                   liveness:
                     description: Liveness identifies the endpoint used to detect an
@@ -85,9 +120,26 @@ spec:
                         minLength: 1
                         pattern: ^/.*$
                         type: string
-                    required:
-                    - path
+                      portName:
+                        description: PortName defaults to the legacy http port only
+                          for existing v1alpha1 objects.
+                        maxLength: 15
+                        minLength: 1
+                        pattern: ^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$
+                        type: string
+                      type:
+                        description: Type defaults to HTTP only for existing v1alpha1
+                          objects.
+                        enum:
+                        - HTTP
+                        - TCP
+                        type: string
                     type: object
+                    x-kubernetes-validations:
+                    - message: HTTP and legacy probes require a path
+                      rule: has(self.type) && self.type == 'TCP' || has(self.path)
+                    - message: TCP probes do not accept a path
+                      rule: '!has(self.type) || self.type != ''TCP'' || !has(self.path)'
                   readiness:
                     description: Readiness identifies the endpoint used to admit the
                       process to the Service.
@@ -98,13 +150,110 @@ spec:
                         minLength: 1
                         pattern: ^/.*$
                         type: string
-                    required:
-                    - path
+                      portName:
+                        description: PortName defaults to the legacy http port only
+                          for existing v1alpha1 objects.
+                        maxLength: 15
+                        minLength: 1
+                        pattern: ^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$
+                        type: string
+                      type:
+                        description: Type defaults to HTTP only for existing v1alpha1
+                          objects.
+                        enum:
+                        - HTTP
+                        - TCP
+                        type: string
                     type: object
+                    x-kubernetes-validations:
+                    - message: HTTP and legacy probes require a path
+                      rule: has(self.type) && self.type == 'TCP' || has(self.path)
+                    - message: TCP probes do not accept a path
+                      rule: '!has(self.type) || self.type != ''TCP'' || !has(self.path)'
+                  startup:
+                    description: |-
+                      Startup is optional for compatibility with existing v1alpha1 objects. The
+                      operator falls back to readiness until the control plane rewrites them.
+                    properties:
+                      path:
+                        description: Path is an absolute HTTP path served by the workload.
+                        maxLength: 2048
+                        minLength: 1
+                        pattern: ^/.*$
+                        type: string
+                      portName:
+                        description: PortName defaults to the legacy http port only
+                          for existing v1alpha1 objects.
+                        maxLength: 15
+                        minLength: 1
+                        pattern: ^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$
+                        type: string
+                      type:
+                        description: Type defaults to HTTP only for existing v1alpha1
+                          objects.
+                        enum:
+                        - HTTP
+                        - TCP
+                        type: string
+                    type: object
+                    x-kubernetes-validations:
+                    - message: HTTP and legacy probes require a path
+                      rule: has(self.type) && self.type == 'TCP' || has(self.path)
+                    - message: TCP probes do not accept a path
+                      rule: '!has(self.type) || self.type != ''TCP'' || !has(self.path)'
                 required:
                 - liveness
                 - readiness
                 type: object
+              publicEndpoints:
+                description: PublicEndpoints are allocation results produced by the
+                  control plane.
+                items:
+                  description: AppDeploymentPublicEndpoint is a bounded public route
+                    allocated by the control plane.
+                  properties:
+                    externalPort:
+                      format: int32
+                      maximum: 65535
+                      minimum: 1
+                      type: integer
+                    hostnameLabel:
+                      maxLength: 253
+                      minLength: 1
+                      type: string
+                    name:
+                      maxLength: 15
+                      minLength: 1
+                      pattern: ^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$
+                      type: string
+                    portName:
+                      maxLength: 15
+                      minLength: 1
+                      pattern: ^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$
+                      type: string
+                    type:
+                      description: AppDeploymentPublicEndpointType selects the shared
+                        publication path.
+                      enum:
+                      - HTTP
+                      - TCP
+                      type: string
+                  required:
+                  - hostnameLabel
+                  - name
+                  - portName
+                  - type
+                  type: object
+                  x-kubernetes-validations:
+                  - message: TCP publication requires an allocated external port
+                    rule: self.type != 'TCP' || has(self.externalPort)
+                  - message: HTTP publication does not use an external port
+                    rule: self.type != 'HTTP' || !has(self.externalPort)
+                maxItems: 2
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
               replicas:
                 default: 1
                 description: Replicas is the desired number of workload replicas.
@@ -165,8 +314,8 @@ spec:
                   plane.
                 type: string
               slug:
-                description: Slug is the globally unique DNS label used for public
-                  exposure.
+                description: Deprecated compatibility projection for pre-multiport
+                  v1alpha1 objects.
                 maxLength: 63
                 minLength: 1
                 pattern: ^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$
@@ -242,16 +391,17 @@ spec:
                   rule: self.kind != 'Stateful' || (has(self.stateful) && !has(self.stateless))
             required:
             - image
-            - port
             - probes
             - resources
             - workload
             type: object
             x-kubernetes-validations:
-            - message: slug is required for public exposure
-              rule: self.exposure != 'Public' || has(self.slug)
-            - message: slug must be omitted for private exposure
-              rule: self.exposure != 'Private' || !has(self.slug)
+            - message: legacy public exposure requires a slug
+              rule: '!has(self.exposure) || self.exposure != ''Public'' || has(self.slug)'
+            - message: legacy private exposure omits the slug
+              rule: '!has(self.exposure) || self.exposure != ''Private'' || !has(self.slug)'
+            - message: at least one legacy or named port is required
+              rule: has(self.port) || has(self.ports)
             - message: Stateful workloads require exactly one replica
               rule: self.workload.kind != 'Stateful' || !has(self.replicas) || self.replicas
                 == 1
@@ -317,6 +467,35 @@ spec:
                 type: array
                 x-kubernetes-list-map-keys:
                 - type
+                x-kubernetes-list-type: map
+              endpointStatuses:
+                description: EndpointStatuses keep HTTP and TCP publication outcomes
+                  independent.
+                items:
+                  description: AppDeploymentEndpointStatus reports one independently
+                    reconciled publication.
+                  properties:
+                    name:
+                      type: string
+                    ready:
+                      type: boolean
+                    reason:
+                      type: string
+                    type:
+                      description: AppDeploymentPublicEndpointType selects the shared
+                        publication path.
+                      enum:
+                      - HTTP
+                      - TCP
+                      type: string
+                  required:
+                  - name
+                  - ready
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
                 x-kubernetes-list-type: map
               observedGeneration:
                 description: ObservedGeneration is the latest generation successfully

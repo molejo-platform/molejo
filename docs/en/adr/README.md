@@ -28,3 +28,5 @@
   — Draft
 - [ADR-0011: Portable Stateful Runtime and Volume Lifecycle](0011-portable-stateful-runtime-and-volume-lifecycle.md)
   — Draft
+- [ADR-0012: Bounded Multiport and Publication Contract](0012-bounded-multiport-and-publication-contract.md)
+  — Draft

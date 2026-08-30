@@ -18,6 +18,11 @@ import (
 const (
 	ExposurePrivate                       = "Private"
 	ExposurePublic                        = "Public"
+	PortProtocolTCP                       = "TCP"
+	ProbeHTTP                             = "HTTP"
+	ProbeTCP                              = "TCP"
+	EndpointHTTP                          = "HTTP"
+	EndpointTCP                           = "TCP"
 	StatePending                          = "Pending"
 	StateProgressing                      = "Progressing"
 	StateReady                            = "Ready"
@@ -119,12 +124,29 @@ type Resources struct {
 }
 
 type Probe struct {
-	Path string `json:"path"`
+	Type     string `json:"type"`
+	PortName string `json:"portName"`
+	Path     string `json:"path,omitempty"`
 }
 
 type Probes struct {
+	Startup   Probe `json:"startup"`
 	Liveness  Probe `json:"liveness"`
 	Readiness Probe `json:"readiness"`
+}
+
+type RuntimePort struct {
+	Name          string `json:"name"`
+	ContainerPort int32  `json:"containerPort"`
+	Protocol      string `json:"protocol"`
+}
+
+type PublicEndpoint struct {
+	Name          string `json:"name"`
+	Type          string `json:"type"`
+	PortName      string `json:"portName"`
+	HostnameLabel string `json:"hostnameLabel"`
+	ExternalPort  int32  `json:"externalPort,omitempty"`
 }
 
 type Variable struct {
@@ -191,31 +213,35 @@ type ResolvedParameter struct {
 }
 
 type RuntimeConfig struct {
-	Replicas   int32              `json:"replicas"`
-	Port       int32              `json:"port"`
-	Resources  Resources          `json:"resources"`
-	Probes     Probes             `json:"probes"`
-	Exposure   string             `json:"exposure"`
-	Slug       string             `json:"slug,omitempty"`
-	Variables  []Variable         `json:"variables"`
-	Parameters []ParameterBinding `json:"parameters"`
+	Replicas        int32              `json:"replicas"`
+	Ports           []RuntimePort      `json:"ports"`
+	Resources       Resources          `json:"resources"`
+	Probes          Probes             `json:"probes"`
+	PublicEndpoints []PublicEndpoint   `json:"publicEndpoints"`
+	Variables       []Variable         `json:"variables"`
+	Parameters      []ParameterBinding `json:"parameters"`
+	Port            int32              `json:"-"`
+	Exposure        string             `json:"-"`
+	Slug            string             `json:"-"`
 }
 
 type Intent struct {
-	Image                string       `json:"image"`
-	Replicas             int32        `json:"replicas"`
-	Port                 int32        `json:"port"`
-	Resources            Resources    `json:"resources"`
-	Probes               Probes       `json:"probes"`
-	Exposure             string       `json:"exposure"`
-	Slug                 string       `json:"slug,omitempty"`
-	Variables            []Variable   `json:"variables"`
-	ConfigMapRef         string       `json:"configMapRef,omitempty"`
-	SecretRef            string       `json:"secretRef,omitempty"`
-	SecretVariables      []Variable   `json:"-"`
-	ConfigurationVersion int64        `json:"-"`
-	WorkloadKind         WorkloadKind `json:"workloadKind"`
-	Volume               *AppVolume   `json:"volume,omitempty"`
+	Image                string           `json:"image"`
+	Replicas             int32            `json:"replicas"`
+	Ports                []RuntimePort    `json:"ports"`
+	Resources            Resources        `json:"resources"`
+	Probes               Probes           `json:"probes"`
+	PublicEndpoints      []PublicEndpoint `json:"publicEndpoints"`
+	Variables            []Variable       `json:"variables"`
+	ConfigMapRef         string           `json:"configMapRef,omitempty"`
+	SecretRef            string           `json:"secretRef,omitempty"`
+	SecretVariables      []Variable       `json:"-"`
+	ConfigurationVersion int64            `json:"-"`
+	WorkloadKind         WorkloadKind     `json:"workloadKind"`
+	Volume               *AppVolume       `json:"volume,omitempty"`
+	Port                 int32            `json:"-"`
+	Exposure             string           `json:"-"`
+	Slug                 string           `json:"-"`
 }
 
 type Actor struct {
@@ -462,8 +488,41 @@ func NormalizeRuntimeConfig(config RuntimeConfig) RuntimeConfig {
 	if config.Replicas == 0 {
 		config.Replicas = 1
 	}
-	if config.Exposure == "" {
-		config.Exposure = ExposurePrivate
+	if len(config.Ports) == 0 && config.Port != 0 {
+		config.Ports = []RuntimePort{{Name: "http", ContainerPort: config.Port, Protocol: PortProtocolTCP}}
+	} else if config.Ports == nil {
+		config.Ports = []RuntimePort{}
+	}
+	for index := range config.Ports {
+		if config.Ports[index].Protocol == "" {
+			config.Ports[index].Protocol = PortProtocolTCP
+		}
+	}
+	if len(config.PublicEndpoints) == 0 && config.Exposure == ExposurePublic && config.Slug != "" {
+		config.PublicEndpoints = []PublicEndpoint{{Name: "web", Type: EndpointHTTP, PortName: config.Ports[0].Name, HostnameLabel: config.Slug}}
+	} else if config.PublicEndpoints == nil {
+		config.PublicEndpoints = []PublicEndpoint{}
+	}
+	config.Port, config.Exposure, config.Slug = 0, "", ""
+	defaultPortName := ""
+	if len(config.Ports) > 0 {
+		defaultPortName = config.Ports[0].Name
+	}
+	normalizeProbe := func(probe Probe) Probe {
+		if probe.Type == "" {
+			probe.Type = ProbeHTTP
+		}
+		if probe.PortName == "" {
+			probe.PortName = defaultPortName
+		}
+		return probe
+	}
+	config.Probes.Readiness = normalizeProbe(config.Probes.Readiness)
+	config.Probes.Liveness = normalizeProbe(config.Probes.Liveness)
+	if config.Probes.Startup.Type == "" && config.Probes.Startup.Path == "" {
+		config.Probes.Startup = config.Probes.Readiness
+	} else {
+		config.Probes.Startup = normalizeProbe(config.Probes.Startup)
 	}
 	if config.Variables == nil {
 		config.Variables = []Variable{}
@@ -475,32 +534,51 @@ func NormalizeRuntimeConfig(config RuntimeConfig) RuntimeConfig {
 }
 
 func NormalizeIntent(intent Intent) Intent {
+	if len(intent.Ports) == 0 && intent.Port != 0 {
+		intent.Ports = []RuntimePort{{Name: "http", ContainerPort: intent.Port, Protocol: PortProtocolTCP}}
+	}
+	if len(intent.PublicEndpoints) == 0 && intent.Exposure == ExposurePublic && intent.Slug != "" {
+		intent.PublicEndpoints = []PublicEndpoint{{Name: "web", Type: EndpointHTTP, PortName: "http", HostnameLabel: intent.Slug}}
+	}
 	configuration := NormalizeRuntimeConfig(ConfigurationFromIntent(intent))
 	intent.Replicas = configuration.Replicas
-	intent.Port = configuration.Port
+	intent.Ports = configuration.Ports
 	intent.Resources = configuration.Resources
 	intent.Probes = configuration.Probes
-	intent.Exposure = configuration.Exposure
-	intent.Slug = configuration.Slug
+	intent.PublicEndpoints = configuration.PublicEndpoints
 	intent.Variables = configuration.Variables
+	intent.Port, intent.Exposure, intent.Slug = 0, "", ""
 	return intent
 }
 
 func IntentFromConfiguration(image string, configuration RuntimeConfig) Intent {
 	configuration = NormalizeRuntimeConfig(configuration)
-	return Intent{Image: image, Replicas: configuration.Replicas, Port: configuration.Port, Resources: configuration.Resources, Probes: configuration.Probes, Exposure: configuration.Exposure, Slug: configuration.Slug, Variables: configuration.Variables}
+	return Intent{Image: image, Replicas: configuration.Replicas, Ports: configuration.Ports, Resources: configuration.Resources, Probes: configuration.Probes, PublicEndpoints: configuration.PublicEndpoints, Variables: configuration.Variables}
 }
 
 func ConfigurationFromIntent(intent Intent) RuntimeConfig {
-	return RuntimeConfig{Replicas: intent.Replicas, Port: intent.Port, Resources: intent.Resources, Probes: intent.Probes, Exposure: intent.Exposure, Slug: intent.Slug, Variables: intent.Variables, Parameters: []ParameterBinding{}}
+	return RuntimeConfig{Replicas: intent.Replicas, Ports: intent.Ports, Resources: intent.Resources, Probes: intent.Probes, PublicEndpoints: intent.PublicEndpoints, Variables: intent.Variables, Parameters: []ParameterBinding{}, Port: intent.Port, Exposure: intent.Exposure, Slug: intent.Slug}
 }
 
 func ValidateRuntimeConfig(config RuntimeConfig, maxReplicas int32, maxCPU, maxMemory int64) error {
 	if config.Replicas < 1 || config.Replicas > maxReplicas {
 		return fmt.Errorf("replicas must be between 1 and %d", maxReplicas)
 	}
-	if config.Port < 1 || config.Port > 65535 {
-		return errors.New("port must be between 1 and 65535")
+	if len(config.Ports) < 1 || len(config.Ports) > 8 {
+		return errors.New("configuration must contain between 1 and 8 ports")
+	}
+	portNames := make(map[string]struct{}, len(config.Ports))
+	for _, port := range config.Ports {
+		if !slugPattern.MatchString(port.Name) || len(port.Name) > 15 {
+			return errors.New("port names must be unique lowercase labels of at most 15 characters")
+		}
+		if _, exists := portNames[port.Name]; exists {
+			return errors.New("port names must be unique lowercase labels of at most 15 characters")
+		}
+		if port.ContainerPort < 1 || port.ContainerPort > 65535 || port.Protocol != PortProtocolTCP {
+			return errors.New("ports must use TCP and a container port between 1 and 65535")
+		}
+		portNames[port.Name] = struct{}{}
 	}
 	if config.Resources.Requests.CPUMillis < 1 || config.Resources.Limits.CPUMillis < config.Resources.Requests.CPUMillis || config.Resources.Limits.CPUMillis > maxCPU {
 		return errors.New("invalid CPU resources")
@@ -508,17 +586,49 @@ func ValidateRuntimeConfig(config RuntimeConfig, maxReplicas int32, maxCPU, maxM
 	if config.Resources.Requests.MemoryMiB < 1 || config.Resources.Limits.MemoryMiB < config.Resources.Requests.MemoryMiB || config.Resources.Limits.MemoryMiB > maxMemory {
 		return errors.New("invalid memory resources")
 	}
-	if !validPath(config.Probes.Liveness.Path) || !validPath(config.Probes.Readiness.Path) {
-		return errors.New("probe paths must be absolute HTTP paths")
+	for _, probe := range []Probe{config.Probes.Startup, config.Probes.Readiness, config.Probes.Liveness} {
+		if _, exists := portNames[probe.PortName]; !exists {
+			return errors.New("probes must reference an existing port name")
+		}
+		if probe.Type == ProbeHTTP && !validPath(probe.Path) {
+			return errors.New("HTTP probe paths must be absolute")
+		}
+		if probe.Type == ProbeTCP && probe.Path != "" {
+			return errors.New("TCP probes cannot declare a path")
+		}
+		if probe.Type != ProbeHTTP && probe.Type != ProbeTCP {
+			return errors.New("probe type must be HTTP or TCP")
+		}
 	}
-	if config.Exposure != ExposurePrivate && config.Exposure != ExposurePublic {
-		return errors.New("exposure must be Private or Public")
+	if len(config.PublicEndpoints) > 2 {
+		return errors.New("configuration must contain at most 2 public endpoints")
 	}
-	if config.Exposure == ExposurePrivate && config.Slug != "" {
-		return errors.New("slug must be omitted for private exposure")
-	}
-	if config.Exposure == ExposurePublic && (len(config.Slug) == 0 || len(config.Slug) > 63 || !slugPattern.MatchString(config.Slug)) {
-		return errors.New("slug is required and must be a lowercase DNS label for public exposure")
+	endpointNames := make(map[string]struct{}, len(config.PublicEndpoints))
+	endpointTypes := make(map[string]struct{}, len(config.PublicEndpoints))
+	for _, endpoint := range config.PublicEndpoints {
+		if !slugPattern.MatchString(endpoint.Name) || len(endpoint.Name) > 15 {
+			return errors.New("public endpoint names must be unique lowercase labels of at most 15 characters")
+		}
+		if _, exists := endpointNames[endpoint.Name]; exists {
+			return errors.New("public endpoint names must be unique lowercase labels of at most 15 characters")
+		}
+		if _, exists := endpointTypes[endpoint.Type]; exists || (endpoint.Type != EndpointHTTP && endpoint.Type != EndpointTCP) {
+			return errors.New("configuration supports at most one HTTP and one TCP public endpoint")
+		}
+		if _, exists := portNames[endpoint.PortName]; !exists {
+			return errors.New("public endpoints must reference an existing port name")
+		}
+		if len(endpoint.HostnameLabel) == 0 || len(endpoint.HostnameLabel) > 63 || !slugPattern.MatchString(endpoint.HostnameLabel) {
+			return errors.New("public endpoint hostnameLabel must be a lowercase DNS label")
+		}
+		if endpoint.Type == EndpointHTTP && endpoint.ExternalPort != 0 {
+			return errors.New("HTTP public endpoints cannot declare an external port")
+		}
+		if endpoint.Type == EndpointTCP && endpoint.ExternalPort != 0 && (endpoint.ExternalPort < 1 || endpoint.ExternalPort > 65535) {
+			return errors.New("TCP public endpoint external port is invalid")
+		}
+		endpointNames[endpoint.Name] = struct{}{}
+		endpointTypes[endpoint.Type] = struct{}{}
 	}
 	if len(config.Variables)+len(config.Parameters) > 100 {
 		return errors.New("configuration must contain at most 100 variables and parameters")

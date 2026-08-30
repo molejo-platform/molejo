@@ -414,6 +414,19 @@ type Project struct {
 	ArchivedAt  pgtype.Timestamptz `json:"archived_at"`
 }
 
+type PublicationClaim struct {
+	ID                          int64              `json:"id"`
+	AppEnvironmentID            int64              `json:"app_environment_id"`
+	EndpointName                string             `json:"endpoint_name"`
+	EndpointType                string             `json:"endpoint_type"`
+	Hostname                    string             `json:"hostname"`
+	ExternalPort                pgtype.Int4        `json:"external_port"`
+	DesiredConfigurationVersion pgtype.Int8        `json:"desired_configuration_version"`
+	CurrentConfigurationVersion pgtype.Int8        `json:"current_configuration_version"`
+	CreatedAt                   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                   pgtype.Timestamptz `json:"updated_at"`
+}
+
 type RecoveryCode struct {
 	ID        int64              `json:"id"`
 	UserID    int64              `json:"user_id"`

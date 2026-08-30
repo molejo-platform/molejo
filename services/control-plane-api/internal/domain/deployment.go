@@ -56,7 +56,7 @@ func PreviewDeployment(current *Deployment, releasePublicID string, revision Con
 	if before.Replicas != after.Replicas {
 		preview.Changes = append(preview.Changes, DeploymentChangeScale)
 	}
-	if before.Port != after.Port || before.Exposure != after.Exposure || before.Slug != after.Slug {
+	if !reflect.DeepEqual(before.Ports, after.Ports) || !reflect.DeepEqual(before.PublicEndpoints, after.PublicEndpoints) {
 		preview.Changes = append(preview.Changes, DeploymentChangeNetwork)
 	}
 	if !reflect.DeepEqual(before.Probes, after.Probes) {

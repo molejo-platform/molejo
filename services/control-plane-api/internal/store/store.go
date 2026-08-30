@@ -29,8 +29,16 @@ import (
 var migrationFS embed.FS
 
 type Store struct {
-	Pool    *pgxpool.Pool
-	queries *storesqlc.Queries
+	Pool        *pgxpool.Pool
+	queries     *storesqlc.Queries
+	Publication PublicationPolicy
+}
+
+type PublicationPolicy struct {
+	Domain         string
+	TCPEnabled     bool
+	TCPMinimumPort int32
+	TCPMaximumPort int32
 }
 
 type migration struct {
@@ -48,7 +56,7 @@ func New(ctx context.Context, dsn string) (*Store, error) {
 		pool.Close()
 		return nil, err
 	}
-	return &Store{Pool: pool, queries: storesqlc.New(pool)}, nil
+	return &Store{Pool: pool, queries: storesqlc.New(pool), Publication: PublicationPolicy{Domain: "molejo.dev"}}, nil
 }
 
 func (s *Store) Close() { s.Pool.Close() }

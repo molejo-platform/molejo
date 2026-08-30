@@ -599,6 +599,42 @@ func (e ParameterInputType) Valid() bool {
 	}
 }
 
+// Defines values for ProbeType.
+const (
+	ProbeTypeHTTP ProbeType = "HTTP"
+	ProbeTypeTCP  ProbeType = "TCP"
+)
+
+// Valid indicates whether the value is a known member of the ProbeType enum.
+func (e ProbeType) Valid() bool {
+	switch e {
+	case ProbeTypeHTTP:
+		return true
+	case ProbeTypeTCP:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PublicEndpointType.
+const (
+	PublicEndpointTypeHTTP PublicEndpointType = "HTTP"
+	PublicEndpointTypeTCP  PublicEndpointType = "TCP"
+)
+
+// Valid indicates whether the value is a known member of the PublicEndpointType enum.
+func (e PublicEndpointType) Valid() bool {
+	switch e {
+	case PublicEndpointTypeHTTP:
+		return true
+	case PublicEndpointTypeTCP:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ReleaseAvailabilityStatus.
 const (
 	ReleaseAvailabilityStatusAvailable ReleaseAvailabilityStatus = "Available"
@@ -647,24 +683,6 @@ func (e ReleaseTrigger) Valid() bool {
 	case ReleaseTriggerPush:
 		return true
 	case ReleaseTriggerRelease:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for RuntimeConfigurationExposure.
-const (
-	Private RuntimeConfigurationExposure = "Private"
-	Public  RuntimeConfigurationExposure = "Public"
-)
-
-// Valid indicates whether the value is a known member of the RuntimeConfigurationExposure enum.
-func (e RuntimeConfigurationExposure) Valid() bool {
-	switch e {
-	case Private:
-		return true
-	case Public:
 		return true
 	default:
 		return false
@@ -839,6 +857,21 @@ func (e RuntimeMetricsUnavailable) Valid() bool {
 	case RuntimeMetricsUnavailableMemory:
 		return true
 	case RuntimeMetricsUnavailableRestarts:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RuntimePortProtocol.
+const (
+	RuntimePortProtocolTCP RuntimePortProtocol = "TCP"
+)
+
+// Valid indicates whether the value is a known member of the RuntimePortProtocol enum.
+func (e RuntimePortProtocol) Valid() bool {
+	switch e {
+	case RuntimePortProtocolTCP:
 		return true
 	default:
 		return false
@@ -1584,8 +1617,13 @@ type PasswordResetVerification struct {
 
 // Probe defines model for Probe.
 type Probe struct {
-	Path string `json:"path"`
+	Path     *string   `json:"path,omitempty"`
+	PortName string    `json:"portName"`
+	Type     ProbeType `json:"type"`
 }
+
+// ProbeType defines model for Probe.Type.
+type ProbeType string
 
 // ProfileInput defines model for ProfileInput.
 type ProfileInput struct {
@@ -1601,6 +1639,18 @@ type Project struct {
 	UpdatedAt  time.Time  `json:"updatedAt"`
 	Version    int        `json:"version"`
 }
+
+// PublicEndpoint defines model for PublicEndpoint.
+type PublicEndpoint struct {
+	ExternalPort  *int               `json:"externalPort,omitempty"`
+	HostnameLabel string             `json:"hostnameLabel"`
+	Name          string             `json:"name"`
+	PortName      string             `json:"portName"`
+	Type          PublicEndpointType `json:"type"`
+}
+
+// PublicEndpointType defines model for PublicEndpoint.Type.
+type PublicEndpointType string
 
 // Release defines model for Release.
 type Release struct {
@@ -1640,24 +1690,21 @@ type ResourceValues struct {
 
 // RuntimeConfiguration defines model for RuntimeConfiguration.
 type RuntimeConfiguration struct {
-	Exposure   RuntimeConfigurationExposure `json:"exposure"`
-	Parameters []ParameterBinding           `json:"parameters"`
-	Port       int                          `json:"port"`
+	Parameters []ParameterBinding `json:"parameters"`
+	Ports      []RuntimePort      `json:"ports"`
 	Probes     struct {
 		Liveness  Probe `json:"liveness"`
 		Readiness Probe `json:"readiness"`
+		Startup   Probe `json:"startup"`
 	} `json:"probes"`
-	Replicas  int `json:"replicas"`
-	Resources struct {
+	PublicEndpoints []PublicEndpoint `json:"publicEndpoints"`
+	Replicas        int              `json:"replicas"`
+	Resources       struct {
 		Limits   ResourceValues `json:"limits"`
 		Requests ResourceValues `json:"requests"`
 	} `json:"resources"`
-	Slug      *string    `json:"slug,omitempty"`
 	Variables []Variable `json:"variables"`
 }
-
-// RuntimeConfigurationExposure defines model for RuntimeConfiguration.Exposure.
-type RuntimeConfigurationExposure string
 
 // RuntimeEvent defines model for RuntimeEvent.
 type RuntimeEvent struct {
@@ -1759,6 +1806,16 @@ type RuntimeMetrics struct {
 // RuntimeMetricsUnavailable defines model for RuntimeMetrics.Unavailable.
 type RuntimeMetricsUnavailable string
 
+// RuntimePort defines model for RuntimePort.
+type RuntimePort struct {
+	ContainerPort int                 `json:"containerPort"`
+	Name          string              `json:"name"`
+	Protocol      RuntimePortProtocol `json:"protocol"`
+}
+
+// RuntimePortProtocol defines model for RuntimePort.Protocol.
+type RuntimePortProtocol string
+
 // Session defines model for Session.
 type Session struct {
 	AssuranceLevel           SessionAssuranceLevel `json:"assuranceLevel"`
@@ -1766,6 +1823,12 @@ type Session struct {
 	InstallationCapabilities struct {
 		CreateWorkspace bool `json:"createWorkspace"`
 		ManageUsers     bool `json:"manageUsers"`
+		PublicTCP       struct {
+			Address     *string `json:"address,omitempty"`
+			Enabled     bool    `json:"enabled"`
+			MaximumPort *int    `json:"maximumPort,omitempty"`
+			MinimumPort *int    `json:"minimumPort,omitempty"`
+		} `json:"publicTCP"`
 	} `json:"installationCapabilities"`
 	User                 User `json:"user"`
 	WorkspaceMemberships []struct {

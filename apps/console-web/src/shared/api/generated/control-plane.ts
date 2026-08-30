@@ -1168,6 +1168,12 @@ export interface components {
             installationCapabilities: {
                 manageUsers: boolean;
                 createWorkspace: boolean;
+                publicTCP: {
+                    enabled: boolean;
+                    address?: string;
+                    minimumPort?: number;
+                    maximumPort?: number;
+                };
             };
             workspaceMemberships: {
                 workspaceId: string;
@@ -1536,21 +1542,17 @@ export interface components {
         RuntimeConfiguration: {
             /** @default 1 */
             replicas: number;
-            port: number;
+            ports: components["schemas"]["RuntimePort"][];
             resources: {
                 requests: components["schemas"]["ResourceValues"];
                 limits: components["schemas"]["ResourceValues"];
             };
             probes: {
+                startup: components["schemas"]["Probe"];
                 liveness: components["schemas"]["Probe"];
                 readiness: components["schemas"]["Probe"];
             };
-            /**
-             * @default Private
-             * @enum {string}
-             */
-            exposure: "Private" | "Public";
-            slug?: string;
+            publicEndpoints: components["schemas"]["PublicEndpoint"][];
             variables: components["schemas"]["Variable"][];
             parameters: components["schemas"]["ParameterBinding"][];
         };
@@ -1668,7 +1670,24 @@ export interface components {
             memoryMiB: number;
         };
         Probe: {
-            path: string;
+            /** @enum {string} */
+            type: "HTTP" | "TCP";
+            portName: string;
+            path?: string;
+        };
+        RuntimePort: {
+            name: string;
+            containerPort: number;
+            /** @enum {string} */
+            protocol: "TCP";
+        };
+        PublicEndpoint: {
+            name: string;
+            /** @enum {string} */
+            type: "HTTP" | "TCP";
+            portName: string;
+            hostnameLabel: string;
+            readonly externalPort?: number;
         };
         Deployment: {
             id: string;

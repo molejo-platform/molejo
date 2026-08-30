@@ -263,6 +263,7 @@ func normalizedServer(value string) string {
 }
 
 func (k *KubernetesClient) ApplyDeployment(ctx context.Context, namespace, name string, intent domain.Intent) error {
+	intent = domain.NormalizeIntent(intent)
 	applyCtx, cancel := context.WithTimeout(ctx, k.applyTimeout)
 	defer cancel()
 	exists, err := k.ownedObjectExists(applyCtx, namespace, name)
@@ -272,6 +273,29 @@ func (k *KubernetesClient) ApplyDeployment(ctx context.Context, namespace, name 
 	replicas := intent.Replicas
 	resourceSpec := platformv1alpha1.AppDeploymentResources{Requests: platformv1alpha1.AppDeploymentResourceValues{CPUMillis: intent.Resources.Requests.CPUMillis, MemoryMiB: intent.Resources.Requests.MemoryMiB}, Limits: platformv1alpha1.AppDeploymentResourceValues{CPUMillis: intent.Resources.Limits.CPUMillis, MemoryMiB: intent.Resources.Limits.MemoryMiB}}
 	variables := make([]platformv1alpha1.AppDeploymentVariable, 0, len(intent.Variables))
+	ports := make([]platformv1alpha1.AppDeploymentPort, 0, len(intent.Ports))
+	for _, port := range intent.Ports {
+		ports = append(ports, platformv1alpha1.AppDeploymentPort{Name: port.Name, ContainerPort: port.ContainerPort, Protocol: corev1.ProtocolTCP})
+	}
+	publicEndpoints := make([]platformv1alpha1.AppDeploymentPublicEndpoint, 0, len(intent.PublicEndpoints))
+	legacyPort := int32(0)
+	if len(intent.Ports) > 0 {
+		legacyPort = intent.Ports[0].ContainerPort
+	}
+	legacyExposure := platformv1alpha1.ExposurePrivate
+	legacySlug := ""
+	for _, endpoint := range intent.PublicEndpoints {
+		var externalPort *int32
+		if endpoint.ExternalPort != 0 {
+			allocated := endpoint.ExternalPort
+			externalPort = &allocated
+		}
+		publicEndpoints = append(publicEndpoints, platformv1alpha1.AppDeploymentPublicEndpoint{Name: endpoint.Name, Type: platformv1alpha1.AppDeploymentPublicEndpointType(endpoint.Type), PortName: endpoint.PortName, HostnameLabel: endpoint.HostnameLabel, ExternalPort: externalPort})
+		if endpoint.Type == domain.EndpointHTTP {
+			legacyExposure = platformv1alpha1.ExposurePublic
+			legacySlug = endpoint.HostnameLabel
+		}
+	}
 	configMapRef, secretRef := intent.ConfigMapRef, intent.SecretRef
 	if intent.ConfigurationVersion > 0 {
 		configMapRef, secretRef, err = k.materializeConfiguration(applyCtx, namespace, name, intent.ConfigurationVersion, intent.Variables, intent.SecretVariables)
@@ -290,7 +314,11 @@ func (k *KubernetesClient) ApplyDeployment(ctx context.Context, namespace, name 
 		}
 		workload = platformv1alpha1.AppDeploymentWorkload{Kind: platformv1alpha1.WorkloadStateful, Stateful: &platformv1alpha1.StatefulWorkload{VolumeRef: intent.Volume.PublicID, MountPath: intent.Volume.MountPath}}
 	}
-	obj := &platformv1alpha1.AppDeployment{TypeMeta: metav1.TypeMeta{APIVersion: "platform.fruto.calouro.tech/v1alpha1", Kind: "AppDeployment"}, ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, Annotations: map[string]string{controlPlaneOwnerAnnotation: name}}, Spec: platformv1alpha1.AppDeploymentSpec{Workload: workload, Image: intent.Image, Replicas: &replicas, Port: intent.Port, Resources: resourceSpec, Probes: platformv1alpha1.AppDeploymentProbes{Liveness: platformv1alpha1.AppDeploymentHTTPProbe{Path: intent.Probes.Liveness.Path}, Readiness: platformv1alpha1.AppDeploymentHTTPProbe{Path: intent.Probes.Readiness.Path}}, Exposure: platformv1alpha1.AppDeploymentExposure(intent.Exposure), Slug: intent.Slug, Variables: variables, ConfigMapRef: configMapRef, SecretRef: secretRef}}
+	probe := func(value domain.Probe) platformv1alpha1.AppDeploymentProbe {
+		return platformv1alpha1.AppDeploymentProbe{Type: value.Type, PortName: value.PortName, Path: value.Path}
+	}
+	startupProbe := probe(intent.Probes.Startup)
+	obj := &platformv1alpha1.AppDeployment{TypeMeta: metav1.TypeMeta{APIVersion: "platform.fruto.calouro.tech/v1alpha1", Kind: "AppDeployment"}, ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, Annotations: map[string]string{controlPlaneOwnerAnnotation: name}}, Spec: platformv1alpha1.AppDeploymentSpec{Workload: workload, Image: intent.Image, Replicas: &replicas, Ports: ports, Port: legacyPort, Resources: resourceSpec, Probes: platformv1alpha1.AppDeploymentProbes{Startup: &startupProbe, Liveness: probe(intent.Probes.Liveness), Readiness: probe(intent.Probes.Readiness)}, PublicEndpoints: publicEndpoints, Exposure: legacyExposure, Slug: legacySlug, Variables: variables, ConfigMapRef: configMapRef, SecretRef: secretRef}}
 	if !exists {
 		if err := k.client.Create(applyCtx, obj, client.FieldOwner(k.fieldManager)); err != nil {
 			if apierrors.IsAlreadyExists(err) {

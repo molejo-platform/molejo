@@ -10,6 +10,12 @@ import (
 )
 
 func (c Config) Validate() error {
+	if strings.TrimSpace(c.PublicDomain) == "" {
+		return fmt.Errorf("public domain is required")
+	}
+	if c.PublicTCPEnabled && (strings.TrimSpace(c.PublicTCPAddress) == "" || c.PublicTCPMinimumPort < 1 || c.PublicTCPMaximumPort < c.PublicTCPMinimumPort || c.PublicTCPMaximumPort > 65535) {
+		return fmt.Errorf("public TCP capability is invalid")
+	}
 	if c.SessionIdleTTL <= 0 || c.SessionTTL <= 0 || c.SessionIdleTTL > c.SessionTTL {
 		return fmt.Errorf("session idle TTL must be positive and at most the absolute TTL")
 	}

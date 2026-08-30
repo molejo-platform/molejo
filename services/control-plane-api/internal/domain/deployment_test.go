@@ -10,7 +10,7 @@ func TestPreviewDeploymentClassifiesRuntimeImpactWithoutValues(t *testing.T) {
 	current := &Deployment{ReleasePublicID: "rel-current", ConfigurationVersion: 2, Configuration: currentConfig}
 	targetConfig := deploymentTestConfiguration()
 	targetConfig.Replicas = 2
-	targetConfig.Port = 9090
+	targetConfig.Ports[0].ContainerPort = 9090
 	targetConfig.Variables = []Variable{{Name: "LOG_LEVEL", Value: "debug"}}
 	targetConfig.Parameters = []ParameterBinding{{Name: "DATABASE_URL", ParameterPublicID: "par-target", ParameterVersion: 4}}
 
@@ -32,12 +32,12 @@ func TestPreviewDeploymentReportsNoRolloutForIdenticalTarget(t *testing.T) {
 
 func deploymentTestConfiguration() RuntimeConfig {
 	return RuntimeConfig{
-		Replicas:   1,
-		Port:       8080,
-		Resources:  Resources{Requests: ResourceValues{CPUMillis: 100, MemoryMiB: 128}, Limits: ResourceValues{CPUMillis: 200, MemoryMiB: 256}},
-		Probes:     Probes{Liveness: Probe{Path: "/health"}, Readiness: Probe{Path: "/ready"}},
-		Exposure:   ExposurePrivate,
-		Variables:  []Variable{},
-		Parameters: []ParameterBinding{},
+		Replicas:        1,
+		Ports:           []RuntimePort{{Name: "http", ContainerPort: 8080, Protocol: PortProtocolTCP}},
+		Resources:       Resources{Requests: ResourceValues{CPUMillis: 100, MemoryMiB: 128}, Limits: ResourceValues{CPUMillis: 200, MemoryMiB: 256}},
+		Probes:          Probes{Startup: Probe{Type: ProbeHTTP, PortName: "http", Path: "/ready"}, Liveness: Probe{Type: ProbeHTTP, PortName: "http", Path: "/health"}, Readiness: Probe{Type: ProbeHTTP, PortName: "http", Path: "/ready"}},
+		PublicEndpoints: []PublicEndpoint{},
+		Variables:       []Variable{},
+		Parameters:      []ParameterBinding{},
 	}
 }

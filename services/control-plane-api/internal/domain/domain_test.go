@@ -10,7 +10,22 @@ import (
 )
 
 func validIntent() Intent {
-	return Intent{Image: "ghcr.io/example/demo@sha256:" + strings.Repeat("a", 64), Replicas: 1, Port: 8080, Resources: Resources{Requests: ResourceValues{CPUMillis: 50, MemoryMiB: 64}, Limits: ResourceValues{CPUMillis: 100, MemoryMiB: 128}}, Probes: Probes{Liveness: Probe{Path: "/healthz"}, Readiness: Probe{Path: "/readyz"}}, Exposure: ExposurePrivate, Variables: []Variable{}}
+	return Intent{Image: "ghcr.io/example/demo@sha256:" + strings.Repeat("a", 64), Replicas: 1, Ports: []RuntimePort{{Name: "http", ContainerPort: 8080, Protocol: PortProtocolTCP}}, Resources: Resources{Requests: ResourceValues{CPUMillis: 50, MemoryMiB: 64}, Limits: ResourceValues{CPUMillis: 100, MemoryMiB: 128}}, Probes: Probes{Startup: Probe{Type: ProbeHTTP, PortName: "http", Path: "/readyz"}, Liveness: Probe{Type: ProbeHTTP, PortName: "http", Path: "/healthz"}, Readiness: Probe{Type: ProbeHTTP, PortName: "http", Path: "/readyz"}}, PublicEndpoints: []PublicEndpoint{}, Variables: []Variable{}}
+}
+
+func TestNormalizeIntentMigratesLegacyPortAndHTTPProbes(t *testing.T) {
+	intent := NormalizeIntent(Intent{
+		Port:   8080,
+		Probes: Probes{Readiness: Probe{Path: "/readyz"}, Liveness: Probe{Path: "/healthz"}},
+	})
+	if len(intent.Ports) != 1 || intent.Ports[0].Name != "http" {
+		t.Fatalf("ports=%+v", intent.Ports)
+	}
+	for name, probe := range map[string]Probe{"startup": intent.Probes.Startup, "readiness": intent.Probes.Readiness, "liveness": intent.Probes.Liveness} {
+		if probe.Type != ProbeHTTP || probe.PortName != "http" || probe.Path == "" {
+			t.Fatalf("%s probe=%+v", name, probe)
+		}
+	}
 }
 
 func TestValidateIntent(t *testing.T) {
@@ -18,7 +33,9 @@ func TestValidateIntent(t *testing.T) {
 		name    string
 		mutate  func(*Intent)
 		wantErr bool
-	}{{"valid", func(i *Intent) {}, false}, {"mutable tag", func(i *Intent) { i.Image = "ghcr.io/example/demo:latest" }, true}, {"request above limit", func(i *Intent) { i.Resources.Requests.CPUMillis = 101 }, true}, {"private slug", func(i *Intent) { i.Slug = "demo" }, true}, {"public slug", func(i *Intent) { i.Exposure = ExposurePublic; i.Slug = "demo" }, false}, {"invalid probe", func(i *Intent) { i.Probes.Readiness.Path = "ready" }, true}}
+	}{{"valid", func(i *Intent) {}, false}, {"mutable tag", func(i *Intent) { i.Image = "ghcr.io/example/demo:latest" }, true}, {"request above limit", func(i *Intent) { i.Resources.Requests.CPUMillis = 101 }, true}, {"unknown probe port", func(i *Intent) { i.Probes.Readiness.PortName = "admin" }, true}, {"public HTTP endpoint", func(i *Intent) {
+		i.PublicEndpoints = []PublicEndpoint{{Name: "web", Type: EndpointHTTP, PortName: "http", HostnameLabel: "demo"}}
+	}, false}, {"invalid probe", func(i *Intent) { i.Probes.Readiness.Path = "ready" }, true}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			intent := validIntent()
@@ -30,21 +47,21 @@ func TestValidateIntent(t *testing.T) {
 	}
 }
 
-func TestNormalizeIntentAppliesOnlyPublicDefaults(t *testing.T) {
+func TestNormalizeIntentAppliesOnlyStableDefaults(t *testing.T) {
 	tests := []struct {
 		name         string
 		intent       Intent
 		wantReplicas int32
-		wantExposure string
+		wantPortsNil bool
 	}{
-		{name: "defaults", intent: Intent{}, wantReplicas: 1, wantExposure: ExposurePrivate},
-		{name: "explicit values", intent: Intent{Replicas: 3, Exposure: ExposurePublic}, wantReplicas: 3, wantExposure: ExposurePublic},
+		{name: "defaults", intent: Intent{}, wantReplicas: 1},
+		{name: "explicit values", intent: Intent{Replicas: 3}, wantReplicas: 3},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := NormalizeIntent(tt.intent)
-			if got.Replicas != tt.wantReplicas || got.Exposure != tt.wantExposure {
-				t.Fatalf("NormalizeIntent() replicas=%d exposure=%q, want replicas=%d exposure=%q", got.Replicas, got.Exposure, tt.wantReplicas, tt.wantExposure)
+			if got.Replicas != tt.wantReplicas || got.Ports == nil || got.PublicEndpoints == nil {
+				t.Fatalf("NormalizeIntent() = %+v, want replicas=%d and non-nil collections", got, tt.wantReplicas)
 			}
 		})
 	}
@@ -53,7 +70,7 @@ func TestNormalizeIntentAppliesOnlyPublicDefaults(t *testing.T) {
 func TestValidateIntentDoesNotSilentlyApplyDefaults(t *testing.T) {
 	intent := validIntent()
 	intent.Replicas = 0
-	intent.Exposure = ""
+	intent.Ports = nil
 	if err := ValidateIntent(intent, 5, 2000, 2048); err == nil {
 		t.Fatal("ValidateIntent accepted omitted values instead of requiring explicit normalization")
 	}
@@ -94,7 +111,8 @@ func TestOpenAPIRuntimeConfigurationConstraintsMatchDomainBoundaries(t *testing.
 		schema, property string
 		wantLimit        int
 	}{
-		{schema: "RuntimeConfiguration", property: "slug", wantLimit: 63},
+		{schema: "PublicEndpoint", property: "hostnameLabel", wantLimit: 63},
+		{schema: "RuntimePort", property: "name", wantLimit: 15},
 		{schema: "Probe", property: "path", wantLimit: 2048},
 		{schema: "Variable", property: "name", wantLimit: 253},
 		{schema: "Variable", property: "value", wantLimit: 4096},
@@ -112,7 +130,7 @@ func TestOpenAPIRuntimeConfigurationConstraintsMatchDomainBoundaries(t *testing.
 	if configuration.AdditionalProperties == nil || *configuration.AdditionalProperties {
 		t.Fatal("OpenAPI RuntimeConfiguration must reject unknown fields")
 	}
-	if !reflect.DeepEqual(configuration.Required, []string{"replicas", "port", "resources", "probes", "exposure", "variables", "parameters"}) {
+	if !reflect.DeepEqual(configuration.Required, []string{"replicas", "ports", "resources", "probes", "publicEndpoints", "variables", "parameters"}) {
 		t.Fatalf("OpenAPI RuntimeConfiguration required fields drifted: %v", configuration.Required)
 	}
 	assertProperty := func(name string, got property, pattern string, minimum, maximum *int64, defaultValue any, enum []string) {
@@ -121,11 +139,10 @@ func TestOpenAPIRuntimeConfigurationConstraintsMatchDomainBoundaries(t *testing.
 			t.Errorf("OpenAPI %s mismatch: %+v", name, got)
 		}
 	}
-	one, five, portMax, cpuMax, memoryMax := int64(1), int64(5), int64(65535), int64(2000), int64(2048)
+	one, five, cpuMax, memoryMax := int64(1), int64(5), int64(2000), int64(2048)
 	assertProperty("RuntimeConfiguration.replicas", configuration.Properties["replicas"], "", &one, &five, 1, nil)
-	assertProperty("RuntimeConfiguration.port", configuration.Properties["port"], "", &one, &portMax, nil, nil)
-	assertProperty("RuntimeConfiguration.exposure", configuration.Properties["exposure"], "", nil, nil, ExposurePrivate, []string{ExposurePrivate, ExposurePublic})
-	assertProperty("RuntimeConfiguration.slug", configuration.Properties["slug"], slugPattern.String(), nil, nil, nil, nil)
+	assertProperty("RuntimePort.name", contract.Components.Schemas["RuntimePort"].Properties["name"], slugPattern.String(), nil, nil, nil, nil)
+	assertProperty("PublicEndpoint.hostnameLabel", contract.Components.Schemas["PublicEndpoint"].Properties["hostnameLabel"], slugPattern.String(), nil, nil, nil, nil)
 	resources := contract.Components.Schemas["ResourceValues"]
 	assertProperty("ResourceValues.cpuMillis", resources.Properties["cpuMillis"], "", &one, &cpuMax, nil, nil)
 	assertProperty("ResourceValues.memoryMiB", resources.Properties["memoryMiB"], "", &one, &memoryMax, nil, nil)
@@ -135,7 +152,7 @@ func TestOpenAPIRuntimeConfigurationConstraintsMatchDomainBoundaries(t *testing.
 			t.Errorf("OpenAPI %s must reject unknown fields", name)
 		}
 	}
-	for _, name := range []string{"ResourceValues", "Probe"} {
+	for _, name := range []string{"ResourceValues", "Probe", "RuntimePort", "PublicEndpoint"} {
 		value := contract.Components.Schemas[name]
 		if value.AdditionalProperties == nil || *value.AdditionalProperties {
 			t.Errorf("OpenAPI %s must reject unknown fields", name)
@@ -169,6 +186,7 @@ func TestGeneratedCRDPreservesRuntimeIntentAndIntentionalQuotaAsymmetry(t *testi
 		Default      any                 `yaml:"default"`
 		Enum         []string            `yaml:"enum"`
 		Properties   map[string]property `yaml:"properties"`
+		Items        *property           `yaml:"items"`
 		XValidations []validation        `yaml:"x-kubernetes-validations"`
 	}
 	var crd struct {
@@ -198,11 +216,9 @@ func TestGeneratedCRDPreservesRuntimeIntentAndIntentionalQuotaAsymmetry(t *testi
 	if !reflect.DeepEqual(spec.Properties["replicas"].Minimum, &one) || spec.Properties["replicas"].Maximum != nil || spec.Properties["replicas"].Default != 1 {
 		t.Error("CRD replicas must preserve the runtime minimum/default while product quota remains API-only")
 	}
-	if !reflect.DeepEqual(spec.Properties["port"].Minimum, &one) || !reflect.DeepEqual(spec.Properties["port"].Maximum, &portMax) {
+	portItems := spec.Properties["ports"].Items
+	if portItems == nil || !reflect.DeepEqual(portItems.Properties["containerPort"].Minimum, &one) || !reflect.DeepEqual(portItems.Properties["containerPort"].Maximum, &portMax) {
 		t.Error("CRD port bounds drifted from the domain")
-	}
-	if !reflect.DeepEqual(spec.Properties["exposure"].Enum, []string{ExposurePrivate, ExposurePublic}) || spec.Properties["exposure"].Default != ExposurePrivate {
-		t.Error("CRD exposure contract drifted from the domain")
 	}
 	resources := spec.Properties["resources"]
 	for _, side := range []string{"requests", "limits"} {
@@ -217,7 +233,7 @@ func TestGeneratedCRDPreservesRuntimeIntentAndIntentionalQuotaAsymmetry(t *testi
 	for _, item := range append(spec.XValidations, resources.XValidations...) {
 		rules = append(rules, item.Rule)
 	}
-	for _, expected := range []string{"self.exposure != 'Public' || has(self.slug)", "self.exposure != 'Private' || !has(self.slug)", "self.requests.cpuMillis <= self.limits.cpuMillis", "self.requests.memoryMiB <= self.limits.memoryMiB"} {
+	for _, expected := range []string{"self.requests.cpuMillis <= self.limits.cpuMillis", "self.requests.memoryMiB <= self.limits.memoryMiB"} {
 		if !contains(rules, expected) {
 			t.Errorf("CRD is missing semantic relation %q", expected)
 		}

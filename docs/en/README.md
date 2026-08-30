@@ -21,8 +21,8 @@ real evidence, and only then extended.
 
 The repository now contains an executable vertical slice: a pre-alpha product
 API and Console, an `AppDeployment` contract, a Kubernetes operator, a private
-ClusterIP Service, optional publication through HTTPRoute and a shared HTTPS
-Gateway, GitHub App repository sources, exact-commit Builds, immutable
+ClusterIP Service, bounded named ports, optional publication through HTTPRoute or
+experimental TCPRoute and a shared Gateway, GitHub App repository sources, exact-commit Builds, immutable
 digest-pinned Releases, and reproducible integration and end-to-end tests. The
 first build contract accepts a root `Dockerfile` for `linux/amd64` through a
 separate rootless BuildKit service. It does not yet provide external DNS

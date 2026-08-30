@@ -305,6 +305,12 @@ func (h *generatedHandler) appEnvironmentInput(w http.ResponseWriter, r *http.Re
 		writeError(w, http.StatusBadRequest, "configuration_invalid", err.Error(), r)
 		return appEnvironmentInput{}, false
 	}
+	for _, endpoint := range input.Configuration.PublicEndpoints {
+		if endpoint.Type == domain.EndpointTCP && !h.server.Config.PublicTCPEnabled {
+			writeError(w, http.StatusConflict, "public_tcp_unavailable", "public TCP endpoints are unavailable in this installation", r)
+			return appEnvironmentInput{}, false
+		}
+	}
 	return input, true
 }
 
@@ -331,6 +337,10 @@ func writeAppEnvironmentError(w http.ResponseWriter, r *http.Request, err error)
 		writeError(w, http.StatusConflict, "storage_profile_unavailable", "the selected storage profile is unavailable", r)
 	case errors.Is(err, store.ErrStorageQuotaExceeded):
 		writeError(w, http.StatusConflict, "storage_quota_exceeded", "the requested storage capacity is unavailable", r)
+	case errors.Is(err, store.ErrPublicationConflict):
+		writeError(w, http.StatusConflict, "public_endpoint_conflict", "the requested public endpoint is unavailable", r)
+	case errors.Is(err, store.ErrPublicationUnavailable):
+		writeError(w, http.StatusConflict, "public_tcp_unavailable", "public TCP endpoint capacity is unavailable", r)
 	default:
 		writeError(w, http.StatusInternalServerError, "storage_failed", "App Environment state could not be persisted", r)
 	}
