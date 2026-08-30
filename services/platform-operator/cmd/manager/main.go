@@ -75,6 +75,10 @@ func run() error {
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&zapOptions)))
 	logger := ctrl.Log.WithName("setup")
 	ctx := ctrl.SetupSignalHandler()
+	statefulTolerations, err := parseStatefulTolerations(os.Getenv(statefulTolerationsEnvironment))
+	if err != nil {
+		return fmt.Errorf("configure stateful scheduling: %w", err)
+	}
 
 	tracerProvider, shutdownTracing, err := configureTracing(ctx, version)
 	if err != nil {
@@ -98,10 +102,11 @@ func run() error {
 	}
 
 	if err := (&controller.AppDeploymentReconciler{
-		Client:   manager.GetClient(),
-		Scheme:   manager.GetScheme(),
-		Recorder: manager.GetEventRecorderFor("platform-operator"),
-		Tracer:   tracerProvider.Tracer("github.com/fruto-platform/fruto/services/platform-operator"),
+		Client:              manager.GetClient(),
+		Scheme:              manager.GetScheme(),
+		Recorder:            manager.GetEventRecorderFor("platform-operator"),
+		Tracer:              tracerProvider.Tracer("github.com/fruto-platform/fruto/services/platform-operator"),
+		StatefulTolerations: statefulTolerations,
 	}).SetupWithManager(manager); err != nil {
 		return fmt.Errorf("register AppDeployment controller: %w", err)
 	}
@@ -124,6 +129,7 @@ func run() error {
 		"commit", commit,
 		"goVersion", stdruntime.Version(),
 		"tracingEnabled", tracingEnabled(),
+		"statefulTolerations", len(statefulTolerations),
 	)
 	if err := manager.Start(ctx); err != nil {
 		return fmt.Errorf("run manager: %w", err)

@@ -4,3 +4,5 @@ resources:
   - ../crds
   - ../operator
   - ../control-plane-lab
+patches:
+  - path: stateful-scheduling-lab.yaml

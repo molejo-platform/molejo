@@ -65,9 +65,10 @@ func init() {
 // AppDeploymentReconciler projects AppDeployment resources into typed Kubernetes workloads.
 type AppDeploymentReconciler struct {
 	client.Client
-	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
-	Tracer   trace.Tracer
+	Scheme              *runtime.Scheme
+	Recorder            record.EventRecorder
+	Tracer              trace.Tracer
+	StatefulTolerations []corev1.Toleration
 }
 
 // +kubebuilder:rbac:groups=platform.fruto.calouro.tech,resources=appdeployments;appvolumes,verbs=get;list;watch
@@ -752,6 +753,10 @@ func (r *AppDeploymentReconciler) applyStatefulSet(
 		statefulSet.Spec.VolumeClaimTemplates = nil
 		statefulSet.Spec.PersistentVolumeClaimRetentionPolicy = nil
 		statefulSet.Spec.Template = desiredPodTemplate(appDeployment)
+		statefulSet.Spec.Template.Spec.Tolerations = append(
+			[]corev1.Toleration(nil),
+			r.StatefulTolerations...,
+		)
 		fsGroup := int64(65532)
 		fsGroupChangePolicy := corev1.FSGroupChangeOnRootMismatch
 		statefulSet.Spec.Template.Spec.SecurityContext.FSGroup = &fsGroup

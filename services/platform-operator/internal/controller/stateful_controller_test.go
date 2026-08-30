@@ -69,7 +69,17 @@ func TestStatefulAppDeploymentCreatesStatefulSetWithIndependentVolume(t *testing
 	if err := testClient.Create(ctx, target); err != nil {
 		t.Fatalf("create Stateful AppDeployment: %v", err)
 	}
-	reconciler := &AppDeploymentReconciler{Client: testClient, Scheme: testScheme}
+	statefulToleration := corev1.Toleration{
+		Key:      "platform.example.com/workload",
+		Operator: corev1.TolerationOpEqual,
+		Value:    "data",
+		Effect:   corev1.TaintEffectNoSchedule,
+	}
+	reconciler := &AppDeploymentReconciler{
+		Client:              testClient,
+		Scheme:              testScheme,
+		StatefulTolerations: []corev1.Toleration{statefulToleration},
+	}
 	request := ctrl.Request{NamespacedName: types.NamespacedName{Name: target.Name, Namespace: namespace}}
 	if _, err := reconciler.Reconcile(ctx, request); err != nil {
 		t.Fatalf("reconcile Stateful AppDeployment: %v", err)
@@ -88,7 +98,40 @@ func TestStatefulAppDeploymentCreatesStatefulSetWithIndependentVolume(t *testing
 	if statefulSet.Spec.Template.Spec.SecurityContext == nil || statefulSet.Spec.Template.Spec.SecurityContext.FSGroup == nil || *statefulSet.Spec.Template.Spec.SecurityContext.FSGroup != 65532 {
 		t.Fatalf("stateful fsGroup = %#v", statefulSet.Spec.Template.Spec.SecurityContext)
 	}
+	if len(statefulSet.Spec.Template.Spec.Tolerations) != 1 || statefulSet.Spec.Template.Spec.Tolerations[0] != statefulToleration {
+		t.Fatalf("stateful tolerations = %#v", statefulSet.Spec.Template.Spec.Tolerations)
+	}
 	if err := testClient.Get(ctx, request.NamespacedName, &appsv1.Deployment{}); err == nil {
 		t.Fatal("stateful workload must not create a Deployment")
+	}
+}
+
+func TestStatefulSchedulingDoesNotAffectStatelessDeployment(t *testing.T) {
+	ctx := context.Background()
+	namespace := createTestNamespace(t, "stateless-scheduling")
+	target := newAppDeployment(namespace, "ap-statelessscheduling", testImage)
+	if err := testClient.Create(ctx, target); err != nil {
+		t.Fatalf("create stateless AppDeployment: %v", err)
+	}
+	reconciler := &AppDeploymentReconciler{
+		Client: testClient,
+		Scheme: testScheme,
+		StatefulTolerations: []corev1.Toleration{{
+			Key:      "platform.example.com/workload",
+			Operator: corev1.TolerationOpEqual,
+			Value:    "data",
+			Effect:   corev1.TaintEffectNoSchedule,
+		}},
+	}
+	request := ctrl.Request{NamespacedName: types.NamespacedName{Name: target.Name, Namespace: namespace}}
+	if _, err := reconciler.Reconcile(ctx, request); err != nil {
+		t.Fatalf("reconcile stateless AppDeployment: %v", err)
+	}
+	deployment := &appsv1.Deployment{}
+	if err := testClient.Get(ctx, request.NamespacedName, deployment); err != nil {
+		t.Fatalf("get Deployment: %v", err)
+	}
+	if len(deployment.Spec.Template.Spec.Tolerations) != 0 {
+		t.Fatalf("stateless tolerations = %#v", deployment.Spec.Template.Spec.Tolerations)
 	}
 }

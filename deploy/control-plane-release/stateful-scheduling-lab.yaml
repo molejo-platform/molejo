@@ -1,0 +1,13 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: platform-operator
+  namespace: fruto-system
+spec:
+  template:
+    spec:
+      containers:
+        - name: manager
+          env:
+            - name: MOLEJO_STATEFUL_TOLERATIONS_JSON
+              value: '[{"key":"fruto.cleidsonoliveira.dev/workload","operator":"Equal","value":"data","effect":"NoSchedule"}]'

@@ -116,7 +116,7 @@ func TestPasswordResetSecretParticipatesInTheReleaseContract(t *testing.T) {
 
 func TestControlPlaneReleaseIncludesTheOperatorAndStatefulContracts(t *testing.T) {
 	required := map[string][]string{
-		"deploy/control-plane-release/kustomization.yaml": {"../crds", "../operator", "../control-plane-lab"},
+		"deploy/control-plane-release/kustomization.yaml": {"../crds", "../operator", "../control-plane-lab", "stateful-scheduling-lab.yaml"},
 		"test/e2e/build-control-plane-release.sh":         {"FRUTO_OPERATOR_IMAGE", "services/platform-operator/Dockerfile", "operator.json"},
 		"test/e2e/render-control-plane-release.sh":        {"FRUTO_OPERATOR_IMAGE", "control-plane-release", "platform-operator@sha256"},
 		"test/e2e/apply-control-plane-k3s.sh":             {"appvolumes.platform.fruto.calouro.tech", "deployment/platform-operator"},
@@ -133,6 +133,29 @@ func TestControlPlaneReleaseIncludesTheOperatorAndStatefulContracts(t *testing.T
 			}
 		}
 	}
+}
+
+func TestLabReleaseConfiguresStatefulSchedulingWithoutExposingItInTheCRD(t *testing.T) {
+	operator := findObject(t, "deploy/control-plane-release/stateful-scheduling-lab.yaml", "Deployment", "platform-operator")
+	container := findContainer(t, workloadPodSpec(t, operator), "manager")
+	environment, found, err := unstructured.NestedSlice(container, "env")
+	if err != nil || !found {
+		t.Fatalf("operator env=%v found=%v err=%v", environment, found, err)
+	}
+	for _, item := range environment {
+		variable, ok := item.(map[string]any)
+		if !ok || variable["name"] != "MOLEJO_STATEFUL_TOLERATIONS_JSON" {
+			continue
+		}
+		value, _ := variable["value"].(string)
+		for _, required := range []string{"fruto.cleidsonoliveira.dev/workload", "data", "NoSchedule"} {
+			if !strings.Contains(value, required) {
+				t.Fatalf("stateful scheduling value %q is missing %q", value, required)
+			}
+		}
+		return
+	}
+	t.Fatal("lab release does not configure stateful scheduling")
 }
 
 func TestObservabilityPlaneIsInternalBoundedAndDigestPinned(t *testing.T) {
