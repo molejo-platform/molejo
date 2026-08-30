@@ -120,7 +120,7 @@ func TestControlPlaneReleaseIncludesTheOperatorAndStatefulContracts(t *testing.T
 		"test/e2e/build-control-plane-release.sh":         {"FRUTO_OPERATOR_IMAGE", "services/platform-operator/Dockerfile", "operator.json"},
 		"test/e2e/render-control-plane-release.sh":        {"FRUTO_OPERATOR_IMAGE", "control-plane-release", "platform-operator@sha256"},
 		"test/e2e/apply-control-plane-k3s.sh":             {"appvolumes.platform.fruto.calouro.tech", "deployment/platform-operator"},
-		"test/e2e/accept-control-plane-k3s.sh":            {"FRUTO_OPERATOR_IMAGE", "persistent-standard", "molejo-app-local"},
+		"test/e2e/accept-control-plane-k3s.sh":            {"FRUTO_OPERATOR_IMAGE", "persistent-standard", "molejo-app-local", "--subresource=status"},
 	}
 	for path, fragments := range required {
 		contents, err := os.ReadFile(filepath.Join("..", "..", path))

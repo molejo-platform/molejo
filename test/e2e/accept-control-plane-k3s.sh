@@ -46,8 +46,8 @@ parameter_worker_identity="system:serviceaccount:fruto-control-plane:control-pla
 [[ "$(kubectl --context "$context" auth can-i patch appdeployments.platform.fruto.calouro.tech --as="$worker_identity" -n fruto-workspaces)" == yes ]]
 [[ "$(kubectl --context "$context" auth can-i create appvolumes.platform.fruto.calouro.tech --as="$worker_identity" -n fruto-workspaces)" == yes ]]
 [[ "$(kubectl --context "$context" auth can-i patch appvolumes.platform.fruto.calouro.tech --as="$worker_identity" -n fruto-workspaces)" == yes ]]
-[[ "$(kubectl --context "$context" auth can-i update appdeployments.platform.fruto.calouro.tech/status --as="$worker_identity" -n fruto-workspaces)" == no ]]
-[[ "$(kubectl --context "$context" auth can-i update appvolumes.platform.fruto.calouro.tech/status --as="$worker_identity" -n fruto-workspaces)" == no ]]
+[[ "$(kubectl --context "$context" auth can-i update appdeployments.platform.fruto.calouro.tech --subresource=status --as="$worker_identity" -n fruto-workspaces)" == no ]]
+[[ "$(kubectl --context "$context" auth can-i update appvolumes.platform.fruto.calouro.tech --subresource=status --as="$worker_identity" -n fruto-workspaces)" == no ]]
 [[ "$(kubectl --context "$context" auth can-i create secrets --as="$worker_identity" -n fruto-workspaces)" == yes ]]
 [[ "$(kubectl --context "$context" auth can-i list configmaps --as="$worker_identity" -n fruto-workspaces)" == yes ]]
 [[ "$(kubectl --context "$context" auth can-i delete configmaps --as="$worker_identity" -n fruto-workspaces)" == yes ]]
@@ -60,7 +60,7 @@ parameter_worker_identity="system:serviceaccount:fruto-control-plane:control-pla
 operator_identity="system:serviceaccount:fruto-system:platform-operator"
 [[ "$(kubectl --context "$context" auth can-i create persistentvolumeclaims --as="$operator_identity" -n fruto-workspaces)" == yes ]]
 [[ "$(kubectl --context "$context" auth can-i create statefulsets.apps --as="$operator_identity" -n fruto-workspaces)" == yes ]]
-[[ "$(kubectl --context "$context" auth can-i update appvolumes.platform.fruto.calouro.tech/status --as="$operator_identity" -n fruto-workspaces)" == yes ]]
+[[ "$(kubectl --context "$context" auth can-i update appvolumes.platform.fruto.calouro.tech --subresource=status --as="$operator_identity" -n fruto-workspaces)" == yes ]]
 
 https_result="$(curl --silent --show-error --output /dev/null --write-out '%{http_code} %{ssl_verify_result}' --max-time 15 https://cloud.molejo.dev/)"
 [[ "$https_result" == "200 0" ]]
