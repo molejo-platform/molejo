@@ -410,7 +410,7 @@ func (s *Store) CreateDeployment(ctx context.Context, workspaceID, actorID int64
 	var appVolumeID int64
 	var appVolumePublicID string
 	if appEnvironment.WorkloadKind == domain.WorkloadStateful {
-		if err = tx.QueryRow(ctx, `SELECT id,public_id FROM app_volumes WHERE app_environment_id=$1 AND desired_state='Ready' AND observed_state='Ready' AND deletion_requested_at IS NULL`, appEnvironment.ID).Scan(&appVolumeID, &appVolumePublicID); errors.Is(err, pgx.ErrNoRows) {
+		if err = tx.QueryRow(ctx, `SELECT id,public_id FROM app_volumes WHERE app_environment_id=$1 AND desired_state='Ready' AND observed_state IN ('Provisioning','Ready') AND deletion_requested_at IS NULL`, appEnvironment.ID).Scan(&appVolumeID, &appVolumePublicID); errors.Is(err, pgx.ErrNoRows) {
 			return domain.Deployment{}, domain.Operation{}, false, ErrConflict
 		} else if err != nil {
 			return domain.Deployment{}, domain.Operation{}, false, err
@@ -673,6 +673,20 @@ func (s *Store) ClaimNext(ctx context.Context, worker string, lease time.Duratio
 }
 
 func (s *Store) CompleteDeployment(ctx context.Context, operation domain.Operation, message, observedRelease string) error {
+	return s.completeDeployment(ctx, operation, message, observedRelease, nil)
+}
+
+func (s *Store) CompleteStatefulDeployment(ctx context.Context, operation domain.Operation, message, observedRelease, volumeMessage string, observedSizeGiB int64) error {
+	volume := &deploymentVolumeCompletion{message: volumeMessage, observedSizeGiB: observedSizeGiB}
+	return s.completeDeployment(ctx, operation, message, observedRelease, volume)
+}
+
+type deploymentVolumeCompletion struct {
+	message         string
+	observedSizeGiB int64
+}
+
+func (s *Store) completeDeployment(ctx context.Context, operation domain.Operation, message, observedRelease string, volume *deploymentVolumeCompletion) error {
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -689,6 +703,13 @@ func (s *Store) CompleteDeployment(ctx context.Context, operation domain.Operati
 		FROM deployments d WHERE ae.id=$2 AND d.id=$3 AND ae.desired_deployment_id=d.id`, message, operation.AppEnvironmentID, operation.DeploymentID)
 	if err != nil {
 		return err
+	}
+	if volume != nil {
+		tag, err = tx.Exec(ctx, `UPDATE app_volumes av SET observed_state='Ready',message=$1,observed_size_gib=$2,updated_at=now()
+			FROM deployments d WHERE d.id=$3 AND d.app_volume_id=av.id AND av.app_environment_id=$4`, volume.message, volume.observedSizeGiB, operation.DeploymentID, operation.AppEnvironmentID)
+		if err != nil || tag.RowsAffected() != 1 {
+			return ErrLeaseLost
+		}
 	}
 	return tx.Commit(ctx)
 }

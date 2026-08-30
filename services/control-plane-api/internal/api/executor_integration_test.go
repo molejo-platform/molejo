@@ -168,6 +168,71 @@ func TestWorkerRetriesVolumeProvisioningAfterATemporaryRuntimeFailure(t *testing
 	}
 }
 
+func TestWorkerAllowsFirstStatefulDeploymentToBindAWaitingVolume(t *testing.T) {
+	ctx := context.Background()
+	s, workspaceID, actorID, workspaceNamespace := newExecutorIntegrationFixture(t)
+	if err := s.ConfigureStorageProfile(ctx, store.StorageProfileInstallation{
+		ID: "persistent-standard", Name: "Persistent storage", MinimumSizeGiB: 1,
+		MaximumSizeGiB: 10, TotalCapacityGiB: 10, WorkspaceQuotaGiB: 10,
+		Expandable: true, Durability: "NodeLocal", RuntimeBinding: "test-storage", Enabled: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	project, err := s.CreateProject(ctx, workspaceID, mustAPIID(t, "prj"), "Platform", "platform")
+	if err != nil {
+		t.Fatal(err)
+	}
+	app, err := s.CreateApp(ctx, workspaceID, project.PublicID, mustAPIID(t, "app"), "API", "api")
+	if err != nil {
+		t.Fatal(err)
+	}
+	environment, err := s.CreateEnvironment(ctx, workspaceID, project.PublicID, mustAPIID(t, "env"), "Production", "production")
+	if err != nil {
+		t.Fatal(err)
+	}
+	target, _, err := s.CreateAppEnvironmentWithWorkload(ctx, workspaceID, actorID, mustAPIID(t, "aev"), project.PublicID, app.PublicID, environment.PublicID, "main", domain.WorkloadStateful, apiRuntimeConfiguration("stateful-api"), &domain.VolumeRequest{StorageProfileID: "persistent-standard", SizeGiB: 1, MountPath: "/data"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtimeClient := &recordingRuntime{volumeObservation: controlruntime.VolumeObservation{
+		Exists: true, State: domain.VolumeStateProvisioning, Message: "waiting for first consumer",
+	}}
+	server := NewServer(s, runtimeClient, Config{OperationLease: time.Minute, WorkspaceNamespace: workspaceNamespace}, nil)
+	if processed, runErr := server.RunOnce(ctx, "stateful-worker"); runErr != nil || !processed {
+		t.Fatalf("prepare volume: processed=%v err=%v", processed, runErr)
+	}
+	currentVolume, err := s.FindAppVolume(ctx, workspaceID, target.PublicID)
+	if err != nil || currentVolume.State != domain.VolumeStateProvisioning {
+		t.Fatalf("prepared volume=%+v err=%v", currentVolume, err)
+	}
+	target, err = s.FindAppEnvironment(ctx, workspaceID, target.PublicID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	releaseID, image := createExecutorRelease(t, s, workspaceID, actorID, project, app, target)
+	deployment, _, _, err := s.CreateDeployment(ctx, workspaceID, actorID, target.PublicID, mustAPIID(t, "dpl"), releaseID, target.ConfigurationVersion, target.Version, "", domain.SHA256([]byte("first-stateful-deploy")), domain.SHA256([]byte("first-stateful-deploy-payload")))
+	if err != nil {
+		t.Fatalf("create first stateful deployment: %v", err)
+	}
+	runtimeClient.volumeObservation = controlruntime.VolumeObservation{
+		Exists: true, State: domain.VolumeStateReady, Message: "persistent storage is ready", ObservedSizeGiB: 1,
+	}
+	if processed, runErr := server.RunOnce(ctx, "stateful-worker"); runErr != nil || !processed {
+		t.Fatalf("deploy stateful workload: processed=%v err=%v", processed, runErr)
+	}
+	currentVolume, err = s.FindAppVolume(ctx, workspaceID, target.PublicID)
+	if err != nil || currentVolume.State != domain.VolumeStateReady || !currentVolume.Attached {
+		t.Fatalf("bound volume=%+v err=%v", currentVolume, err)
+	}
+	currentTarget, err := s.FindAppEnvironment(ctx, workspaceID, target.PublicID)
+	if err != nil || currentTarget.CurrentDeploymentPublicID != deployment.PublicID || currentTarget.State != domain.Ready {
+		t.Fatalf("stateful App Environment=%+v err=%v", currentTarget, err)
+	}
+	if runtimeClient.intent.Volume == nil || runtimeClient.intent.Volume.PublicID != currentVolume.PublicID || runtimeClient.intent.Image != image {
+		t.Fatalf("stateful runtime intent=%+v", runtimeClient.intent)
+	}
+}
+
 func TestSessionReadKeepsTheExistingSessionStable(t *testing.T) {
 	ctx := context.Background()
 	s, _, actorID, _ := newExecutorIntegrationFixture(t)
@@ -221,6 +286,7 @@ type recordingRuntime struct {
 	exists             bool
 	garbageCollections int
 	volumeApplyErr     error
+	volumeObservation  controlruntime.VolumeObservation
 }
 
 func (r *recordingRuntime) EnsureWorkspace(context.Context, string) error { return nil }
@@ -230,6 +296,9 @@ func (r *recordingRuntime) ApplyVolume(context.Context, string, string, controlr
 }
 
 func (r *recordingRuntime) ObserveVolume(context.Context, string, string) (controlruntime.VolumeObservation, error) {
+	if r.volumeObservation.State != "" {
+		return r.volumeObservation, nil
+	}
 	return controlruntime.VolumeObservation{Exists: true, State: domain.VolumeStateReady, ObservedSizeGiB: 1}, nil
 }
 
@@ -273,9 +342,16 @@ func createExecutorTargetAndRelease(t *testing.T, s *store.Store, workspaceID, a
 	if err != nil {
 		t.Fatal(err)
 	}
+	releaseID, image := createExecutorRelease(t, s, workspaceID, actorID, project, app, target)
+	return target, releaseID, image
+}
+
+func createExecutorRelease(t *testing.T, s *store.Store, workspaceID, actorID int64, project domain.Project, app domain.App, target domain.AppEnvironment) (string, string) {
+	t.Helper()
+	ctx := context.Background()
 	buildID := mustAPIID(t, "bld")
 	var internalBuildID int64
-	err = s.Pool.QueryRow(ctx, `INSERT INTO builds(public_id,workspace_id,project_id,app_id,app_environment_id,requested_by_user_id,github_installation_external_id,repository_id,repository_full_name,source_branch,commit_sha,platform,status,idempotency_hash,payload_hash)
+	err := s.Pool.QueryRow(ctx, `INSERT INTO builds(public_id,workspace_id,project_id,app_id,app_environment_id,requested_by_user_id,github_installation_external_id,repository_id,repository_full_name,source_branch,commit_sha,platform,status,idempotency_hash,payload_hash)
 		VALUES($1,$2,$3,$4,$5,$6,1,1,'molejo/platform',$7,$8,'linux/amd64','Succeeded',$9,$10) RETURNING id`, buildID, workspaceID, project.ID, app.ID, target.ID, actorID, target.SourceBranch, strings.Repeat("a", 40), domain.SHA256([]byte(buildID)), domain.SHA256([]byte("payload:"+buildID))).Scan(&internalBuildID)
 	if err != nil {
 		t.Fatal(err)
@@ -285,7 +361,7 @@ func createExecutorTargetAndRelease(t *testing.T, s *store.Store, workspaceID, a
 	if _, err = s.Pool.Exec(ctx, `INSERT INTO releases(public_id,workspace_id,project_id,app_id,app_environment_id,build_id,commit_sha,image,platform) VALUES($1,$2,$3,$4,$5,$6,$7,$8,'linux/amd64')`, releaseID, workspaceID, project.ID, app.ID, target.ID, internalBuildID, strings.Repeat("a", 40), image); err != nil {
 		t.Fatal(err)
 	}
-	return target, releaseID, image
+	return releaseID, image
 }
 
 func newExecutorIntegrationFixture(t *testing.T) (*store.Store, int64, int64, string) {

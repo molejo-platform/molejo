@@ -543,7 +543,8 @@ func (s *Server) RunOnce(ctx context.Context, workerID string) (bool, error) {
 		if op.Kind == domain.OperationDeleteVolume {
 			expectedState = domain.VolumeStateRetained
 		}
-		if !observation.Exists || observation.State != expectedState || (expectedState == domain.VolumeStateReady && observation.ObservedSizeGiB < volumeRuntime.Volume.SizeGiB) {
+		waitingForFirstConsumer := op.Kind == domain.OperationEnsureVolume && observation.Exists && observation.State == domain.VolumeStateProvisioning
+		if !waitingForFirstConsumer && (!observation.Exists || observation.State != expectedState || (expectedState == domain.VolumeStateReady && observation.ObservedSizeGiB < volumeRuntime.Volume.SizeGiB)) {
 			return true, s.failOperation(ctx, op, "runtime_not_ready", "persistent storage has not reached the requested state", true)
 		}
 		return true, s.Store.CompleteVolume(ctx, op, observation.State, observation.Message, observation.ObservedSizeGiB)
@@ -568,7 +569,7 @@ func (s *Server) RunOnce(ctx context.Context, workerID string) (bool, error) {
 	intent.WorkloadKind = deployment.WorkloadKind
 	if deployment.WorkloadKind == domain.WorkloadStateful {
 		volume, volumeErr := s.Store.FindAppVolume(ctx, deployment.WorkspaceID, appEnvironment.PublicID)
-		if volumeErr != nil || volume.PublicID != deployment.AppVolumePublicID || volume.State != domain.VolumeStateReady {
+		if volumeErr != nil || volume.PublicID != deployment.AppVolumePublicID || (volume.State != domain.VolumeStateProvisioning && volume.State != domain.VolumeStateReady) {
 			return true, s.failOperation(ctx, op, "volume_unavailable", "persistent storage is unavailable", true)
 		}
 		intent.Volume = &volume
@@ -602,8 +603,21 @@ func (s *Server) RunOnce(ctx context.Context, workerID string) (bool, error) {
 	if obs.State != domain.Ready || !obs.Exists || obs.ObservedRelease != deployment.Image {
 		return true, s.failOperation(ctx, op, "runtime_not_ready", "runtime has not observed the requested release", true)
 	}
+	var volumeObservation runtime.VolumeObservation
+	if deployment.WorkloadKind == domain.WorkloadStateful {
+		volumeObservation, err = s.Runtime.ObserveVolume(ctx, workspace.Namespace, deployment.AppVolumePublicID)
+		if err != nil {
+			return true, s.failOperation(ctx, op, "runtime_observation_failed", "persistent storage observation failed", true)
+		}
+		if !volumeObservation.Exists || volumeObservation.State != domain.VolumeStateReady || volumeObservation.ObservedSizeGiB < intent.Volume.SizeGiB {
+			return true, s.failOperation(ctx, op, "runtime_not_ready", "persistent storage has not reached the requested state", true)
+		}
+	}
 	if err = s.Runtime.GarbageCollectConfiguration(ctx, workspace.Namespace, appEnvironment.RuntimeName); err != nil {
 		return true, s.failOperation(ctx, op, "configuration_cleanup_failed", "runtime configuration cleanup failed", true)
+	}
+	if deployment.WorkloadKind == domain.WorkloadStateful {
+		return true, s.Store.CompleteStatefulDeployment(ctx, op, obs.Message, obs.ObservedRelease, volumeObservation.Message, volumeObservation.ObservedSizeGiB)
 	}
 	return true, s.Store.CompleteDeployment(ctx, op, obs.Message, obs.ObservedRelease)
 }
