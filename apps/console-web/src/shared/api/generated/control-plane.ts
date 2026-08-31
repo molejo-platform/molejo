@@ -1174,6 +1174,12 @@ export interface components {
                     minimumPort?: number;
                     maximumPort?: number;
                 };
+                publicationDomains?: {
+                    id: string;
+                    suffix: string;
+                    workloadKinds: ("Stateless" | "Stateful")[];
+                    endpointTypes: ("HTTP" | "TCP")[];
+                }[];
             };
             workspaceMemberships: {
                 workspaceId: string;
@@ -1686,6 +1692,7 @@ export interface components {
             /** @enum {string} */
             type: "HTTP" | "TCP";
             portName: string;
+            domainId: string;
             hostnameLabel: string;
             readonly externalPort?: number;
         };

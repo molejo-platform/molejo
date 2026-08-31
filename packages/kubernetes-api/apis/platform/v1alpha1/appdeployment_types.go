@@ -192,6 +192,10 @@ type AppDeploymentPublicEndpoint struct {
 	// +kubebuilder:validation:MaxLength=253
 	HostnameLabel string `json:"hostnameLabel"`
 
+	// Hostname is the exact public name resolved by the control plane.
+	// +kubebuilder:validation:MaxLength=253
+	Hostname string `json:"hostname,omitempty"`
+
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=65535
 	ExternalPort *int32 `json:"externalPort,omitempty"`

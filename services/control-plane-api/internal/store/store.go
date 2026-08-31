@@ -35,10 +35,18 @@ type Store struct {
 }
 
 type PublicationPolicy struct {
-	Domain         string
+	Domains        []PublicationDomain
 	TCPEnabled     bool
 	TCPMinimumPort int32
 	TCPMaximumPort int32
+}
+
+type PublicationDomain struct {
+	ID             string
+	Suffix         string
+	WorkloadKinds  []domain.WorkloadKind
+	EndpointTypes  []string
+	ReservedLabels []string
 }
 
 type migration struct {
@@ -56,7 +64,7 @@ func New(ctx context.Context, dsn string) (*Store, error) {
 		pool.Close()
 		return nil, err
 	}
-	return &Store{Pool: pool, queries: storesqlc.New(pool), Publication: PublicationPolicy{Domain: "molejo.dev"}}, nil
+	return &Store{Pool: pool, queries: storesqlc.New(pool), Publication: NewPublicationPolicy("molejo.dev", "", false, 0, 0)}, nil
 }
 
 func (s *Store) Close() { s.Pool.Close() }

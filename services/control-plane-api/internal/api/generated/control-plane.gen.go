@@ -896,6 +896,42 @@ func (e SessionAssuranceLevel) Valid() bool {
 	}
 }
 
+// Defines values for SessionInstallationCapabilitiesPublicationDomainsEndpointTypes.
+const (
+	SessionInstallationCapabilitiesPublicationDomainsEndpointTypesHTTP SessionInstallationCapabilitiesPublicationDomainsEndpointTypes = "HTTP"
+	SessionInstallationCapabilitiesPublicationDomainsEndpointTypesTCP  SessionInstallationCapabilitiesPublicationDomainsEndpointTypes = "TCP"
+)
+
+// Valid indicates whether the value is a known member of the SessionInstallationCapabilitiesPublicationDomainsEndpointTypes enum.
+func (e SessionInstallationCapabilitiesPublicationDomainsEndpointTypes) Valid() bool {
+	switch e {
+	case SessionInstallationCapabilitiesPublicationDomainsEndpointTypesHTTP:
+		return true
+	case SessionInstallationCapabilitiesPublicationDomainsEndpointTypesTCP:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SessionInstallationCapabilitiesPublicationDomainsWorkloadKinds.
+const (
+	SessionInstallationCapabilitiesPublicationDomainsWorkloadKindsStateful  SessionInstallationCapabilitiesPublicationDomainsWorkloadKinds = "Stateful"
+	SessionInstallationCapabilitiesPublicationDomainsWorkloadKindsStateless SessionInstallationCapabilitiesPublicationDomainsWorkloadKinds = "Stateless"
+)
+
+// Valid indicates whether the value is a known member of the SessionInstallationCapabilitiesPublicationDomainsWorkloadKinds enum.
+func (e SessionInstallationCapabilitiesPublicationDomainsWorkloadKinds) Valid() bool {
+	switch e {
+	case SessionInstallationCapabilitiesPublicationDomainsWorkloadKindsStateful:
+		return true
+	case SessionInstallationCapabilitiesPublicationDomainsWorkloadKindsStateless:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SessionWorkspaceMembershipsRole.
 const (
 	SessionWorkspaceMembershipsRoleMember SessionWorkspaceMembershipsRole = "Member"
@@ -1642,6 +1678,7 @@ type Project struct {
 
 // PublicEndpoint defines model for PublicEndpoint.
 type PublicEndpoint struct {
+	DomainId      string             `json:"domainId"`
 	ExternalPort  *int               `json:"externalPort,omitempty"`
 	HostnameLabel string             `json:"hostnameLabel"`
 	Name          string             `json:"name"`
@@ -1829,6 +1866,12 @@ type Session struct {
 			MaximumPort *int    `json:"maximumPort,omitempty"`
 			MinimumPort *int    `json:"minimumPort,omitempty"`
 		} `json:"publicTCP"`
+		PublicationDomains *[]struct {
+			EndpointTypes []SessionInstallationCapabilitiesPublicationDomainsEndpointTypes `json:"endpointTypes"`
+			Id            string                                                           `json:"id"`
+			Suffix        string                                                           `json:"suffix"`
+			WorkloadKinds []SessionInstallationCapabilitiesPublicationDomainsWorkloadKinds `json:"workloadKinds"`
+		} `json:"publicationDomains,omitempty"`
 	} `json:"installationCapabilities"`
 	User                 User `json:"user"`
 	WorkspaceMemberships []struct {
@@ -1839,6 +1882,12 @@ type Session struct {
 
 // SessionAssuranceLevel defines model for Session.AssuranceLevel.
 type SessionAssuranceLevel string
+
+// SessionInstallationCapabilitiesPublicationDomainsEndpointTypes defines model for Session.InstallationCapabilities.PublicationDomains.EndpointTypes.
+type SessionInstallationCapabilitiesPublicationDomainsEndpointTypes string
+
+// SessionInstallationCapabilitiesPublicationDomainsWorkloadKinds defines model for Session.InstallationCapabilities.PublicationDomains.WorkloadKinds.
+type SessionInstallationCapabilitiesPublicationDomainsWorkloadKinds string
 
 // SessionWorkspaceMembershipsRole defines model for Session.WorkspaceMemberships.Role.
 type SessionWorkspaceMembershipsRole string

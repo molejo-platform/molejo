@@ -83,6 +83,7 @@ func run() error {
 	cfg.CookieSecure = os.Getenv("FRUTO_COOKIE_SECURE") == "true"
 	cfg.TOTPEnabled = os.Getenv("FRUTO_TOTP_ENABLED") == "true"
 	cfg.PublicDomain = env("FRUTO_PUBLIC_DOMAIN", cfg.PublicDomain)
+	cfg.PublicStatefulDomain = os.Getenv("FRUTO_PUBLIC_STATEFUL_DOMAIN")
 	cfg.PublicTCPEnabled = os.Getenv("FRUTO_PUBLIC_TCP_ENABLED") == "true"
 	cfg.PublicTCPAddress = os.Getenv("FRUTO_PUBLIC_TCP_ADDRESS")
 	if cfg.PublicTCPMinimumPort, err = int32Env("FRUTO_PUBLIC_TCP_MIN_PORT", cfg.PublicTCPMinimumPort); err != nil {
@@ -257,7 +258,8 @@ func runRuntimeWorker() error {
 	}
 	cfg := api.DefaultConfig()
 	cfg.PublicDomain = env("FRUTO_PUBLIC_DOMAIN", cfg.PublicDomain)
-	s.Publication.Domain = cfg.PublicDomain
+	cfg.PublicStatefulDomain = os.Getenv("FRUTO_PUBLIC_STATEFUL_DOMAIN")
+	s.Publication = store.NewPublicationPolicy(cfg.PublicDomain, cfg.PublicStatefulDomain, false, cfg.PublicTCPMinimumPort, cfg.PublicTCPMaximumPort)
 	if value := os.Getenv("FRUTO_OPERATION_LEASE"); value != "" {
 		cfg.OperationLease, err = durationEnv("FRUTO_OPERATION_LEASE", cfg.OperationLease)
 		if err != nil {

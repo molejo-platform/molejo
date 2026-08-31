@@ -49,7 +49,9 @@ sigue siendo la fuente del rollout.
 
 `spec.publicEndpoints` contiene como máximo una publicación HTTP y una TCP
 experimental. HTTP se conecta al listener `https-molejo` y sirve
-`{hostnameLabel}.molejo.dev`. TCP se conecta al listener preasignado
+el hostname exacto resuelto por el control plane a partir de `domainId` y
+`hostnameLabel`. El catálogo inicial ofrece `molejo.dev` a ambos tipos de
+workload y `stateful.molejo.dev` solo a workloads Stateful. TCP se conecta al listener preasignado
 `tcp-{externalPort}`. Ambas rutas reenvían a un puerto con nombre del Service con
 el mismo nombre. Una lista vacía mantiene privado al workload. `spec.exposure`,
 `spec.slug` y `spec.port` se conservan solamente para migración legada.

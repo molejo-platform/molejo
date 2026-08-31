@@ -959,3 +959,10 @@ func applyGatewayAPIDefaults(object client.Object) {
 	weight := int32(1)
 	route.Spec.Rules[0].BackendRefs[0].Weight = &weight
 }
+
+func TestPublicEndpointHostnamePrefersControlPlaneResolution(t *testing.T) {
+	endpoint := platformv1alpha1.AppDeploymentPublicEndpoint{HostnameLabel: "pg", Hostname: "pg.stateful.molejo.dev"}
+	if got := publicEndpointHostname(endpoint); got != "pg.stateful.molejo.dev" {
+		t.Fatalf("hostname=%q", got)
+	}
+}

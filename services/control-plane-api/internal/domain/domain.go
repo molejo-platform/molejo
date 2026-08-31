@@ -145,8 +145,10 @@ type PublicEndpoint struct {
 	Name          string `json:"name"`
 	Type          string `json:"type"`
 	PortName      string `json:"portName"`
+	DomainID      string `json:"domainId"`
 	HostnameLabel string `json:"hostnameLabel"`
 	ExternalPort  int32  `json:"externalPort,omitempty"`
+	Hostname      string `json:"-"`
 }
 
 type Variable struct {
@@ -499,9 +501,14 @@ func NormalizeRuntimeConfig(config RuntimeConfig) RuntimeConfig {
 		}
 	}
 	if len(config.PublicEndpoints) == 0 && config.Exposure == ExposurePublic && config.Slug != "" {
-		config.PublicEndpoints = []PublicEndpoint{{Name: "web", Type: EndpointHTTP, PortName: config.Ports[0].Name, HostnameLabel: config.Slug}}
+		config.PublicEndpoints = []PublicEndpoint{{Name: "web", Type: EndpointHTTP, PortName: config.Ports[0].Name, DomainID: "default", HostnameLabel: config.Slug}}
 	} else if config.PublicEndpoints == nil {
 		config.PublicEndpoints = []PublicEndpoint{}
+	}
+	for index := range config.PublicEndpoints {
+		if config.PublicEndpoints[index].DomainID == "" {
+			config.PublicEndpoints[index].DomainID = "default"
+		}
 	}
 	config.Port, config.Exposure, config.Slug = 0, "", ""
 	defaultPortName := ""
@@ -620,6 +627,9 @@ func ValidateRuntimeConfig(config RuntimeConfig, maxReplicas int32, maxCPU, maxM
 		}
 		if len(endpoint.HostnameLabel) == 0 || len(endpoint.HostnameLabel) > 63 || !slugPattern.MatchString(endpoint.HostnameLabel) {
 			return errors.New("public endpoint hostnameLabel must be a lowercase DNS label")
+		}
+		if len(endpoint.DomainID) == 0 || len(endpoint.DomainID) > 63 || !slugPattern.MatchString(endpoint.DomainID) {
+			return errors.New("public endpoint domainId must be a lowercase DNS label")
 		}
 		if endpoint.Type == EndpointHTTP && endpoint.ExternalPort != 0 {
 			return errors.New("HTTP public endpoints cannot declare an external port")

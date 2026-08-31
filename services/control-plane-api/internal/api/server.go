@@ -60,6 +60,7 @@ type Config struct {
 	ObservabilityMetricsLivePerUser int
 	TOTPEnabled                     bool
 	PublicDomain                    string
+	PublicStatefulDomain            string
 	PublicTCPEnabled                bool
 	PublicTCPAddress                string
 	PublicTCPMinimumPort            int32
@@ -104,16 +105,13 @@ func NewServer(s *store.Store, r runtime.Client, cfg Config, logger *slog.Logger
 		cfg.SessionIdleTTL = min(2*time.Hour, cfg.SessionTTL)
 	}
 	if s != nil {
-		publication := s.Publication
 		if cfg.PublicDomain != "" {
-			publication.Domain = cfg.PublicDomain
+			s.Publication = store.NewPublicationPolicy(cfg.PublicDomain, cfg.PublicStatefulDomain, cfg.PublicTCPEnabled, cfg.PublicTCPMinimumPort, cfg.PublicTCPMaximumPort)
+		} else if cfg.PublicTCPMinimumPort > 0 || cfg.PublicTCPMaximumPort > 0 || cfg.PublicTCPEnabled {
+			s.Publication.TCPEnabled = cfg.PublicTCPEnabled
+			s.Publication.TCPMinimumPort = cfg.PublicTCPMinimumPort
+			s.Publication.TCPMaximumPort = cfg.PublicTCPMaximumPort
 		}
-		if cfg.PublicTCPMinimumPort > 0 || cfg.PublicTCPMaximumPort > 0 || cfg.PublicTCPEnabled {
-			publication.TCPEnabled = cfg.PublicTCPEnabled
-			publication.TCPMinimumPort = cfg.PublicTCPMinimumPort
-			publication.TCPMaximumPort = cfg.PublicTCPMaximumPort
-		}
-		s.Publication = publication
 	}
 	return &Server{Store: s, Runtime: r, Config: cfg, Logger: logger, Tracer: noop.NewTracerProvider().Tracer("github.com/fruto-platform/fruto/services/control-plane-api"), ParameterSecrets: parameters.UnavailableStore{}, AuthenticationSecrets: parameters.UnavailableStore{}, Observability: observability.UnavailableReader{}, logLiveLimiter: &concurrencyLimiter{active: map[int64]int{}}, metricsLiveLimiter: &concurrencyLimiter{active: map[int64]int{}}, metricSnapshots: newMetricSnapshotCache(cfg.ObservabilityMetricsLivePoll), token: randomToken, deploymentID: func() (string, error) { return domain.NewPublicID("dpl") }, parameterID: func() (string, error) { return domain.NewPublicID("par") }, dummyPasswordHash: dummyHash}
 }
@@ -272,14 +270,19 @@ func (s *Server) writeSession(w http.ResponseWriter, user identity.User, assuran
 		role := workspaceRoles[workspaceID]
 		workspaceMemberships = append(workspaceMemberships, map[string]string{"workspaceId": workspaceID, "role": role})
 	}
+	publicationDomains := make([]map[string]any, 0, len(s.Store.Publication.Domains))
+	for _, publicationDomain := range s.Store.Publication.Domains {
+		publicationDomains = append(publicationDomains, map[string]any{"id": publicationDomain.ID, "suffix": publicationDomain.Suffix, "workloadKinds": publicationDomain.WorkloadKinds, "endpointTypes": publicationDomain.EndpointTypes})
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"user":           user,
 		"assuranceLevel": assuranceLevel,
 		"csrfToken":      csrf,
 		"installationCapabilities": map[string]any{
-			"manageUsers":     installationAdmin,
-			"createWorkspace": installationAdmin,
-			"publicTCP":       map[string]any{"enabled": s.Config.PublicTCPEnabled, "address": s.Config.PublicTCPAddress, "minimumPort": s.Config.PublicTCPMinimumPort, "maximumPort": s.Config.PublicTCPMaximumPort},
+			"manageUsers":        installationAdmin,
+			"createWorkspace":    installationAdmin,
+			"publicTCP":          map[string]any{"enabled": s.Config.PublicTCPEnabled, "address": s.Config.PublicTCPAddress, "minimumPort": s.Config.PublicTCPMinimumPort, "maximumPort": s.Config.PublicTCPMaximumPort},
+			"publicationDomains": publicationDomains,
 		},
 		"workspaceMemberships": workspaceMemberships,
 	})
@@ -588,6 +591,12 @@ func (s *Server) RunOnce(ctx context.Context, workerID string) (bool, error) {
 	}
 	intent := domain.IntentFromConfiguration(deployment.Image, deployment.Configuration)
 	intent.WorkloadKind = deployment.WorkloadKind
+	for index := range intent.PublicEndpoints {
+		intent.PublicEndpoints[index].Hostname, err = s.Store.Publication.Resolve(deployment.WorkloadKind, intent.PublicEndpoints[index])
+		if err != nil {
+			return true, s.failOperation(ctx, op, "publication_invalid", "public endpoint configuration is unavailable", false)
+		}
+	}
 	if deployment.WorkloadKind == domain.WorkloadStateful {
 		volume, volumeErr := s.Store.FindAppVolume(ctx, deployment.WorkspaceID, appEnvironment.PublicID)
 		if volumeErr != nil || volume.PublicID != deployment.AppVolumePublicID || (volume.State != domain.VolumeStateProvisioning && volume.State != domain.VolumeStateReady) {

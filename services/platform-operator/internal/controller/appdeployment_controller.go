@@ -348,7 +348,7 @@ func (r *AppDeploymentReconciler) applyPublication(
 				Group: &gatewayGroup, Kind: &gatewayKind, Name: sharedGatewayName,
 				Namespace: &gatewayNamespace, SectionName: &httpsSection,
 			}}},
-			Hostnames: []gatewayv1.Hostname{gatewayv1.Hostname(publicHostname(endpoint.HostnameLabel))},
+			Hostnames: []gatewayv1.Hostname{gatewayv1.Hostname(publicEndpointHostname(endpoint))},
 			Rules: []gatewayv1.HTTPRouteRule{{
 				Matches: []gatewayv1.HTTPRouteMatch{{Path: &gatewayv1.HTTPPathMatch{
 					Type: &pathType, Value: &pathValue,
@@ -513,8 +513,8 @@ func (r *AppDeploymentReconciler) ensureHostnameAvailable(
 	}
 	for index := range appDeployments.Items {
 		candidate := &appDeployments.Items[index]
-		if candidate.Spec.Exposure != platformv1alpha1.ExposurePublic ||
-			candidate.Spec.Slug != appDeployment.Spec.Slug ||
+		if appDeploymentPublicHostname(candidate) == "" ||
+			appDeploymentPublicHostname(candidate) != appDeploymentPublicHostname(appDeployment) ||
 			candidate.UID == appDeployment.UID {
 			continue
 		}
@@ -547,7 +547,7 @@ func (r *AppDeploymentReconciler) hasPublicHostnameRoute(
 	}
 	return metav1.IsControlledBy(route, appDeployment) &&
 		len(route.Spec.Hostnames) == 1 &&
-		string(route.Spec.Hostnames[0]) == publicHostname(appDeployment.Spec.Slug), nil
+		string(route.Spec.Hostnames[0]) == appDeploymentPublicHostname(appDeployment), nil
 }
 
 func hostnameClaimPrecedes(left, right *platformv1alpha1.AppDeployment) bool {
@@ -564,6 +564,20 @@ func hostnameClaimPrecedes(left, right *platformv1alpha1.AppDeployment) bool {
 
 func publicHostname(slug string) string {
 	return slug + ".molejo.dev"
+}
+
+func publicEndpointHostname(endpoint platformv1alpha1.AppDeploymentPublicEndpoint) string {
+	if endpoint.Hostname != "" {
+		return endpoint.Hostname
+	}
+	return publicHostname(endpoint.HostnameLabel)
+}
+
+func appDeploymentPublicHostname(appDeployment *platformv1alpha1.AppDeployment) string {
+	if endpoint, ok := publicEndpoint(appDeployment, platformv1alpha1.AppDeploymentPublicEndpointType("HTTP")); ok {
+		return publicEndpointHostname(endpoint)
+	}
+	return ""
 }
 
 func publicEndpoint(appDeployment *platformv1alpha1.AppDeployment, endpointType platformv1alpha1.AppDeploymentPublicEndpointType) (platformv1alpha1.AppDeploymentPublicEndpoint, bool) {

@@ -1577,6 +1577,21 @@ components:
                 address: { type: string, maxLength: 253 }
                 minimumPort: { type: integer, minimum: 1, maximum: 65535 }
                 maximumPort: { type: integer, minimum: 1, maximum: 65535 }
+            publicationDomains:
+              type: array
+              items:
+                type: object
+                required: [id, suffix, workloadKinds, endpointTypes]
+                additionalProperties: false
+                properties:
+                  id: { type: string, minLength: 1, maxLength: 63, pattern: '^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$' }
+                  suffix: { type: string, minLength: 1, maxLength: 253 }
+                  workloadKinds:
+                    type: array
+                    items: { type: string, enum: [Stateless, Stateful] }
+                  endpointTypes:
+                    type: array
+                    items: { type: string, enum: [HTTP, TCP] }
         workspaceMemberships:
           type: array
           items:
@@ -2219,12 +2234,13 @@ components:
         protocol: { type: string, enum: [TCP] }
     PublicEndpoint:
       type: object
-      required: [name, type, portName, hostnameLabel]
+      required: [name, type, portName, domainId, hostnameLabel]
       additionalProperties: false
       properties:
         name: { type: string, minLength: 1, maxLength: 15, pattern: '^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$' }
         type: { type: string, enum: [HTTP, TCP] }
         portName: { type: string, minLength: 1, maxLength: 15, pattern: '^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$' }
+        domainId: { type: string, minLength: 1, maxLength: 63, pattern: '^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$' }
         hostnameLabel: { type: string, minLength: 1, maxLength: 63, pattern: '^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$' }
         externalPort: { type: integer, minimum: 1, maximum: 65535, readOnly: true }
     Deployment:

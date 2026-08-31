@@ -217,6 +217,11 @@ spec:
                       maximum: 65535
                       minimum: 1
                       type: integer
+                    hostname:
+                      description: Hostname is the exact public name resolved by the
+                        control plane.
+                      maxLength: 253
+                      type: string
                     hostnameLabel:
                       maxLength: 253
                       minLength: 1

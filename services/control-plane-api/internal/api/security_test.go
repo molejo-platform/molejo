@@ -18,9 +18,9 @@ import (
 )
 
 func TestNewServerWithPartialConfigPreservesStorePublicationPolicy(t *testing.T) {
-	storage := &store.Store{Publication: store.PublicationPolicy{Domain: "molejo.dev", TCPEnabled: true, TCPMinimumPort: 20000, TCPMaximumPort: 20015}}
+	storage := &store.Store{Publication: store.NewPublicationPolicy("molejo.dev", "", true, 20000, 20015)}
 	NewServer(storage, nil, Config{OperationLease: time.Minute}, nil)
-	if storage.Publication.Domain != "molejo.dev" || !storage.Publication.TCPEnabled || storage.Publication.TCPMinimumPort != 20000 || storage.Publication.TCPMaximumPort != 20015 {
+	if len(storage.Publication.Domains) != 1 || storage.Publication.Domains[0].Suffix != "molejo.dev" || !storage.Publication.TCPEnabled || storage.Publication.TCPMinimumPort != 20000 || storage.Publication.TCPMaximumPort != 20015 {
 		t.Fatalf("publication policy=%+v", storage.Publication)
 	}
 }

@@ -290,7 +290,7 @@ func (k *KubernetesClient) ApplyDeployment(ctx context.Context, namespace, name 
 			allocated := endpoint.ExternalPort
 			externalPort = &allocated
 		}
-		publicEndpoints = append(publicEndpoints, platformv1alpha1.AppDeploymentPublicEndpoint{Name: endpoint.Name, Type: platformv1alpha1.AppDeploymentPublicEndpointType(endpoint.Type), PortName: endpoint.PortName, HostnameLabel: endpoint.HostnameLabel, ExternalPort: externalPort})
+		publicEndpoints = append(publicEndpoints, platformv1alpha1.AppDeploymentPublicEndpoint{Name: endpoint.Name, Type: platformv1alpha1.AppDeploymentPublicEndpointType(endpoint.Type), PortName: endpoint.PortName, HostnameLabel: endpoint.HostnameLabel, Hostname: endpoint.Hostname, ExternalPort: externalPort})
 		if endpoint.Type == domain.EndpointHTTP {
 			legacyExposure = platformv1alpha1.ExposurePublic
 			legacySlug = endpoint.HostnameLabel

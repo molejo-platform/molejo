@@ -34,7 +34,7 @@ func TestValidateIntent(t *testing.T) {
 		mutate  func(*Intent)
 		wantErr bool
 	}{{"valid", func(i *Intent) {}, false}, {"mutable tag", func(i *Intent) { i.Image = "ghcr.io/example/demo:latest" }, true}, {"request above limit", func(i *Intent) { i.Resources.Requests.CPUMillis = 101 }, true}, {"unknown probe port", func(i *Intent) { i.Probes.Readiness.PortName = "admin" }, true}, {"public HTTP endpoint", func(i *Intent) {
-		i.PublicEndpoints = []PublicEndpoint{{Name: "web", Type: EndpointHTTP, PortName: "http", HostnameLabel: "demo"}}
+		i.PublicEndpoints = []PublicEndpoint{{Name: "web", Type: EndpointHTTP, PortName: "http", DomainID: "default", HostnameLabel: "demo"}}
 	}, false}, {"invalid probe", func(i *Intent) { i.Probes.Readiness.Path = "ready" }, true}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -64,6 +64,15 @@ func TestNormalizeIntentAppliesOnlyStableDefaults(t *testing.T) {
 				t.Fatalf("NormalizeIntent() = %+v, want replicas=%d and non-nil collections", got, tt.wantReplicas)
 			}
 		})
+	}
+}
+
+func TestNormalizeRuntimeConfigDefaultsPublicationDomain(t *testing.T) {
+	configuration := ConfigurationFromIntent(validIntent())
+	configuration.PublicEndpoints = []PublicEndpoint{{Name: "web", Type: EndpointHTTP, PortName: "http", HostnameLabel: "demo"}}
+	normalized := NormalizeRuntimeConfig(configuration)
+	if normalized.PublicEndpoints[0].DomainID != "default" {
+		t.Fatalf("domainId=%q, want default", normalized.PublicEndpoints[0].DomainID)
 	}
 }
 

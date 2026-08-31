@@ -341,6 +341,10 @@ func writeAppEnvironmentError(w http.ResponseWriter, r *http.Request, err error)
 		writeError(w, http.StatusConflict, "public_endpoint_conflict", "the requested public endpoint is unavailable", r)
 	case errors.Is(err, store.ErrPublicationUnavailable):
 		writeError(w, http.StatusConflict, "public_tcp_unavailable", "public TCP endpoint capacity is unavailable", r)
+	case errors.Is(err, store.ErrPublicationDomainNotAllowed):
+		writeError(w, http.StatusBadRequest, "publication_domain_not_allowed", "the selected publication domain is not allowed for this workload", r)
+	case errors.Is(err, store.ErrPublicationHostnameReserved):
+		writeError(w, http.StatusBadRequest, "publication_hostname_reserved", "the requested public hostname is reserved", r)
 	default:
 		writeError(w, http.StatusInternalServerError, "storage_failed", "App Environment state could not be persisted", r)
 	}

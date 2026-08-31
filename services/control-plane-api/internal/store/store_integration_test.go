@@ -492,10 +492,48 @@ func TestPublicationClaimsRejectDuplicateHostnameAcrossApps(t *testing.T) {
 	}
 }
 
+func TestActivatePublicationClaimsReplacesObsoleteHostnameWithoutInvalidReference(t *testing.T) {
+	ctx := context.Background()
+	storage, workspaceID, actorID := newIntegrationFixture(t)
+	storage.Publication = NewPublicationPolicy("molejo.dev", "stateful.molejo.dev", true, 20000, 20100)
+	project, app, environment := createHierarchy(t, storage, workspaceID)
+	target, err := storage.CreateAppEnvironment(ctx, workspaceID, actorID, newID(t, "aev"), project.PublicID, app.PublicID, environment.PublicID, "main", integrationConfiguration("database"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = storage.Pool.Exec(ctx, `UPDATE publication_claims SET desired_configuration_version=NULL,current_configuration_version=1 WHERE app_environment_id=$1`, target.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = storage.Pool.Exec(ctx, `INSERT INTO publication_claims(app_environment_id,endpoint_name,endpoint_type,hostname,desired_configuration_version) VALUES($1,'web','HTTP','database.stateful.molejo.dev',2)`, target.ID); err != nil {
+		t.Fatal(err)
+	}
+	configuration := integrationConfiguration("database")
+	configuration.PublicEndpoints[0].DomainID = "stateful"
+	tx, err := storage.Pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(ctx)
+	if err = activatePublicationClaims(ctx, tx, target.ID, 2, domain.WorkloadStateful, configuration, storage.Publication); err != nil {
+		t.Fatal(err)
+	}
+	if err = tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var count, desiredVersion, currentVersion int64
+	var hostname string
+	if err = storage.Pool.QueryRow(ctx, `SELECT count(*),min(hostname),min(desired_configuration_version),min(current_configuration_version) FROM publication_claims WHERE app_environment_id=$1`, target.ID).Scan(&count, &hostname, &desiredVersion, &currentVersion); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 || hostname != "database.stateful.molejo.dev" || desiredVersion != 2 || currentVersion != 2 {
+		t.Fatalf("active claims = count=%d hostname=%q desired=%d current=%d", count, hostname, desiredVersion, currentVersion)
+	}
+}
+
 func TestPublicationClaimsAllocateTCPPoolTransactionally(t *testing.T) {
 	ctx := context.Background()
 	storage, workspaceID, actorID := newIntegrationFixture(t)
-	storage.Publication = PublicationPolicy{Domain: "molejo.dev", TCPEnabled: true, TCPMinimumPort: 20000, TCPMaximumPort: 20000}
+	storage.Publication = NewPublicationPolicy("molejo.dev", "", true, 20000, 20000)
 	project, firstApp, environment := createHierarchy(t, storage, workspaceID)
 	configuration := integrationConfiguration("first-http")
 	configuration.Ports = append(configuration.Ports, domain.RuntimePort{Name: "postgres", ContainerPort: 5432, Protocol: domain.PortProtocolTCP})

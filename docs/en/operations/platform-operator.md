@@ -46,7 +46,9 @@ remains the rollout source of truth.
 
 `spec.publicEndpoints` contains at most one HTTP and one experimental TCP
 publication. HTTP attaches to `https-molejo` and serves
-`{hostnameLabel}.molejo.dev`. TCP attaches to the preallocated
+the exact hostname resolved by the control plane from `domainId` and
+`hostnameLabel`. The initial catalog offers `molejo.dev` to both workload kinds
+and `stateful.molejo.dev` only to Stateful workloads. TCP attaches to the preallocated
 `tcp-{externalPort}` listener. Both routes forward to a named port on the
 same-named Service. Empty publication keeps the workload private. Legacy
 `spec.exposure`, `spec.slug`, and `spec.port` remain migration-only fields.

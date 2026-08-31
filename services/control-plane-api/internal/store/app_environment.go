@@ -94,7 +94,7 @@ func (s *Store) CreateAppEnvironmentWithWorkload(ctx context.Context, workspaceI
 	if err != nil {
 		return domain.AppEnvironment{}, nil, translateDBError(err)
 	}
-	configuration, err = s.reservePublicationClaims(ctx, tx, item.ID, item.ConfigurationVersion, configuration)
+	configuration, err = s.reservePublicationClaims(ctx, tx, item.ID, item.ConfigurationVersion, item.WorkloadKind, configuration)
 	if err != nil {
 		return domain.AppEnvironment{}, nil, err
 	}
@@ -179,7 +179,7 @@ func (s *Store) UpdateAppEnvironment(ctx context.Context, workspaceID, actorID i
 		return domain.AppEnvironment{}, translateDBError(err)
 	}
 	if configurationChanged {
-		configuration, err = s.reservePublicationClaims(ctx, tx, item.ID, item.ConfigurationVersion, configuration)
+		configuration, err = s.reservePublicationClaims(ctx, tx, item.ID, item.ConfigurationVersion, item.WorkloadKind, configuration)
 		if err != nil {
 			return domain.AppEnvironment{}, err
 		}
@@ -428,7 +428,7 @@ func (s *Store) CreateDeployment(ctx context.Context, workspaceID, actorID int64
 		return domain.Deployment{}, domain.Operation{}, false, err
 	}
 	revision.Configuration = inheritAllocatedPorts(revision.Configuration, appEnvironment.Configuration)
-	revision.Configuration, err = s.reservePublicationClaims(ctx, tx, appEnvironment.ID, revision.Version, revision.Configuration)
+	revision.Configuration, err = s.reservePublicationClaims(ctx, tx, appEnvironment.ID, revision.Version, appEnvironment.WorkloadKind, revision.Configuration)
 	if err != nil {
 		return domain.Deployment{}, domain.Operation{}, false, err
 	}
@@ -745,7 +745,7 @@ func (s *Store) completeDeployment(ctx context.Context, operation domain.Operati
 			return ErrLeaseLost
 		}
 	}
-	if err = activatePublicationClaims(ctx, tx, operation.AppEnvironmentID, deployed.ConfigurationVersion, deployed.Configuration, s.Publication.Domain); err != nil {
+	if err = activatePublicationClaims(ctx, tx, operation.AppEnvironmentID, deployed.ConfigurationVersion, deployed.WorkloadKind, deployed.Configuration, s.Publication); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
