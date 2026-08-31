@@ -16,11 +16,12 @@ esac
 api_image="${FRUTO_API_IMAGE:?set FRUTO_API_IMAGE}"
 console_image="${FRUTO_CONSOLE_IMAGE:?set FRUTO_CONSOLE_IMAGE}"
 operator_image="${FRUTO_OPERATOR_IMAGE:?set FRUTO_OPERATOR_IMAGE}"
+agent_image="${FRUTO_AGENT_IMAGE:?set FRUTO_AGENT_IMAGE}"
 testkit_image="${FRUTO_TESTKIT_IMAGE:?set FRUTO_TESTKIT_IMAGE}"
 build_image_repository="${MOLEJO_BUILD_IMAGE_REPOSITORY:?set MOLEJO_BUILD_IMAGE_REPOSITORY}"
 cluster_uid="${FRUTO_EXPECTED_CLUSTER_UID:?set FRUTO_EXPECTED_CLUSTER_UID}"
 proxy_cidr="${FRUTO_TRUSTED_PROXY_CIDR:?set FRUTO_TRUSTED_PROXY_CIDR}"
-for reference in "$api_image" "$console_image" "$operator_image" "$testkit_image"; do
+for reference in "$api_image" "$console_image" "$operator_image" "$agent_image" "$testkit_image"; do
   [[ "$reference" =~ ^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$ ]] || {
     echo "release images must be immutable digest references" >&2
     exit 2
@@ -35,7 +36,7 @@ source "$script_dir/lib/release-configuration.sh"
 release_metadata_load "$release_dir/metadata/control-plane.env"
 release_metadata_load "$release_dir/metadata/openbao.env"
 release_metadata_load "$release_dir/metadata/observability.env"
-for name in "$MOLEJO_GITHUB_APP_SECRET" "$MOLEJO_GITHUB_WEBHOOK_SECRET" "$MOLEJO_PASSWORD_RESET_SECRET" "$MOLEJO_OPENBAO_CA_CONFIGMAP" "$MOLEJO_PARAMETER_FINGERPRINT_SECRET" "$MOLEJO_OBSERVABILITY_READER_SECRET"; do
+for name in "$MOLEJO_GITHUB_APP_SECRET" "$MOLEJO_GITHUB_WEBHOOK_SECRET" "$MOLEJO_PASSWORD_RESET_SECRET" "$MOLEJO_OPENBAO_CA_CONFIGMAP" "$MOLEJO_PARAMETER_FINGERPRINT_SECRET" "$MOLEJO_OBSERVABILITY_READER_SECRET" "$MOLEJO_AGENT_CA_SECRET" "$MOLEJO_AGENT_SERVER_TLS_SECRET"; do
   [[ "$name" =~ ^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$ ]] || { echo "invalid release object name" >&2; exit 2; }
 done
 
@@ -54,6 +55,7 @@ cp -R deploy/control-plane-lab "$temporary_dir/control-plane-lab"
 cp -R deploy/control-plane-release "$temporary_dir/control-plane-release"
 cp -R deploy/crds "$temporary_dir/crds"
 cp -R deploy/operator "$temporary_dir/operator"
+cp -R deploy/cluster-agent "$temporary_dir/cluster-agent"
 sed \
   -e "s|required-external-cluster-uid|$cluster_uid|g" \
   -e "s|required-external-proxy-cidr|$proxy_cidr|g" \
@@ -62,17 +64,20 @@ sed \
 commit="$(git rev-parse HEAD)"
 {
   printf '# Molejo pre-alpha control-plane release\n'
-  printf '# source_commit=%s architecture=linux/amd64 api=%s console=%s operator=%s testkit=%s\n' "$commit" "$api_image" "$console_image" "$operator_image" "$testkit_image"
+  printf '# source_commit=%s architecture=linux/amd64 api=%s console=%s operator=%s agent=%s testkit=%s\n' "$commit" "$api_image" "$console_image" "$operator_image" "$agent_image" "$testkit_image"
   kubectl --context fruto-lab kustomize "$temporary_dir/control-plane-release" |
     sed -e "s|ghcr.io/fruto-platform/control-plane-api@sha256:0000000000000000000000000000000000000000000000000000000000000000|$api_image|g" \
       -e "s|ghcr.io/fruto-platform/console-web@sha256:0000000000000000000000000000000000000000000000000000000000000000|$console_image|g" \
       -e "s|ghcr.io/fruto-platform/platform-operator@sha256:0000000000000000000000000000000000000000000000000000000000000000|$operator_image|g" \
+      -e "s|ghcr.io/fruto-platform/cluster-agent@sha256:0000000000000000000000000000000000000000000000000000000000000000|$agent_image|g" \
       -e "s|molejo-github-app|$MOLEJO_GITHUB_APP_SECRET|g" \
       -e "s|required-external-github-webhook-secret|$MOLEJO_GITHUB_WEBHOOK_SECRET|g" \
       -e "s|required-external-password-reset-secret|$MOLEJO_PASSWORD_RESET_SECRET|g" \
       -e "s|required-external-openbao-ca-configmap|$MOLEJO_OPENBAO_CA_CONFIGMAP|g" \
       -e "s|required-external-parameter-fingerprint-secret|$MOLEJO_PARAMETER_FINGERPRINT_SECRET|g" \
-      -e "s|required-external-observability-reader-secret|$MOLEJO_OBSERVABILITY_READER_SECRET|g"
+      -e "s|required-external-observability-reader-secret|$MOLEJO_OBSERVABILITY_READER_SECRET|g" \
+      -e "s|required-external-agent-ca-secret|$MOLEJO_AGENT_CA_SECRET|g" \
+      -e "s|required-external-agent-server-tls|$MOLEJO_AGENT_SERVER_TLS_SECRET|g"
 } >"$temporary"
 
 if grep -Eq 'sha256:0{64}|required-external-' "$temporary"; then

@@ -1,0 +1,105 @@
+package kube
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	agentidentity "github.com/fruto-platform/fruto/services/cluster-agent/internal/identity"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/typed/core/v1"
+	"k8s.io/client-go/util/retry"
+)
+
+type Identity = agentidentity.StoredIdentity
+type Certificate = agentidentity.Certificate
+
+type SecretStore struct {
+	core           v1.CoreV1Interface
+	namespace      string
+	identityName   string
+	enrollmentName string
+}
+
+func NewSecretStore(core v1.CoreV1Interface, namespace, identityName, enrollmentName string) *SecretStore {
+	return &SecretStore{core: core, namespace: namespace, identityName: identityName, enrollmentName: enrollmentName}
+}
+
+func (s *SecretStore) LoadIdentity(ctx context.Context) (Identity, error) {
+	secret, err := s.core.Secrets(s.namespace).Get(ctx, s.identityName, metav1.GetOptions{})
+	if err != nil {
+		return Identity{}, fmt.Errorf("read Agent identity Secret: %w", err)
+	}
+	value := Identity{
+		AttemptID: string(secret.Data["enrollment-attempt-id"]), PrivateKeyPEM: append([]byte(nil), secret.Data["private-key.pem"]...), CSRPEM: append([]byte(nil), secret.Data["csr.pem"]...),
+		InstallationID: string(secret.Data["installation-id"]), CertificatePEM: append([]byte(nil), secret.Data["tls.crt"]...), CACertificatePEM: append([]byte(nil), secret.Data["ca.crt"]...),
+	}
+	if raw := strings.TrimSpace(string(secret.Data["certificate-not-after"])); raw != "" {
+		value.ExpiresAt, err = time.Parse(time.RFC3339Nano, raw)
+		if err != nil {
+			return Identity{}, fmt.Errorf("Agent certificate expiry is invalid")
+		}
+	}
+	return value, nil
+}
+
+func (s *SecretStore) SaveEnrollmentIdentity(ctx context.Context, value Identity) error {
+	if value.AttemptID == "" || len(value.PrivateKeyPEM) == 0 || len(value.CSRPEM) == 0 {
+		return errors.New("Agent enrollment identity is incomplete")
+	}
+	return s.update(ctx, s.identityName, func(secret *corev1.Secret) {
+		secret.Data["enrollment-attempt-id"] = []byte(value.AttemptID)
+		secret.Data["private-key.pem"] = append([]byte(nil), value.PrivateKeyPEM...)
+		secret.Data["csr.pem"] = append([]byte(nil), value.CSRPEM...)
+	})
+}
+
+func (s *SecretStore) SaveCertificate(ctx context.Context, value Certificate) error {
+	if value.InstallationID == "" || len(value.CertificatePEM) == 0 || len(value.CACertificatePEM) == 0 || value.ExpiresAt.IsZero() {
+		return errors.New("Agent certificate is incomplete")
+	}
+	return s.update(ctx, s.identityName, func(secret *corev1.Secret) {
+		secret.Data["installation-id"] = []byte(value.InstallationID)
+		secret.Data["tls.crt"] = append([]byte(nil), value.CertificatePEM...)
+		secret.Data["ca.crt"] = append([]byte(nil), value.CACertificatePEM...)
+		secret.Data["certificate-not-after"] = []byte(value.ExpiresAt.UTC().Format(time.RFC3339Nano))
+	})
+}
+
+func (s *SecretStore) EnrollmentToken(ctx context.Context) (string, error) {
+	secret, err := s.core.Secrets(s.namespace).Get(ctx, s.enrollmentName, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("read Agent enrollment Secret: %w", err)
+	}
+	return strings.TrimSpace(string(secret.Data["token"])), nil
+}
+
+func (s *SecretStore) ClearEnrollmentToken(ctx context.Context) error {
+	err := s.update(ctx, s.enrollmentName, func(secret *corev1.Secret) { delete(secret.Data, "token") })
+	if apierrors.IsNotFound(err) {
+		return nil
+	}
+	return err
+}
+
+func (s *SecretStore) update(ctx context.Context, name string, mutate func(*corev1.Secret)) error {
+	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		secret, err := s.core.Secrets(s.namespace).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return err
+		}
+		if secret.Data == nil {
+			secret.Data = map[string][]byte{}
+		}
+		mutate(secret)
+		_, err = s.core.Secrets(s.namespace).Update(ctx, secret, metav1.UpdateOptions{})
+		return err
+	})
+}

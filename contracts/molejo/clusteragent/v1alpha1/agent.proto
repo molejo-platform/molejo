@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package molejo.clusteragent.v1alpha1;
+
+option go_package = "github.com/fruto-platform/fruto/contracts/molejo/clusteragent/v1alpha1;clusteragentv1alpha1";
+
+service ClusterAgentService {
+  rpc Connect(stream ConnectRequest) returns (stream ConnectResponse);
+}
+
+message ConnectRequest {
+  oneof payload {
+    AgentHello hello = 1;
+    Heartbeat heartbeat = 2;
+  }
+}
+
+message ConnectResponse {
+  oneof payload {
+    ControlPlaneHello hello = 1;
+    HeartbeatAck heartbeat_ack = 2;
+  }
+}
+
+message AgentHello {
+  string installation_id = 1;
+  string agent_version = 2;
+}
+
+message ControlPlaneHello {
+  string protocol_version = 1;
+  int32 heartbeat_interval_seconds = 2;
+  int64 server_time_unix = 3;
+}
+
+message Heartbeat {
+  uint64 sequence = 1;
+  int64 sent_at_unix = 2;
+}
+
+message HeartbeatAck {
+  uint64 sequence = 1;
+  int64 received_at_unix = 2;
+}

@@ -10,6 +10,8 @@ func TestWorkspacePolicy(t *testing.T) {
 		allowed    bool
 	}{
 		{name: "installation administrator creates workspace", context: Context{InstallationAdministrator: true}, permission: CreateWorkspace, allowed: true},
+		{name: "installation administrator manages agents", context: Context{InstallationAdministrator: true}, permission: ManageAgents, allowed: true},
+		{name: "workspace owner cannot manage agents", context: Context{MembershipRole: RoleOwner}, permission: ManageAgents, allowed: false},
 		{name: "owner manages members", context: Context{MembershipRole: RoleOwner}, permission: ManageMembers, allowed: true},
 		{name: "member deploys", context: Context{MembershipRole: RoleMember}, permission: Deploy, allowed: true},
 		{name: "viewer cannot deploy", context: Context{MembershipRole: RoleViewer}, permission: Deploy},

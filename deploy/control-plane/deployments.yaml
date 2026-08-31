@@ -58,6 +58,14 @@ spec:
               value: /var/run/secrets/molejo/parameter-fingerprint/key
             - name: FRUTO_PASSWORD_RESET_KEY_FILE
               value: /var/run/secrets/molejo/password-reset/key
+            - name: FRUTO_AGENT_CA_CERT_FILE
+              value: /var/run/secrets/molejo/agent-ca/ca.crt
+            - name: FRUTO_AGENT_CA_KEY_FILE
+              value: /var/run/secrets/molejo/agent-ca/ca.key
+            - name: FRUTO_AGENT_SERVER_CERT_FILE
+              value: /var/run/secrets/molejo/agent-server/tls.crt
+            - name: FRUTO_AGENT_SERVER_KEY_FILE
+              value: /var/run/secrets/molejo/agent-server/tls.key
             - name: FRUTO_TOTP_ENABLED
               value: "true"
           volumeMounts:
@@ -82,7 +90,15 @@ spec:
             - name: observability-reader
               mountPath: /var/run/secrets/molejo/observability
               readOnly: true
-          ports: [{ name: http, containerPort: 8080, protocol: TCP }]
+            - name: agent-ca
+              mountPath: /var/run/secrets/molejo/agent-ca
+              readOnly: true
+            - name: agent-server
+              mountPath: /var/run/secrets/molejo/agent-server
+              readOnly: true
+          ports:
+            - { name: http, containerPort: 8080, protocol: TCP }
+            - { name: agent-grpc, containerPort: 8443, protocol: TCP }
           readinessProbe:
             httpGet:
               path: /readyz
@@ -133,6 +149,14 @@ spec:
         - name: observability-reader
           secret:
             secretName: required-external-observability-reader-secret
+        - name: agent-ca
+          secret:
+            secretName: required-external-agent-ca-secret
+            defaultMode: 0440
+        - name: agent-server
+          secret:
+            secretName: required-external-agent-server-tls
+            defaultMode: 0440
 ---
 apiVersion: apps/v1
 kind: Deployment

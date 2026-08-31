@@ -3,6 +3,7 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY packages packages
+COPY contracts contracts
 COPY services/control-plane-api services/control-plane-api
 RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/control-plane-api ./services/control-plane-api/cmd/control-plane-api
 

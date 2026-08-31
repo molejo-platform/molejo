@@ -220,6 +220,32 @@ paths:
           content: { application/json: { schema: { $ref: '#/components/schemas/PasswordResetGrant' } } }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/admin/agent-installations:
+    post:
+      operationId: createAgentInstallation
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AgentInstallationCreateInput' } } }
+      responses:
+        '201':
+          description: One-time Agent enrollment invitation
+          content: { application/json: { schema: { $ref: '#/components/schemas/AgentEnrollmentInvitation' } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /agent/v1/enroll:
+    post:
+      operationId: enrollAgent
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AgentEnrollmentInput' } } }
+      responses:
+        '200':
+          description: Signed Agent client identity
+          content: { application/json: { schema: { $ref: '#/components/schemas/AgentEnrollmentResult' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
   /api/v1/workspaces/{workspaceId}/members:
     parameters: [{ $ref: '#/components/parameters/WorkspaceId' }]
     get:
@@ -1726,6 +1752,37 @@ components:
         displayName: { type: string, minLength: 1, maxLength: 120 }
         password: { type: string, minLength: 15, maxLength: 1024, writeOnly: true }
         installationAdministrator: { type: boolean, default: false }
+    AgentInstallationCreateInput:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+    AgentEnrollmentInvitation:
+      type: object
+      required: [installationId, enrollmentToken, expiresAt]
+      additionalProperties: false
+      properties:
+        installationId: { type: string, pattern: '^agi-[a-z2-7]{20}$' }
+        enrollmentToken: { type: string, minLength: 64, maxLength: 64, writeOnly: true }
+        expiresAt: { type: string, format: date-time }
+    AgentEnrollmentInput:
+      type: object
+      required: [enrollmentToken, attemptId, csrPem]
+      additionalProperties: false
+      properties:
+        enrollmentToken: { type: string, minLength: 64, maxLength: 64, writeOnly: true }
+        attemptId: { type: string, pattern: '^ena-[a-z2-7]{26}$' }
+        csrPem: { type: string, minLength: 1, maxLength: 4096, writeOnly: true }
+    AgentEnrollmentResult:
+      type: object
+      required: [installationId, certificatePem, caCertificatePem, expiresAt]
+      additionalProperties: false
+      properties:
+        installationId: { type: string, pattern: '^agi-[a-z2-7]{20}$' }
+        certificatePem: { type: string, writeOnly: true }
+        caCertificatePem: { type: string }
+        expiresAt: { type: string, format: date-time }
     UserStatusInput:
       type: object
       required: [status]

@@ -16,6 +16,7 @@ import (
 
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/audit"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/auth"
+	controlagent "github.com/fruto-platform/fruto/services/control-plane-api/internal/clusteragent"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/domain"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/githubapp"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/identity"
@@ -84,13 +85,16 @@ type Server struct {
 	PasswordResetKey      []byte
 	AuthenticationSecrets parameters.SecretValueStore
 	Observability         observability.Reader
-	logLiveLimiter        *concurrencyLimiter
-	metricsLiveLimiter    *concurrencyLimiter
-	metricSnapshots       *metricSnapshotCache
-	token                 func(int) (string, error)
-	deploymentID          func() (string, error)
-	parameterID           func() (string, error)
-	dummyPasswordHash     string
+	AgentSigner           interface {
+		Sign(string, []byte, time.Time) (controlagent.IssuedCertificate, error)
+	}
+	logLiveLimiter     *concurrencyLimiter
+	metricsLiveLimiter *concurrencyLimiter
+	metricSnapshots    *metricSnapshotCache
+	token              func(int) (string, error)
+	deploymentID       func() (string, error)
+	parameterID        func() (string, error)
+	dummyPasswordHash  string
 }
 
 func NewServer(s *store.Store, r runtime.Client, cfg Config, logger *slog.Logger) *Server {
@@ -360,7 +364,7 @@ func securityMiddleware(s *Server, next http.Handler) http.Handler {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
-		if strings.HasPrefix(r.URL.Path, "/api/v1/session") || strings.HasPrefix(r.URL.Path, "/api/v1/users") || strings.HasPrefix(r.URL.Path, "/api/v1/admin/users") || strings.HasPrefix(r.URL.Path, "/api/v1/password-resets") {
+		if strings.HasPrefix(r.URL.Path, "/api/v1/session") || strings.HasPrefix(r.URL.Path, "/api/v1/users") || strings.HasPrefix(r.URL.Path, "/api/v1/admin/users") || strings.HasPrefix(r.URL.Path, "/api/v1/admin/agent-installations") || strings.HasPrefix(r.URL.Path, "/api/v1/password-resets") || strings.HasPrefix(r.URL.Path, "/agent/") {
 			w.Header().Set("Cache-Control", "no-store")
 		}
 		if strings.HasPrefix(s.Config.PublicURL, "https://") && s.isHTTPS(r) {

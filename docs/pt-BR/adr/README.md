@@ -29,3 +29,5 @@
   — Draft
 - [ADR-0012: Bounded Multiport and Publication Contract](0012-bounded-multiport-and-publication-contract.md)
   — Draft
+- [ADR-0013: Outbound Cluster Agent Identity and Pairing](0013-outbound-cluster-agent-identity-and-pairing.md)
+  — Draft

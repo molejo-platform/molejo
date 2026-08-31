@@ -135,6 +135,28 @@ func TestControlPlaneReleaseIncludesTheOperatorAndStatefulContracts(t *testing.T
 	}
 }
 
+func TestControlPlaneReleaseIncludesTheClusterAgentContract(t *testing.T) {
+	required := map[string][]string{
+		"deploy/control-plane-release/kustomization.yaml": {"../cluster-agent"},
+		"test/e2e/build-control-plane-release.sh":         {"FRUTO_AGENT_IMAGE", "services/cluster-agent/Dockerfile", "agent.json"},
+		"test/e2e/prepare-control-plane-k3s.sh":           {"MOLEJO_AGENT_CA_SECRET", "MOLEJO_AGENT_SERVER_TLS_SECRET", "agent-ca.key", "control-plane-api.fruto-control-plane.svc.cluster.local", "subjectAltName=DNS:%s"},
+		"test/e2e/render-control-plane-release.sh":        {"FRUTO_AGENT_IMAGE", "cluster-agent@sha256", "required-external-agent-ca-secret", "required-external-agent-server-tls"},
+		"test/e2e/apply-control-plane-k3s.sh":             {"MOLEJO_AGENT_CA_SECRET", "MOLEJO_AGENT_SERVER_TLS_SECRET", "deployment/cluster-agent"},
+		"test/e2e/accept-control-plane-k3s.sh":            {"FRUTO_AGENT_IMAGE", "deployment/cluster-agent", "molejo-agent-identity", "molejo-agent-enrollment"},
+	}
+	for path, fragments := range required {
+		contents, err := os.ReadFile(filepath.Join("..", "..", path))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, fragment := range fragments {
+			if !strings.Contains(string(contents), fragment) {
+				t.Fatalf("%s is missing release contract fragment %q", path, fragment)
+			}
+		}
+	}
+}
+
 func TestLabReleaseConfiguresStatefulSchedulingWithoutExposingItInTheCRD(t *testing.T) {
 	operator := findObject(t, "deploy/control-plane-release/stateful-scheduling-lab.yaml", "Deployment", "platform-operator")
 	container := findContainer(t, workloadPodSpec(t, operator), "manager")

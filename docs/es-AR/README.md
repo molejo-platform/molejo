@@ -132,6 +132,8 @@ contrato de estado, flujo de diagnóstico, métricas protegidas y tracing opcion
 El [runbook del control plane](operations/control-plane.md) documenta el TLS local
 y los flujos autorizados de release, build y recuperación de las Fases 7 y 8 en
 k3s.
+El [runbook del Cluster Agent](operations/cluster-agent.md) documenta su identidad
+saliente, estados de pairing y permisos restringidos de Kubernetes.
 
 ## Documentación
 

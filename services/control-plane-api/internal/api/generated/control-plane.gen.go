@@ -1214,6 +1214,33 @@ type AccessGrantInputResourceType string
 // AccessGrantInputSubjectType defines model for AccessGrantInput.SubjectType.
 type AccessGrantInputSubjectType string
 
+// AgentEnrollmentInput defines model for AgentEnrollmentInput.
+type AgentEnrollmentInput struct {
+	AttemptId       string  `json:"attemptId"`
+	CsrPem          *string `json:"csrPem,omitempty"`
+	EnrollmentToken *string `json:"enrollmentToken,omitempty"`
+}
+
+// AgentEnrollmentInvitation defines model for AgentEnrollmentInvitation.
+type AgentEnrollmentInvitation struct {
+	EnrollmentToken *string   `json:"enrollmentToken,omitempty"`
+	ExpiresAt       time.Time `json:"expiresAt"`
+	InstallationId  string    `json:"installationId"`
+}
+
+// AgentEnrollmentResult defines model for AgentEnrollmentResult.
+type AgentEnrollmentResult struct {
+	CaCertificatePem string    `json:"caCertificatePem"`
+	CertificatePem   *string   `json:"certificatePem,omitempty"`
+	ExpiresAt        time.Time `json:"expiresAt"`
+	InstallationId   string    `json:"installationId"`
+}
+
+// AgentInstallationCreateInput defines model for AgentInstallationCreateInput.
+type AgentInstallationCreateInput struct {
+	Name string `json:"name"`
+}
+
 // App defines model for App.
 type App struct {
 	ArchivedAt *time.Time `json:"archivedAt,omitempty"`
@@ -2377,6 +2404,12 @@ type ListEnvironmentAppsParams struct {
 	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
+// EnrollAgentJSONRequestBody defines body for EnrollAgent for application/json ContentType.
+type EnrollAgentJSONRequestBody = AgentEnrollmentInput
+
+// CreateAgentInstallationJSONRequestBody defines body for CreateAgentInstallation for application/json ContentType.
+type CreateAgentInstallationJSONRequestBody = AgentInstallationCreateInput
+
 // CreateUserJSONRequestBody defines body for CreateUser for application/json ContentType.
 type CreateUserJSONRequestBody = UserCreateInput
 
@@ -2481,6 +2514,12 @@ type UpdateEnvironmentJSONRequestBody = HierarchyInput
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+
+	// (POST /agent/v1/enroll)
+	EnrollAgent(w http.ResponseWriter, r *http.Request)
+
+	// (POST /api/v1/admin/agent-installations)
+	CreateAgentInstallation(w http.ResponseWriter, r *http.Request)
 
 	// (GET /api/v1/admin/users)
 	ListUsers(w http.ResponseWriter, r *http.Request, params ListUsersParams)
@@ -2777,6 +2816,16 @@ type ServerInterface interface {
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
 
 type Unimplemented struct{}
+
+// (POST /agent/v1/enroll)
+func (_ Unimplemented) EnrollAgent(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /api/v1/admin/agent-installations)
+func (_ Unimplemented) CreateAgentInstallation(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
 
 // (GET /api/v1/admin/users)
 func (_ Unimplemented) ListUsers(w http.ResponseWriter, r *http.Request, params ListUsersParams) {
@@ -3271,6 +3320,34 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// EnrollAgent operation middleware
+func (siw *ServerInterfaceWrapper) EnrollAgent(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.EnrollAgent(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateAgentInstallation operation middleware
+func (siw *ServerInterfaceWrapper) CreateAgentInstallation(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateAgentInstallation(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // ListUsers operation middleware
 func (siw *ServerInterfaceWrapper) ListUsers(w http.ResponseWriter, r *http.Request) {
@@ -8033,6 +8110,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/api/v1/admin/users/{userId}/password-reset", wrapper.CreatePasswordResetGrant)
 	})
 	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/admin/agent-installations", wrapper.CreateAgentInstallation)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/agent/v1/enroll", wrapper.EnrollAgent)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/members", wrapper.ListWorkspaceMembers)
 	})
 	r.Group(func(r chi.Router) {
@@ -8282,6 +8365,120 @@ type TooManyRequestsJSONResponse Error
 type UnauthorizedJSONResponse Error
 
 type UnavailableJSONResponse Error
+
+type EnrollAgentRequestObject struct {
+	Body *EnrollAgentJSONRequestBody
+}
+
+type EnrollAgentResponseObject interface {
+	VisitEnrollAgentResponse(w http.ResponseWriter) error
+}
+
+type EnrollAgent200JSONResponse AgentEnrollmentResult
+
+func (response EnrollAgent200JSONResponse) VisitEnrollAgentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type EnrollAgent400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response EnrollAgent400JSONResponse) VisitEnrollAgentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type EnrollAgent401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response EnrollAgent401JSONResponse) VisitEnrollAgentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type EnrollAgent409JSONResponse struct{ ConflictJSONResponse }
+
+func (response EnrollAgent409JSONResponse) VisitEnrollAgentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateAgentInstallationRequestObject struct {
+	Body *CreateAgentInstallationJSONRequestBody
+}
+
+type CreateAgentInstallationResponseObject interface {
+	VisitCreateAgentInstallationResponse(w http.ResponseWriter) error
+}
+
+type CreateAgentInstallation201JSONResponse AgentEnrollmentInvitation
+
+func (response CreateAgentInstallation201JSONResponse) VisitCreateAgentInstallationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateAgentInstallation403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response CreateAgentInstallation403JSONResponse) VisitCreateAgentInstallationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateAgentInstallation409JSONResponse struct{ ConflictJSONResponse }
+
+func (response CreateAgentInstallation409JSONResponse) VisitCreateAgentInstallationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
 
 type ListUsersRequestObject struct {
 	Params ListUsersParams
@@ -13419,6 +13616,12 @@ func (response ListStorageProfiles404JSONResponse) VisitListStorageProfilesRespo
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 
+	// (POST /agent/v1/enroll)
+	EnrollAgent(ctx context.Context, request EnrollAgentRequestObject) (EnrollAgentResponseObject, error)
+
+	// (POST /api/v1/admin/agent-installations)
+	CreateAgentInstallation(ctx context.Context, request CreateAgentInstallationRequestObject) (CreateAgentInstallationResponseObject, error)
+
 	// (GET /api/v1/admin/users)
 	ListUsers(ctx context.Context, request ListUsersRequestObject) (ListUsersResponseObject, error)
 
@@ -13748,6 +13951,68 @@ type strictHandler struct {
 	ssi         StrictServerInterface
 	middlewares []StrictMiddlewareFunc
 	options     StrictHTTPServerOptions
+}
+
+// EnrollAgent operation middleware
+func (sh *strictHandler) EnrollAgent(w http.ResponseWriter, r *http.Request) {
+	var request EnrollAgentRequestObject
+
+	var body EnrollAgentJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.EnrollAgent(ctx, request.(EnrollAgentRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "EnrollAgent")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(EnrollAgentResponseObject); ok {
+		if err := validResponse.VisitEnrollAgentResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateAgentInstallation operation middleware
+func (sh *strictHandler) CreateAgentInstallation(w http.ResponseWriter, r *http.Request) {
+	var request CreateAgentInstallationRequestObject
+
+	var body CreateAgentInstallationJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateAgentInstallation(ctx, request.(CreateAgentInstallationRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateAgentInstallation")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateAgentInstallationResponseObject); ok {
+		if err := validResponse.VisitCreateAgentInstallationResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
 }
 
 // ListUsers operation middleware

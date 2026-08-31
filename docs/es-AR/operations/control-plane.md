@@ -99,7 +99,7 @@ nunca como deployment exitoso. Esta instalación no declara HA ni DR.
 
 Antes de la aceptación en k3s, `just ci` debe pasar desde un checkout limpio.
 Registrá el commit de origen, `linux/amd64` y los digests de API, Consola,
-platform operator y Testkit en un manifiesto externo de release; reemplazá los placeholders de UID
+platform operator, Cluster Agent y Testkit en un manifiesto externo de release; reemplazá los placeholders de UID
 del cluster y proxy confiable; creá Secrets de base y bootstrap fuera de Git; y
 declará si la base es descartable. Si no lo es, generá y verificá una exportación
 manual cifrada antes del rollout. Rollback significa reaplicar digests
@@ -136,8 +136,8 @@ just control-plane-build-release
 source "$FRUTO_RELEASE_DIR/images.env"
 just control-plane-preflight-k3s
 export FRUTO_RELEASE_OUTPUT="$FRUTO_RELEASE_DIR/control-plane.yaml"
-just control-plane-render-release
 just control-plane-prepare-k3s
+just control-plane-render-release
 just control-plane-apply-k3s
 just control-plane-accept-k3s
 ```

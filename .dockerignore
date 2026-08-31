@@ -4,6 +4,8 @@
 !package.json
 !pnpm-lock.yaml
 !pnpm-workspace.yaml
+!contracts/
+!contracts/**
 !apps/
 !apps/console-web/
 !apps/console-web/**

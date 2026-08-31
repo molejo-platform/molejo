@@ -3,6 +3,8 @@ kind: Kustomization
 resources:
   - ../crds
   - ../operator
+  - ../cluster-agent
   - ../control-plane-lab
 patches:
   - path: stateful-scheduling-lab.yaml
+  - path: cluster-agent-private-registry.yaml

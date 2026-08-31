@@ -6,6 +6,7 @@ type Relation string
 const (
 	CreateWorkspace Permission = "installation.workspace.create"
 	ManageUsers     Permission = "installation.users.manage"
+	ManageAgents    Permission = "installation.agents.manage"
 	ReadWorkspace   Permission = "workspace.read"
 	ManageWorkspace Permission = "workspace.manage"
 	ManageMembers   Permission = "workspace.members.manage"
@@ -34,7 +35,7 @@ type Context struct {
 }
 
 func Allowed(context Context, permission Permission) bool {
-	if permission == CreateWorkspace || permission == ManageUsers {
+	if permission == CreateWorkspace || permission == ManageUsers || permission == ManageAgents {
 		return context.InstallationAdministrator
 	}
 	if context.MembershipSuspended || context.MembershipRole == "" {

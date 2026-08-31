@@ -4,9 +4,11 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -15,9 +17,11 @@ import (
 	"syscall"
 	"time"
 
+	clusteragentv1alpha1 "github.com/fruto-platform/fruto/contracts/molejo/clusteragent/v1alpha1"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/api"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/auth"
 	controlbuild "github.com/fruto-platform/fruto/services/control-plane-api/internal/build"
+	controlagent "github.com/fruto-platform/fruto/services/control-plane-api/internal/clusteragent"
 	controldelivery "github.com/fruto-platform/fruto/services/control-plane-api/internal/delivery"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/domain"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/githubapp"
@@ -25,6 +29,8 @@ import (
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/parameters"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/runtime"
 	"github.com/fruto-platform/fruto/services/control-plane-api/internal/store"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 func main() {
@@ -208,18 +214,103 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	httpServer := &http.Server{Addr: env("FRUTO_HTTP_ADDR", ":8080"), Handler: server.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 20 * time.Second, WriteTimeout: 20 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
-	go func() {
-		<-ctx.Done()
-		shutdown, stop := context.WithTimeout(context.Background(), 5*time.Second)
-		defer stop()
-		_ = httpServer.Shutdown(shutdown)
-	}()
-	slog.Info("control plane listening", "address", httpServer.Addr)
-	if err = httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	grpcServer, grpcListener, err := configureAgentPairing(server, s)
+	if err != nil {
 		return err
 	}
-	return nil
+	httpServer := &http.Server{Addr: env("FRUTO_HTTP_ADDR", ":8080"), Handler: server.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 20 * time.Second, WriteTimeout: 20 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
+	httpErrors := make(chan error, 1)
+	go func() { httpErrors <- httpServer.ListenAndServe() }()
+	grpcErrors := make(chan error, 1)
+	if grpcServer != nil {
+		go func() { grpcErrors <- grpcServer.Serve(grpcListener) }()
+		slog.Info("control plane Agent gRPC listening", "address", grpcListener.Addr().String())
+	}
+	slog.Info("control plane listening", "address", httpServer.Addr)
+	var serveErr error
+	select {
+	case <-ctx.Done():
+	case serveErr = <-httpErrors:
+		if errors.Is(serveErr, http.ErrServerClosed) {
+			serveErr = nil
+		}
+	case serveErr = <-grpcErrors:
+	}
+	shutdown, stop := context.WithTimeout(context.Background(), 5*time.Second)
+	defer stop()
+	_ = httpServer.Shutdown(shutdown)
+	if grpcServer != nil {
+		gracefulStopGRPC(grpcServer, 5*time.Second)
+	}
+	return serveErr
+}
+
+func gracefulStopGRPC(server *grpc.Server, timeout time.Duration) {
+	done := make(chan struct{})
+	go func() {
+		server.GracefulStop()
+		close(done)
+	}()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-done:
+	case <-timer.C:
+		server.Stop()
+		<-done
+	}
+}
+
+func configureAgentPairing(server *api.Server, registry *store.Store) (*grpc.Server, net.Listener, error) {
+	caCertificatePath := strings.TrimSpace(os.Getenv("FRUTO_AGENT_CA_CERT_FILE"))
+	caKeyPath := strings.TrimSpace(os.Getenv("FRUTO_AGENT_CA_KEY_FILE"))
+	serverCertificatePath := strings.TrimSpace(os.Getenv("FRUTO_AGENT_SERVER_CERT_FILE"))
+	serverKeyPath := strings.TrimSpace(os.Getenv("FRUTO_AGENT_SERVER_KEY_FILE"))
+	configured := []string{caCertificatePath, caKeyPath, serverCertificatePath, serverKeyPath}
+	provided := 0
+	for _, value := range configured {
+		if value != "" {
+			provided++
+		}
+	}
+	if provided == 0 {
+		return nil, nil, nil
+	}
+	if provided != len(configured) {
+		return nil, nil, fmt.Errorf("Agent pairing TLS configuration is incomplete")
+	}
+	caCertificatePEM, err := os.ReadFile(caCertificatePath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("read Agent CA certificate: %w", err)
+	}
+	caKeyPEM, err := os.ReadFile(caKeyPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("read Agent CA key: %w", err)
+	}
+	validity, err := durationEnv("FRUTO_AGENT_CERTIFICATE_TTL", 7*24*time.Hour)
+	if err != nil {
+		return nil, nil, err
+	}
+	signer, err := controlagent.NewSigner(caCertificatePEM, caKeyPEM, validity)
+	if err != nil {
+		return nil, nil, err
+	}
+	serverCertificate, err := tls.LoadX509KeyPair(serverCertificatePath, serverKeyPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("load Agent gRPC server identity: %w", err)
+	}
+	clientRoots := x509.NewCertPool()
+	if !clientRoots.AppendCertsFromPEM(caCertificatePEM) {
+		return nil, nil, fmt.Errorf("Agent CA certificate is invalid")
+	}
+	listener, err := net.Listen("tcp", env("FRUTO_AGENT_GRPC_ADDR", ":8443"))
+	if err != nil {
+		return nil, nil, fmt.Errorf("listen for Agent gRPC: %w", err)
+	}
+	server.AgentSigner = signer
+	grpcServer := grpc.NewServer(grpc.Creds(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS13, Certificates: []tls.Certificate{serverCertificate}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: clientRoots})))
+	clusteragentv1alpha1.RegisterClusterAgentServiceServer(grpcServer, controlagent.NewGRPCService(registry, 30*time.Second))
+	return grpcServer, listener, nil
 }
 
 func runRuntimeWorker() error {

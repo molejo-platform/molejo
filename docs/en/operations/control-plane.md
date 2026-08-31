@@ -92,7 +92,7 @@ inspecting its logs. A missing or unavailable runtime is shown as `Unknown`; it 
 treated as a successful deployment. This installation does not claim HA or DR.
 
 Before a k3s acceptance, `just ci` must pass from a clean checkout. Record the
-source commit, `linux/amd64`, API, Console, platform operator, and Testkit digests in an external
+source commit, `linux/amd64`, API, Console, platform operator, Cluster Agent, and Testkit digests in an external
 release manifest; replace the cluster UID and trusted-proxy placeholders;
 create database and bootstrap Secrets outside Git; and decide whether the
 database is explicitly disposable. If it is not disposable, create and verify
@@ -130,8 +130,8 @@ just control-plane-build-release
 source "$FRUTO_RELEASE_DIR/images.env"
 just control-plane-preflight-k3s
 export FRUTO_RELEASE_OUTPUT="$FRUTO_RELEASE_DIR/control-plane.yaml"
-just control-plane-render-release
 just control-plane-prepare-k3s
+just control-plane-render-release
 just control-plane-apply-k3s
 just control-plane-accept-k3s
 ```

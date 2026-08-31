@@ -250,6 +250,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/agent-installations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createAgentInstallation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agent/v1/enroll": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["enrollAgent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspaceId}/members": {
         parameters: {
             query?: never;
@@ -1267,6 +1299,27 @@ export interface components {
             password: string;
             /** @default false */
             installationAdministrator: boolean;
+        };
+        AgentInstallationCreateInput: {
+            name: string;
+        };
+        AgentEnrollmentInvitation: {
+            installationId: string;
+            enrollmentToken: string;
+            /** Format: date-time */
+            expiresAt: string;
+        };
+        AgentEnrollmentInput: {
+            enrollmentToken: string;
+            attemptId: string;
+            csrPem: string;
+        };
+        AgentEnrollmentResult: {
+            installationId: string;
+            certificatePem: string;
+            caCertificatePem: string;
+            /** Format: date-time */
+            expiresAt: string;
         };
         UserStatusInput: {
             /** @enum {string} */
@@ -2422,6 +2475,59 @@ export interface operations {
             };
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    createAgentInstallation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentInstallationCreateInput"];
+            };
+        };
+        responses: {
+            /** @description One-time Agent enrollment invitation */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnrollmentInvitation"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    enrollAgent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentEnrollmentInput"];
+            };
+        };
+        responses: {
+            /** @description Signed Agent client identity */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnrollmentResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            409: components["responses"]["Conflict"];
         };
     };
     listWorkspaceMembers: {

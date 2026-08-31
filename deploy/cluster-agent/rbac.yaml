@@ -1,0 +1,24 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cluster-agent-identity
+  namespace: fruto-system
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [molejo-agent-identity, molejo-agent-enrollment]
+    verbs: [get, update, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cluster-agent-identity
+  namespace: fruto-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cluster-agent-identity
+subjects:
+  - kind: ServiceAccount
+    name: cluster-agent
+    namespace: fruto-system

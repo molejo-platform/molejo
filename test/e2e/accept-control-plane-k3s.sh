@@ -10,6 +10,7 @@ expected_uid="${FRUTO_EXPECTED_CLUSTER_UID:?set FRUTO_EXPECTED_CLUSTER_UID}"
 api_image="${FRUTO_API_IMAGE:?set FRUTO_API_IMAGE}"
 console_image="${FRUTO_CONSOLE_IMAGE:?set FRUTO_CONSOLE_IMAGE}"
 operator_image="${FRUTO_OPERATOR_IMAGE:?set FRUTO_OPERATOR_IMAGE}"
+agent_image="${FRUTO_AGENT_IMAGE:?set FRUTO_AGENT_IMAGE}"
 
 actual_uid="$(kubectl --context "$context" get namespace kube-system -o jsonpath='{.metadata.uid}')"
 [[ "$actual_uid" == "$expected_uid" ]] || { echo "cluster UID does not match the approved target" >&2; exit 1; }
@@ -22,6 +23,11 @@ done
 [[ "$(kubectl --context "$context" -n fruto-control-plane get deployment control-plane-parameter-worker -o jsonpath='{.spec.template.spec.containers[0].image}')" == "$api_image" ]]
 [[ "$(kubectl --context "$context" -n fruto-control-plane get deployment console-web -o jsonpath='{.spec.template.spec.containers[0].image}')" == "$console_image" ]]
 [[ "$(kubectl --context "$context" -n fruto-system get deployment platform-operator -o jsonpath='{.spec.template.spec.containers[0].image}')" == "$operator_image" ]]
+[[ "$(kubectl --context "$context" -n fruto-system get deployment/cluster-agent -o jsonpath='{.spec.template.spec.containers[0].image}')" == "$agent_image" ]]
+[[ "$(kubectl --context "$context" -n fruto-system get deployment/cluster-agent -o jsonpath='{.status.availableReplicas}')" == 1 ]]
+for secret in molejo-agent-identity molejo-agent-enrollment; do
+  kubectl --context "$context" -n fruto-system get secret "$secret" >/dev/null
+done
 
 for crd in appdeployments.platform.fruto.calouro.tech appvolumes.platform.fruto.calouro.tech; do
   [[ "$(kubectl --context "$context" get crd "$crd" -o jsonpath='{.status.conditions[?(@.type=="Established")].status}')" == True ]]
@@ -61,6 +67,12 @@ operator_identity="system:serviceaccount:fruto-system:platform-operator"
 [[ "$(kubectl --context "$context" auth can-i create persistentvolumeclaims --as="$operator_identity" -n fruto-workspaces)" == yes ]]
 [[ "$(kubectl --context "$context" auth can-i create statefulsets.apps --as="$operator_identity" -n fruto-workspaces)" == yes ]]
 [[ "$(kubectl --context "$context" auth can-i update appvolumes.platform.fruto.calouro.tech --subresource=status --as="$operator_identity" -n fruto-workspaces)" == yes ]]
+
+agent_identity="system:serviceaccount:fruto-system:cluster-agent"
+[[ "$(kubectl --context "$context" auth can-i get secret/molejo-agent-identity --as="$agent_identity" -n fruto-system)" == yes ]]
+[[ "$(kubectl --context "$context" auth can-i patch secret/molejo-agent-enrollment --as="$agent_identity" -n fruto-system)" == yes ]]
+[[ "$(kubectl --context "$context" auth can-i list secrets --as="$agent_identity" -n fruto-system)" == no ]]
+[[ "$(kubectl --context "$context" auth can-i get appdeployments.platform.fruto.calouro.tech --as="$agent_identity" -n fruto-workspaces)" == no ]]
 
 https_result="$(curl --silent --show-error --output /dev/null --write-out '%{http_code} %{ssl_verify_result}' --max-time 15 https://cloud.molejo.dev/)"
 [[ "$https_result" == "200 0" ]]

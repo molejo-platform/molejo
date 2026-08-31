@@ -127,6 +127,8 @@ The [platform operator runbook](operations/platform-operator.md) documents its
 state contract, diagnostic workflow, protected metrics, and optional tracing.
 The [control plane runbook](operations/control-plane.md) documents local TLS and
 the authorized Phase 7 and Phase 8 k3s release, build, and recovery workflows.
+The [Cluster Agent runbook](operations/cluster-agent.md) documents its outbound
+identity, pairing states, and narrow Kubernetes permissions.
 
 ## Documentation
 

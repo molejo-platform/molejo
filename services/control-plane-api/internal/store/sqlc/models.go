@@ -22,6 +22,32 @@ type AccessGrant struct {
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 }
 
+type AgentEnrollmentToken struct {
+	InstallationID int64              `json:"installation_id"`
+	TokenHash      []byte             `json:"token_hash"`
+	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
+	ConsumedAt     pgtype.Timestamptz `json:"consumed_at"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
+type AgentInstallation struct {
+	ID                     int64              `json:"id"`
+	PublicID               string             `json:"public_id"`
+	Name                   string             `json:"name"`
+	Status                 string             `json:"status"`
+	EnrollmentAttemptID    pgtype.Text        `json:"enrollment_attempt_id"`
+	CsrFingerprint         []byte             `json:"csr_fingerprint"`
+	CertificatePem         []byte             `json:"certificate_pem"`
+	CaCertificatePem       []byte             `json:"ca_certificate_pem"`
+	CertificateSerial      pgtype.Text        `json:"certificate_serial"`
+	CertificateFingerprint []byte             `json:"certificate_fingerprint"`
+	CertificateNotAfter    pgtype.Timestamptz `json:"certificate_not_after"`
+	LastSeenAt             pgtype.Timestamptz `json:"last_seen_at"`
+	CreatedBy              int64              `json:"created_by"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+}
+
 type App struct {
 	ID         int64              `json:"id"`
 	PublicID   string             `json:"public_id"`

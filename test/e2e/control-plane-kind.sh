@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+trap 'echo "control-plane E2E failed at line $LINENO" >&2' ERR
+
 for command in docker kubectl curl jq openssl go corepack node; do
   command -v "$command" >/dev/null 2>&1 || {
     echo "$command is required for the control-plane E2E" >&2
@@ -29,7 +31,9 @@ api_log="$tmp_dir/api.log"
 runtime_worker_log="$tmp_dir/runtime-worker.log"
 vite_log="$tmp_dir/vite.log"
 gateway_log="$tmp_dir/gateway-port-forward.log"
+agent_log="$tmp_dir/agent-port-forward.log"
 operator_manifest="$tmp_dir/operator.yaml"
+agent_manifest="$tmp_dir/cluster-agent.yaml"
 control_plane_manifest="$tmp_dir/control-plane.yaml"
 postgres_port="$(allocate_port)"
 host_api_port="$(allocate_port)"
@@ -43,15 +47,19 @@ node_paused=false
 api_image_built=false
 console_image_built=false
 operator_image_built=false
+agent_image_built=false
 fixture_image_built=false
 host_api_pid=""
 runtime_worker_pid=""
 vite_pid=""
 gateway_port_forward_pid=""
 gateway_port=""
+agent_port_forward_pid=""
+agent_port=""
 api_image="fruto-control-plane-api:local-$PPID"
 console_image="fruto-console-web:local-$PPID"
 operator_image="fruto-platform-operator:e2e-$PPID"
+agent_image="molejo-cluster-agent:e2e-$PPID"
 fixture_image="fruto-control-plane-http-app:e2e-$PPID"
 node_name="$cluster_name-control-plane"
 
@@ -72,16 +80,19 @@ cleanup() {
   stop_pid "$runtime_worker_pid"
   stop_pid "$vite_pid"
   stop_pid "$gateway_port_forward_pid"
+  stop_pid "$agent_port_forward_pid"
   if [[ "$exit_code" -ne 0 && "$cluster_created" == true ]]; then
     [[ -f "$api_log" ]] && sed -n '1,160p' "$api_log" || true
     [[ -f "$runtime_worker_log" ]] && sed -n '1,160p' "$runtime_worker_log" || true
     [[ -f "$vite_log" ]] && sed -n '1,160p' "$vite_log" || true
+    [[ -f "$agent_log" ]] && sed -n '1,160p' "$agent_log" || true
     kubectl --kubeconfig "$kubeconfig" get pods -A -o wide || true
     kubectl --kubeconfig "$kubeconfig" get events -A --sort-by=.lastTimestamp || true
     kubectl --kubeconfig "$kubeconfig" -n fruto-control-plane logs deployment/control-plane-api --tail=120 || true
     kubectl --kubeconfig "$kubeconfig" -n fruto-control-plane get jobs,httproutes -o yaml || true
     kubectl --kubeconfig "$kubeconfig" -n fruto-workspaces get appdeployments -o yaml || true
     kubectl --kubeconfig "$kubeconfig" -n fruto-system logs deployment/platform-operator --tail=120 || true
+    kubectl --kubeconfig "$kubeconfig" -n fruto-system logs deployment/cluster-agent --tail=120 || true
   fi
   if [[ "$cluster_created" == true ]]; then
     if ! kind_cli delete cluster --name "$cluster_name" >/dev/null 2>&1; then
@@ -96,6 +107,7 @@ cleanup() {
   if [[ "$api_image_built" == true ]] && ! docker image rm "$api_image" >/dev/null 2>&1; then cleanup_failed=true; fi
   if [[ "$console_image_built" == true ]] && ! docker image rm "$console_image" >/dev/null 2>&1; then cleanup_failed=true; fi
   if [[ "$operator_image_built" == true ]] && ! docker image rm "$operator_image" >/dev/null 2>&1; then cleanup_failed=true; fi
+  if [[ "$agent_image_built" == true ]] && ! docker image rm "$agent_image" >/dev/null 2>&1; then cleanup_failed=true; fi
   if [[ "$fixture_image_built" == true ]] && ! docker image rm "$fixture_image" >/dev/null 2>&1; then cleanup_failed=true; fi
   if ! rm -rf "$tmp_dir"; then
     cleanup_failed=true
@@ -185,6 +197,30 @@ start_gateway_forward() {
   return 1
 }
 
+start_agent_forward() {
+  kubectl --kubeconfig "$kubeconfig" -n fruto-system port-forward deployment/cluster-agent :8081 >"$agent_log" 2>&1 &
+  agent_port_forward_pid=$!
+  for _ in $(seq 1 60); do
+    agent_port="$(sed -n 's/.*127\.0\.0\.1:\([0-9][0-9]*\).*/\1/p' "$agent_log" | head -n 1)"
+    [[ -n "$agent_port" ]] && return 0
+    sleep 0.2
+  done
+  cat "$agent_log" >&2
+  return 1
+}
+
+wait_agent_state() {
+  local expected="$1"
+  for _ in $(seq 1 120); do
+    local state
+    state="$(curl --silent --max-time 2 "http://127.0.0.1:${agent_port}/status" | jq -r '.state // empty' || true)"
+    [[ "$state" == "$expected" ]] && return 0
+    sleep 1
+  done
+  echo "timed out waiting for Agent state $expected" >&2
+  return 1
+}
+
 wait_operation() {
   local base_url="$1" operation_id="$2" cookie_jar="$3"
   for _ in $(seq 1 180); do
@@ -271,6 +307,15 @@ assert_rbac() {
   [[ "$(kubectl --kubeconfig "$kubeconfig" auth can-i get secrets -n fruto-workspaces --as="$parameter_worker_identity")" == no ]]
 }
 
+assert_agent_rbac() {
+  local agent_identity="system:serviceaccount:fruto-system:cluster-agent"
+  [[ "$(kubectl --kubeconfig "$kubeconfig" auth can-i get secret/molejo-agent-identity -n fruto-system --as="$agent_identity")" == yes ]]
+  [[ "$(kubectl --kubeconfig "$kubeconfig" auth can-i patch secret/molejo-agent-enrollment -n fruto-system --as="$agent_identity")" == yes ]]
+  [[ "$(kubectl --kubeconfig "$kubeconfig" auth can-i list secrets -n fruto-system --as="$agent_identity")" == no ]]
+  [[ "$(kubectl --kubeconfig "$kubeconfig" auth can-i get secret/fruto-e2e-wildcard-tls -n fruto-system --as="$agent_identity")" == no ]]
+  [[ "$(kubectl --kubeconfig "$kubeconfig" auth can-i get appdeployments.platform.fruto.calouro.tech -n fruto-workspaces --as="$agent_identity")" == no ]]
+}
+
 run_concurrent_request() {
   local output="$1"
   curl --fail --silent --show-error -b "$host_cookie_jar" \
@@ -327,13 +372,15 @@ expected_cluster_uid="$(kubectl --kubeconfig "$kubeconfig" get namespace kube-sy
 
 docker buildx build --file services/platform-operator/Dockerfile --tag "$operator_image" --load .
 operator_image_built=true
+docker buildx build --file services/cluster-agent/Dockerfile --tag "$agent_image" --load .
+agent_image_built=true
 docker buildx build --file services/control-plane-api/Dockerfile --tag "$api_image" --load .
 api_image_built=true
 docker buildx build --file apps/console-web/Dockerfile --tag "$console_image" --load .
 console_image_built=true
 docker buildx build --file test/fixtures/http-app/Dockerfile --tag "$fixture_image" --build-arg VERSION=e2e-v1 --load .
 fixture_image_built=true
-kind_cli load docker-image --name "$cluster_name" "$operator_image" "$api_image" "$console_image" "$fixture_image"
+kind_cli load docker-image --name "$cluster_name" "$operator_image" "$agent_image" "$api_image" "$console_image" "$fixture_image"
 
 curl -L --fail --silent --show-error \
   https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/experimental-install.yaml \
@@ -353,6 +400,14 @@ kubectl kustomize deploy/operator |
 grep -Fq "image: $operator_image" "$operator_manifest"
 kubectl --kubeconfig "$kubeconfig" apply -f "$operator_manifest"
 kubectl --kubeconfig "$kubeconfig" -n fruto-system rollout status deployment/platform-operator --timeout=120s
+kubectl kustomize deploy/cluster-agent |
+  sed "s|image: ghcr.io/fruto-platform/cluster-agent@sha256:0000000000000000000000000000000000000000000000000000000000000000|image: $agent_image|" >"$agent_manifest"
+grep -Fq "image: $agent_image" "$agent_manifest"
+kubectl --kubeconfig "$kubeconfig" apply -f "$agent_manifest"
+kubectl --kubeconfig "$kubeconfig" -n fruto-system rollout status deployment/cluster-agent --timeout=120s
+assert_agent_rbac
+start_agent_forward
+wait_agent_state Unpaired
 kubectl --kubeconfig "$kubeconfig" apply -f deploy/control-plane/namespace.yaml
 
 fixture_full="docker.io/library/$fixture_image"
@@ -384,6 +439,7 @@ start_host_runtime_worker
 start_vite
 
 host_cookie_jar="$tmp_dir/host-cookies.txt"
+echo "validating host control-plane API"
 run_without_xtrace login http://127.0.0.1:${host_api_port} "$host_cookie_jar"
 
 api_base="http://127.0.0.1:${host_api_port}/api/v1"
@@ -403,12 +459,13 @@ app_response="$(curl --fail --silent --show-error -b "$host_cookie_jar" \
   -H 'Content-Type: application/json' -d '{"name":"E2E App"}' \
   "$api_base/workspaces/$workspace_id/projects/$project_id/apps")"
 app_id="$(jq -er '.id' <<<"$app_response")"
-configuration="$(jq -cn --arg environment "$environment_id" '{environmentId:$environment,branch:"main",workloadKind:"Stateless",configuration:{replicas:1,port:8080,resources:{requests:{cpuMillis:50,memoryMiB:64},limits:{cpuMillis:250,memoryMiB:128}},probes:{liveness:{path:"/healthz"},readiness:{path:"/readyz"}},exposure:"Private",variables:[],parameters:[]}}')"
+configuration="$(jq -cn --arg environment "$environment_id" '{environmentId:$environment,branch:"main",workloadKind:"Stateless",configuration:{replicas:1,ports:[{name:"http",containerPort:8080,protocol:"TCP"}],resources:{requests:{cpuMillis:50,memoryMiB:64},limits:{cpuMillis:250,memoryMiB:128}},probes:{startup:{type:"HTTP",portName:"http",path:"/readyz"},liveness:{type:"HTTP",portName:"http",path:"/healthz"},readiness:{type:"HTTP",portName:"http",path:"/readyz"}},publicEndpoints:[],variables:[],parameters:[]}}')"
 app_environment_response="$(curl --fail --silent --show-error -b "$host_cookie_jar" \
   -H "Origin: http://127.0.0.1:${vite_port}" -H "X-CSRF-Token: $csrf_token" \
   -H 'Content-Type: application/json' -d "$configuration" \
   "$api_base/workspaces/$workspace_id/projects/$project_id/apps/$app_id/environments")"
 app_environment_id="$(jq -er '.id' <<<"$app_environment_response")"
+echo "host hierarchy created"
 app_environment_version="$(jq -er '.version' <<<"$app_environment_response")"
 configuration_version="$(jq -er '.configurationVersion' <<<"$app_environment_response")"
 app_environment_base="$api_base/workspaces/$workspace_id/projects/$project_id/apps/$app_id/environments/$app_environment_id"
@@ -445,6 +502,7 @@ assert_http_status 403 "http://127.0.0.1:${host_api_port}/api/v1/session" \
 assert_http_status 404 "$deployment_base/dpl-aaaaaaaaaaaaaaaaaaaa" -b "$host_cookie_jar"
 
 wait_operation "http://127.0.0.1:${host_api_port}" "$api_operation_id" "$host_cookie_jar"
+echo "host deployment reached Ready"
 ready_response="$(curl --fail --silent --show-error -b "$host_cookie_jar" "$deployment_base/$api_deployment_id")"
 [[ "$(jq -r '.state' <<<"$ready_response")" == Ready ]]
 app_environment_detail="$(curl --fail --silent --show-error -b "$host_cookie_jar" "$app_environment_base")"
@@ -535,10 +593,35 @@ kubectl --kubeconfig "$kubeconfig" -n fruto-control-plane rollout status deploym
 kubectl --kubeconfig "$kubeconfig" -n fruto-control-plane create secret generic fruto-control-plane-db --from-literal=database-url='postgres://fruto:fruto@postgres:5432/fruto?sslmode=disable'
 
 openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj '/CN=*.molejo.dev' -addext 'subjectAltName=DNS:*.molejo.dev' -keyout "$tmp_dir/wildcard.key" -out "$tmp_dir/wildcard.crt" >/dev/null 2>&1
+openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 1 \
+  -subj '/CN=Molejo Agent E2E CA' -keyout "$tmp_dir/agent-ca.key" -out "$tmp_dir/agent-ca.crt" >/dev/null 2>&1
+openssl req -new -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes \
+  -subj '/CN=control-plane-api.fruto-control-plane.svc.cluster.local' \
+  -addext 'subjectAltName=DNS:control-plane-api.fruto-control-plane.svc.cluster.local' \
+  -addext 'extendedKeyUsage=serverAuth' \
+  -keyout "$tmp_dir/agent-server.key" -out "$tmp_dir/agent-server.csr" >/dev/null 2>&1
+openssl x509 -req -days 1 -sha256 -copy_extensions copy \
+  -in "$tmp_dir/agent-server.csr" -CA "$tmp_dir/agent-ca.crt" -CAkey "$tmp_dir/agent-ca.key" -CAcreateserial \
+  -out "$tmp_dir/agent-server.crt" >/dev/null 2>&1
 kubectl --kubeconfig "$kubeconfig" create namespace fruto-system 2>/dev/null || true
 kubectl --kubeconfig "$kubeconfig" -n fruto-system create secret tls fruto-e2e-wildcard-tls --cert="$tmp_dir/wildcard.crt" --key="$tmp_dir/wildcard.key"
+kubectl --kubeconfig "$kubeconfig" -n fruto-control-plane create secret generic required-external-agent-ca-secret \
+  --from-file=ca.crt="$tmp_dir/agent-ca.crt" --from-file=ca.key="$tmp_dir/agent-ca.key"
+kubectl --kubeconfig "$kubeconfig" -n fruto-control-plane create secret tls required-external-agent-server-tls \
+  --cert="$tmp_dir/agent-server.crt" --key="$tmp_dir/agent-server.key"
 kubectl --kubeconfig "$kubeconfig" apply -f test/e2e/gateway.yaml
 kubectl --kubeconfig "$kubeconfig" -n fruto-system rollout status deployment/traefik-e2e --timeout=180s
+gateway_cluster_ip="$(kubectl --kubeconfig "$kubeconfig" -n fruto-system get service traefik-e2e -o jsonpath='{.spec.clusterIP}')"
+[[ -n "$gateway_cluster_ip" && "$gateway_cluster_ip" != None ]]
+kubectl --kubeconfig "$kubeconfig" -n fruto-system create configmap agent-enrollment-ca --from-file=ca.crt="$tmp_dir/wildcard.crt"
+kubectl --kubeconfig "$kubeconfig" -n fruto-system patch configmap cluster-agent-config --type merge \
+  -p '{"data":{"MOLEJO_AGENT_ENROLLMENT_URL":"https://cloud.molejo.dev:8443/agent/v1/enroll"}}'
+agent_patch="$(jq -cn --arg ip "$gateway_cluster_ip" '{spec:{template:{spec:{hostAliases:[{ip:$ip,hostnames:["cloud.molejo.dev"]}],containers:[{name:"agent",env:[{name:"MOLEJO_AGENT_ENROLLMENT_CA_FILE",value:"/var/run/secrets/molejo/enrollment-ca/ca.crt"}],volumeMounts:[{name:"enrollment-ca",mountPath:"/var/run/secrets/molejo/enrollment-ca",readOnly:true}]}],volumes:[{name:"enrollment-ca",configMap:{name:"agent-enrollment-ca"}}]}}}}')"
+kubectl --kubeconfig "$kubeconfig" -n fruto-system patch deployment cluster-agent --type strategic -p "$agent_patch"
+kubectl --kubeconfig "$kubeconfig" -n fruto-system rollout status deployment/cluster-agent --timeout=120s
+stop_pid "$agent_port_forward_pid"; agent_port_forward_pid=""; agent_port=""
+start_agent_forward
+wait_agent_state Unpaired
 kubectl kustomize deploy/control-plane-local |
   sed -e "s|image: fruto-control-plane-api:local|image: $api_image|g" \
     -e "s|image: fruto-console-web:local|image: $console_image|g" \
@@ -552,6 +635,7 @@ kubectl --kubeconfig "$kubeconfig" apply -f test/e2e/control-plane-gateway.yaml
 kubectl --kubeconfig "$kubeconfig" -n fruto-control-plane wait --for=condition=complete job/control-plane-migrate --timeout=180s
 kubectl --kubeconfig "$kubeconfig" -n fruto-control-plane rollout status deployment/control-plane-api --timeout=120s
 kubectl --kubeconfig "$kubeconfig" -n fruto-control-plane rollout status deployment/console-web --timeout=120s
+echo "validating in-cluster control plane"
 run_without_xtrace run_cluster_bootstrap
 kubectl --kubeconfig "$kubeconfig" -n fruto-control-plane rollout status deployment/control-plane-api --timeout=120s
 assert_rbac
@@ -568,7 +652,11 @@ gateway_curl_args=(--insecure --resolve "cloud.molejo.dev:${gateway_port}:127.0.
 kubectl --kubeconfig "$kubeconfig" -n fruto-control-plane set env deployment/control-plane-api \
   "FRUTO_PUBLIC_URL=${gateway_base_url}" \
   "FRUTO_ALLOWED_ORIGIN=${gateway_base_url}" \
-  "FRUTO_ALLOWED_HOSTS=cloud.molejo.dev,cloud.molejo.dev:${gateway_port}"
+  "FRUTO_ALLOWED_HOSTS=cloud.molejo.dev,cloud.molejo.dev:8443,cloud.molejo.dev:${gateway_port}" \
+  "FRUTO_AGENT_CA_CERT_FILE=/var/run/secrets/molejo/agent-ca/ca.crt" \
+  "FRUTO_AGENT_CA_KEY_FILE=/var/run/secrets/molejo/agent-ca/ca.key" \
+  "FRUTO_AGENT_SERVER_CERT_FILE=/var/run/secrets/molejo/agent-server/tls.crt" \
+  "FRUTO_AGENT_SERVER_KEY_FILE=/var/run/secrets/molejo/agent-server/tls.key"
 kubectl --kubeconfig "$kubeconfig" -n fruto-control-plane rollout status deployment/control-plane-api --timeout=120s
 gateway_api_status=""
 gateway_console_body=""
@@ -582,6 +670,33 @@ for _ in $(seq 1 60); do
 done
 [[ "$gateway_api_status" == 401 ]]
 grep -q '<div id="root">' <<<"$gateway_console_body"
+
+agent_cookie_jar="$tmp_dir/agent-pairing-cookies.txt"
+agent_login_payload="$(jq -cn --arg password "$owner_password" '{username:"owner",password:$password}')"
+agent_login_response="$(curl "${gateway_curl_args[@]}" --fail --silent --show-error -c "$agent_cookie_jar" \
+  -H "Origin: ${gateway_base_url}" -H 'Content-Type: application/json' \
+  -d "$agent_login_payload" "$gateway_base_url/api/v1/session")"
+agent_csrf_token="$(jq -er '.csrfToken' <<<"$agent_login_response")"
+agent_invitation="$(curl "${gateway_curl_args[@]}" --fail --silent --show-error -b "$agent_cookie_jar" \
+  -H "Origin: ${gateway_base_url}" -H "X-CSRF-Token: $agent_csrf_token" -H 'Content-Type: application/json' \
+  -d '{"name":"Kind E2E cluster"}' "$gateway_base_url/api/v1/admin/agent-installations")"
+agent_installation_id="$(jq -er '.installationId' <<<"$agent_invitation")"
+agent_enrollment_token="$(jq -er '.enrollmentToken' <<<"$agent_invitation")"
+agent_token_patch="$(jq -cn --arg token "$(printf '%s' "$agent_enrollment_token" | base64)" '{data:{token:$token}}')"
+kubectl --kubeconfig "$kubeconfig" -n fruto-system patch secret molejo-agent-enrollment --type merge -p "$agent_token_patch" >/dev/null
+agent_enrollment_token=""; agent_invitation=""; agent_token_patch=""
+wait_agent_state Paired
+echo "cluster Agent paired"
+
+identity_keys="$(kubectl --kubeconfig "$kubeconfig" -n fruto-system get secret molejo-agent-identity -o json | jq -r '.data | keys[]')"
+for key in enrollment-attempt-id private-key.pem csr.pem installation-id tls.crt ca.crt certificate-not-after; do
+  grep -Fxq "$key" <<<"$identity_keys"
+done
+[[ -z "$(kubectl --kubeconfig "$kubeconfig" -n fruto-system get secret molejo-agent-enrollment -o jsonpath='{.data.token}')" ]]
+[[ "$(kubectl --kubeconfig "$kubeconfig" -n fruto-system get secret molejo-agent-identity -o jsonpath='{.data.installation-id}' | base64 --decode)" == "$agent_installation_id" ]]
+agent_database_state="$(kubectl --kubeconfig "$kubeconfig" -n fruto-control-plane exec deployment/postgres -- \
+  psql -U fruto -d fruto -Atc "SELECT status || ':' || (last_seen_at IS NOT NULL)::text FROM agent_installations WHERE public_id = '${agent_installation_id}'")"
+[[ "$agent_database_state" == "Active:true" ]]
 run_cluster_browser
 
 echo "control-plane hierarchy E2E passed"

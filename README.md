@@ -191,7 +191,7 @@ effects are documented in the operator runbook.
 | `just e2e` | Exercise the complete flow in a disposable Kind cluster. |
 | `just e2e-public` | Add a non-deterministic outbound public HTTPS check to the E2E flow. |
 | `just e2e-frontend-k3s` | Manually publish and validate frontend fixtures on `fruto-lab`. |
-| `just control-plane-build-release` | Publish the API, Console, and platform operator as `linux/amd64` digests. |
+| `just control-plane-build-release` | Publish the API, Console, platform operator, and Cluster Agent as `linux/amd64` digests. |
 | `just control-plane-preflight-k3s` | Validate the approved k3s target without mutations. |
 | `just control-plane-render-release` | Render the external digest-pinned CRD, operator, and control-plane bundle. |
 | `just control-plane-prepare-k3s` | Generate external lab credentials and Kubernetes Secrets. |
