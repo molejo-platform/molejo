@@ -178,6 +178,12 @@ func TestObservabilityPlaneIsInternalBoundedAndDigestPinned(t *testing.T) {
 			if err != nil || !found || requests["cpu"] == "" || requests["memory"] == "" {
 				t.Fatalf("resource requests=%v found=%v err=%v", requests, found, err)
 			}
+			if workload.name == "clickhouse" {
+				limits, found, err := unstructured.NestedStringMap(container, "resources", "limits")
+				if err != nil || !found || requests["memory"] != "1Gi" || limits["memory"] != "3Gi" {
+					t.Fatalf("ClickHouse memory requests=%v limits=%v found=%v err=%v", requests, limits, found, err)
+				}
+			}
 		})
 	}
 
@@ -262,6 +268,19 @@ func TestObservabilityIngestionIsRuntimeScopedAndQueriesAreBounded(t *testing.T)
 	}
 	if strings.Contains(migrationText, "ADD INDEX MolejoRuntimeIndex MolejoRuntime") {
 		t.Fatal("ClickHouse runtime correlation reuses the stale runtime index name")
+	}
+}
+
+func TestObservabilityAcceptanceSendsATimestampedOTLPLog(t *testing.T) {
+	acceptance, err := os.ReadFile(filepath.Join("..", "..", "test/e2e/accept-observability-k3s.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(acceptance)
+	for _, required := range []string{"date", "timeUnixNano"} {
+		if !strings.Contains(text, required) {
+			t.Fatalf("observability acceptance payload is missing %q", required)
+		}
 	}
 }
 

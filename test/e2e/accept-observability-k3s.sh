@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-for command in kubectl grep curl openssl base64 jq sort cut awk mktemp install; do
+for command in kubectl grep curl openssl base64 jq sort cut awk mktemp install date; do
   command -v "$command" >/dev/null 2>&1 || { echo "$command is required" >&2; exit 2; }
 done
 context="${FRUTO_K3S_CONTEXT:-fruto-lab}"
@@ -63,9 +63,10 @@ for _ in $(seq 1 30); do
 done
 [[ "$gateway_ready" == true && "$clickhouse_ready" == true ]] || { echo "observability port-forwards did not become ready" >&2; exit 1; }
 marker="molejo-accept-$(openssl rand -hex 12)"
+timestamp_unix_nano="$(( $(date +%s) * 1000000000 ))"
 curl --fail --silent --show-error --max-time 10 \
   -H 'Content-Type: application/json' \
-  --data "{\"resourceLogs\":[{\"scopeLogs\":[{\"logRecords\":[{\"body\":{\"stringValue\":\"$marker\"}}]}]}]}" \
+  --data "{\"resourceLogs\":[{\"scopeLogs\":[{\"logRecords\":[{\"timeUnixNano\":\"$timestamp_unix_nano\",\"body\":{\"stringValue\":\"$marker\"}}]}]}]}" \
   http://127.0.0.1:14318/v1/logs >/dev/null
 observed=0
 for _ in $(seq 1 30); do

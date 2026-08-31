@@ -35,8 +35,8 @@ spec:
           readinessProbe: { httpGet: { path: /ping, port: http }, periodSeconds: 10 }
           livenessProbe: { httpGet: { path: /ping, port: http }, periodSeconds: 20 }
           resources:
-            requests: { cpu: 100m, memory: 512Mi }
-            limits: { cpu: "1", memory: 2Gi }
+            requests: { cpu: 100m, memory: 1Gi }
+            limits: { cpu: "1", memory: 3Gi }
           securityContext:
             allowPrivilegeEscalation: false
             capabilities: { drop: [ALL] }
