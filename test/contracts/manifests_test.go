@@ -246,6 +246,9 @@ func TestObservabilityIngestionIsRuntimeScopedAndQueriesAreBounded(t *testing.T)
 		"MATERIALIZE COLUMN MolejoRuntime",
 		`runtime_changed=1`,
 		`materialize_runtime_index="$runtime_changed"`,
+		"command = '(MATERIALIZE COLUMN MolejoRuntime)'",
+		"command = '(MATERIALIZE INDEX MolejoRuntimeIndex)'",
+		"create_time >",
 		"MATERIALIZE INDEX MolejoRuntimeIndex",
 	} {
 		if !strings.Contains(migrationText, required) {

@@ -74,6 +74,9 @@ spec:
                 query "ALTER TABLE otel.otel_logs ADD INDEX MolejoRuntimeIndex MolejoRuntime TYPE set(100) GRANULARITY 1"
                 materialize_runtime_index=1
               fi
+              if [ "$materialize_runtime_index" = "0" ] && [ "$(query "SELECT count() FROM system.mutations WHERE database = 'otel' AND table = 'otel_logs' AND command = '(MATERIALIZE COLUMN MolejoRuntime)' AND is_done = 1 AND create_time > (SELECT max(create_time) FROM system.mutations WHERE database = 'otel' AND table = 'otel_logs' AND command = '(MATERIALIZE INDEX MolejoRuntimeIndex)' AND is_done = 1)")" != "0" ]; then
+                materialize_runtime_index=1
+              fi
               if [ "$materialize_runtime_index" = "1" ]; then
                 query "ALTER TABLE otel.otel_logs MATERIALIZE INDEX MolejoRuntimeIndex SETTINGS mutations_sync = 2"
               fi
