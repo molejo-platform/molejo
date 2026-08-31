@@ -27,7 +27,7 @@ fi
 kubectl --context "$context" -n fruto-control-plane get secret "$MOLEJO_GITHUB_WEBHOOK_SECRET" >/dev/null
 kubectl --context "$context" -n fruto-control-plane get configmap "$MOLEJO_OPENBAO_CA_CONFIGMAP" >/dev/null
 
-yq ea 'select(.kind != "Job")' "$release_file" |
+yq ea 'select(.kind != "Job" and .kind != "Deployment")' "$release_file" |
   kubectl --context "$context" apply --server-side --dry-run=server -f - >/dev/null
 
 yq ea 'select(.kind == "CustomResourceDefinition")' "$release_file" |
@@ -50,7 +50,9 @@ yq ea 'select(.kind == "Job" and .metadata.name == "control-plane-bootstrap")' "
   kubectl --context "$context" apply --server-side -f - >/dev/null
 kubectl --context "$context" -n fruto-control-plane wait --for=condition=complete job/control-plane-bootstrap --timeout=300s
 
-yq ea 'select(.kind == "Deployment" or .kind == "HTTPRoute")' "$release_file" |
+yq ea 'select(.kind == "Deployment")' "$release_file" |
+  kubectl --context "$context" apply --server-side --force-conflicts -f - >/dev/null
+yq ea 'select(.kind == "HTTPRoute")' "$release_file" |
   kubectl --context "$context" apply --server-side -f - >/dev/null
 kubectl --context "$context" -n fruto-control-plane rollout status deployment/control-plane-api --timeout=300s
 kubectl --context "$context" -n fruto-control-plane rollout status deployment/control-plane-runtime-worker --timeout=300s

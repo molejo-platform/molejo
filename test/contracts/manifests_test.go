@@ -157,6 +157,20 @@ func TestControlPlaneReleaseIncludesTheClusterAgentContract(t *testing.T) {
 	}
 }
 
+func TestControlPlaneApplyOnlyForcesDeploymentOwnershipAfterMigrations(t *testing.T) {
+	contents, err := os.ReadFile(filepath.Join("..", "..", "test/e2e/apply-control-plane-k3s.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(contents)
+	migration := strings.Index(text, "wait --for=condition=complete job/control-plane-migrate")
+	forcedDeployments := strings.Index(text, `select(.kind == "Deployment")`)
+	forceFlag := strings.Index(text, "apply --server-side --force-conflicts -f -")
+	if migration < 0 || forcedDeployments < migration || forceFlag < forcedDeployments {
+		t.Fatalf("Deployment ownership must be forced only after the migration completes")
+	}
+}
+
 func TestLabReleaseConfiguresStatefulSchedulingWithoutExposingItInTheCRD(t *testing.T) {
 	operator := findObject(t, "deploy/control-plane-release/stateful-scheduling-lab.yaml", "Deployment", "platform-operator")
 	container := findContainer(t, workloadPodSpec(t, operator), "manager")
