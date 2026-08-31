@@ -69,17 +69,18 @@ spec:
                 query "ALTER TABLE otel.otel_logs ADD INDEX MolejoNamespaceIndex MolejoNamespace TYPE set(100) GRANULARITY 1"
                 query "ALTER TABLE otel.otel_logs MATERIALIZE INDEX MolejoNamespaceIndex SETTINGS mutations_sync = 2"
               fi
+              query "ALTER TABLE otel.otel_logs DROP INDEX IF EXISTS MolejoRuntimeIndex"
               materialize_runtime_index="$runtime_changed"
-              if [ "$(query "SELECT count() FROM system.data_skipping_indices WHERE database = 'otel' AND table = 'otel_logs' AND name = 'MolejoRuntimeIndex'")" = "0" ]; then
+              if [ "$(query "SELECT count() FROM system.data_skipping_indices WHERE database = 'otel' AND table = 'otel_logs' AND name = 'MolejoRuntimeIndexV2'")" = "0" ]; then
                 materialize_runtime_index=1
               fi
-              if [ "$materialize_runtime_index" = "0" ] && [ "$(query "SELECT count() FROM system.mutations WHERE database = 'otel' AND table = 'otel_logs' AND command = '(MATERIALIZE COLUMN MolejoRuntime)' AND is_done = 1 AND create_time > (SELECT max(create_time) FROM system.mutations WHERE database = 'otel' AND table = 'otel_logs' AND command = '(MATERIALIZE INDEX MolejoRuntimeIndex)' AND is_done = 1)")" != "0" ]; then
+              if [ "$materialize_runtime_index" = "0" ] && [ "$(query "SELECT count() FROM system.mutations WHERE database = 'otel' AND table = 'otel_logs' AND command = '(MATERIALIZE COLUMN MolejoRuntime)' AND is_done = 1 AND create_time > (SELECT max(create_time) FROM system.mutations WHERE database = 'otel' AND table = 'otel_logs' AND command = '(MATERIALIZE INDEX MolejoRuntimeIndexV2)' AND is_done = 1)")" != "0" ]; then
                 materialize_runtime_index=1
               fi
               if [ "$materialize_runtime_index" = "1" ]; then
-                query "ALTER TABLE otel.otel_logs DROP INDEX IF EXISTS MolejoRuntimeIndex"
-                query "ALTER TABLE otel.otel_logs ADD INDEX MolejoRuntimeIndex MolejoRuntime TYPE set(100) GRANULARITY 1"
-                query "ALTER TABLE otel.otel_logs MATERIALIZE INDEX MolejoRuntimeIndex SETTINGS mutations_sync = 2"
+                query "ALTER TABLE otel.otel_logs DROP INDEX IF EXISTS MolejoRuntimeIndexV2"
+                query "ALTER TABLE otel.otel_logs ADD INDEX MolejoRuntimeIndexV2 MolejoRuntime TYPE set(100) GRANULARITY 1"
+                query "ALTER TABLE otel.otel_logs MATERIALIZE INDEX MolejoRuntimeIndexV2 SETTINGS mutations_sync = 2"
               fi
           resources:
             requests: { cpu: 25m, memory: 64Mi }

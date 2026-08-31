@@ -247,10 +247,11 @@ func TestObservabilityIngestionIsRuntimeScopedAndQueriesAreBounded(t *testing.T)
 		`runtime_changed=1`,
 		`materialize_runtime_index="$runtime_changed"`,
 		"command = '(MATERIALIZE COLUMN MolejoRuntime)'",
-		"command = '(MATERIALIZE INDEX MolejoRuntimeIndex)'",
+		"command = '(MATERIALIZE INDEX MolejoRuntimeIndexV2)'",
 		"create_time >",
 		"DROP INDEX IF EXISTS MolejoRuntimeIndex",
-		"MATERIALIZE INDEX MolejoRuntimeIndex",
+		"ADD INDEX MolejoRuntimeIndexV2",
+		"MATERIALIZE INDEX MolejoRuntimeIndexV2",
 	} {
 		if !strings.Contains(migrationText, required) {
 			t.Fatalf("ClickHouse runtime correlation migration is missing %q", required)
@@ -258,6 +259,9 @@ func TestObservabilityIngestionIsRuntimeScopedAndQueriesAreBounded(t *testing.T)
 	}
 	if strings.Contains(migrationText, "MATERIALIZED ResourceAttributes['k8s.deployment.name']") {
 		t.Fatal("ClickHouse runtime correlation is coupled to Deployments")
+	}
+	if strings.Contains(migrationText, "ADD INDEX MolejoRuntimeIndex MolejoRuntime") {
+		t.Fatal("ClickHouse runtime correlation reuses the stale runtime index name")
 	}
 }
 
