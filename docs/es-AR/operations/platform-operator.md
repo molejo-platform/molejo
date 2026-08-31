@@ -158,6 +158,20 @@ Liveness informa la salud del proceso en `/healthz`. Readiness responde con éxi
 en `/readyz` solamente después de sincronizar el cache del manager. La instalación
 base no expone el puerto de salud mediante un Service.
 
+## Apagado ordenado
+
+Al recibir `SIGTERM` o `SIGINT`, readiness falla inmediatamente y el manager
+dispone de hasta 20 segundos para detener controllers, caches y servidores
+internos. Después, tracing usa un contexto nuevo para un flush limitado a cinco
+segundos. El Pod concede 30 segundos en total, preservando un margen para la salida
+del proceso antes de que Kubernetes pueda forzar la terminación.
+
+Una reconciliación interrumpida por el apagado del proceso es trabajo incompleto,
+no degradación del workload. No registra `ReconcileFailed`; el estado deseado
+permanece durable y es retomado por la siguiente instancia del manager. Una
+segunda señal representa una terminación forzada explícita y no garantiza el
+drenaje ni la exportación de traces.
+
 Las métricas están disponibles mediante HTTPS autenticado en
 `platform-operator-metrics.fruto-system.svc:8443`. Los consumidores necesitan un
 binding al ClusterRole `platform-operator-metrics-reader`. Además de las métricas

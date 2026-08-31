@@ -8,7 +8,6 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/otel/trace/noop"
 	appsv1 "k8s.io/api/apps/v1"
@@ -112,6 +111,9 @@ func (r *AppDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		}
+		if markCanceledReconciliation(ctx, span, err) {
+			return ctrl.Result{}, nil
+		}
 		markReconcileFailure(span, err)
 		logReconcileFailure(ctx, appDeployment, err)
 		return ctrl.Result{}, err
@@ -213,6 +215,9 @@ func (r *AppDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		attribute.String("fruto.reconciliation.reason", decision.reason),
 	)
 	if err := r.updateStatus(ctx, appDeployment, deployment, decision, true, endpointStatuses); err != nil {
+		if markCanceledReconciliation(ctx, span, err) {
+			return ctrl.Result{}, nil
+		}
 		markReconcileFailure(span, err)
 		logReconcileFailure(ctx, appDeployment, err)
 		return ctrl.Result{}, err
@@ -1070,65 +1075,6 @@ func (r *AppDeploymentReconciler) applyService(
 	return service, operation, resourceVersionBefore, err
 }
 
-func (r *AppDeploymentReconciler) handleProjectionFailure(
-	ctx context.Context,
-	span trace.Span,
-	appDeployment *platformv1alpha1.AppDeployment,
-	err error,
-) (ctrl.Result, error) {
-	if errors.Is(err, errHostnameConflict) {
-		decision := workloadDecision{
-			state:   workloadStateDegraded,
-			reason:  platformv1alpha1.ReasonHostnameConflict,
-			message: "The requested public hostname is not available.",
-		}
-		span.SetAttributes(
-			attribute.String("fruto.reconciliation.state", string(decision.state)),
-			attribute.String("fruto.reconciliation.reason", decision.reason),
-		)
-		if statusErr := r.updateStatus(ctx, appDeployment, nil, decision, false, nil); statusErr != nil {
-			markReconcileFailure(span, statusErr)
-			logReconcileFailure(ctx, appDeployment, statusErr)
-			return ctrl.Result{}, statusErr
-		}
-		return ctrl.Result{RequeueAfter: ownershipConflictRequeueAfter}, nil
-	}
-	if errors.Is(err, errOwnershipConflict) {
-		decision := workloadDecision{
-			state:   workloadStateDegraded,
-			reason:  platformv1alpha1.ReasonOwnershipConflict,
-			message: "A required Kubernetes child is not controlled by this AppDeployment.",
-		}
-		span.SetAttributes(
-			attribute.String("fruto.reconciliation.state", string(decision.state)),
-			attribute.String("fruto.reconciliation.reason", decision.reason),
-		)
-		if statusErr := r.updateStatus(ctx, appDeployment, nil, decision, false, nil); statusErr != nil {
-			markReconcileFailure(span, statusErr)
-			logReconcileFailure(ctx, appDeployment, statusErr)
-			return ctrl.Result{}, statusErr
-		}
-		return ctrl.Result{RequeueAfter: ownershipConflictRequeueAfter}, nil
-	}
-
-	markReconcileFailure(span, err)
-	logReconcileFailure(ctx, appDeployment, err)
-	if isPersistentReconcileError(err) {
-		decision := workloadDecision{
-			state:   workloadStateDegraded,
-			reason:  platformv1alpha1.ReasonReconcileFailed,
-			message: "A required Kubernetes child could not be reconciled.",
-		}
-		if statusErr := r.updateStatus(ctx, appDeployment, nil, decision, false, nil); statusErr != nil {
-			markReconcileFailure(span, statusErr)
-			logReconcileFailure(ctx, appDeployment, statusErr)
-			return ctrl.Result{}, statusErr
-		}
-		return ctrl.Result{RequeueAfter: persistentFailureRequeueAfter}, nil
-	}
-	return ctrl.Result{}, err
-}
-
 func desiredSelectorLabels(appDeployment *platformv1alpha1.AppDeployment) map[string]string {
 	return map[string]string{appDeploymentLabel: appDeployment.Name}
 }
@@ -1440,46 +1386,4 @@ func (r *AppDeploymentReconciler) tracer() trace.Tracer {
 		return r.Tracer
 	}
 	return noop.NewTracerProvider().Tracer(tracerName)
-}
-
-func finishSpan(span trace.Span, err error) {
-	if err != nil && !apierrors.IsNotFound(err) {
-		markSpanError(span, err)
-	}
-	span.End()
-}
-
-func markSpanError(span trace.Span, err error) {
-	span.RecordError(err)
-	span.SetStatus(codes.Error, "operation failed")
-}
-
-func markReconcileFailure(span trace.Span, err error) {
-	span.SetAttributes(
-		attribute.String("fruto.reconciliation.state", string(workloadStateDegraded)),
-		attribute.String("fruto.reconciliation.reason", platformv1alpha1.ReasonReconcileFailed),
-	)
-	markSpanError(span, err)
-}
-
-func logReconcileFailure(
-	ctx context.Context,
-	appDeployment *platformv1alpha1.AppDeployment,
-	err error,
-) {
-	ctrl.LoggerFrom(ctx).Error(err, "AppDeployment reconciliation failed",
-		"uid", appDeployment.UID,
-		"generation", appDeployment.Generation,
-		"observedGeneration", appDeployment.Status.ObservedGeneration,
-		"state", workloadStateDegraded,
-		"reason", platformv1alpha1.ReasonReconcileFailed,
-	)
-}
-
-func isPersistentReconcileError(err error) bool {
-	return apierrors.IsInvalid(err) ||
-		apierrors.IsBadRequest(err) ||
-		apierrors.IsForbidden(err) ||
-		apierrors.IsUnauthorized(err) ||
-		apierrors.IsMethodNotSupported(err)
 }

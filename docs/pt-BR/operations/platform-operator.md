@@ -154,6 +154,20 @@ Liveness informa a saúde do processo em `/healthz`. Readiness responde com
 sucesso em `/readyz` somente após a sincronização do cache do manager. A
 instalação base não expõe a porta de saúde por um Service.
 
+## Encerramento gracioso
+
+Ao receber `SIGTERM` ou `SIGINT`, readiness falha imediatamente e o manager tem
+até 20 segundos para encerrar controllers, caches e servidores internos. Em
+seguida, tracing usa um contexto novo para um flush limitado a cinco segundos. O
+Pod concede 30 segundos no total, preservando uma margem para a saída do processo
+antes que o Kubernetes possa forçar o encerramento.
+
+Uma reconciliação interrompida pelo encerramento do processo é trabalho
+incompleto, não degradação do workload. Ela não registra `ReconcileFailed`; o
+estado desejado permanece durável e é retomado pela próxima instância do manager.
+Um segundo sinal representa encerramento forçado explícito e não garante
+drenagem nem exportação dos traces.
+
 As métricas ficam disponíveis por HTTPS autenticado em
 `platform-operator-metrics.fruto-system.svc:8443`. Consumidores precisam de um
 binding para o ClusterRole `platform-operator-metrics-reader`. Além das métricas

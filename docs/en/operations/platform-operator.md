@@ -151,6 +151,18 @@ Liveness reports process health at `/healthz`. Readiness reports success at
 `/readyz` only after the manager cache is synchronized. The base installation
 does not expose the health port through a Service.
 
+## Graceful shutdown
+
+On `SIGTERM` or `SIGINT`, readiness fails immediately and the manager has up to
+20 seconds to stop controllers, caches, and internal servers. Tracing then uses
+a fresh context for a bounded five-second flush. The Pod grants 30 seconds in
+total so process exit retains a margin before Kubernetes can force termination.
+
+A reconciliation interrupted by process shutdown is unfinished work, not
+workload degradation. It does not record `ReconcileFailed`; the desired state
+remains durable and is resumed by the next manager instance. A second signal is
+an explicit forced termination and does not guarantee draining or trace export.
+
 Metrics are available over authenticated HTTPS through
 `platform-operator-metrics.fruto-system.svc:8443`. Consumers need a binding to
 the `platform-operator-metrics-reader` ClusterRole. The operator exposes native
