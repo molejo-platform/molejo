@@ -53,8 +53,13 @@ spec:
                 query "ALTER TABLE otel.otel_logs ADD COLUMN MolejoNamespace LowCardinality(String) MATERIALIZED ResourceAttributes['k8s.namespace.name']"
                 query "ALTER TABLE otel.otel_logs MATERIALIZE COLUMN MolejoNamespace SETTINGS mutations_sync = 2"
               fi
-              if [ "$(query "SELECT count() FROM system.columns WHERE database = 'otel' AND table = 'otel_logs' AND name = 'MolejoRuntime'")" = "0" ]; then
-                query "ALTER TABLE otel.otel_logs ADD COLUMN MolejoRuntime LowCardinality(String) MATERIALIZED ResourceAttributes['k8s.deployment.name']"
+              runtime_expression="$(query "SELECT default_expression FROM system.columns WHERE database = 'otel' AND table = 'otel_logs' AND name = 'MolejoRuntime' FORMAT TSVRaw")"
+              desired_runtime_expression="ResourceAttributes['molejo.app_environment.runtime']"
+              if [ -z "$runtime_expression" ]; then
+                query "ALTER TABLE otel.otel_logs ADD COLUMN MolejoRuntime LowCardinality(String) MATERIALIZED ResourceAttributes['molejo.app_environment.runtime']"
+                query "ALTER TABLE otel.otel_logs MATERIALIZE COLUMN MolejoRuntime SETTINGS mutations_sync = 2"
+              elif [ "$runtime_expression" != "$desired_runtime_expression" ]; then
+                query "ALTER TABLE otel.otel_logs MODIFY COLUMN MolejoRuntime LowCardinality(String) MATERIALIZED ResourceAttributes['molejo.app_environment.runtime']"
                 query "ALTER TABLE otel.otel_logs MATERIALIZE COLUMN MolejoRuntime SETTINGS mutations_sync = 2"
               fi
               if [ "$(query "SELECT count() FROM system.data_skipping_indices WHERE database = 'otel' AND table = 'otel_logs' AND name = 'MolejoNamespaceIndex'")" = "0" ]; then

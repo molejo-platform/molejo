@@ -234,6 +234,24 @@ func TestObservabilityIngestionIsRuntimeScopedAndQueriesAreBounded(t *testing.T)
 			t.Fatalf("VictoriaMetrics workload is missing %q", required)
 		}
 	}
+
+	migration, err := os.ReadFile(filepath.Join("..", "..", "deploy/observability/log-schema-migration.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	migrationText := string(migration)
+	for _, required := range []string{
+		"MODIFY COLUMN MolejoRuntime",
+		"MATERIALIZED ResourceAttributes['molejo.app_environment.runtime']",
+		"MATERIALIZE COLUMN MolejoRuntime",
+	} {
+		if !strings.Contains(migrationText, required) {
+			t.Fatalf("ClickHouse runtime correlation migration is missing %q", required)
+		}
+	}
+	if strings.Contains(migrationText, "MATERIALIZED ResourceAttributes['k8s.deployment.name']") {
+		t.Fatal("ClickHouse runtime correlation is coupled to Deployments")
+	}
 }
 
 func TestOpenEBSCapacityScrapeDropsVolumeCardinality(t *testing.T) {
