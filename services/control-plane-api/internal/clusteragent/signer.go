@@ -42,16 +42,31 @@ func NewSigner(certificatePEM, privateKeyPEM []byte, validity time.Duration) (*S
 	if err != nil || !certificate.IsCA {
 		return nil, fmt.Errorf("agent CA certificate is invalid")
 	}
-	parsedKey, err := x509.ParsePKCS8PrivateKey(privateKeyBlock.Bytes)
+	key, err := parseECDSAPrivateKey(privateKeyBlock.Bytes)
 	if err != nil {
 		return nil, fmt.Errorf("parse agent CA key: %w", err)
 	}
-	key, ok := parsedKey.(*ecdsa.PrivateKey)
 	caPublicKey, caUsesECDSA := certificate.PublicKey.(*ecdsa.PublicKey)
-	if !ok || !caUsesECDSA || key.Curve != elliptic.P256() || caPublicKey.Curve != elliptic.P256() || !caPublicKey.Equal(&key.PublicKey) {
+	if !caUsesECDSA || key.Curve != elliptic.P256() || caPublicKey.Curve != elliptic.P256() || !caPublicKey.Equal(&key.PublicKey) {
 		return nil, fmt.Errorf("agent CA must use a matching ECDSA P-256 key")
 	}
 	return &Signer{ca: certificate, key: key, caPEM: append([]byte(nil), certificatePEM...), validity: validity}, nil
+}
+
+func parseECDSAPrivateKey(der []byte) (*ecdsa.PrivateKey, error) {
+	parsed, pkcs8Err := x509.ParsePKCS8PrivateKey(der)
+	if pkcs8Err == nil {
+		key, ok := parsed.(*ecdsa.PrivateKey)
+		if !ok {
+			return nil, fmt.Errorf("private key is not ECDSA")
+		}
+		return key, nil
+	}
+	key, sec1Err := x509.ParseECPrivateKey(der)
+	if sec1Err != nil {
+		return nil, errors.Join(pkcs8Err, sec1Err)
+	}
+	return key, nil
 }
 
 func (s *Signer) Sign(installationID string, csrPEM []byte, now time.Time) (IssuedCertificate, error) {
