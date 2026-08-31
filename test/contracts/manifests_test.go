@@ -244,6 +244,9 @@ func TestObservabilityIngestionIsRuntimeScopedAndQueriesAreBounded(t *testing.T)
 		"MODIFY COLUMN MolejoRuntime",
 		"MATERIALIZED ResourceAttributes['molejo.app_environment.runtime']",
 		"MATERIALIZE COLUMN MolejoRuntime",
+		`runtime_changed=1`,
+		`materialize_runtime_index="$runtime_changed"`,
+		"MATERIALIZE INDEX MolejoRuntimeIndex",
 	} {
 		if !strings.Contains(migrationText, required) {
 			t.Fatalf("ClickHouse runtime correlation migration is missing %q", required)
