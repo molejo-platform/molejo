@@ -2,4 +2,8 @@
   <logger><level>information</level><console>true</console></logger>
   <listen_host>::</listen_host>
   <max_server_memory_usage_to_ram_ratio>0.65</max_server_memory_usage_to_ram_ratio>
+  <total_memory_profiler_step>0</total_memory_profiler_step>
+  <trace_log remove="1"/>
+  <metric_log remove="1"/>
+  <asynchronous_metric_log remove="1"/>
 </clickhouse>

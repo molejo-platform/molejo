@@ -284,6 +284,24 @@ func TestObservabilityAcceptanceSendsATimestampedOTLPLog(t *testing.T) {
 	}
 }
 
+func TestClickHouseDisablesUnconsumedHighFrequencySystemLogs(t *testing.T) {
+	config, err := os.ReadFile(filepath.Join("..", "..", "deploy/observability/config/clickhouse-retention.xml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(config)
+	for _, required := range []string{
+		"<total_memory_profiler_step>0</total_memory_profiler_step>",
+		`<trace_log remove="1"/>`,
+		`<metric_log remove="1"/>`,
+		`<asynchronous_metric_log remove="1"/>`,
+	} {
+		if !strings.Contains(text, required) {
+			t.Fatalf("ClickHouse bounded configuration is missing %q", required)
+		}
+	}
+}
+
 func TestOpenEBSCapacityScrapeDropsVolumeCardinality(t *testing.T) {
 	config, err := os.ReadFile(filepath.Join("..", "..", "deploy/observability/config/otel-cluster.yaml"))
 	if err != nil {
