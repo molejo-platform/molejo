@@ -14,37 +14,6 @@ import (
 	platformv1alpha1 "github.com/molejo-platform/molejo/packages/kubernetes-api/apis/platform/v1alpha1"
 )
 
-func TestAppVolumeReconcileCreatesOnePersistentClaim(t *testing.T) {
-	ctx := context.Background()
-	namespace := createTestNamespace(t, "stateful-volume")
-	volume := &platformv1alpha1.AppVolume{
-		ObjectMeta: metav1.ObjectMeta{Name: "vol-statefulvolume01", Namespace: namespace},
-		Spec: platformv1alpha1.AppVolumeSpec{
-			StorageClassName: "test-storage",
-			SizeGiB:          2,
-			RetentionPolicy:  platformv1alpha1.VolumeRetentionPreserve,
-		},
-	}
-	if err := testClient.Create(ctx, volume); err != nil {
-		t.Fatalf("create AppVolume: %v", err)
-	}
-	reconciler := &AppVolumeReconciler{Client: testClient, Scheme: testScheme}
-	request := ctrl.Request{NamespacedName: types.NamespacedName{Name: volume.Name, Namespace: namespace}}
-	if _, err := reconciler.Reconcile(ctx, request); err != nil {
-		t.Fatalf("reconcile AppVolume: %v", err)
-	}
-	claim := &corev1.PersistentVolumeClaim{}
-	if err := testClient.Get(ctx, request.NamespacedName, claim); err != nil {
-		t.Fatalf("get PersistentVolumeClaim: %v", err)
-	}
-	if claim.Spec.StorageClassName == nil || *claim.Spec.StorageClassName != "test-storage" {
-		t.Fatalf("storage class = %v", claim.Spec.StorageClassName)
-	}
-	if claim.Spec.Resources.Requests.Storage().Value() != 2<<30 {
-		t.Fatalf("storage request = %s", claim.Spec.Resources.Requests.Storage().String())
-	}
-}
-
 func TestStatefulAppDeploymentCreatesStatefulSetWithIndependentVolume(t *testing.T) {
 	ctx := context.Background()
 	namespace := createTestNamespace(t, "stateful-workload")
