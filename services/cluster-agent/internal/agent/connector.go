@@ -15,16 +15,19 @@ import (
 )
 
 type GRPCConnector struct {
-	address    string
-	serverName string
-	version    string
+	address         string
+	serverName      string
+	version         string
+	responseTimeout time.Duration
 }
+
+const controlChannelResponseTimeout = 10 * time.Second
 
 func NewGRPCConnector(address, serverName, version string) (*GRPCConnector, error) {
 	if address == "" || serverName == "" || version == "" {
 		return nil, errors.New("Agent gRPC configuration is incomplete")
 	}
-	return &GRPCConnector{address: address, serverName: serverName, version: version}, nil
+	return &GRPCConnector{address: address, serverName: serverName, version: version, responseTimeout: controlChannelResponseTimeout}, nil
 }
 
 func (c *GRPCConnector) Connect(ctx context.Context, identity agentidentity.StoredIdentity, paired func()) error {
@@ -41,14 +44,25 @@ func (c *GRPCConnector) Connect(ctx context.Context, identity agentidentity.Stor
 		return fmt.Errorf("create Agent gRPC client: %w", err)
 	}
 	defer connection.Close()
-	stream, err := clusteragentv1alpha1.NewClusterAgentServiceClient(connection).Connect(ctx)
+	streamContext, cancel := context.WithCancel(ctx)
+	defer cancel()
+	stream, err := clusteragentv1alpha1.NewClusterAgentServiceClient(connection).Connect(streamContext)
 	if err != nil {
 		return fmt.Errorf("open Agent gRPC stream: %w", err)
 	}
-	if err = stream.Send(&clusteragentv1alpha1.ConnectRequest{Payload: &clusteragentv1alpha1.ConnectRequest_Hello{Hello: &clusteragentv1alpha1.AgentHello{InstallationId: identity.InstallationID, AgentVersion: c.version}}}); err != nil {
+	return runControlChannel(streamContext, stream, identity.InstallationID, c.version, paired, c.responseTimeout)
+}
+
+type agentControlStream interface {
+	Send(*clusteragentv1alpha1.ConnectRequest) error
+	Recv() (*clusteragentv1alpha1.ConnectResponse, error)
+}
+
+func runControlChannel(ctx context.Context, stream agentControlStream, installationID string, version string, paired func(), responseTimeout time.Duration) error {
+	if err := stream.Send(&clusteragentv1alpha1.ConnectRequest{Payload: &clusteragentv1alpha1.ConnectRequest_Hello{Hello: &clusteragentv1alpha1.AgentHello{InstallationId: installationID, AgentVersion: version}}}); err != nil {
 		return fmt.Errorf("send Agent hello: %w", err)
 	}
-	response, err := stream.Recv()
+	response, err := receiveControlResponse(ctx, responseTimeout, stream.Recv)
 	if err != nil {
 		return fmt.Errorf("receive control plane hello: %w", err)
 	}
@@ -71,7 +85,7 @@ func (c *GRPCConnector) Connect(ctx context.Context, identity agentidentity.Stor
 			if err = stream.Send(&clusteragentv1alpha1.ConnectRequest{Payload: &clusteragentv1alpha1.ConnectRequest_Heartbeat{Heartbeat: &clusteragentv1alpha1.Heartbeat{Sequence: sequence, SentAtUnix: now.Unix()}}}); err != nil {
 				return fmt.Errorf("send Agent heartbeat: %w", err)
 			}
-			ack, receiveErr := stream.Recv()
+			ack, receiveErr := receiveControlResponse(ctx, responseTimeout, stream.Recv)
 			if receiveErr != nil {
 				return fmt.Errorf("receive Agent heartbeat acknowledgement: %w", receiveErr)
 			}
@@ -79,5 +93,28 @@ func (c *GRPCConnector) Connect(ctx context.Context, identity agentidentity.Stor
 				return errors.New("control plane heartbeat acknowledgement is invalid")
 			}
 		}
+	}
+}
+
+type controlResponseResult struct {
+	response *clusteragentv1alpha1.ConnectResponse
+	err      error
+}
+
+func receiveControlResponse(ctx context.Context, timeout time.Duration, receive func() (*clusteragentv1alpha1.ConnectResponse, error)) (*clusteragentv1alpha1.ConnectResponse, error) {
+	result := make(chan controlResponseResult, 1)
+	go func() {
+		response, err := receive()
+		result <- controlResponseResult{response: response, err: err}
+	}()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-timer.C:
+		return nil, fmt.Errorf("control channel response timed out: %w", context.DeadlineExceeded)
+	case received := <-result:
+		return received.response, received.err
 	}
 }
