@@ -1,0 +1,60 @@
+version: "2"
+
+run:
+  relative-path-mode: gomod
+
+linters:
+  default: none
+  enable:
+    - errcheck
+    - errorlint
+    - govet
+    - importas
+    - ineffassign
+    - nolintlint
+    - staticcheck
+  settings:
+    errorlint:
+      errorf: false
+    importas:
+      no-unaliased: true
+      alias:
+        - pkg: github.com/molejo-platform/molejo/packages/kubernetes-api/apis/platform/v1alpha1
+          alias: platformv1alpha1
+        - pkg: k8s.io/api/apps/v1
+          alias: appsv1
+        - pkg: k8s.io/api/core/v1
+          alias: corev1
+        - pkg: k8s.io/api/rbac/v1
+          alias: rbacv1
+        - pkg: k8s.io/apimachinery/pkg/api/errors
+          alias: apierrors
+        - pkg: k8s.io/apimachinery/pkg/apis/meta/v1
+          alias: metav1
+        - pkg: sigs.k8s.io/controller-runtime
+          alias: ctrl
+    staticcheck:
+      checks:
+        - all
+        - "-SA9003"
+        - "-SA1019"
+        - "-ST1000"
+        - "-ST1003"
+        - "-ST1005"
+        - "-ST1016"
+        - "-ST1020"
+        - "-ST1021"
+        - "-ST1022"
+        - "-ST1023"
+        - "-QF*"
+  exclusions:
+    generated: strict
+    warn-unused: true
+    rules:
+      - linters:
+          - errcheck
+        source: '^\s*defer .*\.(Close|Rollback|Remove|RemoveAll)\('
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

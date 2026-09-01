@@ -1,17 +1,32 @@
 set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
 
 envtest_version := "1.36.2"
+tool_mod := "tools/go.mod"
+go_sources := "contracts packages services test"
 
 default: verify
 
 fmt:
-    go fmt ./...
+    go tool -modfile={{ tool_mod }} gofumpt -w {{ go_sources }}
+    go tool -modfile={{ tool_mod }} gci write --skip-generated -s standard -s default -s localmodule {{ go_sources }}
 
 fmt-check:
-    test -z "$(find packages services test -type f -name '*.go' -exec gofmt -l {} + 2>/dev/null)"
+    test -z "$(find {{ go_sources }} -type f -name '*.go' -exec gofmt -l {} + 2>/dev/null)"
+    test -z "$(go tool -modfile={{ tool_mod }} gofumpt -l {{ go_sources }})"
+    test -z "$(go tool -modfile={{ tool_mod }} gci list --skip-generated -s standard -s default -s localmodule {{ go_sources }})"
 
 lint:
-    go vet ./...
+    GOCACHE="${GOCACHE:-/tmp/molejo-go-cache}" go -C tools build -o /tmp/molejo-golangci-lint github.com/golangci/golangci-lint/v2/cmd/golangci-lint
+    GOCACHE="${GOCACHE:-/tmp/molejo-go-cache}" GOLANGCI_LINT_CACHE="${GOLANGCI_LINT_CACHE:-/tmp/molejo-golangci-cache}" /tmp/molejo-golangci-lint run ./...
+
+mod-check:
+    go mod tidy -diff
+    go mod verify
+    go -C tools mod tidy -diff
+    go -C tools mod verify
+
+hooks-install:
+    hook_bin="$(git rev-parse --path-format=absolute --git-path lefthook)"; GOCACHE="${GOCACHE:-/tmp/molejo-go-cache}" go -C tools build -o "$hook_bin" github.com/evilmartians/lefthook/v2; "$hook_bin" install
 
 generate:
     BUF_CACHE_DIR="${BUF_CACHE_DIR:-/tmp/molejo-buf-cache}" go run github.com/bufbuild/buf/cmd/buf@v1.72.0 lint
@@ -36,4 +51,8 @@ control-plane-build:
 
 test: operator-test agent-test contract-test
 
-verify: generate fmt-check lint test control-plane-build
+verify: mod-check generate fmt-check lint test control-plane-build
+
+ci: verify
+    git diff --check
+    git diff --exit-code
