@@ -15,6 +15,7 @@ const (
 	StateEnrolling    State = "Enrolling"
 	StateConnecting   State = "Connecting"
 	StatePaired       State = "Paired"
+	StateStopping     State = "Stopping"
 	StateFailed       State = "Failed"
 
 	BackoffMinimum = time.Second
@@ -30,6 +31,7 @@ type Snapshot struct {
 type Status struct {
 	mu       sync.RWMutex
 	snapshot Snapshot
+	stopping bool
 }
 
 func NewStatus() *Status {
@@ -39,7 +41,17 @@ func NewStatus() *Status {
 func (s *Status) Set(state State, reason string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.stopping {
+		return
+	}
 	s.snapshot = Snapshot{State: state, Reason: reason, UpdatedAt: time.Now().UTC()}
+}
+
+func (s *Status) Stop() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.stopping = true
+	s.snapshot = Snapshot{State: StateStopping, UpdatedAt: time.Now().UTC()}
 }
 
 func (s *Status) Snapshot() Snapshot {
@@ -50,7 +62,7 @@ func (s *Status) Snapshot() Snapshot {
 
 func (s *Status) Ready() bool {
 	state := s.Snapshot().State
-	return state != StateInitializing && state != StateFailed
+	return state != StateInitializing && state != StateStopping && state != StateFailed
 }
 
 type Backoff struct {

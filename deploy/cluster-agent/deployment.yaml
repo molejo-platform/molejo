@@ -19,6 +19,8 @@ spec:
     spec:
       serviceAccountName: cluster-agent
       automountServiceAccountToken: false
+      # Keeps the Pod alive longer than the Agent's bounded lifecycle shutdown.
+      terminationGracePeriodSeconds: 30
       securityContext:
         runAsNonRoot: true
         seccompProfile: { type: RuntimeDefault }

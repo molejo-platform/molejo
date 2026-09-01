@@ -67,22 +67,8 @@ func run() error {
 	}
 	runner := agent.NewRunner(store, enroller, connector, status)
 	healthServer := &http.Server{Addr: env("MOLEJO_AGENT_HEALTH_ADDR", ":8081"), Handler: agent.HealthHandler(status), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 10 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 8 << 10}
-	healthErrors := make(chan error, 1)
-	go func() { healthErrors <- healthServer.ListenAndServe() }()
-	go runner.Run(ctx)
 	slog.Info("cluster Agent started", "version", version, "health_address", healthServer.Addr)
-	select {
-	case <-ctx.Done():
-		err = nil
-	case err = <-healthErrors:
-		if err == http.ErrServerClosed {
-			err = nil
-		}
-	}
-	shutdown, stop := context.WithTimeout(context.Background(), 5*time.Second)
-	defer stop()
-	_ = healthServer.Shutdown(shutdown)
-	return err
+	return superviseLifecycle(ctx, runner, healthServer, status)
 }
 
 func enrollmentHTTPClient() (*http.Client, error) {

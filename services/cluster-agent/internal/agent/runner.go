@@ -42,11 +42,11 @@ func NewRunner(store IdentityStore, enroller Enroller, connector Connector, stat
 	return &Runner{Store: store, Enroller: enroller, Connector: connector, Status: status, ValidateCertificate: ValidateCertificate, now: func() time.Time { return time.Now().UTC() }, backoff: NewBackoff(uint64(time.Now().UnixNano()))}
 }
 
-func (r *Runner) Run(ctx context.Context) {
+func (r *Runner) Run(ctx context.Context) error {
 	for ctx.Err() == nil {
 		err := r.ReconcileOnce(ctx)
 		if ctx.Err() != nil {
-			return
+			return nil
 		}
 		delay := 5 * time.Second
 		if err != nil {
@@ -58,10 +58,11 @@ func (r *Runner) Run(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			timer.Stop()
-			return
+			return nil
 		case <-timer.C:
 		}
 	}
+	return nil
 }
 
 func (r *Runner) ReconcileOnce(ctx context.Context) error {

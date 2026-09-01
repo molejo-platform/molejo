@@ -19,6 +19,20 @@ func TestStateRemainsReadyBeforePairing(t *testing.T) {
 	}
 }
 
+func TestStoppingStateIsUnreadyAndTerminal(t *testing.T) {
+	status := NewStatus()
+	status.Set(StatePaired, "")
+	status.Stop()
+	status.Set(StateConnecting, "connection interrupted")
+
+	if status.Ready() {
+		t.Fatal("stopping state remained ready")
+	}
+	if got := status.Snapshot(); got.State != StateStopping || got.Reason != "" {
+		t.Fatalf("status=%+v", got)
+	}
+}
+
 func TestBackoffIsBounded(t *testing.T) {
 	backoff := NewBackoff(1)
 	for range 100 {
