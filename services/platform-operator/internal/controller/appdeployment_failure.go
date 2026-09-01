@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"errors"
+	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -11,6 +12,16 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	platformv1alpha1 "github.com/molejo-platform/molejo/packages/kubernetes-api/apis/platform/v1alpha1"
+)
+
+const (
+	ownershipConflictRequeueAfter = 5 * time.Minute
+	persistentFailureRequeueAfter = 5 * time.Minute
+)
+
+var (
+	errOwnershipConflict = errors.New("required child is not controlled by the AppDeployment")
+	errHostnameConflict  = errors.New("public hostname is already owned by another AppDeployment")
 )
 
 func (r *AppDeploymentReconciler) handleProjectionFailure(
@@ -32,7 +43,7 @@ func (r *AppDeploymentReconciler) handleProjectionFailure(
 			attribute.String("molejo.reconciliation.state", string(decision.state)),
 			attribute.String("molejo.reconciliation.reason", decision.reason),
 		)
-		if statusErr := r.updateStatus(ctx, appDeployment, nil, decision, false, nil); statusErr != nil {
+		if statusErr := r.updateFailureStatus(ctx, appDeployment, decision); statusErr != nil {
 			if markCanceledReconciliation(ctx, span, statusErr) {
 				return ctrl.Result{}, nil
 			}
@@ -52,7 +63,7 @@ func (r *AppDeploymentReconciler) handleProjectionFailure(
 			attribute.String("molejo.reconciliation.state", string(decision.state)),
 			attribute.String("molejo.reconciliation.reason", decision.reason),
 		)
-		if statusErr := r.updateStatus(ctx, appDeployment, nil, decision, false, nil); statusErr != nil {
+		if statusErr := r.updateFailureStatus(ctx, appDeployment, decision); statusErr != nil {
 			if markCanceledReconciliation(ctx, span, statusErr) {
 				return ctrl.Result{}, nil
 			}
@@ -71,7 +82,7 @@ func (r *AppDeploymentReconciler) handleProjectionFailure(
 			reason:  platformv1alpha1.ReasonReconcileFailed,
 			message: "A required Kubernetes child could not be reconciled.",
 		}
-		if statusErr := r.updateStatus(ctx, appDeployment, nil, decision, false, nil); statusErr != nil {
+		if statusErr := r.updateFailureStatus(ctx, appDeployment, decision); statusErr != nil {
 			if markCanceledReconciliation(ctx, span, statusErr) {
 				return ctrl.Result{}, nil
 			}

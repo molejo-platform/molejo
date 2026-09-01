@@ -200,11 +200,11 @@ func TestReconcilePublicHTTPRouteDoesNotPatchAPIServerDefaults(t *testing.T) {
 	defaultingClient := &gatewayDefaultingClient{Client: baseClient}
 	reconciler := &AppDeploymentReconciler{Client: defaultingClient, Scheme: scheme}
 
-	if _, _, _, err := reconciler.applyPublication(ctx, appDeployment); err != nil {
+	if _, _, _, err := reconciler.applyHTTPPublication(ctx, appDeployment); err != nil {
 		t.Fatalf("create HTTPRoute: %v", err)
 	}
 	defaultingClient.patchCalls = 0
-	if _, _, _, err := reconciler.applyPublication(ctx, appDeployment); err != nil {
+	if _, _, _, err := reconciler.applyHTTPPublication(ctx, appDeployment); err != nil {
 		t.Fatalf("reconcile defaulted HTTPRoute: %v", err)
 	}
 	if defaultingClient.patchCalls != 0 {
