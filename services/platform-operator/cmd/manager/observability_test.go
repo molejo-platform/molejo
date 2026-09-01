@@ -3,9 +3,13 @@ package main
 import (
 	"context"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	dto "github.com/prometheus/client_model/go"
+	"sigs.k8s.io/yaml"
 )
 
 func TestManagerOptionsProtectMetricsEndpoint(t *testing.T) {
@@ -15,6 +19,9 @@ func TestManagerOptionsProtectMetricsEndpoint(t *testing.T) {
 	}
 	if options.Metrics.FilterProvider == nil {
 		t.Error("expected the metrics endpoint to enforce authentication and authorization")
+	}
+	if options.GracefulShutdownTimeout == nil || *options.GracefulShutdownTimeout != managerGracefulShutdownTimeout {
+		t.Fatalf("graceful shutdown timeout = %v, want %s", options.GracefulShutdownTimeout, managerGracefulShutdownTimeout)
 	}
 }
 
@@ -30,7 +37,7 @@ func TestReadinessRequiresSynchronizedCache(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			checker := readinessChecker(fakeCacheSyncer{synced: test.synchronized})
+			checker := readinessChecker(context.Background(), &fakeCacheSyncer{synced: test.synchronized})
 			request := httptest.NewRequest("GET", "/readyz", nil)
 			err := checker(request)
 			if test.wantError && err == nil {
@@ -40,6 +47,65 @@ func TestReadinessRequiresSynchronizedCache(t *testing.T) {
 				t.Fatalf("expected readiness to succeed: %v", err)
 			}
 		})
+	}
+}
+
+func TestReadinessFailsWithoutConsultingCacheAfterShutdownBegins(t *testing.T) {
+	processCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+	syncer := &fakeCacheSyncer{synced: true}
+
+	err := readinessChecker(processCtx, syncer)(httptest.NewRequest("GET", "/readyz", nil))
+	if err == nil {
+		t.Fatal("expected readiness to fail after shutdown begins")
+	}
+	if syncer.calls != 0 {
+		t.Fatalf("cache sync calls = %d, want 0", syncer.calls)
+	}
+}
+
+func TestFlushTracingUsesFreshBoundedContext(t *testing.T) {
+	err := flushTracing(func(ctx context.Context) error {
+		if err := ctx.Err(); err != nil {
+			t.Fatalf("flush context is already canceled: %v", err)
+		}
+		deadline, ok := ctx.Deadline()
+		if !ok {
+			t.Fatal("flush context has no deadline")
+		}
+		remaining := time.Until(deadline)
+		if remaining <= 0 || remaining > tracingShutdownTimeout {
+			t.Fatalf("flush deadline remaining = %s, want within (0, %s]", remaining, tracingShutdownTimeout)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("flush tracing: %v", err)
+	}
+}
+
+func TestShutdownBudgetFitsDeploymentTerminationGracePeriod(t *testing.T) {
+	contents, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "deploy", "operator", "manager", "deployment.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest := struct {
+		Spec struct {
+			Template struct {
+				Spec struct {
+					TerminationGracePeriodSeconds int64 `yaml:"terminationGracePeriodSeconds"`
+				} `yaml:"spec"`
+			} `yaml:"template"`
+		} `yaml:"spec"`
+	}{}
+	if err := yaml.Unmarshal(contents, &manifest); err != nil {
+		t.Fatal(err)
+	}
+
+	podGrace := time.Duration(manifest.Spec.Template.Spec.TerminationGracePeriodSeconds) * time.Second
+	required := managerGracefulShutdownTimeout + tracingShutdownTimeout
+	if podGrace <= required {
+		t.Fatalf("Pod termination grace = %s, must exceed the %s manager and tracing budget", podGrace, required)
 	}
 }
 
@@ -93,8 +159,10 @@ func TestBuildInfoMetricUsesOnlyBoundedLabels(t *testing.T) {
 
 type fakeCacheSyncer struct {
 	synced bool
+	calls  int
 }
 
-func (syncer fakeCacheSyncer) WaitForCacheSync(context.Context) bool {
+func (syncer *fakeCacheSyncer) WaitForCacheSync(context.Context) bool {
+	syncer.calls++
 	return syncer.synced
 }

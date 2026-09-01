@@ -37,6 +37,14 @@ type AppVolumeReconciler struct {
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 
 func (r *AppVolumeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	result, err := r.reconcile(ctx, req)
+	if isCanceledReconciliation(ctx, err) {
+		return ctrl.Result{}, nil
+	}
+	return result, err
+}
+
+func (r *AppVolumeReconciler) reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	volume := &platformv1alpha1.AppVolume{}
 	if err := r.Get(ctx, req.NamespacedName, volume); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)

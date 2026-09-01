@@ -59,4 +59,5 @@ spec:
               drop:
                 - ALL
             readOnlyRootFilesystem: true
-      terminationGracePeriodSeconds: 10
+      # Allows controller drain and trace export before forced termination.
+      terminationGracePeriodSeconds: 30
