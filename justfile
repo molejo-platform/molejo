@@ -2,7 +2,7 @@ set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
 
 envtest_version := "1.36.2"
 tool_mod := "tools/go.mod"
-go_sources := "contracts packages services test"
+go_sources := "apps contracts packages services test tools/cmd tools/internal"
 
 default: verify
 
@@ -49,9 +49,18 @@ contract-test:
 control-plane-build:
     go build -o /tmp/molejo-control-plane-api ./services/control-plane-api/cmd/control-plane-api
 
-test: operator-test agent-test contract-test
+distribution-build:
+    go build -o /tmp/molejoctl ./apps/molejoctl
+    go build -o /tmp/molejo-console-web ./apps/console-web
+    go -C tools build -o /tmp/molejo-release ./cmd/release
 
-verify: mod-check generate fmt-check lint test control-plane-build
+distribution-test:
+    go test ./apps/...
+    go -C tools test ./cmd/release/... ./internal/release/...
+
+test: operator-test agent-test contract-test distribution-test
+
+verify: mod-check generate fmt-check lint test control-plane-build distribution-build
 
 ci: verify
     git diff --check

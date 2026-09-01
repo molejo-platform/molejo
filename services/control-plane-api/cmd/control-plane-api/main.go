@@ -34,6 +34,8 @@ import (
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/store"
 )
 
+var version = "devel"
+
 func main() {
 	if err := run(); err != nil {
 		slog.Error("control plane stopped", "error", err)
@@ -46,6 +48,7 @@ func run() error {
 	if len(os.Args) > 1 {
 		command = os.Args[1]
 	}
+	slog.Info("control plane starting", "version", version, "command", command)
 	switch command {
 	case "hash-password":
 		return hashPassword()
