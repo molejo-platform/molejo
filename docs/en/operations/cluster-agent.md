@@ -40,9 +40,16 @@ the local key, Agent CA, certificate expiry, and installation URI before being
 persisted. The token is then removed and the Agent opens the TLS 1.3 mTLS stream.
 
 `/healthz` reports process health. `/readyz` remains successful in
-`Unconfigured`, `Unpaired`, `Enrolling`, `Connecting`, and `Paired`; `/status`
-exposes the current state without identity material. `Failed` means the local
-identity Secret is unreadable, unwritable, partial, invalid, or expired.
+`Unconfigured`, `Unpaired`, `Enrolling`, `Connecting`, and `Paired`; it becomes
+unavailable while the process is `Initializing`, `Stopping`, or `Failed`.
+`/status` exposes the current state without identity material. `Failed` means the
+local identity Secret is unreadable, unwritable, partial, invalid, or expired.
+
+The Agent bounds each control-plane response wait to ten seconds. A missing hello
+or heartbeat acknowledgement closes the stream and returns to the existing
+connection backoff. During termination, the Agent marks readiness unavailable,
+cancels the runner, shuts down the health server, and waits up to twenty seconds;
+the Pod termination grace period is thirty seconds.
 
 This increment has no automatic certificate rotation. A seven-day certificate
 must not be treated as a production lifecycle; re-pairing is the temporary
