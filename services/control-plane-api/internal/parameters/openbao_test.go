@@ -3,6 +3,7 @@ package parameters
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -101,7 +102,7 @@ func TestOpenBaoKV2MapsCASConflictWithoutLeakingResponse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = client.Put(context.Background(), "workspaces/ws-a/parameters/par-a", "sensitive-value", 2); err != ErrConflict {
+	if _, err = client.Put(context.Background(), "workspaces/ws-a/parameters/par-a", "sensitive-value", 2); !errors.Is(err, ErrConflict) {
 		t.Fatalf("Put() error = %v, want ErrConflict", err)
 	}
 }

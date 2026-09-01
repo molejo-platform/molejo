@@ -14,6 +14,9 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
+
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/audit"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/auth"
 	controlagent "github.com/molejo-platform/molejo/services/control-plane-api/internal/clusteragent"
@@ -24,12 +27,12 @@ import (
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/parameters"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/runtime"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/store"
-	"go.opentelemetry.io/otel/trace"
-	"go.opentelemetry.io/otel/trace/noop"
 )
 
-const maxRequestBody = 128 << 10
-const maxGitHubWebhookBody = 10 << 20
+const (
+	maxRequestBody       = 128 << 10
+	maxGitHubWebhookBody = 10 << 20
+)
 
 type Config struct {
 	Mode                            string
@@ -328,6 +331,7 @@ func (s *Server) validCSRF(r *http.Request, hash []byte) bool {
 	cookie, err := r.Cookie(s.Config.CookieName + "_csrf")
 	return err == nil && s.originAllowed(r) && len(hash) > 0 && csrf != "" && csrf == cookie.Value && equal(auth.HashToken(csrf), hash)
 }
+
 func (s *Server) originAllowed(r *http.Request) bool {
 	origin := r.Header.Get("Origin")
 	if s.Config.AllowedOrigin != "" {
@@ -335,6 +339,7 @@ func (s *Server) originAllowed(r *http.Request) bool {
 	}
 	return false
 }
+
 func equal(a, b []byte) bool {
 	if len(a) != len(b) {
 		return false
@@ -379,9 +384,11 @@ func securityMiddleware(s *Server, next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
+
 func (s *Server) isHTTPS(r *http.Request) bool {
 	return r.TLS != nil || s.proxyTrusted(r) && strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
 }
+
 func (s *Server) remoteIP(r *http.Request) string {
 	if s.proxyTrusted(r) {
 		if forwarded := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-For"), ",")[0]); net.ParseIP(forwarded) != nil {
@@ -421,6 +428,7 @@ func (s *Server) hostAllowed(host string) bool {
 	}
 	return false
 }
+
 func decodeJSON(r *http.Request, target any) error {
 	r.Body = io.NopCloser(io.LimitReader(r.Body, maxRequestBody))
 	dec := json.NewDecoder(r.Body)
@@ -434,6 +442,7 @@ func decodeJSON(r *http.Request, target any) error {
 	}
 	return nil
 }
+
 func idempotency(r *http.Request) (string, []byte, bool) {
 	value := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
 	if value == "" || len(value) > 128 {
@@ -449,6 +458,7 @@ func idempotency(r *http.Request) (string, []byte, bool) {
 	canonical, _ := json.Marshal(body)
 	return value, domain.SHA256(canonical), true
 }
+
 func randomToken(size int) (string, error) {
 	b := make([]byte, size)
 	if _, err := rand.Read(b); err != nil {
@@ -509,11 +519,13 @@ func (s *Server) recordAudit(r *http.Request, event audit.Event) error {
 	base.Metadata = event.Metadata
 	return s.Store.RecordAudit(r.Context(), base)
 }
+
 func writeJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(value)
 }
+
 func writeError(w http.ResponseWriter, status int, code, message string, r *http.Request) {
 	id := requestID(r)
 	if id == "" {

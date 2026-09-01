@@ -10,8 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molejo-platform/molejo/services/cluster-agent/internal/agent"
 	"sigs.k8s.io/yaml"
+
+	"github.com/molejo-platform/molejo/services/cluster-agent/internal/agent"
 )
 
 type lifecycleTestRunner struct {

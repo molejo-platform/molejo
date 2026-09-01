@@ -3,6 +3,7 @@ package observability
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -231,7 +232,7 @@ func TestUnavailableReaderHasStableError(t *testing.T) {
 	t.Parallel()
 
 	_, err := (UnavailableReader{}).Logs(context.Background(), Scope{}, LogQuery{})
-	if err != ErrUnavailable {
+	if !errors.Is(err, ErrUnavailable) {
 		t.Fatalf("got %v, want ErrUnavailable", err)
 	}
 }

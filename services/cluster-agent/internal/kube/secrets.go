@@ -7,16 +7,19 @@ import (
 	"strings"
 	"time"
 
-	agentidentity "github.com/molejo-platform/molejo/services/cluster-agent/internal/identity"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/util/retry"
+
+	agentidentity "github.com/molejo-platform/molejo/services/cluster-agent/internal/identity"
 )
 
-type Identity = agentidentity.StoredIdentity
-type Certificate = agentidentity.Certificate
+type (
+	Identity    = agentidentity.StoredIdentity
+	Certificate = agentidentity.Certificate
+)
 
 type SecretStore struct {
 	core           v1.CoreV1Interface

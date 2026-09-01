@@ -66,10 +66,12 @@ func (h *generatedHandler) ReceiveGitHubWebhook(w http.ResponseWriter, r *http.R
 		writeError(w, http.StatusBadRequest, "github_payload_invalid", "GitHub webhook payload is invalid", r)
 		return
 	}
-	delivery := domain.GitHubDelivery{DeliveryID: deliveryID, EventType: eventType, Action: strings.TrimSpace(payload.Action),
+	delivery := domain.GitHubDelivery{
+		DeliveryID: deliveryID, EventType: eventType, Action: strings.TrimSpace(payload.Action),
 		InstallationExternalID: payload.Installation.ID, RepositoryID: payload.Repository.ID,
 		RepositoryFullName: strings.TrimSpace(payload.Repository.FullName), SourceRef: strings.TrimSpace(payload.Ref),
-		TagName: strings.TrimSpace(payload.Release.TagName), PayloadHash: domain.SHA256(body)}
+		TagName: strings.TrimSpace(payload.Release.TagName), PayloadHash: domain.SHA256(body),
+	}
 	if eventType == "push" {
 		if strings.HasPrefix(delivery.SourceRef, "refs/heads/") {
 			delivery.SourceBranch = strings.TrimPrefix(delivery.SourceRef, "refs/heads/")

@@ -108,7 +108,7 @@ func TestWorkerRetriesAppEnvironmentDeletionUntilRuntimeAbsenceIsObserved(t *tes
 	if processed, runErr := server.RunOnce(ctx, "delete-worker"); runErr != nil || !processed {
 		t.Fatalf("second delete: processed=%v err=%v", processed, runErr)
 	}
-	if _, err = s.FindAppEnvironment(ctx, workspaceID, target.PublicID); err != store.ErrNotFound {
+	if _, err = s.FindAppEnvironment(ctx, workspaceID, target.PublicID); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("deleted target error=%v, want not found", err)
 	}
 	if runtimeClient.garbageCollections != 1 {

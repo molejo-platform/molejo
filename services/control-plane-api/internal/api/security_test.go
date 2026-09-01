@@ -10,11 +10,12 @@ import (
 	"testing"
 	"time"
 
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/auth"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/domain"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/store"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
 
 func TestNewServerWithPartialConfigPreservesStorePublicationPolicy(t *testing.T) {

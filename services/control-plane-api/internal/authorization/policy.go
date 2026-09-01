@@ -1,7 +1,9 @@
 package authorization
 
-type Permission string
-type Relation string
+type (
+	Permission string
+	Relation   string
+)
 
 const (
 	CreateWorkspace Permission = "installation.workspace.create"

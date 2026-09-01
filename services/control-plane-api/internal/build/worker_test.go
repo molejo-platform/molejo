@@ -98,16 +98,19 @@ type fakeBuildQueue struct {
 func (f *fakeBuildQueue) ClaimNextBuild(context.Context, string, time.Duration) (domain.Build, bool, error) {
 	return f.build, true, nil
 }
+
 func (f *fakeBuildQueue) AppendBuildLog(_ context.Context, _ domain.Build, message string) error {
 	f.logs += message
 	return nil
 }
+
 func (f *fakeBuildQueue) FailBuild(_ context.Context, _ domain.Build, code, _ string, retryable bool) error {
 	f.failed = true
 	f.failureCode = code
 	f.retryable = retryable
 	return nil
 }
+
 func (f *fakeBuildQueue) CompleteBuild(context.Context, domain.Build, string, string) (domain.Release, error) {
 	f.completed = true
 	return domain.Release{}, nil

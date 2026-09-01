@@ -9,10 +9,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pquerna/otp/totp"
+
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/auth"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/identity"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/store"
-	"github.com/pquerna/otp/totp"
 )
 
 func TestIdentityAPICreatesIndependentUserMembershipAndGroup(t *testing.T) {

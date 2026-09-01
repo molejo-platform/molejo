@@ -17,6 +17,9 @@ import (
 	"syscall"
 	"time"
 
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+
 	clusteragentv1alpha1 "github.com/molejo-platform/molejo/contracts/molejo/clusteragent/v1alpha1"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/api"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/auth"
@@ -29,8 +32,6 @@ import (
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/parameters"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/runtime"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/store"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 )
 
 func main() {
@@ -723,6 +724,7 @@ func withStore(fn func(*store.Store) error) error {
 	defer s.Close()
 	return fn(s)
 }
+
 func hashPassword() error {
 	password, err := io.ReadAll(os.Stdin)
 	if err != nil {
@@ -771,6 +773,7 @@ func bootstrap() error {
 		return s.Bootstrap(context.Background(), domain.Workspace{PublicID: workspaceID, Name: "Beta Workspace", Namespace: env("MOLEJO_WORKSPACE_NAMESPACE", "molejo-workspaces")}, actors)
 	})
 }
+
 func env(key, fallback string) string {
 	if value := strings.TrimSpace(os.Getenv(key)); value != "" {
 		return value

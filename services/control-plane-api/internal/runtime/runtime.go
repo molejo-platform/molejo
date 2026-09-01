@@ -10,8 +10,6 @@ import (
 	"strings"
 	"time"
 
-	platformv1alpha1 "github.com/molejo-platform/molejo/packages/kubernetes-api/apis/platform/v1alpha1"
-	"github.com/molejo-platform/molejo/services/control-plane-api/internal/domain"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -22,15 +20,20 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	platformv1alpha1 "github.com/molejo-platform/molejo/packages/kubernetes-api/apis/platform/v1alpha1"
+	"github.com/molejo-platform/molejo/services/control-plane-api/internal/domain"
 )
 
-const controlPlaneOwnerAnnotation = "platform.molejo.dev/control-plane-owner"
-const workspaceOwnerValue = "molejo-control-plane"
-const managedByLabel = "app.kubernetes.io/managed-by"
-const configurationVersionLabel = "platform.molejo.dev/configuration-version"
-const workspaceRuntimeAccessName = "control-plane-runtime"
-const runtimeWorkerServiceAccountName = "control-plane-runtime-worker"
-const controlPlaneNamespace = "molejo-control-plane"
+const (
+	controlPlaneOwnerAnnotation     = "platform.molejo.dev/control-plane-owner"
+	workspaceOwnerValue             = "molejo-control-plane"
+	managedByLabel                  = "app.kubernetes.io/managed-by"
+	configurationVersionLabel       = "platform.molejo.dev/configuration-version"
+	workspaceRuntimeAccessName      = "control-plane-runtime"
+	runtimeWorkerServiceAccountName = "control-plane-runtime-worker"
+	controlPlaneNamespace           = "molejo-control-plane"
+)
 
 var ErrOwnershipConflict = errors.New("runtime object is not owned by the control plane")
 

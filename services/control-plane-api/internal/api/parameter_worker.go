@@ -37,7 +37,8 @@ func (s *Server) RunParameterMaintenanceOnce(ctx context.Context) (bool, error) 
 	if err != nil {
 		return false, err
 	}
-	for _, candidate := range candidates {
+	if len(candidates) > 0 {
+		candidate := candidates[0]
 		if candidate.Kind == domain.ParameterSecret {
 			if candidate.SecretReference == "" {
 				return true, parameters.ErrUnavailable

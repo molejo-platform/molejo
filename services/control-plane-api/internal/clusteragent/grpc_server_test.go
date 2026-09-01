@@ -14,13 +14,14 @@ import (
 	"testing"
 	"time"
 
-	clusteragentv1alpha1 "github.com/molejo-platform/molejo/contracts/molejo/clusteragent/v1alpha1"
-	"github.com/molejo-platform/molejo/services/control-plane-api/internal/audit"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
+
+	clusteragentv1alpha1 "github.com/molejo-platform/molejo/contracts/molejo/clusteragent/v1alpha1"
+	"github.com/molejo-platform/molejo/services/control-plane-api/internal/audit"
 )
 
 type recordingAgentRegistry struct {

@@ -8,10 +8,11 @@ import (
 	"fmt"
 	"time"
 
-	clusteragentv1alpha1 "github.com/molejo-platform/molejo/contracts/molejo/clusteragent/v1alpha1"
-	agentidentity "github.com/molejo-platform/molejo/services/cluster-agent/internal/identity"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+
+	clusteragentv1alpha1 "github.com/molejo-platform/molejo/contracts/molejo/clusteragent/v1alpha1"
+	agentidentity "github.com/molejo-platform/molejo/services/cluster-agent/internal/identity"
 )
 
 type GRPCConnector struct {

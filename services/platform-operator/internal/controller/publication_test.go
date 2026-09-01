@@ -261,10 +261,14 @@ func TestGatewayCertificateFailureRevokesPublicReadinessWithoutAppChange(t *test
 	}
 	route := getHTTPRoute(t, ctx, key)
 	route.Status = routeWithConditions(
-		metav1.Condition{Type: string(gatewayv1.RouteConditionAccepted), Status: metav1.ConditionTrue,
-			ObservedGeneration: route.Generation},
-		metav1.Condition{Type: string(gatewayv1.RouteConditionResolvedRefs), Status: metav1.ConditionTrue,
-			ObservedGeneration: route.Generation},
+		metav1.Condition{
+			Type: string(gatewayv1.RouteConditionAccepted), Status: metav1.ConditionTrue,
+			ObservedGeneration: route.Generation,
+		},
+		metav1.Condition{
+			Type: string(gatewayv1.RouteConditionResolvedRefs), Status: metav1.ConditionTrue,
+			ObservedGeneration: route.Generation,
+		},
 	).Status
 	if err := testClient.Status().Update(ctx, route); err != nil {
 		t.Fatalf("mark HTTPRoute accepted: %v", err)
@@ -601,8 +605,10 @@ func TestEvaluatePublication(t *testing.T) {
 			name: "reports invalid resolved references",
 			route: routeWithConditions(
 				metav1.Condition{Type: string(gatewayv1.RouteConditionAccepted), Status: metav1.ConditionTrue},
-				metav1.Condition{Type: string(gatewayv1.RouteConditionResolvedRefs), Status: metav1.ConditionFalse,
-					Reason: string(gatewayv1.RouteReasonBackendNotFound)},
+				metav1.Condition{
+					Type: string(gatewayv1.RouteConditionResolvedRefs), Status: metav1.ConditionFalse,
+					Reason: string(gatewayv1.RouteReasonBackendNotFound),
+				},
 			),
 			wantState: workloadStateDegraded, wantReason: platformv1alpha1.ReasonHTTPRouteRejected,
 		},
@@ -692,12 +698,16 @@ func TestEvaluatePublicationGatewayUsesFailureFirstPrecedence(t *testing.T) {
 		metav1.Condition{Type: string(gatewayv1.GatewayConditionProgrammed), Status: metav1.ConditionUnknown},
 		metav1.Condition{Type: string(gatewayv1.ListenerConditionAccepted), Status: metav1.ConditionTrue},
 		metav1.Condition{Type: string(gatewayv1.ListenerConditionProgrammed), Status: metav1.ConditionFalse},
-		metav1.Condition{Type: string(gatewayv1.ListenerConditionResolvedRefs), Status: metav1.ConditionFalse,
-			Message: "secret private-certificate-detail is invalid"},
+		metav1.Condition{
+			Type: string(gatewayv1.ListenerConditionResolvedRefs), Status: metav1.ConditionFalse,
+			Message: "secret private-certificate-detail is invalid",
+		},
 	)
 	staleFailure := publicationGatewayWithConditions(
-		metav1.Condition{Type: string(gatewayv1.GatewayConditionProgrammed), Status: metav1.ConditionFalse,
-			ObservedGeneration: 2},
+		metav1.Condition{
+			Type: string(gatewayv1.GatewayConditionProgrammed), Status: metav1.ConditionFalse,
+			ObservedGeneration: 2,
+		},
 		metav1.Condition{Type: string(gatewayv1.ListenerConditionAccepted), Status: metav1.ConditionTrue},
 		metav1.Condition{Type: string(gatewayv1.ListenerConditionProgrammed), Status: metav1.ConditionTrue},
 		metav1.Condition{Type: string(gatewayv1.ListenerConditionResolvedRefs), Status: metav1.ConditionTrue},
@@ -799,7 +809,8 @@ func routeWithConditions(conditions ...metav1.Condition) *gatewayv1.HTTPRoute {
 				ControllerName: "molejo.test/gateway-controller",
 				Conditions:     conditions,
 			}},
-		}}}
+		}},
+	}
 }
 
 func publicationGatewayWithConditions(

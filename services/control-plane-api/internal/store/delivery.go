@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/domain"
 )
 
@@ -274,11 +275,13 @@ func (s *Store) CreateDeliveryTargetBuild(ctx context.Context, delivery domain.G
 	if _, err = tx.Exec(ctx, `UPDATE delivery_targets SET build_id=$1,updated_at=now() WHERE id=$2`, buildID, target.ID); err != nil {
 		return domain.DeliveryTarget{}, false, err
 	}
-	target = domain.DeliveryTarget{ID: target.ID, PublicID: targetPublicID, GitHubDeliveryID: delivery.ID,
+	target = domain.DeliveryTarget{
+		ID: target.ID, PublicID: targetPublicID, GitHubDeliveryID: delivery.ID,
 		WorkspaceID: candidate.WorkspaceID, ProjectID: candidate.ProjectID, AppID: candidate.AppID,
 		AppEnvironmentID: candidate.AppEnvironmentID, AppEnvironmentPublicID: candidate.AppEnvironmentPublicID,
 		RequestedByActorID: candidate.RequestedByActorID, TriggerType: trigger, SourceBranch: candidate.SourceBranch,
-		CommitSHA: metadata.SHA, BuildID: buildID, BuildPublicID: buildPublicID, Status: "Building"}
+		CommitSHA: metadata.SHA, BuildID: buildID, BuildPublicID: buildPublicID, Status: "Building",
+	}
 	return target, false, tx.Commit(ctx)
 }
 
@@ -358,15 +361,19 @@ func (s *Store) AttachDeliveryDeployment(ctx context.Context, targetID, deployme
 }
 
 func deliveryScanTargets(delivery *domain.GitHubDelivery) []any {
-	return []any{&delivery.ID, &delivery.DeliveryID, &delivery.EventType, &delivery.Action, &delivery.InstallationExternalID,
+	return []any{
+		&delivery.ID, &delivery.DeliveryID, &delivery.EventType, &delivery.Action, &delivery.InstallationExternalID,
 		&delivery.RepositoryID, &delivery.RepositoryFullName, &delivery.SourceBranch, &delivery.SourceRef, &delivery.CommitSHA,
 		&delivery.TagName, &delivery.RepositoryIDs, &delivery.PayloadHash, &delivery.Status, &delivery.Attempts,
-		&delivery.WorkerID, &delivery.FencingToken, &delivery.LeaseUntil}
+		&delivery.WorkerID, &delivery.FencingToken, &delivery.LeaseUntil,
+	}
 }
 
 func deliveryTargetScanTargets(target *domain.DeliveryTarget) []any {
-	return []any{&target.ID, &target.PublicID, &target.GitHubDeliveryID, &target.WorkspaceID, &target.ProjectID,
+	return []any{
+		&target.ID, &target.PublicID, &target.GitHubDeliveryID, &target.WorkspaceID, &target.ProjectID,
 		&target.AppID, &target.AppEnvironmentID, &target.AppEnvironmentPublicID, &target.RequestedByActorID,
 		&target.TriggerType, &target.SourceBranch, &target.CommitSHA, &target.BuildID, &target.BuildPublicID,
-		&target.ReleasePublicID, &target.DeploymentID, &target.DeploymentPublicID, &target.Status}
+		&target.ReleasePublicID, &target.DeploymentID, &target.DeploymentPublicID, &target.Status,
+	}
 }

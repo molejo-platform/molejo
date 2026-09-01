@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/api/generated"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/authorization"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/domain"

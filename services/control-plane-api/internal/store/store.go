@@ -18,11 +18,12 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/pressly/goose/v3"
+	"github.com/pressly/goose/v3/lock"
+
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/domain"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/identity"
 	storesqlc "github.com/molejo-platform/molejo/services/control-plane-api/internal/store/sqlc"
-	"github.com/pressly/goose/v3"
-	"github.com/pressly/goose/v3/lock"
 )
 
 //go:embed migrations/*.sql
@@ -429,9 +430,11 @@ var ErrNameConflict = fmt.Errorf("name conflict: %w", ErrConflict)
 
 var ErrDependencyConflict = fmt.Errorf("dependency conflict: %w", ErrConflict)
 
-var ErrParameterBinding = errors.New("parameter binding is invalid")
-var ErrParameterInUse = errors.New("parameter is in use")
-var ErrIdempotencyConflict = errors.New("idempotency key was reused with another payload")
+var (
+	ErrParameterBinding    = errors.New("parameter binding is invalid")
+	ErrParameterInUse      = errors.New("parameter is in use")
+	ErrIdempotencyConflict = errors.New("idempotency key was reused with another payload")
+)
 
 var ErrLeaseLost = errors.New("operation lease lost")
 

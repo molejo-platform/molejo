@@ -2,16 +2,18 @@ package api
 
 import (
 	"crypto/subtle"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/pquerna/otp/totp"
+
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/api/generated"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/audit"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/auth"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/parameters"
-	"github.com/pquerna/otp/totp"
 )
 
 const authenticationChallengeTTL = 5 * time.Minute
@@ -64,7 +66,7 @@ func (h *generatedHandler) BeginTOTPEnrollment(w http.ResponseWriter, r *http.Re
 	}
 	reference := fmt.Sprintf("identity/totp/%s", user.PublicID)
 	version, err := h.server.AuthenticationSecrets.Put(r.Context(), reference, key.Secret(), 0)
-	if err == parameters.ErrConflict {
+	if errors.Is(err, parameters.ErrConflict) {
 		currentVersion, inspectErr := h.server.AuthenticationSecrets.CurrentVersion(r.Context(), reference)
 		if inspectErr == nil {
 			version, err = h.server.AuthenticationSecrets.Put(r.Context(), reference, key.Secret(), currentVersion)

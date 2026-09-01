@@ -285,7 +285,8 @@ type apiSession struct {
 
 func createAPISession(t *testing.T, storage interface {
 	CreateSession(context.Context, int64, []byte, []byte, time.Time) error
-}, actorID int64, token, csrf string) apiSession {
+}, actorID int64, token, csrf string,
+) apiSession {
 	t.Helper()
 	if err := storage.CreateSession(context.Background(), actorID, auth.HashToken(token), auth.HashToken(csrf), time.Now().Add(time.Hour)); err != nil {
 		t.Fatal(err)

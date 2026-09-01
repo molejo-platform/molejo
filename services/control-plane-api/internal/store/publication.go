@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/domain"
 )
 

@@ -12,9 +12,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pressly/goose/v3"
+
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/domain"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/testsupport"
-	"github.com/pressly/goose/v3"
 )
 
 func TestParameterHardeningMigrationBackfillsArchivedParameters(t *testing.T) {

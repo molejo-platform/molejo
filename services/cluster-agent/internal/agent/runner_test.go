@@ -20,15 +20,19 @@ type memoryIdentityStore struct {
 func (s *memoryIdentityStore) LoadIdentity(context.Context) (agentidentity.StoredIdentity, error) {
 	return s.identity, nil
 }
+
 func (s *memoryIdentityStore) SaveEnrollmentIdentity(_ context.Context, value agentidentity.StoredIdentity) error {
 	s.identity, s.saved = value, true
 	return nil
 }
+
 func (s *memoryIdentityStore) EnrollmentToken(context.Context) (string, error) { return s.token, nil }
+
 func (s *memoryIdentityStore) SaveCertificate(_ context.Context, value agentidentity.Certificate) error {
 	s.identity.InstallationID, s.identity.CertificatePEM, s.identity.CACertificatePEM, s.identity.ExpiresAt = value.InstallationID, value.CertificatePEM, value.CACertificatePEM, value.ExpiresAt
 	return nil
 }
+
 func (s *memoryIdentityStore) ClearEnrollmentToken(context.Context) error {
 	if s.clearErr != nil {
 		return s.clearErr

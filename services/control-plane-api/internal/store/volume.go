@@ -6,12 +6,15 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/domain"
 )
 
-var ErrStorageProfileUnavailable = errors.New("storage profile unavailable")
-var ErrStorageQuotaExceeded = errors.New("storage quota exceeded")
-var ErrVolumeAttached = errors.New("volume is attached")
+var (
+	ErrStorageProfileUnavailable = errors.New("storage profile unavailable")
+	ErrStorageQuotaExceeded      = errors.New("storage quota exceeded")
+	ErrVolumeAttached            = errors.New("volume is attached")
+)
 
 type StorageProfileInstallation struct {
 	ID                string

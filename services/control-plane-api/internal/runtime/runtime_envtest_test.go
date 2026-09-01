@@ -6,13 +6,14 @@ import (
 	"testing"
 	"time"
 
-	platformv1alpha1 "github.com/molejo-platform/molejo/packages/kubernetes-api/apis/platform/v1alpha1"
-	"github.com/molejo-platform/molejo/services/control-plane-api/internal/domain"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
+
+	platformv1alpha1 "github.com/molejo-platform/molejo/packages/kubernetes-api/apis/platform/v1alpha1"
+	"github.com/molejo-platform/molejo/services/control-plane-api/internal/domain"
 )
 
 func TestEnvtestEnsuresExactWorkspaceAndAppDeploymentIdempotently(t *testing.T) {

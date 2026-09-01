@@ -13,10 +13,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/molejo-platform/molejo/services/cluster-agent/internal/agent"
-	agentkube "github.com/molejo-platform/molejo/services/cluster-agent/internal/kube"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+
+	"github.com/molejo-platform/molejo/services/cluster-agent/internal/agent"
+	agentkube "github.com/molejo-platform/molejo/services/cluster-agent/internal/kube"
 )
 
 var version = "dev"
