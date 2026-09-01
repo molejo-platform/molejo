@@ -9,6 +9,12 @@ import (
 	"strings"
 )
 
+var gatewayCRDFiles = []string{
+	"gateway.networking.k8s.io_gateways.yaml",
+	"gateway.networking.k8s.io_httproutes.yaml",
+	"gateway.networking.k8s.io_tcproutes.yaml",
+}
+
 func (p *Pipeline) packageCharts(ctx context.Context, directory string, digests map[string]string) (map[string]Artifact, error) {
 	result := make(map[string]Artifact, len(Charts))
 	for _, chart := range Charts {
@@ -30,6 +36,17 @@ func (p *Pipeline) packageCharts(ctx context.Context, directory string, digests 
 			if err = copyCRDs(filepath.Join(p.Root, "deploy", "crds"), filepath.Join(staging, "crds")); err != nil {
 				return nil, err
 			}
+			gatewayModule, moduleErr := p.runner.output(ctx, "go", "list", "-m", "-f={{.Dir}}", "sigs.k8s.io/gateway-api")
+			if moduleErr != nil {
+				return nil, moduleErr
+			}
+			if err = copyNamedFiles(
+				filepath.Join(gatewayModule, "config", "crd", "experimental"),
+				filepath.Join(staging, "crds"),
+				gatewayCRDFiles,
+			); err != nil {
+				return nil, err
+			}
 		}
 		if err = p.runner.run(ctx, nil, nil, "helm", "lint", staging); err != nil {
 			return nil, err
@@ -44,6 +61,22 @@ func (p *Pipeline) packageCharts(ctx context.Context, directory string, digests 
 		result[chart.Name] = Artifact{Reference: ChartRegistry + "/" + chart.Name, File: filename}
 	}
 	return result, nil
+}
+
+func copyNamedFiles(source, destination string, names []string) error {
+	if err := os.MkdirAll(destination, 0o755); err != nil {
+		return fmt.Errorf("create chart CRD directory: %w", err)
+	}
+	for _, name := range names {
+		contents, err := os.ReadFile(filepath.Join(source, name))
+		if err != nil {
+			return fmt.Errorf("read CRD %s: %w", name, err)
+		}
+		if err = os.WriteFile(filepath.Join(destination, name), contents, 0o644); err != nil {
+			return fmt.Errorf("write CRD %s: %w", name, err)
+		}
+	}
+	return nil
 }
 
 func copyCRDs(source, destination string) error {
@@ -78,6 +111,7 @@ func (p *Pipeline) renderChartResources(ctx context.Context, chart string, diges
 		if renderErr != nil {
 			return "", renderErr
 		}
+		operator = excludeYAMLKind(operator, "Namespace")
 		agent, renderErr := p.runner.output(ctx, "kubectl", "kustomize", "deploy/cluster-agent")
 		if renderErr != nil {
 			return "", renderErr
@@ -104,6 +138,23 @@ func (p *Pipeline) renderChartResources(ctx context.Context, chart string, diges
 		return "", fmt.Errorf("chart %s retains an unresolved image digest", chart)
 	}
 	return rendered, nil
+}
+
+func excludeYAMLKind(rendered, excludedKind string) string {
+	var kept []string
+	for _, document := range strings.Split(rendered, "\n---\n") {
+		kind := ""
+		for _, line := range strings.Split(document, "\n") {
+			if value, found := strings.CutPrefix(strings.TrimSpace(line), "kind:"); found {
+				kind = strings.TrimSpace(value)
+				break
+			}
+		}
+		if kind != excludedKind {
+			kept = append(kept, document)
+		}
+	}
+	return strings.Join(kept, "\n---\n")
 }
 
 func copyTree(source, destination string) error {

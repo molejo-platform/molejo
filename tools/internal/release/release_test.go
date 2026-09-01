@@ -91,6 +91,45 @@ func TestCopyCRDsExcludesKustomization(t *testing.T) {
 	}
 }
 
+func TestCopyNamedFilesCopiesOnlyRequestedCRDs(t *testing.T) {
+	t.Parallel()
+
+	source := t.TempDir()
+	destination := filepath.Join(t.TempDir(), "crds")
+	for _, name := range []string{"gateway.yaml", "httproute.yaml", "ignored.yaml"} {
+		if err := os.WriteFile(filepath.Join(source, name), []byte("kind: CustomResourceDefinition\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := copyNamedFiles(source, destination, []string{"gateway.yaml", "httproute.yaml"}); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := os.ReadDir(destination)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, entry := range entries {
+		names = append(names, entry.Name())
+	}
+	if want := []string{"gateway.yaml", "httproute.yaml"}; !reflect.DeepEqual(names, want) {
+		t.Fatalf("copied entries = %v, want %v", names, want)
+	}
+}
+
+func TestExcludeYAMLKindRemovesNamespace(t *testing.T) {
+	t.Parallel()
+
+	rendered := "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: molejo-system\n---\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: platform-operator"
+	filtered := excludeYAMLKind(rendered, "Namespace")
+	if strings.Contains(filtered, "kind: Namespace") {
+		t.Fatalf("namespace remains in rendered chart: %s", filtered)
+	}
+	if !strings.Contains(filtered, "kind: Deployment") {
+		t.Fatalf("deployment was removed from rendered chart: %s", filtered)
+	}
+}
+
 func TestImageDigestFromMetadata(t *testing.T) {
 	t.Parallel()
 

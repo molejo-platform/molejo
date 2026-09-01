@@ -14,7 +14,7 @@ func TestHelpAndVersion(t *testing.T) {
 		args []string
 		want []string
 	}{
-		{name: "help", args: []string{"--help"}, want: []string{"Install and operate Molejo", "molejoctl"}},
+		{name: "help", args: []string{"--help"}, want: []string{"Install and operate Molejo", "molejoctl", "cluster"}},
 		{name: "version", args: []string{"--version"}, want: []string{"v0.1.0-alpha.1", "abcdef", "2026-09-01T00:00:00Z"}},
 	}
 	for _, test := range tests {
