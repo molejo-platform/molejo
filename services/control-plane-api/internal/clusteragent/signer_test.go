@@ -63,6 +63,22 @@ func TestSignerRejectsNonP256CSR(t *testing.T) {
 	}
 }
 
+func TestSignerAcceptsStandardSEC1ECPrivateKey(t *testing.T) {
+	caCert, caKey := testCA(t)
+	block, _ := pem.Decode(caKey)
+	parsed, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sec1, err := x509.MarshalECPrivateKey(parsed.(*ecdsa.PrivateKey))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = NewSigner(caCert, pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: sec1}), time.Hour); err != nil {
+		t.Fatalf("SEC1 ECDSA key was rejected: %v", err)
+	}
+}
+
 func testCA(t *testing.T) ([]byte, []byte) {
 	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
