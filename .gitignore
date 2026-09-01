@@ -1,2 +1,9 @@
 # Planos de trabalho locais.
 /docs/plans/
+
+# JavaScript workspace artifacts.
+node_modules/
+dist/
+.pnpm-store/
+apps/console-web/test-results/
+.local/
