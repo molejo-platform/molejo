@@ -16,13 +16,11 @@ confiables reconcilian esa intención en recursos de Kubernetes.
 
 ## Estado
 
-El repositorio está en su etapa fundacional. El trabajo es intencionalmente
-incremental: se implementa la capacidad útil más pequeña, se la observa en
-ejecución, se la corrige a partir de evidencia real y solo entonces se la amplía.
-
-El alcance actual está limitado a convenciones de ingeniería, decisiones de
-arquitectura y los primeros contratos versionados. Todavía no existe una
-plataforma funcional, API pública, controller ni interfaz web.
+El repositorio continúa siendo experimental y pre-alfa. Su implementación actual
+incluye contratos de Kubernetes versionados, el Platform Operator, un backend de
+control plane y el flujo de pairing del Cluster Agent outbound. Estos componentes
+no constituyen una plataforma soportada para producción ni evidencia de una
+release pública soportada.
 
 ## Modelo del Producto
 
@@ -41,19 +39,15 @@ Kubernetes son proyecciones de runtime y nunca otorgan permisos del producto.
 
 ## Monorepo
 
-Este repositorio es el monorepo público de Molejo. Contendrá los contratos
-versionados y los componentes que implementan el producto público.
+Este repositorio es el monorepo público de Molejo. Su estructura actual es:
 
-La estructura se incorporará solo cuando cada componente tenga un consumidor real:
+- `contracts/` — contratos versionados neutrales de lenguaje y generados;
+- `packages/` — bibliotecas compartidas con consumidores concretos;
+- `services/` — Platform Operator, control plane y Cluster Agent;
+- `deploy/` — artefactos de instalación de Kubernetes generados y mantenidos;
+- `docs/` — documentación pública de arquitectura y operaciones.
 
-- `api/` — tipos de la API de Kubernetes y contratos versionados;
-- `cmd/` — entry points en Go para controllers, APIs y otros binarios;
-- `internal/` — implementación Go compartida y privada;
-- `web/` — interfaz web del producto;
-- `config/` — artefactos de instalación de Kubernetes generados y mantenidos;
-- `docs/` — documentación pública de arquitectura y del proyecto.
-
-El código Go inicial usará un único módulo en la raíz del repositorio. Se
+El código Go usa un único módulo en la raíz del repositorio. Se
 incorporarán nuevos módulos Go y un archivo `go.work` solamente cuando un
 componente, como un SDK público, requiera versionado y compatibilidad de releases
 independientes.
@@ -62,7 +56,7 @@ independientes.
 
 - Go, Kubebuilder y `controller-runtime` para controllers de Kubernetes;
 - Go, `net/http` y Chi para APIs HTTP;
-- TypeScript, React, Vite, Tailwind CSS, shadcn/ui y Lineicons para la interfaz web;
+- Protocol Buffers y gRPC para el canal autenticado del Cluster Agent;
 - Buildx y BuildKit para builds de containers;
 - un `justfile` en la raíz para comandos de desarrollo local.
 
@@ -75,10 +69,11 @@ El inglés es el idioma canónico de la documentación. Las versiones en portugu
 (`pt-BR`) y español de Argentina (`es-AR`) se mantienen en conjunto, y se podrán
 incorporar otros idiomas en el futuro.
 
-Los Architecture Decision Records se encuentran en
-[`adr`](adr/README.md). Los archivos de ADR usan el mismo identificador,
-nombre de archivo y headings en inglés en todos los idiomas; solo se localiza el
-contenido.
+Guías actuales de los componentes:
+
+- [Platform Operator](operations/platform-operator.md)
+- [Cluster Agent outbound](operations/cluster-agent.md)
+- [ADR de identidad y pairing del Cluster Agent outbound](adr/0013-outbound-cluster-agent-identity-and-pairing.md)
 
 ## Contribuciones
 

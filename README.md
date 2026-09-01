@@ -21,6 +21,11 @@ Choose a language:
 English is the canonical source. Localized documentation mirrors the same relative
 structure whenever an equivalent page is available.
 
+Current experimental components:
+
+- [Platform Operator](docs/en/operations/platform-operator.md)
+- [Outbound Cluster Agent](docs/en/operations/cluster-agent.md)
+
 ## Contributing
 
 Contribution guidelines will be added soon. See [CONTRIBUTING.md](CONTRIBUTING.md)
