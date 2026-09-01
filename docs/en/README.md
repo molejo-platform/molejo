@@ -1,16 +1,16 @@
-# Fruto Platform
+# Molejo
 
 [Project home](../../README.md) | [Português (Brasil)](../pt-BR/README.md) |
 [Español (Argentina)](../es-AR/README.md)
 
-> Experimental pre-alpha project. Fruto Platform is not ready for production.
+> Experimental pre-alpha project. Molejo is not ready for production.
 
-Fruto Platform is a public and portable Kubernetes Application Platform. It aims
+Molejo is a public and portable Kubernetes Application Platform. It aims
 to let people create, publish, and operate applications without requiring them to
 understand Kubernetes, `kubectl`, YAML, or the underlying infrastructure.
 
 Kubernetes is the execution substrate, not the product API. Users declare product
-intent through Fruto contracts, and trusted controllers reconcile that intent into
+intent through Molejo contracts, and trusted controllers reconcile that intent into
 Kubernetes resources.
 
 ## Status
@@ -40,7 +40,7 @@ projections and never grant product permissions.
 
 ## Monorepo
 
-This repository is the public Fruto Platform monorepo. It will contain the
+This repository is the public Molejo monorepo. It will contain the
 versioned contracts and the components that implement the public product.
 
 The structure will be introduced only when each component has a real consumer:

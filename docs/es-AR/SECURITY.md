@@ -7,14 +7,14 @@ Esta es una traducción informativa. La versión canónica está en
 
 ## Versiones Compatibles
 
-Fruto Platform es un proyecto experimental en pre-alfa y no tiene una release
+Molejo es un proyecto experimental en pre-alfa y no tiene una release
 compatible ni una versión lista para producción. Las correcciones de seguridad se
 aplican a la rama predeterminada según la disponibilidad de los mantenedores.
 
 ## Cómo Informar una Vulnerabilidad
 
 Informá las posibles vulnerabilidades mediante el
-[canal privado de vulnerabilidades de GitHub](https://github.com/fruto-platform/fruto/security/advisories/new).
+[canal privado de vulnerabilidades de GitHub](https://github.com/molejo-platform/molejo/security/advisories/new).
 No divulgues la vulnerabilidad en un issue, discusión o pull request público.
 
 Incluí, cuando sea posible:

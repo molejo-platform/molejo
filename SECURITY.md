@@ -7,14 +7,14 @@ English is the canonical version of this policy.
 
 ## Supported Versions
 
-Fruto Platform is an experimental pre-alpha project and has no supported release
+Molejo is an experimental pre-alpha project and has no supported release
 or production-ready version. Security fixes are applied to the default branch on
 a best-effort basis.
 
 ## Reporting a Vulnerability
 
 Report suspected vulnerabilities through
-[GitHub private vulnerability reporting](https://github.com/fruto-platform/fruto/security/advisories/new).
+[GitHub private vulnerability reporting](https://github.com/molejo-platform/molejo/security/advisories/new).
 Do not disclose the vulnerability in a public issue, discussion, or pull request.
 
 Include, when possible:

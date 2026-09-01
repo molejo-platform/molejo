@@ -1,13 +1,13 @@
-# Fruto Platform
+# Molejo
 
-> Experimental pre-alpha project. Fruto Platform is not ready for production.
+> Experimental pre-alpha project. Molejo is not ready for production.
 
-Fruto Platform is a public and portable Kubernetes Application Platform. It aims
+Molejo is a public and portable Kubernetes Application Platform. It aims
 to let people create, publish, and operate applications without requiring them to
 understand Kubernetes, `kubectl`, YAML, or the underlying infrastructure.
 
 This repository is the public monorepo for the product. Kubernetes is its execution
-substrate, while Fruto contracts and APIs represent the product intent exposed to
+substrate, while Molejo contracts and APIs represent the product intent exposed to
 users.
 
 ## Documentation

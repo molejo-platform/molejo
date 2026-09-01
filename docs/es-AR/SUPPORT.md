@@ -5,7 +5,7 @@
 Esta es una traducción informativa. La versión canónica está en
 [inglés](../../SUPPORT.md).
 
-Fruto Platform es un proyecto experimental en pre-alfa. Actualmente no ofrece
+Molejo es un proyecto experimental en pre-alfa. Actualmente no ofrece
 soporte para producción, compromiso de compatibilidad ni garantía de tiempo de
 respuesta.
 
