@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cluster-agent-config
+  namespace: molejo-system
+data:
+  MOLEJO_AGENT_ENROLLMENT_URL: https://cloud.molejo.dev/agent/v1/enroll
+  MOLEJO_AGENT_GRPC_ADDRESS: dns:///control-plane-api.molejo-control-plane.svc.cluster.local:8443
+  MOLEJO_AGENT_GRPC_SERVER_NAME: control-plane-api.molejo-control-plane.svc.cluster.local
+  MOLEJO_AGENT_IDENTITY_SECRET: molejo-agent-identity
+  MOLEJO_AGENT_ENROLLMENT_SECRET: molejo-agent-enrollment

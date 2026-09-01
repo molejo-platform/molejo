@@ -1,0 +1,20 @@
+# Incomplete, non-installed example: database egress is intentionally unrestricted
+# until an installation supplies its actual PostgreSQL destination and validates it
+# with the selected CNI. Do not add this file to kustomization.yaml as-is.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: control-plane-api-egress
+  namespace: molejo-control-plane
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: control-plane-api }
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: kube-system } }
+      ports: [{ protocol: UDP, port: 53 }, { protocol: TCP, port: 53 }]
+    - to:
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: molejo-workspaces } }
+      ports: [{ protocol: TCP, port: 443 }]
+    - ports: [{ protocol: TCP, port: 5432 }]
