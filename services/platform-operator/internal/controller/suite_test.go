@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -27,6 +28,8 @@ var (
 	testConfig      *rest.Config
 	testEnvironment *envtest.Environment
 	testScheme      = runtime.NewScheme()
+	envtestOnce     sync.Once
+	envtestErr      error
 )
 
 func TestMain(m *testing.M) {
@@ -51,41 +54,49 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 
-	crdDirectory, err := filepath.Abs("../../../../deploy/crds")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "resolve CRD directory: %v\n", err)
-		os.Exit(1)
-	}
-	gatewayCRDs, err := gatewayAPICRDs()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "load pinned Gateway API CRDs: %v\n", err)
-		os.Exit(1)
-	}
-	testEnvironment = &envtest.Environment{
-		CRDDirectoryPaths:     []string{crdDirectory},
-		ErrorIfCRDPathMissing: true,
-		CRDs:                  gatewayCRDs,
-	}
-	testConfig, err = testEnvironment.Start()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "start envtest: %v\n", err)
-		os.Exit(1)
-	}
-	testClient, err = client.New(testConfig, client.Options{Scheme: testScheme})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "create test client: %v\n", err)
-		_ = testEnvironment.Stop()
-		os.Exit(1)
-	}
-
 	exitCode := m.Run()
-	if err := testEnvironment.Stop(); err != nil {
-		fmt.Fprintf(os.Stderr, "stop envtest: %v\n", err)
-		if exitCode == 0 {
-			exitCode = 1
+	if testEnvironment != nil {
+		if err := testEnvironment.Stop(); err != nil {
+			fmt.Fprintf(os.Stderr, "stop envtest: %v\n", err)
+			if exitCode == 0 {
+				exitCode = 1
+			}
 		}
 	}
 	os.Exit(exitCode)
+}
+
+func startEnvtest(t *testing.T) {
+	t.Helper()
+	envtestOnce.Do(func() {
+		crdDirectory, err := filepath.Abs("../../../../deploy/crds")
+		if err != nil {
+			envtestErr = fmt.Errorf("resolve CRD directory: %w", err)
+			return
+		}
+		gatewayCRDs, err := gatewayAPICRDs()
+		if err != nil {
+			envtestErr = fmt.Errorf("load pinned Gateway API CRDs: %w", err)
+			return
+		}
+		testEnvironment = &envtest.Environment{
+			CRDDirectoryPaths:     []string{crdDirectory},
+			ErrorIfCRDPathMissing: true,
+			CRDs:                  gatewayCRDs,
+		}
+		testConfig, err = testEnvironment.Start()
+		if err != nil {
+			envtestErr = fmt.Errorf("start envtest: %w", err)
+			return
+		}
+		testClient, err = client.New(testConfig, client.Options{Scheme: testScheme})
+		if err != nil {
+			envtestErr = fmt.Errorf("create test client: %w", err)
+		}
+	})
+	if envtestErr != nil {
+		t.Fatalf("initialize envtest: %v", envtestErr)
+	}
 }
 
 func gatewayAPICRDs() ([]*apiextensionsv1.CustomResourceDefinition, error) {
