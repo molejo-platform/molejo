@@ -28,9 +28,12 @@ operator-test:
 agent-test:
     go test ./contracts/... ./services/cluster-agent/... ./services/control-plane-api/...
 
+contract-test:
+    go test ./test/contracts
+
 control-plane-build:
     go build -o /tmp/molejo-control-plane-api ./services/control-plane-api/cmd/control-plane-api
 
-test: operator-test agent-test
+test: operator-test agent-test contract-test
 
 verify: generate fmt-check lint test control-plane-build
