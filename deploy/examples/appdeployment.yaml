@@ -1,0 +1,24 @@
+apiVersion: platform.molejo.dev/v1alpha1
+kind: AppDeployment
+metadata:
+  name: ap-example0001
+  namespace: default
+spec:
+  workload:
+    kind: Stateless
+    stateless: {}
+  # Replace this placeholder with an HTTP image pinned by its manifest digest.
+  image: registry.example.com/molejo/http-app@sha256:0000000000000000000000000000000000000000000000000000000000000000
+  port: 8080
+  resources:
+    requests:
+      cpuMillis: 50
+      memoryMiB: 64
+    limits:
+      cpuMillis: 500
+      memoryMiB: 256
+  probes:
+    liveness:
+      path: /healthz
+    readiness:
+      path: /readyz

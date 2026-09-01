@@ -1,0 +1,541 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.21.0
+  name: appdeployments.platform.molejo.dev
+spec:
+  group: platform.molejo.dev
+  names:
+    kind: AppDeployment
+    listKind: AppDeploymentList
+    plural: appdeployments
+    shortNames:
+    - appdep
+    singular: appdeployment
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.image
+      name: Image
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: AppDeployment represents the stable runtime intent for one AppEnvironment.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: AppDeploymentSpec declares the minimum workload intent understood
+              by the platform operator.
+            properties:
+              configMapRef:
+                description: ConfigMapRef names an immutable ConfigMap prepared by
+                  the control plane.
+                type: string
+              exposure:
+                default: Private
+                description: Deprecated compatibility projection for pre-multiport
+                  v1alpha1 objects.
+                enum:
+                - Private
+                - Public
+                type: string
+              image:
+                description: Image is an immutable OCI image reference.
+                pattern: ^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$
+                type: string
+              port:
+                description: Deprecated compatibility projection for pre-multiport
+                  v1alpha1 objects.
+                format: int32
+                maximum: 65535
+                minimum: 1
+                type: integer
+              ports:
+                description: Ports are stable, named TCP ports exposed by the workload
+                  Service.
+                items:
+                  description: AppDeploymentPort is one named TCP port exposed by
+                    the workload.
+                  properties:
+                    containerPort:
+                      format: int32
+                      maximum: 65535
+                      minimum: 1
+                      type: integer
+                    name:
+                      maxLength: 15
+                      minLength: 1
+                      pattern: ^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$
+                      type: string
+                    protocol:
+                      description: Protocol defines network protocols supported for
+                        things like container ports.
+                      enum:
+                      - TCP
+                      type: string
+                  required:
+                  - containerPort
+                  - name
+                  - protocol
+                  type: object
+                maxItems: 8
+                minItems: 1
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
+              probes:
+                description: Probes declares health checks against named workload
+                  ports.
+                properties:
+                  liveness:
+                    description: Liveness identifies the endpoint used to detect an
+                      unhealthy process.
+                    properties:
+                      path:
+                        description: Path is an absolute HTTP path served by the workload.
+                        maxLength: 2048
+                        minLength: 1
+                        pattern: ^/.*$
+                        type: string
+                      portName:
+                        description: PortName defaults to the legacy http port only
+                          for existing v1alpha1 objects.
+                        maxLength: 15
+                        minLength: 1
+                        pattern: ^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$
+                        type: string
+                      type:
+                        description: Type defaults to HTTP only for existing v1alpha1
+                          objects.
+                        enum:
+                        - HTTP
+                        - TCP
+                        type: string
+                    type: object
+                    x-kubernetes-validations:
+                    - message: HTTP and legacy probes require a path
+                      rule: has(self.type) && self.type == 'TCP' || has(self.path)
+                    - message: TCP probes do not accept a path
+                      rule: '!has(self.type) || self.type != ''TCP'' || !has(self.path)'
+                  readiness:
+                    description: Readiness identifies the endpoint used to admit the
+                      process to the Service.
+                    properties:
+                      path:
+                        description: Path is an absolute HTTP path served by the workload.
+                        maxLength: 2048
+                        minLength: 1
+                        pattern: ^/.*$
+                        type: string
+                      portName:
+                        description: PortName defaults to the legacy http port only
+                          for existing v1alpha1 objects.
+                        maxLength: 15
+                        minLength: 1
+                        pattern: ^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$
+                        type: string
+                      type:
+                        description: Type defaults to HTTP only for existing v1alpha1
+                          objects.
+                        enum:
+                        - HTTP
+                        - TCP
+                        type: string
+                    type: object
+                    x-kubernetes-validations:
+                    - message: HTTP and legacy probes require a path
+                      rule: has(self.type) && self.type == 'TCP' || has(self.path)
+                    - message: TCP probes do not accept a path
+                      rule: '!has(self.type) || self.type != ''TCP'' || !has(self.path)'
+                  startup:
+                    description: |-
+                      Startup is optional for compatibility with existing v1alpha1 objects. The
+                      operator falls back to readiness until the control plane rewrites them.
+                    properties:
+                      path:
+                        description: Path is an absolute HTTP path served by the workload.
+                        maxLength: 2048
+                        minLength: 1
+                        pattern: ^/.*$
+                        type: string
+                      portName:
+                        description: PortName defaults to the legacy http port only
+                          for existing v1alpha1 objects.
+                        maxLength: 15
+                        minLength: 1
+                        pattern: ^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$
+                        type: string
+                      type:
+                        description: Type defaults to HTTP only for existing v1alpha1
+                          objects.
+                        enum:
+                        - HTTP
+                        - TCP
+                        type: string
+                    type: object
+                    x-kubernetes-validations:
+                    - message: HTTP and legacy probes require a path
+                      rule: has(self.type) && self.type == 'TCP' || has(self.path)
+                    - message: TCP probes do not accept a path
+                      rule: '!has(self.type) || self.type != ''TCP'' || !has(self.path)'
+                required:
+                - liveness
+                - readiness
+                type: object
+              publicEndpoints:
+                description: PublicEndpoints are allocation results produced by the
+                  control plane.
+                items:
+                  description: AppDeploymentPublicEndpoint is a bounded public route
+                    allocated by the control plane.
+                  properties:
+                    externalPort:
+                      format: int32
+                      maximum: 65535
+                      minimum: 1
+                      type: integer
+                    hostname:
+                      description: Hostname is the exact public name resolved by the
+                        control plane.
+                      maxLength: 253
+                      type: string
+                    hostnameLabel:
+                      maxLength: 253
+                      minLength: 1
+                      type: string
+                    name:
+                      maxLength: 15
+                      minLength: 1
+                      pattern: ^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$
+                      type: string
+                    portName:
+                      maxLength: 15
+                      minLength: 1
+                      pattern: ^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$
+                      type: string
+                    type:
+                      description: AppDeploymentPublicEndpointType selects the shared
+                        publication path.
+                      enum:
+                      - HTTP
+                      - TCP
+                      type: string
+                  required:
+                  - hostnameLabel
+                  - name
+                  - portName
+                  - type
+                  type: object
+                  x-kubernetes-validations:
+                  - message: TCP publication requires an allocated external port
+                    rule: self.type != 'TCP' || has(self.externalPort)
+                  - message: HTTP publication does not use an external port
+                    rule: self.type != 'HTTP' || !has(self.externalPort)
+                maxItems: 2
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
+              replicas:
+                default: 1
+                description: Replicas is the desired number of workload replicas.
+                format: int32
+                minimum: 1
+                type: integer
+              resources:
+                description: Resources declares the required compute requests and
+                  limits.
+                properties:
+                  limits:
+                    description: Limits declares the maximum compute available to
+                      the workload.
+                    properties:
+                      cpuMillis:
+                        description: CPUMillis is CPU capacity measured in millicores.
+                        format: int64
+                        minimum: 1
+                        type: integer
+                      memoryMiB:
+                        description: MemoryMiB is memory capacity measured in mebibytes.
+                        format: int64
+                        minimum: 1
+                        type: integer
+                    required:
+                    - cpuMillis
+                    - memoryMiB
+                    type: object
+                  requests:
+                    description: Requests declares the minimum compute reserved for
+                      the workload.
+                    properties:
+                      cpuMillis:
+                        description: CPUMillis is CPU capacity measured in millicores.
+                        format: int64
+                        minimum: 1
+                        type: integer
+                      memoryMiB:
+                        description: MemoryMiB is memory capacity measured in mebibytes.
+                        format: int64
+                        minimum: 1
+                        type: integer
+                    required:
+                    - cpuMillis
+                    - memoryMiB
+                    type: object
+                required:
+                - limits
+                - requests
+                type: object
+                x-kubernetes-validations:
+                - message: CPU requests must not exceed CPU limits
+                  rule: self.requests.cpuMillis <= self.limits.cpuMillis
+                - message: memory requests must not exceed memory limits
+                  rule: self.requests.memoryMiB <= self.limits.memoryMiB
+              secretRef:
+                description: SecretRef names an immutable Secret prepared by the control
+                  plane.
+                type: string
+              slug:
+                description: Deprecated compatibility projection for pre-multiport
+                  v1alpha1 objects.
+                maxLength: 63
+                minLength: 1
+                pattern: ^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$
+                type: string
+              variables:
+                description: Variables are non-secret environment variables projected
+                  into the workload.
+                items:
+                  description: AppDeploymentVariable declares one non-secret environment
+                    variable.
+                  properties:
+                    name:
+                      description: Name follows the portable environment variable
+                        identifier format.
+                      maxLength: 253
+                      pattern: ^[A-Za-z_][A-Za-z0-9_]*$
+                      type: string
+                    value:
+                      description: Value is stored in clear text and must not contain
+                        secret material.
+                      maxLength: 4096
+                      type: string
+                  required:
+                  - name
+                  - value
+                  type: object
+                maxItems: 100
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
+              workload:
+                description: Workload selects exactly one workload renderer.
+                properties:
+                  kind:
+                    description: AppDeploymentWorkloadKind discriminates the workload
+                      renderer.
+                    enum:
+                    - Stateless
+                    - Stateful
+                    type: string
+                  stateful:
+                    description: StatefulWorkload attaches one durable AppVolume to
+                      the workload.
+                    properties:
+                      mountPath:
+                        description: MountPath is the absolute path made writable
+                          in the workload container.
+                        maxLength: 255
+                        minLength: 2
+                        pattern: ^/[^[:cntrl:]]+$
+                        type: string
+                      volumeRef:
+                        description: VolumeRef is the namespaced AppVolume identity.
+                        maxLength: 63
+                        pattern: ^vol-[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$
+                        type: string
+                    required:
+                    - mountPath
+                    - volumeRef
+                    type: object
+                  stateless:
+                    description: StatelessWorkload marks a workload without persistent
+                      storage.
+                    type: object
+                required:
+                - kind
+                type: object
+                x-kubernetes-validations:
+                - message: Stateless requires only the stateless branch
+                  rule: self.kind != 'Stateless' || (has(self.stateless) && !has(self.stateful))
+                - message: Stateful requires only the stateful branch
+                  rule: self.kind != 'Stateful' || (has(self.stateful) && !has(self.stateless))
+            required:
+            - image
+            - probes
+            - resources
+            - workload
+            type: object
+            x-kubernetes-validations:
+            - message: legacy public exposure requires a slug
+              rule: '!has(self.exposure) || self.exposure != ''Public'' || has(self.slug)'
+            - message: legacy private exposure omits the slug
+              rule: '!has(self.exposure) || self.exposure != ''Private'' || !has(self.slug)'
+            - message: at least one legacy or named port is required
+              rule: has(self.port) || has(self.ports)
+            - message: Stateful workloads require exactly one replica
+              rule: self.workload.kind != 'Stateful' || !has(self.replicas) || self.replicas
+                == 1
+          status:
+            description: AppDeploymentStatus reports the observed workload state.
+            properties:
+              conditions:
+                description: Conditions describe readiness, progress, and degradation.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              endpointStatuses:
+                description: EndpointStatuses keep HTTP and TCP publication outcomes
+                  independent.
+                items:
+                  description: AppDeploymentEndpointStatus reports one independently
+                    reconciled publication.
+                  properties:
+                    name:
+                      type: string
+                    ready:
+                      type: boolean
+                    reason:
+                      type: string
+                    type:
+                      description: AppDeploymentPublicEndpointType selects the shared
+                        publication path.
+                      enum:
+                      - HTTP
+                      - TCP
+                      type: string
+                  required:
+                  - name
+                  - ready
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
+              observedGeneration:
+                description: ObservedGeneration is the latest generation successfully
+                  projected to the workload.
+                format: int64
+                type: integer
+              observedRelease:
+                description: ObservedRelease is the immutable image reference projected
+                  to the workload.
+                type: string
+              workloadRef:
+                description: WorkloadRef identifies the Deployment managed for this
+                  resource.
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+            type: object
+        required:
+        - spec
+        type: object
+        x-kubernetes-validations:
+        - message: metadata.name must start with ap- and contain at most 63 lowercase
+            DNS-compatible characters
+          rule: self.metadata.name.matches('^ap-[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$')
+            && size(self.metadata.name) <= 63
+    served: true
+    storage: true
+    subresources:
+      status: {}
