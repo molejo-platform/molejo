@@ -1,2 +1,10 @@
 postgresql:
   storageClass: ""
+
+public:
+  enabled: false
+  host: ""
+  gateway:
+    namespace: molejo-system
+    name: molejo
+    sectionName: https-molejo

@@ -28,7 +28,7 @@ func newControlPlaneCommand(cliVersion string, installer controlPlaneInstaller) 
 }
 
 func newControlPlaneInstallCommand(cliVersion string, installer controlPlaneInstaller) *cobra.Command {
-	var contextName, requestedVersion, storageClass string
+	var contextName, requestedVersion, storageClass, publicHost, gatewayReference, gatewaySection string
 	var showGeneratedCredentials bool
 	command := &cobra.Command{
 		Use:   "install",
@@ -43,8 +43,16 @@ func newControlPlaneInstallCommand(cliVersion string, installer controlPlaneInst
 			if err != nil {
 				return err
 			}
+			gatewayNamespace, gatewayName := "", ""
+			if strings.TrimSpace(publicHost) != "" {
+				gatewayNamespace, gatewayName, err = namespacedName(gatewayReference)
+				if err != nil {
+					return fmt.Errorf("Gateway: %w", err)
+				}
+			}
 			report, err := installer.Install(command.Context(), controlplaneinstall.Options{
-				ContextName: contextName, Version: version, StorageClass: strings.TrimSpace(storageClass),
+				ContextName: contextName, Version: version, StorageClass: strings.TrimSpace(storageClass), PublicHost: strings.TrimSpace(publicHost),
+				GatewayNamespace: gatewayNamespace, GatewayName: gatewayName, GatewaySection: strings.TrimSpace(gatewaySection),
 			})
 			if err != nil {
 				return fmt.Errorf("install Molejo control plane: %w", err)
@@ -71,6 +79,9 @@ func newControlPlaneInstallCommand(cliVersion string, installer controlPlaneInst
 	command.Flags().StringVar(&contextName, "kube-context", "", "kubeconfig context to install into")
 	command.Flags().StringVar(&requestedVersion, "version", "", "Molejo chart version (required for development builds)")
 	command.Flags().StringVar(&storageClass, "storage-class", "", "StorageClass for the PostgreSQL PVC (defaults to the cluster default)")
+	command.Flags().StringVar(&publicHost, "public-host", "", "public console DNS hostname")
+	command.Flags().StringVar(&gatewayReference, "gateway", "molejo-system/molejo", "Gateway as namespace/name")
+	command.Flags().StringVar(&gatewaySection, "gateway-section", "https-molejo", "Gateway HTTPS listener name")
 	command.Flags().BoolVar(&showGeneratedCredentials, "show-generated-credentials", false, "print the generated database and owner credentials")
 	_ = command.MarkFlagRequired("kube-context")
 	return command

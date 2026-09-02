@@ -114,10 +114,11 @@ func (d kubernetesDoctor) Run(parent context.Context, contextName string) Report
 	report.Checks = append(report.Checks, resultCheck("Molejo CRDs", "AppDeployment, AppVolume", err))
 
 	err = errors.Join(
-		client.Resources("gateway.networking.k8s.io/v1", "gateways", "httproutes"),
-		client.Resources("gateway.networking.k8s.io/v1alpha2", "tcproutes"),
+		client.Resources("gateway.networking.k8s.io/v1", "backendtlspolicies", "gatewayclasses", "gateways", "grpcroutes", "httproutes"),
+		client.Resources("gateway.networking.k8s.io/v1beta1", "referencegrants"),
+		client.Resources("gateway.networking.k8s.io/v1alpha2", "tcproutes", "tlsroutes"),
 	)
-	report.Checks = append(report.Checks, resultCheck("Gateway API CRDs", "Gateway, HTTPRoute, TCPRoute", err))
+	report.Checks = append(report.Checks, resultCheck("Gateway API CRDs", "GatewayClass, Gateway, HTTPRoute, GRPCRoute, TCPRoute, TLSRoute", err))
 
 	report.Checks = append(report.Checks,
 		deploymentCheck(ctx, client, "Platform Operator", "platform-operator"),

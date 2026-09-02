@@ -26,6 +26,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayclient "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned"
 
 	"github.com/molejo-platform/molejo/apps/molejoctl/internal/helmclient"
 	"github.com/molejo-platform/molejo/apps/molejoctl/internal/kubecontext"
@@ -47,9 +49,13 @@ var controlPlaneLabels = map[string]string{
 
 // Options identifies the target and release selected by the CLI.
 type Options struct {
-	ContextName  string
-	Version      string
-	StorageClass string
+	ContextName      string
+	Version          string
+	StorageClass     string
+	PublicHost       string
+	GatewayNamespace string
+	GatewayName      string
+	GatewaySection   string
 }
 
 // Check is one readiness observation produced after installation.
@@ -75,6 +81,10 @@ func New() *Installer { return &Installer{} }
 
 // Install observes, plans, applies and verifies the control plane installation.
 func (*Installer) Install(ctx context.Context, options Options) (Report, error) {
+	options, err := normalizeAndValidateOptions(options)
+	if err != nil {
+		return Report{}, err
+	}
 	client, err := kubernetesClientForContext(options.ContextName)
 	if err != nil {
 		return Report{}, err
@@ -82,7 +92,7 @@ func (*Installer) Install(ctx context.Context, options Options) (Report, error) 
 	if err = requireClusterAgent(ctx, client); err != nil {
 		return Report{}, err
 	}
-	helmState, err := inspectControlPlaneRelease(options.ContextName)
+	helmState, err := inspectControlPlaneRelease(options.ContextName, options)
 	if err != nil {
 		return Report{}, err
 	}
@@ -91,6 +101,9 @@ func (*Installer) Install(ctx context.Context, options Options) (Report, error) 
 	}
 	if helmState.installed && helmState.status != "deployed" {
 		return Report{}, fmt.Errorf("release %s is %s; run the documented teardown before retrying", controlPlaneRelease, helmState.status)
+	}
+	if helmState.installed && options.PublicHost != "" && !helmState.publicConfigurationMatches {
+		return Report{}, errors.New("control plane release does not contain the requested public configuration; upgrades are not available yet")
 	}
 
 	observed, err := observeControlPlane(ctx, client, helmState.installed)
@@ -134,7 +147,7 @@ func (*Installer) Install(ctx context.Context, options Options) (Report, error) 
 		}
 	}
 	if plan.installChart {
-		if err = installControlPlaneChart(ctx, options.ContextName, options.Version, storageClass); err != nil {
+		if err = installControlPlaneChart(ctx, options, storageClass); err != nil {
 			return Report{}, err
 		}
 	}
@@ -142,6 +155,16 @@ func (*Installer) Install(ctx context.Context, options Options) (Report, error) 
 	checks, err := waitForControlPlane(ctx, client)
 	if err != nil {
 		return Report{}, err
+	}
+	if options.PublicHost != "" {
+		gatewayAPIClient, clientErr := gatewayClientForContext(options.ContextName)
+		if clientErr != nil {
+			return Report{}, clientErr
+		}
+		if err = waitForPublicRoute(ctx, gatewayAPIClient, options); err != nil {
+			return Report{}, err
+		}
+		checks = append(checks, Check{Name: "Public console route", Detail: options.PublicHost, Healthy: true})
 	}
 	return Report{
 		AlreadyInstalled: helmState.installed && !agentChanged,
@@ -152,12 +175,13 @@ func (*Installer) Install(ctx context.Context, options Options) (Report, error) 
 }
 
 type controlPlaneReleaseState struct {
-	installed bool
-	version   string
-	status    string
+	installed                  bool
+	version                    string
+	status                     string
+	publicConfigurationMatches bool
 }
 
-func inspectControlPlaneRelease(contextName string) (controlPlaneReleaseState, error) {
+func inspectControlPlaneRelease(contextName string, options Options) (controlPlaneReleaseState, error) {
 	helm, err := helmclient.New(contextName, controlPlaneNamespace, nil)
 	if err != nil {
 		return controlPlaneReleaseState{}, err
@@ -169,11 +193,20 @@ func inspectControlPlaneRelease(contextName string) (controlPlaneReleaseState, e
 	if err != nil {
 		return controlPlaneReleaseState{}, fmt.Errorf("inspect control plane Helm release: %w", err)
 	}
-	return controlPlaneReleaseState{installed: true, version: metadata.Version, status: metadata.Status}, nil
+	values, err := action.NewGetValues(helm.Configuration).Run(controlPlaneRelease)
+	if err != nil {
+		return controlPlaneReleaseState{}, fmt.Errorf("inspect control plane Helm values: %w", err)
+	}
+	return controlPlaneReleaseState{
+		installed:                  true,
+		version:                    metadata.Version,
+		status:                     metadata.Status,
+		publicConfigurationMatches: publicConfigurationMatches(values, options),
+	}, nil
 }
 
-func installControlPlaneChart(ctx context.Context, contextName, version, storageClass string) error {
-	helm, err := helmclient.New(contextName, controlPlaneNamespace, nil)
+func installControlPlaneChart(ctx context.Context, options Options, storageClass string) error {
+	helm, err := helmclient.New(options.ContextName, controlPlaneNamespace, nil)
 	if err != nil {
 		return err
 	}
@@ -184,21 +217,64 @@ func installControlPlaneChart(ctx context.Context, contextName, version, storage
 	install.WaitStrategy = kube.StatusWatcherStrategy
 	install.WaitForJobs = true
 	install.RollbackOnFailure = true
-	install.Version = version
+	install.Version = options.Version
 	install.SetRegistryClient(helm.Registry)
 	chartPath, err := install.LocateChart(controlPlaneChart, helm.Settings)
 	if err != nil {
-		return fmt.Errorf("locate chart %s:%s: %w", controlPlaneChart, version, err)
+		return fmt.Errorf("locate chart %s:%s: %w", controlPlaneChart, options.Version, err)
 	}
 	chart, err := loader.Load(chartPath)
 	if err != nil {
 		return fmt.Errorf("load control plane chart: %w", err)
 	}
-	values := map[string]any{"postgresql": map[string]any{"storageClass": storageClass}}
-	if _, err = install.RunWithContext(ctx, chart, values); err != nil {
+	if _, err = install.RunWithContext(ctx, chart, controlPlaneChartValues(options, storageClass)); err != nil {
 		return fmt.Errorf("run control plane Helm install: %w", err)
 	}
 	return nil
+}
+
+func gatewayClientForContext(contextName string) (gatewayclient.Interface, error) {
+	restConfig, err := kubecontext.RESTConfig(contextName, 30*time.Second)
+	if err != nil {
+		return nil, err
+	}
+	client, err := gatewayclient.NewForConfig(restConfig)
+	if err != nil {
+		return nil, fmt.Errorf("create Gateway API client: %w", err)
+	}
+	return client, nil
+}
+
+func waitForPublicRoute(parent context.Context, client gatewayclient.Interface, options Options) error {
+	ctx, cancel := context.WithTimeout(parent, controlPlaneReadyWait)
+	defer cancel()
+	return pollReady(ctx, "public console route", func(ctx context.Context) (bool, error) {
+		route, err := client.GatewayV1().HTTPRoutes(controlPlaneNamespace).Get(ctx, "control-plane-console", metav1.GetOptions{})
+		if apierrors.IsNotFound(err) {
+			return false, nil
+		}
+		if err != nil {
+			return false, err
+		}
+		for _, parentStatus := range route.Status.Parents {
+			if string(parentStatus.ParentRef.Name) == options.GatewayName &&
+				parentStatus.ParentRef.Namespace != nil && string(*parentStatus.ParentRef.Namespace) == options.GatewayNamespace &&
+				conditionReady(parentStatus.Conditions, string(gatewayv1.RouteConditionAccepted), route.Generation) &&
+				conditionReady(parentStatus.Conditions, string(gatewayv1.RouteConditionResolvedRefs), route.Generation) {
+				return true, nil
+			}
+		}
+		return false, nil
+	})
+}
+
+func conditionReady(conditions []metav1.Condition, conditionType string, generation int64) bool {
+	for _, condition := range conditions {
+		if condition.Type == conditionType && condition.Status == metav1.ConditionTrue && condition.ObservedGeneration == generation {
+			return true
+		}
+	}
+	return false
 }
 
 func kubernetesClientForContext(contextName string) (*kubernetes.Clientset, error) {

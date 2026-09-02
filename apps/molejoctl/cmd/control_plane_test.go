@@ -53,6 +53,22 @@ func TestControlPlaneInstallShowsCredentialOnlyWhenRequested(t *testing.T) {
 	}
 }
 
+func TestControlPlaneInstallPassesPublicGateway(t *testing.T) {
+	installer := &fakeControlPlaneInstaller{}
+	_, err := executeControlPlaneInstall(t, "v0.1.0-alpha.3", installer,
+		"--kube-context", "molejo-k3s",
+		"--public-host", "cloud.molejo.dev",
+		"--gateway", "molejo-system/molejo",
+		"--gateway-section", "https-molejo",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if installer.options.PublicHost != "cloud.molejo.dev" || installer.options.GatewayNamespace != "molejo-system" || installer.options.GatewayName != "molejo" || installer.options.GatewaySection != "https-molejo" {
+		t.Fatalf("options=%+v", installer.options)
+	}
+}
+
 func TestControlPlaneInstallReturnsExecutorFailure(t *testing.T) {
 	installer := &fakeControlPlaneInstaller{err: errors.New("storage unavailable")}
 	_, err := executeControlPlaneInstall(t, "v0.1.0-alpha.3", installer, "--kube-context", "molejo-k3s")

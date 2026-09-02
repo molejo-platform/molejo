@@ -71,6 +71,7 @@ Current component guides:
 - [Platform Operator](operations/platform-operator.md)
 - [Outbound Cluster Agent](operations/cluster-agent.md)
 - [Cluster TLS](operations/tls.md)
+- [K3s day-zero setup](operations/cluster-setup.md)
 - [Outbound Cluster Agent identity and pairing ADR](adr/0013-outbound-cluster-agent-identity-and-pairing.md)
 
 ## Contributing

@@ -73,6 +73,7 @@ Guias atuais dos componentes:
 - [Platform Operator](operations/platform-operator.md)
 - [Cluster Agent outbound](operations/cluster-agent.md)
 - [TLS do cluster](operations/tls.md)
+- [Setup day zero no K3s](operations/cluster-setup.md)
 - [ADR de identidade e pairing do Cluster Agent outbound](adr/0013-outbound-cluster-agent-identity-and-pairing.md)
 
 ## Contribuição

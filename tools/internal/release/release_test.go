@@ -131,10 +131,15 @@ func TestExcludeYAMLKindRemovesNamespace(t *testing.T) {
 }
 
 func TestControlPlaneStorageClassTemplateIsInjected(t *testing.T) {
-	rendered := "      accessModes:\n      - ReadWriteOnce\n      resources:\n        requests:\n          storage: 2Gi\n"
+	rendered := "  MOLEJO_MODE: development\n  MOLEJO_PUBLIC_URL: http://127.0.0.1:8080\n  MOLEJO_ALLOWED_ORIGIN: http://127.0.0.1:8080\n  MOLEJO_COOKIE_SECURE: \"false\"\n      accessModes:\n      - ReadWriteOnce\n      resources:\n        requests:\n          storage: 2Gi\n"
 	templated := injectControlPlaneChartValues(rendered)
 	if !strings.Contains(templated, ".Values.postgresql.storageClass") || !strings.Contains(templated, "storageClassName") {
 		t.Fatalf("storage class template was not injected: %s", templated)
+	}
+	for _, expected := range []string{".Values.public.enabled", ".Values.public.host", "MOLEJO_MODE: development"} {
+		if !strings.Contains(templated, expected) {
+			t.Fatalf("public configuration template was not injected: %s", templated)
+		}
 	}
 }
 

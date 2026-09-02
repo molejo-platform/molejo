@@ -10,9 +10,14 @@ import (
 )
 
 var gatewayCRDFiles = []string{
+	"gateway.networking.k8s.io_backendtlspolicies.yaml",
+	"gateway.networking.k8s.io_gatewayclasses.yaml",
 	"gateway.networking.k8s.io_gateways.yaml",
+	"gateway.networking.k8s.io_grpcroutes.yaml",
 	"gateway.networking.k8s.io_httproutes.yaml",
+	"gateway.networking.k8s.io_referencegrants.yaml",
 	"gateway.networking.k8s.io_tcproutes.yaml",
+	"gateway.networking.k8s.io_tlsroutes.yaml",
 }
 
 func (p *Pipeline) packageCharts(ctx context.Context, directory string, digests map[string]string) (map[string]Artifact, error) {
@@ -147,10 +152,20 @@ func (p *Pipeline) renderChartResources(ctx context.Context, chart string, diges
 }
 
 func injectControlPlaneChartValues(rendered string) string {
-	return strings.ReplaceAll(rendered,
+	rendered = strings.ReplaceAll(rendered,
 		"      accessModes:\n      - ReadWriteOnce\n      resources:",
 		"      accessModes:\n      - ReadWriteOnce\n{{- with .Values.postgresql.storageClass }}\n      storageClassName: {{ . | quote }}\n{{- end }}\n      resources:",
 	)
+	replacements := map[string]string{
+		"  MOLEJO_PUBLIC_URL: http://127.0.0.1:8080":     `  MOLEJO_PUBLIC_URL: {{ ternary (printf "https://%s" .Values.public.host) "http://127.0.0.1:8080" .Values.public.enabled | quote }}`,
+		"  MOLEJO_ALLOWED_ORIGIN: http://127.0.0.1:8080": `  MOLEJO_ALLOWED_ORIGIN: {{ ternary (printf "https://%s" .Values.public.host) "http://127.0.0.1:8080" .Values.public.enabled | quote }}`,
+		"  MOLEJO_COOKIE_SECURE: \"false\"":              `  MOLEJO_COOKIE_SECURE: {{ ternary "true" "false" .Values.public.enabled | quote }}`,
+		"  MOLEJO_ALLOWED_HOSTS: 127.0.0.1:8080,control-plane-api,control-plane-api.molejo-control-plane.svc,control-plane-api.molejo-control-plane.svc.cluster.local,control-plane-api.molejo-control-plane.svc.cluster.local:8444": `  MOLEJO_ALLOWED_HOSTS: {{ ternary (printf "%s,control-plane-api,control-plane-api.molejo-control-plane.svc,control-plane-api.molejo-control-plane.svc.cluster.local,control-plane-api.molejo-control-plane.svc.cluster.local:8444" .Values.public.host) "127.0.0.1:8080,control-plane-api,control-plane-api.molejo-control-plane.svc,control-plane-api.molejo-control-plane.svc.cluster.local,control-plane-api.molejo-control-plane.svc.cluster.local:8444" .Values.public.enabled | quote }}`,
+	}
+	for source, target := range replacements {
+		rendered = strings.ReplaceAll(rendered, source, target)
+	}
+	return rendered
 }
 
 func excludeYAMLKind(rendered, excludedKind string) string {
