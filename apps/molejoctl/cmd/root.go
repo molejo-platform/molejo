@@ -21,7 +21,7 @@ func New(version, commit, buildDate string) *cobra.Command {
 	}
 	command.SetVersionTemplate(fmt.Sprintf("molejoctl %s (commit %s, built %s)\n", version, commit, buildDate))
 	command.AddCommand(
-		newClusterCommand(version, newKubernetesDoctor(), newHelmInstaller(), newKubernetesTLSConfigurator()),
+		newClusterCommand(version, newKubernetesDoctor(), newHelmInstaller(), newKubernetesTLSOperator()),
 		newControlPlaneCommand(version, newControlPlaneInstaller()),
 	)
 	return command

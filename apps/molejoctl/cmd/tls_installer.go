@@ -2,11 +2,14 @@ package cmd
 
 import (
 	"context"
+	"crypto/subtle"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"reflect"
 	"strings"
 	"time"
 
@@ -29,33 +32,24 @@ import (
 	"github.com/molejo-platform/molejo/apps/molejoctl/internal/clustertls"
 )
 
-const (
-	tlsOperationTimeout = 5 * time.Minute
-	tlsBindingKey       = "binding.yaml"
-)
+const tlsOperationTimeout = 5 * time.Minute
 
-var tlsManagedLabels = map[string]string{
-	"app.kubernetes.io/managed-by": "molejoctl",
-}
+var tlsManagedLabels = map[string]string{"app.kubernetes.io/managed-by": "molejoctl"}
 
-type kubernetesTLSConfigurator struct {
-	registry       clustertls.Registry
+type kubernetesTLSOperator struct {
 	newEnvironment tlsEnvironmentFactory
 }
 
-func newKubernetesTLSConfigurator() tlsConfigurator {
-	return kubernetesTLSConfigurator{
-		registry:       clustertls.NewRegistry(clustertls.ExistingSecretDriver{}, clustertls.CertManagerDriver{}),
-		newEnvironment: newKubernetesTLSEnvironment,
-	}
+func newKubernetesTLSOperator() tlsOperator {
+	return kubernetesTLSOperator{newEnvironment: newKubernetesTLSEnvironment}
 }
 
 type tlsEnvironment interface {
-	Discover(context.Context, clustertls.Profile) (clustertls.Facts, error)
+	Discover(context.Context, clustertls.Setup) (clustertls.Facts, error)
 	Execute(context.Context, clustertls.Operation) error
 }
 
-type tlsEnvironmentFactory func(string) (tlsEnvironment, error)
+type tlsEnvironmentFactory func(string, []byte) (tlsEnvironment, error)
 
 type tlsClients struct {
 	kubernetes kubernetes.Interface
@@ -64,67 +58,107 @@ type tlsClients struct {
 
 type kubernetesTLSEnvironment struct {
 	contextName string
+	credential  []byte
 	clients     tlsClients
 }
 
-func (c kubernetesTLSConfigurator) Configure(ctx context.Context, options tlsConfigureOptions) (tlsConfigureReport, error) {
-	profile, err := clustertls.LoadProfile(options.profilePath)
+func (o kubernetesTLSOperator) Prepare(ctx context.Context, options tlsOptions) (tlsReport, error) {
+	setup, err := loadTLSSetup(options.setupPath)
 	if err != nil {
-		return tlsConfigureReport{}, err
+		return tlsReport{}, err
 	}
-	profile, diagnostics := clustertls.NormalizeAndValidate(profile)
-	if len(diagnostics) > 0 {
-		return tlsConfigureReport{}, diagnosticsError(diagnostics)
-	}
-	environment, err := c.newEnvironment(options.contextName)
+	credential, err := credentialFromEnvironment(options.credentialEnv)
 	if err != nil {
-		return tlsConfigureReport{}, err
+		return tlsReport{}, err
+	}
+	environment, err := o.newEnvironment(options.contextName, credential)
+	if err != nil {
+		return tlsReport{}, err
 	}
 
 	changed := false
 	for attempt := 0; attempt < 3; attempt++ {
-		facts, discoverErr := environment.Discover(ctx, profile)
+		facts, discoverErr := environment.Discover(ctx, setup)
 		if discoverErr != nil {
-			return tlsConfigureReport{}, discoverErr
+			return tlsReport{}, discoverErr
 		}
-		plan := c.registry.Build(profile, facts)
+		plan := clustertls.BuildPreparePlan(setup, facts, len(credential) > 0)
 		if !plan.Valid() {
-			return tlsConfigureReport{}, diagnosticsError(plan.Diagnostics)
+			return tlsReport{}, diagnosticsError(plan.Diagnostics)
 		}
-		if len(plan.Operations) == 0 {
-			if plan.Binding == nil {
-				return tlsConfigureReport{}, errors.New("TLS plan converged without a ready binding")
-			}
-			return tlsConfigureReport{binding: *plan.Binding, alreadyConfigured: !changed}, nil
+		if plan.Ready {
+			return tlsReport{setup: setup, certificate: facts.Certificate, changed: changed}, nil
 		}
 		writeTLSPlan(options.output, plan.Operations)
 		if !options.yes {
-			return tlsConfigureReport{}, errors.New("TLS configuration has changes; inspect the plan and rerun with --yes")
+			return tlsReport{}, errors.New("TLS preparation has changes; inspect the plan and rerun with --yes")
 		}
 		for _, operation := range plan.Operations {
 			if err = environment.Execute(ctx, operation); err != nil {
-				return tlsConfigureReport{}, fmt.Errorf("execute %s: %w", operation.ID, err)
+				return tlsReport{}, fmt.Errorf("execute %s: %w", operation.ID, err)
 			}
 		}
 		changed = true
 	}
-	return tlsConfigureReport{}, errors.New("TLS configuration did not converge after three planning passes")
+	return tlsReport{}, errors.New("TLS preparation did not converge after three planning passes")
 }
 
-func newKubernetesTLSEnvironment(contextName string) (tlsEnvironment, error) {
+func (o kubernetesTLSOperator) Verify(ctx context.Context, options tlsOptions) (tlsReport, error) {
+	setup, err := loadTLSSetup(options.setupPath)
+	if err != nil {
+		return tlsReport{}, err
+	}
+	environment, err := o.newEnvironment(options.contextName, nil)
+	if err != nil {
+		return tlsReport{}, err
+	}
+	facts, err := environment.Discover(ctx, setup)
+	if err != nil {
+		return tlsReport{}, err
+	}
+	if diagnostics := clustertls.Verify(setup, facts); len(diagnostics) > 0 {
+		return tlsReport{}, diagnosticsError(diagnostics)
+	}
+	return tlsReport{setup: setup, certificate: facts.Certificate}, nil
+}
+
+func loadTLSSetup(path string) (clustertls.Setup, error) {
+	setup, err := clustertls.LoadSetup(path)
+	if err != nil {
+		return clustertls.Setup{}, err
+	}
+	normalized, diagnostics := clustertls.NormalizeAndValidate(setup)
+	if len(diagnostics) > 0 {
+		return clustertls.Setup{}, diagnosticsError(diagnostics)
+	}
+	return normalized, nil
+}
+
+func credentialFromEnvironment(name string) ([]byte, error) {
+	if name == "" {
+		return nil, nil
+	}
+	value, exists := os.LookupEnv(name)
+	if !exists || strings.TrimSpace(value) == "" {
+		return nil, fmt.Errorf("credential environment variable %s is empty or unavailable", name)
+	}
+	return []byte(value), nil
+}
+
+func newKubernetesTLSEnvironment(contextName string, credential []byte) (tlsEnvironment, error) {
 	clients, err := newTLSClients(contextName)
 	if err != nil {
 		return nil, err
 	}
-	return kubernetesTLSEnvironment{contextName: contextName, clients: clients}, nil
+	return kubernetesTLSEnvironment{contextName: contextName, credential: credential, clients: clients}, nil
 }
 
-func (e kubernetesTLSEnvironment) Discover(ctx context.Context, profile clustertls.Profile) (clustertls.Facts, error) {
-	return discoverTLSFacts(ctx, e.clients, e.contextName, profile)
+func (e kubernetesTLSEnvironment) Discover(ctx context.Context, setup clustertls.Setup) (clustertls.Facts, error) {
+	return discoverTLSFacts(ctx, e.clients, e.contextName, setup, e.credential)
 }
 
 func (e kubernetesTLSEnvironment) Execute(ctx context.Context, operation clustertls.Operation) error {
-	return executeTLSOperation(ctx, e.clients, e.contextName, operation)
+	return executeTLSOperation(ctx, e.clients, e.contextName, e.credential, operation)
 }
 
 func diagnosticsError(diagnostics []clustertls.Diagnostic) error {
@@ -139,9 +173,9 @@ func writeTLSPlan(writer io.Writer, operations []clustertls.Operation) {
 	if writer == nil {
 		writer = io.Discard
 	}
-	_, _ = fmt.Fprintln(writer, "TLS configuration plan")
+	_, _ = fmt.Fprintln(writer, "TLS preparation plan")
 	for _, operation := range operations {
-		_, _ = fmt.Fprintf(writer, "%-7s %s\n", operation.Kind, operation.Detail)
+		_, _ = fmt.Fprintf(writer, "%-22s %s\n", operation.Kind, operation.Detail)
 	}
 	_, _ = fmt.Fprintln(writer)
 }
@@ -173,51 +207,50 @@ func newTLSClients(contextName string) (tlsClients, error) {
 	return tlsClients{kubernetes: kubernetesClient, dynamic: dynamicClient}, nil
 }
 
-func discoverTLSFacts(ctx context.Context, clients tlsClients, contextName string, profile clustertls.Profile) (clustertls.Facts, error) {
+func discoverTLSFacts(ctx context.Context, clients tlsClients, contextName string, setup clustertls.Setup, credential []byte) (clustertls.Facts, error) {
 	facts := clustertls.Facts{}
-	secret, err := clients.kubernetes.CoreV1().Secrets(profile.Spec.Certificate.TargetSecretRef.Namespace).Get(ctx, profile.Spec.Certificate.TargetSecretRef.Name, metav1.GetOptions{})
+	secret, err := clients.kubernetes.CoreV1().Secrets(setup.Spec.TargetSecretRef.Namespace).Get(ctx, setup.Spec.TargetSecretRef.Name, metav1.GetOptions{})
 	if err == nil {
-		facts.Certificate = inspectTLSSecret(secret, profile.Spec.Domains, time.Now().UTC())
+		facts.Certificate = inspectTLSSecret(secret, setup.Spec.DNSNames, time.Now().UTC())
 	} else if !apierrors.IsNotFound(err) {
 		return facts, fmt.Errorf("inspect TLS Secret: %w", err)
 	}
-
-	bindingConfigMap, err := clients.kubernetes.CoreV1().ConfigMaps(systemNamespace).Get(ctx, tlsBindingName(profile.Metadata.Name), metav1.GetOptions{})
-	if err == nil {
-		binding, decodeErr := clustertls.DecodeBinding([]byte(bindingConfigMap.Data[tlsBindingKey]))
-		if decodeErr != nil {
-			return facts, decodeErr
-		}
-		facts.Binding = &binding
-	} else if !apierrors.IsNotFound(err) {
-		return facts, fmt.Errorf("inspect TLS binding: %w", err)
-	}
-
-	if profile.Spec.Certificate.Driver != clustertls.DriverCertManager {
+	if setup.Spec.Recipe.ID == "" {
 		return facts, nil
 	}
-	issuerName, certificateName, credentialRef, err := clustertls.CertManagerResourceNames(profile)
+
+	issuerName, certificateName, credentialRef, issuer, certificate, err := clustertls.CertManagerResources(setup)
 	if err != nil {
 		return facts, err
 	}
-	facts.CertManager.Installed, _, err = inspectHelmRelease(contextName, "cert-manager", "cert-manager")
-	if err != nil {
-		return facts, err
-	}
-	credentialSecret, err := clients.kubernetes.CoreV1().Secrets(credentialRef.Namespace).Get(ctx, credentialRef.Name, metav1.GetOptions{})
-	facts.CertManager.CredentialExists = err == nil && len(credentialSecret.Data["api-token"]) > 0
+	_, err = clients.kubernetes.CoreV1().Namespaces().Get(ctx, credentialRef.Namespace, metav1.GetOptions{})
+	facts.CertManager.NamespaceExists = err == nil
 	if err != nil && !apierrors.IsNotFound(err) {
-		return facts, fmt.Errorf("inspect DNS credential Secret: %w", err)
+		return facts, fmt.Errorf("inspect cert-manager namespace: %w", err)
 	}
-	facts.CertManager.Issuer, err = discoverManagedResource(ctx, clients.dynamic, clusterIssuerGVR(), "", issuerName)
+	facts.CertManager.Installed, facts.CertManager.VersionMatches, err = inspectHelmRelease(contextName, "cert-manager", "cert-manager", clustertls.CertManagerVersion)
 	if err != nil {
 		return facts, err
 	}
-	facts.CertManager.Certificate, err = discoverManagedResource(ctx, clients.dynamic, certificateGVR(), profile.Spec.Certificate.TargetSecretRef.Namespace, certificateName)
+	credentialSecret, getErr := clients.kubernetes.CoreV1().Secrets(credentialRef.Namespace).Get(ctx, credentialRef.Name, metav1.GetOptions{})
+	if getErr == nil {
+		stored := credentialSecret.Data["api-token"]
+		facts.CertManager.Credential = clustertls.CredentialFacts{
+			Exists: true, Owned: credentialSecret.Labels["app.kubernetes.io/managed-by"] == "molejoctl", Usable: len(stored) > 0,
+			Matches: len(credential) > 0 && len(stored) == len(credential) && subtle.ConstantTimeCompare(stored, credential) == 1,
+		}
+	} else if !apierrors.IsNotFound(getErr) {
+		return facts, fmt.Errorf("inspect DNS credential Secret: %w", getErr)
+	}
+	facts.CertManager.Issuer, err = discoverManagedResource(ctx, clients.dynamic, clusterIssuerGVR(), "", issuerName, issuer)
+	if err != nil {
+		return facts, err
+	}
+	facts.CertManager.Certificate, err = discoverManagedResource(ctx, clients.dynamic, certificateGVR(), setup.Spec.TargetSecretRef.Namespace, certificateName, certificate)
 	return facts, err
 }
 
-func inspectTLSSecret(secret *corev1.Secret, domains []string, now time.Time) clustertls.CertificateFacts {
+func inspectTLSSecret(secret *corev1.Secret, dnsNames []string, now time.Time) clustertls.CertificateFacts {
 	facts := clustertls.CertificateFacts{Exists: true}
 	if secret.Type != corev1.SecretTypeTLS {
 		facts.Problem = "Secret type must be kubernetes.io/tls"
@@ -244,33 +277,34 @@ func inspectTLSSecret(secret *corev1.Secret, domains []string, now time.Time) cl
 		facts.Problem = "certificate is not currently valid for at least 24 hours"
 		return facts
 	}
-	for _, domain := range domains {
-		if err = certificate.VerifyHostname(domain); err != nil {
-			facts.Problem = fmt.Sprintf("certificate does not cover %s", domain)
+	for _, dnsName := range dnsNames {
+		if err = certificate.VerifyHostname(dnsName); err != nil {
+			facts.Problem = fmt.Sprintf("certificate does not cover %s", dnsName)
 			return facts
 		}
 	}
-	facts.DomainsCovered = true
+	facts.DNSNamesCovered = true
 	facts.Valid = true
 	return facts
 }
 
-func inspectHelmRelease(contextName, namespace, name string) (bool, string, error) {
+func inspectHelmRelease(contextName, namespace, name, expectedVersion string) (bool, bool, error) {
 	configuration, _, err := tlsHelmConfiguration(contextName, namespace)
 	if err != nil {
-		return false, "", err
+		return false, false, err
 	}
 	metadata, err := action.NewGetMetadata(configuration).Run(name)
 	if errors.Is(err, driver.ErrReleaseNotFound) {
-		return false, "", nil
+		return false, false, nil
 	}
 	if err != nil {
-		return false, "", fmt.Errorf("inspect Helm release %s: %w", name, err)
+		return false, false, fmt.Errorf("inspect Helm release %s: %w", name, err)
 	}
-	return true, metadata.Version, nil
+	expectedVersion = strings.TrimPrefix(expectedVersion, "v")
+	return true, metadata.Version == expectedVersion || metadata.Version == "v"+expectedVersion, nil
 }
 
-func discoverManagedResource(ctx context.Context, client dynamic.Interface, gvr schema.GroupVersionResource, namespace, name string) (clustertls.ManagedResourceFacts, error) {
+func discoverManagedResource(ctx context.Context, client dynamic.Interface, gvr schema.GroupVersionResource, namespace, name string, desired map[string]any) (clustertls.ManagedResourceFacts, error) {
 	resource := client.Resource(gvr)
 	var object *unstructured.Unstructured
 	var err error
@@ -279,16 +313,46 @@ func discoverManagedResource(ctx context.Context, client dynamic.Interface, gvr 
 	} else {
 		object, err = resource.Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
 	}
-	if apierrors.IsNotFound(err) || apierrors.IsMethodNotSupported(err) {
+	if apierrors.IsNotFound(err) || apierrors.IsMethodNotSupported(err) || strings.Contains(fmt.Sprint(err), "the server could not find the requested resource") {
 		return clustertls.ManagedResourceFacts{}, nil
 	}
 	if err != nil {
-		if apierrors.IsNotFound(err) || strings.Contains(err.Error(), "the server could not find the requested resource") {
-			return clustertls.ManagedResourceFacts{}, nil
-		}
 		return clustertls.ManagedResourceFacts{}, fmt.Errorf("inspect %s %s: %w", gvr.Resource, name, err)
 	}
-	return clustertls.ManagedResourceFacts{Exists: true, Owned: object.GetLabels()["app.kubernetes.io/managed-by"] == "molejoctl", Ready: conditionReady(object, "Ready")}, nil
+	desiredSpec, _, _ := unstructured.NestedMap(desired, "spec")
+	currentSpec, _, _ := unstructured.NestedMap(object.Object, "spec")
+	return clustertls.ManagedResourceFacts{
+		Exists: true, Owned: object.GetLabels()["app.kubernetes.io/managed-by"] == "molejoctl", Ready: conditionReady(object, "Ready"), Matches: containsDesired(currentSpec, desiredSpec),
+	}, nil
+}
+
+func containsDesired(current, desired any) bool {
+	switch desiredValue := desired.(type) {
+	case map[string]any:
+		currentValue, ok := current.(map[string]any)
+		if !ok {
+			return false
+		}
+		for key, value := range desiredValue {
+			if !containsDesired(currentValue[key], value) {
+				return false
+			}
+		}
+		return true
+	case []any:
+		currentValue, ok := current.([]any)
+		if !ok || len(currentValue) != len(desiredValue) {
+			return false
+		}
+		for index := range desiredValue {
+			if !containsDesired(currentValue[index], desiredValue[index]) {
+				return false
+			}
+		}
+		return true
+	default:
+		return reflect.DeepEqual(current, desired)
+	}
 }
 
 func conditionReady(object *unstructured.Unstructured, conditionType string) bool {
@@ -305,19 +369,56 @@ func conditionReady(object *unstructured.Unstructured, conditionType string) boo
 	return false
 }
 
-func executeTLSOperation(ctx context.Context, clients tlsClients, contextName string, operation clustertls.Operation) error {
+func executeTLSOperation(ctx context.Context, clients tlsClients, contextName string, credential []byte, operation clustertls.Operation) error {
 	switch operation.Kind {
+	case clustertls.OperationEnsureNamespace:
+		return ensureTLSNamespace(ctx, clients.kubernetes, operation.Namespace)
+	case clustertls.OperationEnsureCredentialSecret:
+		return ensureTLSCredential(ctx, clients.kubernetes, *operation.Credential, credential)
 	case clustertls.OperationEnsureHelmRelease:
 		return ensureTLSHelmRelease(ctx, contextName, *operation.Helm)
 	case clustertls.OperationEnsureObject:
 		return ensureTLSObject(ctx, clients.dynamic, operation.Object)
 	case clustertls.OperationWaitForCondition:
 		return waitForTLSCondition(ctx, clients.dynamic, *operation.Wait)
-	case clustertls.OperationWriteBinding:
-		return writeTLSBinding(ctx, clients.kubernetes, *operation.Binding)
 	default:
 		return fmt.Errorf("unsupported TLS operation %q", operation.Kind)
 	}
+}
+
+func ensureTLSNamespace(ctx context.Context, client kubernetes.Interface, name string) error {
+	_, err := client.CoreV1().Namespaces().Get(ctx, name, metav1.GetOptions{})
+	if err == nil {
+		return nil
+	}
+	if !apierrors.IsNotFound(err) {
+		return err
+	}
+	_, err = client.CoreV1().Namespaces().Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: name, Labels: copyLabels(tlsManagedLabels)}}, metav1.CreateOptions{})
+	return err
+}
+
+func ensureTLSCredential(ctx context.Context, client kubernetes.Interface, reference clustertls.ObjectReference, credential []byte) error {
+	if len(credential) == 0 {
+		return errors.New("Cloudflare credential is unavailable")
+	}
+	secrets := client.CoreV1().Secrets(reference.Namespace)
+	existing, err := secrets.Get(ctx, reference.Name, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		_, err = secrets.Create(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: reference.Name, Namespace: reference.Namespace, Labels: copyLabels(tlsManagedLabels)}, Type: corev1.SecretTypeOpaque, Data: map[string][]byte{"api-token": credential}}, metav1.CreateOptions{})
+		return err
+	}
+	if err != nil {
+		return err
+	}
+	if existing.Labels["app.kubernetes.io/managed-by"] != "molejoctl" {
+		return fmt.Errorf("Secret %s/%s is not owned by molejoctl", reference.Namespace, reference.Name)
+	}
+	existing.Type = corev1.SecretTypeOpaque
+	existing.Labels = copyLabels(tlsManagedLabels)
+	existing.Data = map[string][]byte{"api-token": credential}
+	_, err = secrets.Update(ctx, existing, metav1.UpdateOptions{})
+	return err
 }
 
 func tlsHelmConfiguration(contextName, namespace string) (*action.Configuration, *cli.EnvSettings, error) {
@@ -401,6 +502,7 @@ func ensureTLSObject(ctx context.Context, client dynamic.Interface, desired map[
 	if existing.GetLabels()["app.kubernetes.io/managed-by"] != "molejoctl" {
 		return fmt.Errorf("%s %s is not owned by molejoctl", object.GetKind(), object.GetName())
 	}
+	existing.SetLabels(object.GetLabels())
 	spec, _, _ := unstructured.NestedMap(object.Object, "spec")
 	if err = unstructured.SetNestedMap(existing.Object, spec, "spec"); err != nil {
 		return err
@@ -438,33 +540,6 @@ func waitForTLSCondition(parent context.Context, client dynamic.Interface, targe
 		return conditionReady(object, target.Condition), nil
 	})
 }
-
-func writeTLSBinding(ctx context.Context, client kubernetes.Interface, binding clustertls.Binding) error {
-	contents, err := clustertls.EncodeBinding(binding)
-	if err != nil {
-		return err
-	}
-	name := tlsBindingName(binding.Metadata.Name)
-	desiredLabels := copyLabels(tlsManagedLabels)
-	desiredLabels["platform.molejo.dev/tls-profile"] = binding.Metadata.Name
-	existing, err := client.CoreV1().ConfigMaps(systemNamespace).Get(ctx, name, metav1.GetOptions{})
-	if apierrors.IsNotFound(err) {
-		_, err = client.CoreV1().ConfigMaps(systemNamespace).Create(ctx, &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: systemNamespace, Labels: desiredLabels}, Data: map[string]string{tlsBindingKey: string(contents)}}, metav1.CreateOptions{})
-		return err
-	}
-	if err != nil {
-		return err
-	}
-	if existing.Labels["app.kubernetes.io/managed-by"] != "molejoctl" {
-		return fmt.Errorf("ConfigMap %s/%s is not owned by molejoctl", systemNamespace, name)
-	}
-	existing.Labels = desiredLabels
-	existing.Data = map[string]string{tlsBindingKey: string(contents)}
-	_, err = client.CoreV1().ConfigMaps(systemNamespace).Update(ctx, existing, metav1.UpdateOptions{})
-	return err
-}
-
-func tlsBindingName(profileName string) string { return "molejo-tls-" + profileName }
 
 func clusterIssuerGVR() schema.GroupVersionResource {
 	return schema.GroupVersionResource{Group: "cert-manager.io", Version: "v1", Resource: "clusterissuers"}

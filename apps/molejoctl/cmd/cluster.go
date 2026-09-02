@@ -2,7 +2,7 @@ package cmd
 
 import "github.com/spf13/cobra"
 
-func newClusterCommand(version string, doctor doctorRunner, installer clusterInstaller, tls tlsConfigurator) *cobra.Command {
+func newClusterCommand(version string, doctor doctorRunner, installer clusterInstaller, tls tlsOperator) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "cluster",
 		Short: "Install and diagnose Molejo in a Kubernetes cluster",

@@ -1,0 +1,25 @@
+apiVersion: config.molejo.dev/v1alpha1
+kind: TLSSetup
+metadata:
+  name: molejo-dev
+spec:
+  dnsNames:
+    - molejo.dev
+    - "*.molejo.dev"
+    - "*.stateful.molejo.dev"
+  targetSecretRef:
+    namespace: molejo-system
+    name: molejo-dev-tls
+  recipe:
+    id: cert-manager-cloudflare
+    config:
+      issuer:
+        type: acme
+        environment: production
+        email: contato@cleidsonoliveira.dev
+      challenge:
+        type: dns01
+        solver: cloudflare
+        credentialSecretRef:
+          namespace: cert-manager
+          name: cloudflare-dns-token

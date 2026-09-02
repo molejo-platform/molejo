@@ -1,19 +1,35 @@
 # TLS do cluster
 
-`molejoctl cluster tls configure` valida ou provisiona o material de certificado e grava um `ClusterTLSBinding` reutilizável. Ele não instala um Gateway, publica aplicações nem gerencia os registros DNS das aplicações.
+A Molejo é responsável pela política de domínios públicos e consome Secrets TLS padrão do Kubernetes. A emissão e a renovação dos certificados continuam sob responsabilidade do operador do cluster e do controlador de certificados escolhido. O control plane, o platform operator e o cluster Agent nunca recebem credenciais do provedor DNS.
 
-Use o exemplo de Secret externo quando o ciclo de vida do certificado for gerenciado fora do Molejo:
+`molejoctl cluster tls verify` é read-only e valida se o Secret `kubernetes.io/tls` possui chave compatível, validade mínima de 24 horas e cobertura para todos os nomes DNS de um documento local `TLSSetup`:
 
 ```bash
-molejoctl cluster tls configure \
+molejoctl cluster tls verify \
   --kube-context molejo-k3s \
   --file deploy/examples/tls-existing-secret.yaml
 ```
 
-A primeira execução mostra o plano. Aplique-o explicitamente com `--yes`. Uma nova execução deve informar que o profile foi verificado sem exigir aprovação.
+`molejoctl cluster tls prepare` é uma receita opcional de conveniência para o day zero. A primeira receita instala o cert-manager e solicita um certificado Let's Encrypt por Cloudflare DNS-01. O cert-manager é responsável pela renovação depois que o comando termina.
 
-O driver `existing-secret` exige um Secret `kubernetes.io/tls` cuja chave corresponda ao certificado, cuja validade seja superior a 24 horas e cujos SANs cubram todos os domínios configurados.
+Execute staging antes de production:
 
-Nesta primeira versão do contrato, o driver `cert-manager` suporta ACME DNS-01 com Cloudflare. O Secret referenciado deve existir previamente no namespace `cert-manager`, com o token de API na chave `api-token`. O Molejo nunca armazena o token no profile nem o imprime. Comece pelo exemplo de staging em `deploy/examples/tls-cert-manager-cloudflare.yaml` antes de alterar o ambiente do issuer para `production`.
+```bash
+molejoctl cluster tls prepare \
+  --kube-context molejo-k3s \
+  --file deploy/examples/tls-molejo-dev-staging.yaml \
+  --credential-env TF_VAR_cloudflare_api_token \
+  --yes
 
-O binding resultante é armazenado como `molejo-system/molejo-tls-<profile>`. `molejoctl cluster doctor` valida todos os bindings armazenados e seus Secrets TLS atuais.
+molejoctl cluster tls prepare \
+  --kube-context molejo-k3s \
+  --file deploy/examples/tls-molejo-dev-production.yaml \
+  --credential-env TF_VAR_cloudflare_api_token \
+  --yes
+```
+
+O token é armazenado em `cert-manager/cloudflare-dns-token`, na chave `api-token`, e nunca é gravado no setup ou na saída do comando. Ele precisa de `Zone - DNS - Edit` e `Zone - Zone - Read` para `molejo.dev`. O account ID da Cloudflare não é utilizado pelo solver baseado em API token do cert-manager.
+
+Staging e production usam recursos Certificate e Secrets separados. O resultado production é `molejo-system/molejo-dev-tls`, cobrindo `molejo.dev`, `*.molejo.dev` e `*.stateful.molejo.dev`.
+
+O arquivo `TLSSetup` é uma receita local do molejoctl, não uma API do control plane ou dos workloads. Ele não instala Gateway, conecta o Secret a um listener, cria registros DNS permanentes para aplicações ou persiste um binding TLS específico da Molejo. O futuro contrato de consumo será `certificateRefs` do Gateway API.

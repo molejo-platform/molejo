@@ -4,44 +4,16 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-func TestExistingSecretPlanIsIdempotent(t *testing.T) {
-	now := time.Date(2026, 9, 2, 0, 0, 0, 0, time.UTC)
-	profile := validProfile(DriverExistingSecret, ManagementExternal)
-	facts := Facts{Certificate: CertificateFacts{Exists: true, Valid: true, KeyMatches: true, DomainsCovered: true, NotBefore: now, NotAfter: now.Add(90 * 24 * time.Hour)}}
-	registry := NewRegistry(ExistingSecretDriver{})
-
-	first := registry.Build(profile, facts)
-	if !first.Valid() || len(first.Operations) != 1 || first.Operations[0].Kind != OperationWriteBinding || first.Binding == nil {
-		t.Fatalf("first plan=%+v", first)
-	}
-	facts.Binding = first.Binding
-	second := registry.Build(profile, facts)
-	if !second.Valid() || len(second.Operations) != 0 || second.Binding == nil {
-		t.Fatalf("second plan=%+v", second)
-	}
-}
-
-func TestExistingSecretRejectsInvalidCertificate(t *testing.T) {
-	profile := validProfile(DriverExistingSecret, ManagementExternal)
-	plan := NewRegistry(ExistingSecretDriver{}).Build(profile, Facts{Certificate: CertificateFacts{Exists: true, Problem: "certificate does not cover *.apps.molejo.dev"}})
-	if plan.Valid() || len(plan.Diagnostics) != 1 {
+func TestPreparePlanOrdersCredentialCertManagerAndCertificate(t *testing.T) {
+	plan := BuildPreparePlan(validSetup(true), Facts{}, true)
+	if !plan.Valid() || len(plan.Operations) != 7 {
 		t.Fatalf("plan=%+v", plan)
 	}
-}
-
-func TestCertManagerPlansInstallIssuerAndCertificate(t *testing.T) {
-	profile := validProfile(DriverCertManager, ManagementManaged)
-	profile.Spec.Certificate.Config = map[string]any{
-		"issuer":    map[string]any{"type": "acme", "environment": "staging", "email": "owner@example.com"},
-		"challenge": map[string]any{"type": "dns01", "solver": "cloudflare", "credentialSecretRef": map[string]any{"namespace": "cert-manager", "name": "cloudflare-dns-token"}},
-	}
-	plan := NewRegistry(CertManagerDriver{}).Build(profile, Facts{CertManager: CertManagerFacts{CredentialExists: true}})
-	if !plan.Valid() || len(plan.Operations) != 5 {
-		t.Fatalf("plan=%+v", plan)
-	}
-	want := []OperationKind{OperationEnsureHelmRelease, OperationEnsureObject, OperationWaitForCondition, OperationEnsureObject, OperationWaitForCondition}
+	want := []OperationKind{OperationEnsureNamespace, OperationEnsureCredentialSecret, OperationEnsureHelmRelease, OperationEnsureObject, OperationWaitForCondition, OperationEnsureObject, OperationWaitForCondition}
 	for index, operation := range plan.Operations {
 		if operation.Kind != want[index] {
 			t.Fatalf("operation[%d]=%s, want %s", index, operation.Kind, want[index])
@@ -49,77 +21,87 @@ func TestCertManagerPlansInstallIssuerAndCertificate(t *testing.T) {
 	}
 }
 
-func TestCertManagerRequiresCredentialSecret(t *testing.T) {
-	profile := validProfile(DriverCertManager, ManagementManaged)
-	profile.Spec.Certificate.Config = map[string]any{
-		"issuer":    map[string]any{"type": "acme", "environment": "staging", "email": "owner@example.com"},
-		"challenge": map[string]any{"type": "dns01", "solver": "cloudflare", "credentialSecretRef": map[string]any{"namespace": "cert-manager", "name": "cloudflare-dns-token"}},
-	}
-	plan := NewRegistry(CertManagerDriver{}).Build(profile, Facts{})
-	if plan.Valid() {
+func TestPreparePlanRequiresCredentialSourceWhenSecretIsMissing(t *testing.T) {
+	plan := BuildPreparePlan(validSetup(true), Facts{}, false)
+	if plan.Valid() || len(plan.Diagnostics) != 1 {
 		t.Fatalf("plan=%+v", plan)
 	}
 }
 
-func TestCertManagerReadyCertificateWritesBindingOnce(t *testing.T) {
+func TestPreparePlanIsReadyWhenRecipeOutcomeExists(t *testing.T) {
 	now := time.Date(2026, 9, 2, 0, 0, 0, 0, time.UTC)
-	profile := validProfile(DriverCertManager, ManagementManaged)
-	profile.Spec.Certificate.Config = map[string]any{
-		"issuer":    map[string]any{"type": "acme", "environment": "production", "email": "owner@example.com"},
-		"challenge": map[string]any{"type": "dns01", "solver": "cloudflare", "credentialSecretRef": map[string]any{"namespace": "cert-manager", "name": "cloudflare-dns-token"}},
-	}
 	facts := Facts{
-		Certificate: CertificateFacts{Exists: true, Valid: true, KeyMatches: true, DomainsCovered: true, NotBefore: now, NotAfter: now.Add(90 * 24 * time.Hour)},
-		CertManager: CertManagerFacts{Installed: true, CredentialExists: true, Issuer: ManagedResourceFacts{Exists: true, Owned: true, Ready: true}, Certificate: ManagedResourceFacts{Exists: true, Owned: true, Ready: true}},
+		Certificate: CertificateFacts{Exists: true, Valid: true, KeyMatches: true, DNSNamesCovered: true, NotBefore: now, NotAfter: now.Add(90 * 24 * time.Hour)},
+		CertManager: CertManagerFacts{NamespaceExists: true, Installed: true, VersionMatches: true, Credential: CredentialFacts{Exists: true, Owned: true, Usable: true}, Issuer: ManagedResourceFacts{Exists: true, Owned: true, Ready: true, Matches: true}, Certificate: ManagedResourceFacts{Exists: true, Owned: true, Ready: true, Matches: true}},
 	}
-	registry := NewRegistry(CertManagerDriver{})
-	first := registry.Build(profile, facts)
-	if !first.Valid() || len(first.Operations) != 1 || first.Binding == nil || first.Binding.Status.Renewal != "Automatic" {
-		t.Fatalf("first plan=%+v", first)
-	}
-	facts.Binding = first.Binding
-	second := registry.Build(profile, facts)
-	if !second.Valid() || len(second.Operations) != 0 {
-		t.Fatalf("second plan=%+v", second)
+	plan := BuildPreparePlan(validSetup(true), facts, false)
+	if !plan.Valid() || !plan.Ready || len(plan.Operations) != 0 {
+		t.Fatalf("plan=%+v", plan)
 	}
 }
 
-func TestProfileNormalizesAndSortsDomains(t *testing.T) {
-	profile := validProfile(DriverExistingSecret, ManagementExternal)
-	profile.Spec.Domains = []string{"API.EXAMPLE.COM.", "*.apps.example.com", "api.example.com"}
-	normalized, diagnostics := NormalizeAndValidate(profile)
+func TestVerifyAcceptsMaterialIndependentOfRecipe(t *testing.T) {
+	now := time.Date(2026, 9, 2, 0, 0, 0, 0, time.UTC)
+	setup := validSetup(false)
+	facts := Facts{Certificate: CertificateFacts{Exists: true, Valid: true, KeyMatches: true, DNSNamesCovered: true, NotBefore: now, NotAfter: now.Add(90 * 24 * time.Hour)}}
+	if diagnostics := Verify(setup, facts); len(diagnostics) != 0 {
+		t.Fatalf("diagnostics=%+v", diagnostics)
+	}
+	facts.Certificate = CertificateFacts{Exists: true, Problem: "certificate does not cover *.molejo.dev"}
+	if diagnostics := Verify(setup, facts); len(diagnostics) != 1 {
+		t.Fatalf("diagnostics=%+v", diagnostics)
+	}
+}
+
+func TestSetupNormalizesAndSortsDNSNames(t *testing.T) {
+	setup := validSetup(false)
+	setup.Spec.DNSNames = []string{"MOLEJO.DEV.", "*.stateful.molejo.dev", "molejo.dev"}
+	normalized, diagnostics := NormalizeAndValidate(setup)
 	if len(diagnostics) != 0 {
 		t.Fatalf("diagnostics=%+v", diagnostics)
 	}
-	if len(normalized.Spec.Domains) != 2 || normalized.Spec.Domains[0] != "*.apps.example.com" || normalized.Spec.Domains[1] != "api.example.com" {
-		t.Fatalf("domains=%v", normalized.Spec.Domains)
+	if len(normalized.Spec.DNSNames) != 2 || normalized.Spec.DNSNames[0] != "*.stateful.molejo.dev" || normalized.Spec.DNSNames[1] != "molejo.dev" {
+		t.Fatalf("dnsNames=%v", normalized.Spec.DNSNames)
 	}
 }
 
-func TestPublishedTLSExamplesMatchTheProfileContract(t *testing.T) {
-	for _, name := range []string{"tls-existing-secret.yaml", "tls-cert-manager-cloudflare.yaml"} {
-		profile, err := LoadProfile(filepath.Join("..", "..", "..", "..", "deploy", "examples", name))
+func TestPublishedTLSSetupsMatchContract(t *testing.T) {
+	for _, name := range []string{"tls-existing-secret.yaml", "tls-molejo-dev-staging.yaml", "tls-molejo-dev-production.yaml"} {
+		setup, err := LoadSetup(filepath.Join("..", "..", "..", "..", "deploy", "examples", name))
 		if err != nil {
 			t.Fatalf("load %s: %v", name, err)
 		}
-		if _, diagnostics := NormalizeAndValidate(profile); len(diagnostics) != 0 {
+		if _, diagnostics := NormalizeAndValidate(setup); len(diagnostics) != 0 {
 			t.Fatalf("%s diagnostics=%+v", name, diagnostics)
 		}
 	}
 }
 
-func validProfile(driver, management string) Profile {
-	return Profile{
+func TestCertificateRecipeUsesUnstructuredJSONTypes(t *testing.T) {
+	_, _, _, _, certificate, err := CertManagerResources(validSetup(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, found, nestedErr := unstructured.NestedMap(certificate, "spec"); nestedErr != nil || !found {
+		t.Fatalf("certificate spec found=%t err=%v", found, nestedErr)
+	}
+}
+
+func validSetup(withRecipe bool) Setup {
+	setup := Setup{
 		APIVersion: APIVersion,
-		Kind:       ProfileKind,
-		Metadata:   Metadata{Name: "default"},
-		Spec: ProfileSpec{
-			Management: management,
-			Domains:    []string{"*.apps.molejo.dev"},
-			Certificate: CertificateSpec{
-				Driver:          driver,
-				TargetSecretRef: ObjectReference{Namespace: "molejo-system", Name: "apps-molejo-dev-tls"},
-			},
+		Kind:       SetupKind,
+		Metadata:   Metadata{Name: "molejo-dev"},
+		Spec: SetupSpec{
+			DNSNames:        []string{"*.molejo.dev", "*.stateful.molejo.dev", "molejo.dev"},
+			TargetSecretRef: ObjectReference{Namespace: "molejo-system", Name: "molejo-dev-tls"},
 		},
 	}
+	if withRecipe {
+		setup.Spec.Recipe = RecipeSpec{ID: RecipeCertManagerCloudflare, Config: map[string]any{
+			"issuer":    map[string]any{"type": "acme", "environment": "staging", "email": "owner@example.com"},
+			"challenge": map[string]any{"type": "dns01", "solver": "cloudflare", "credentialSecretRef": map[string]any{"namespace": "cert-manager", "name": "cloudflare-dns-token"}},
+		}}
+	}
+	return setup
 }

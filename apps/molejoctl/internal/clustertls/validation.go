@@ -8,58 +8,51 @@ import (
 )
 
 var (
-	profileNamePattern = regexp.MustCompile(`^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$`)
-	dnsNamePattern     = regexp.MustCompile(`^(?:[a-z0-9](?:[-a-z0-9]*[a-z0-9])?\.)+[a-z]{2,63}$`)
+	setupNamePattern = regexp.MustCompile(`^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$`)
+	dnsNamePattern   = regexp.MustCompile(`^(?:[a-z0-9](?:[-a-z0-9]*[a-z0-9])?\.)+[a-z]{2,63}$`)
 )
 
-func NormalizeAndValidate(profile Profile) (Profile, []Diagnostic) {
-	profile.APIVersion = strings.TrimSpace(profile.APIVersion)
-	profile.Kind = strings.TrimSpace(profile.Kind)
-	profile.Metadata.Name = strings.TrimSpace(profile.Metadata.Name)
-	profile.Spec.Management = strings.TrimSpace(profile.Spec.Management)
-	profile.Spec.Certificate.Driver = strings.TrimSpace(profile.Spec.Certificate.Driver)
-	profile.Spec.Certificate.TargetSecretRef.Namespace = strings.TrimSpace(profile.Spec.Certificate.TargetSecretRef.Namespace)
-	profile.Spec.Certificate.TargetSecretRef.Name = strings.TrimSpace(profile.Spec.Certificate.TargetSecretRef.Name)
+func NormalizeAndValidate(setup Setup) (Setup, []Diagnostic) {
+	setup.APIVersion = strings.TrimSpace(setup.APIVersion)
+	setup.Kind = strings.TrimSpace(setup.Kind)
+	setup.Metadata.Name = strings.TrimSpace(setup.Metadata.Name)
+	setup.Spec.TargetSecretRef.Namespace = strings.TrimSpace(setup.Spec.TargetSecretRef.Namespace)
+	setup.Spec.TargetSecretRef.Name = strings.TrimSpace(setup.Spec.TargetSecretRef.Name)
+	setup.Spec.Recipe.ID = strings.TrimSpace(setup.Spec.Recipe.ID)
 
 	diagnostics := []Diagnostic{}
-	if profile.APIVersion != APIVersion {
+	if setup.APIVersion != APIVersion {
 		diagnostics = append(diagnostics, Diagnostic{Field: "apiVersion", Message: fmt.Sprintf("must be %s", APIVersion)})
 	}
-	if profile.Kind != ProfileKind {
-		diagnostics = append(diagnostics, Diagnostic{Field: "kind", Message: fmt.Sprintf("must be %s", ProfileKind)})
+	if setup.Kind != SetupKind {
+		diagnostics = append(diagnostics, Diagnostic{Field: "kind", Message: fmt.Sprintf("must be %s", SetupKind)})
 	}
-	if len(profile.Metadata.Name) > 40 || !profileNamePattern.MatchString(profile.Metadata.Name) {
+	if len(setup.Metadata.Name) > 40 || !setupNamePattern.MatchString(setup.Metadata.Name) {
 		diagnostics = append(diagnostics, Diagnostic{Field: "metadata.name", Message: "must be a lowercase DNS label with at most 40 characters"})
 	}
-	if profile.Spec.Management != ManagementManaged && profile.Spec.Management != ManagementExternal {
-		diagnostics = append(diagnostics, Diagnostic{Field: "spec.management", Message: "must be Managed or External"})
-	}
-	if profile.Spec.Certificate.Driver == "" {
-		diagnostics = append(diagnostics, Diagnostic{Field: "spec.certificate.driver", Message: "is required"})
-	}
-	if profile.Spec.Certificate.TargetSecretRef.Namespace == "" || profile.Spec.Certificate.TargetSecretRef.Name == "" {
-		diagnostics = append(diagnostics, Diagnostic{Field: "spec.certificate.targetSecretRef", Message: "namespace and name are required"})
+	if setup.Spec.TargetSecretRef.Namespace == "" || setup.Spec.TargetSecretRef.Name == "" {
+		diagnostics = append(diagnostics, Diagnostic{Field: "spec.targetSecretRef", Message: "namespace and name are required"})
 	}
 
 	seen := map[string]struct{}{}
-	domains := make([]string, 0, len(profile.Spec.Domains))
-	for index, raw := range profile.Spec.Domains {
-		domain := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(raw), "."))
-		candidate := strings.TrimPrefix(domain, "*.")
+	dnsNames := make([]string, 0, len(setup.Spec.DNSNames))
+	for index, raw := range setup.Spec.DNSNames {
+		dnsName := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(raw), "."))
+		candidate := strings.TrimPrefix(dnsName, "*.")
 		if strings.Contains(candidate, "*") || !dnsNamePattern.MatchString(candidate) {
-			diagnostics = append(diagnostics, Diagnostic{Field: fmt.Sprintf("spec.domains[%d]", index), Message: "must be a DNS name or a single-label wildcard"})
+			diagnostics = append(diagnostics, Diagnostic{Field: fmt.Sprintf("spec.dnsNames[%d]", index), Message: "must be a DNS name or a single-label wildcard"})
 			continue
 		}
-		if _, exists := seen[domain]; exists {
+		if _, exists := seen[dnsName]; exists {
 			continue
 		}
-		seen[domain] = struct{}{}
-		domains = append(domains, domain)
+		seen[dnsName] = struct{}{}
+		dnsNames = append(dnsNames, dnsName)
 	}
-	if len(domains) == 0 {
-		diagnostics = append(diagnostics, Diagnostic{Field: "spec.domains", Message: "must contain at least one valid domain"})
+	if len(dnsNames) == 0 {
+		diagnostics = append(diagnostics, Diagnostic{Field: "spec.dnsNames", Message: "must contain at least one valid DNS name"})
 	}
-	sort.Strings(domains)
-	profile.Spec.Domains = domains
-	return profile, diagnostics
+	sort.Strings(dnsNames)
+	setup.Spec.DNSNames = dnsNames
+	return setup, diagnostics
 }
