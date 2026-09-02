@@ -65,6 +65,54 @@ func (s *Store) CreateAgentInstallation(ctx context.Context, publicID, name stri
 	return value, tx.Commit(ctx)
 }
 
+// EnsureBootstrapAgentInstallation creates the first cluster Agent invitation or
+// refreshes its unconsumed token while the installation is still pending.
+func (s *Store) EnsureBootstrapAgentInstallation(ctx context.Context, publicID, name string, tokenHash []byte, expiresAt time.Time) error {
+	name = strings.TrimSpace(name)
+	if publicID == "" || name == "" || len(name) > 80 || len(tokenHash) == 0 || !expiresAt.After(time.Now()) {
+		return ErrAgentEnrollmentInvalid
+	}
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	var installationID int64
+	var status string
+	err = tx.QueryRow(ctx, `SELECT id,status FROM agent_installations WHERE public_id=$1 FOR UPDATE`, publicID).Scan(&installationID, &status)
+	if errors.Is(err, pgx.ErrNoRows) {
+		var ownerID int64
+		if err = tx.QueryRow(ctx, `SELECT u.id FROM users u
+			JOIN installation_role_assignments r ON r.user_id=u.id AND r.role='Administrator'
+			WHERE u.status='Active' ORDER BY u.id LIMIT 1`).Scan(&ownerID); err != nil {
+			return fmt.Errorf("find bootstrap owner: %w", err)
+		}
+		if err = tx.QueryRow(ctx, `INSERT INTO agent_installations(public_id,name,created_by) VALUES($1,$2,$3) RETURNING id`, publicID, name, ownerID).Scan(&installationID); err != nil {
+			return err
+		}
+		if _, err = tx.Exec(ctx, `INSERT INTO agent_enrollment_tokens(installation_id,token_hash,expires_at) VALUES($1,$2,$3)`, installationID, tokenHash, expiresAt); err != nil {
+			return err
+		}
+		return tx.Commit(ctx)
+	}
+	if err != nil {
+		return err
+	}
+	if status == "Active" {
+		return tx.Commit(ctx)
+	}
+	if status != "Pending" {
+		return ErrAgentEnrollmentInvalid
+	}
+	_, err = tx.Exec(ctx, `UPDATE agent_enrollment_tokens SET token_hash=$2,expires_at=$3
+		WHERE installation_id=$1 AND consumed_at IS NULL`, installationID, tokenHash, expiresAt)
+	if err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
 func (s *Store) EnrollAgent(ctx context.Context, tokenHash []byte, attemptID string, csrFingerprint []byte, now time.Time, issue func(string) (AgentCertificate, error), event audit.Event) (AgentCertificate, error) {
 	if len(tokenHash) == 0 || strings.TrimSpace(attemptID) == "" || len(csrFingerprint) == 0 || issue == nil {
 		return AgentCertificate{}, ErrAgentEnrollmentInvalid

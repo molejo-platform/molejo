@@ -130,6 +130,14 @@ func TestExcludeYAMLKindRemovesNamespace(t *testing.T) {
 	}
 }
 
+func TestControlPlaneStorageClassTemplateIsInjected(t *testing.T) {
+	rendered := "      accessModes:\n      - ReadWriteOnce\n      resources:\n        requests:\n          storage: 2Gi\n"
+	templated := injectControlPlaneChartValues(rendered)
+	if !strings.Contains(templated, ".Values.postgresql.storageClass") || !strings.Contains(templated, "storageClassName") {
+		t.Fatalf("storage class template was not injected: %s", templated)
+	}
+}
+
 func TestImageDigestFromMetadata(t *testing.T) {
 	t.Parallel()
 

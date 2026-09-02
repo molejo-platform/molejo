@@ -7,9 +7,9 @@ gerenciamento de entrada.
 
 ## Identidade da instalação
 
-O instalador fornece `required-external-agent-ca-secret`, com `ca.crt` e
-`ca.key`, e `required-external-agent-server-tls`, com `tls.crt` e `tls.key`, em
-`molejo-control-plane`. O certificado de servidor precisa cobrir
+`molejoctl control-plane install` cria `molejo-agent-ca`, com `ca.crt` e
+`ca.key`, e `molejo-agent-server-tls`, com `tls.crt` e `tls.key`, em
+`molejo-control-plane`. O certificado de servidor cobre
 `control-plane-api.molejo-control-plane.svc.cluster.local`. A chave da CA fica fora
 do Git e é montada somente no pod da API.
 
@@ -18,22 +18,21 @@ O ServiceAccount do Agent pode apenas ler e atualizar
 lista Secrets nem acessa CRDs da Molejo. A chave privada é gerada pelo Agent e
 nunca sai de `molejo-agent-identity`.
 
-## Release no k3s
+## Instalação no k3s
 
-O build da release do control plane publica o Agent como imagem `linux/amd64`
-separada e imutável. `just control-plane-prepare-k3s` cria ou reutiliza a CA
-ECDSA P-256 e o certificado interno de servidor, controlados pelo instalador e
-fora do checkout, e aplica Secrets versionados. A renderização substitui os
-nomes desses Secrets e o placeholder da imagem; o apply aguarda o Deployment do
-Agent. Proteja o diretório externo da release, pois ele contém a chave da CA.
+Instale Operator e Agent com `molejoctl cluster install` e depois execute
+`molejoctl control-plane install`. O segundo comando cria ou reutiliza a CA
+ECDSA P-256, o certificado interno, as credenciais do banco e o convite inicial
+de enrollment. Ele instala PostgreSQL e API, configura os endpoints internos
+HTTPS e gRPC e aguarda o Agent ficar `Paired`. As credenciais ficam em Secrets e
+somente são impressas com `--show-generated-credentials`.
 
 ## Pareamento
 
-Um administrador da instalação chama `POST
-/api/v1/admin/agent-installations` com um nome. A resposta entrega uma única vez
-um token de enrollment de 256 bits, válido por dez minutos. Transfira-o para a
-chave `token` de `molejo-agent-enrollment` sem colocá-lo no Git, histórico do
-shell, logs ou chat.
+O Agent inicial no mesmo cluster é pareado automaticamente pelo instalador. Para
+Agents adicionais, um administrador chama `POST
+/api/v1/admin/agent-installations` e transfere o token de uso único para
+`molejo-agent-enrollment` sem colocá-lo no Git, histórico do shell, logs ou chat.
 
 O Agent persiste chave, CSR e ID da tentativa antes do enrollment; timeout ou
 crash repete a mesma operação. A resposta é validada contra a chave local, Agent

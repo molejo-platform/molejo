@@ -7,11 +7,13 @@ metadata:
     app.kubernetes.io/name: control-plane-bootstrap
     app.kubernetes.io/part-of: molejo-platform
 spec:
-  backoffLimit: 5
-  activeDeadlineSeconds: 300
+  backoffLimit: 10
+  activeDeadlineSeconds: 600
   template:
     metadata:
-      labels: { app.kubernetes.io/name: control-plane-bootstrap }
+      labels:
+        app.kubernetes.io/name: control-plane-bootstrap
+        app.kubernetes.io/part-of: molejo-platform
     spec:
       restartPolicy: OnFailure
       automountServiceAccountToken: false
@@ -22,15 +24,19 @@ spec:
         - name: bootstrap
           image: ghcr.io/molejo-platform/control-plane-api@sha256:0000000000000000000000000000000000000000000000000000000000000000
           args: ["bootstrap"]
-          envFrom:
-            - secretRef: { name: molejo-control-plane-bootstrap }
           env:
             - name: MOLEJO_DATABASE_URL
               valueFrom:
                 secretKeyRef: { name: molejo-control-plane-db, key: database-url }
-            - name: MOLEJO_WORKSPACE_NAMESPACE
+            - name: MOLEJO_AGENT_INSTALLATION_ID
               valueFrom:
-                configMapKeyRef: { name: control-plane-config, key: MOLEJO_WORKSPACE_NAMESPACE }
+                secretKeyRef: { name: molejo-control-plane-bootstrap, key: agent-installation-id }
+            - name: MOLEJO_AGENT_ENROLLMENT_TOKEN_HASH_HEX
+              valueFrom:
+                secretKeyRef: { name: molejo-control-plane-bootstrap, key: agent-enrollment-token-hash-hex }
+            - { name: MOLEJO_OWNER_PASSWORD_FILE, value: /var/run/secrets/molejo/bootstrap/owner-password }
+          volumeMounts:
+            - { name: bootstrap, mountPath: /var/run/secrets/molejo/bootstrap, readOnly: true }
           resources:
             requests: { cpu: 10m, memory: 32Mi }
             limits: { cpu: 100m, memory: 128Mi }
@@ -38,3 +44,8 @@ spec:
             allowPrivilegeEscalation: false
             capabilities: { drop: [ALL] }
             readOnlyRootFilesystem: true
+      volumes:
+        - name: bootstrap
+          secret:
+            secretName: molejo-control-plane-bootstrap
+            defaultMode: 0440

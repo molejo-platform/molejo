@@ -4,13 +4,3 @@ metadata:
   name: molejo-control-plane
   labels:
     app.kubernetes.io/part-of: molejo-platform
----
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: molejo-workspaces
-  annotations:
-    platform.molejo.dev/control-plane-owner: molejo-control-plane
-  labels:
-    app.kubernetes.io/part-of: molejo-platform
-    app.kubernetes.io/managed-by: molejo-control-plane

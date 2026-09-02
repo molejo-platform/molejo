@@ -3,26 +3,12 @@ kind: Service
 metadata:
   name: control-plane-api
   namespace: molejo-control-plane
+  labels:
+    app.kubernetes.io/name: control-plane-api
+    app.kubernetes.io/part-of: molejo-platform
 spec:
   selector:
     app.kubernetes.io/name: control-plane-api
   ports:
-    - name: http
-      port: 8080
-      targetPort: http
-    - name: agent-grpc
-      port: 8443
-      targetPort: agent-grpc
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: console-web
-  namespace: molejo-control-plane
-spec:
-  selector:
-    app.kubernetes.io/name: console-web
-  ports:
-    - name: http
-      port: 8080
-      targetPort: http
+    - { name: https, port: 8444, targetPort: https }
+    - { name: agent-grpc, port: 8443, targetPort: agent-grpc }

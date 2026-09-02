@@ -30,6 +30,7 @@ spec:
           imagePullPolicy: IfNotPresent
           envFrom:
             - configMapRef: { name: cluster-agent-config }
+            - configMapRef: { name: cluster-agent-connection, optional: true }
           env:
             - name: POD_NAMESPACE
               valueFrom:
@@ -44,6 +45,7 @@ spec:
             periodSeconds: 10
           volumeMounts:
             - { name: kube-api, mountPath: /var/run/secrets/kubernetes.io/serviceaccount, readOnly: true }
+            - { name: control-plane-ca, mountPath: /var/run/secrets/molejo/control-plane, readOnly: true }
           resources:
             requests: { cpu: 10m, memory: 32Mi }
             limits: { cpu: 100m, memory: 64Mi }
@@ -53,6 +55,10 @@ spec:
             capabilities: { drop: [ALL] }
             readOnlyRootFilesystem: true
       volumes:
+        - name: control-plane-ca
+          configMap:
+            name: cluster-agent-control-plane-ca
+            optional: true
         - name: kube-api
           projected:
             defaultMode: 0440

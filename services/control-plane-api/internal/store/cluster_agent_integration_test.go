@@ -45,6 +45,34 @@ func TestAgentEnrollmentIsSingleUseAndIdempotent(t *testing.T) {
 	}
 }
 
+func TestBootstrapAgentInstallationIsIdempotent(t *testing.T) {
+	storage, _, _ := newIntegrationFixture(t)
+	ctx := t.Context()
+	installationID := newID(t, "agi")
+	firstHash := auth.HashToken("first-bootstrap-token")
+	secondHash := auth.HashToken("second-bootstrap-token")
+	if err := storage.EnsureBootstrapAgentInstallation(ctx, installationID, "Local cluster", firstHash, time.Now().Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.EnsureBootstrapAgentInstallation(ctx, installationID, "Local cluster", secondHash, time.Now().Add(2*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	var installations, tokens int
+	var storedHash []byte
+	if err := storage.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM agent_installations WHERE public_id=$1`, installationID).Scan(&installations); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM agent_enrollment_tokens t JOIN agent_installations i ON i.id=t.installation_id WHERE i.public_id=$1`, installationID).Scan(&tokens); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.Pool.QueryRow(ctx, `SELECT token_hash FROM agent_enrollment_tokens t JOIN agent_installations i ON i.id=t.installation_id WHERE i.public_id=$1`, installationID).Scan(&storedHash); err != nil {
+		t.Fatal(err)
+	}
+	if installations != 1 || tokens != 1 || !bytes.Equal(storedHash, secondHash) {
+		t.Fatalf("installations=%d tokens=%d hash=%x", installations, tokens, storedHash)
+	}
+}
+
 func TestAgentEnrollmentSerializesConcurrentConsumption(t *testing.T) {
 	storage, _, actorID := newIntegrationFixture(t)
 	now := time.Now().UTC()

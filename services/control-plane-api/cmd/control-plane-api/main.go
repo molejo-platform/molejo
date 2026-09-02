@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -223,8 +225,22 @@ func run() error {
 		return err
 	}
 	httpServer := &http.Server{Addr: env("MOLEJO_HTTP_ADDR", ":8080"), Handler: server.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 20 * time.Second, WriteTimeout: 20 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
+	httpTLSCertificate := strings.TrimSpace(os.Getenv("MOLEJO_HTTP_TLS_CERT_FILE"))
+	httpTLSKey := strings.TrimSpace(os.Getenv("MOLEJO_HTTP_TLS_KEY_FILE"))
+	if (httpTLSCertificate == "") != (httpTLSKey == "") {
+		return fmt.Errorf("HTTP TLS configuration is incomplete")
+	}
+	if httpTLSCertificate != "" {
+		httpServer.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS13}
+	}
 	httpErrors := make(chan error, 1)
-	go func() { httpErrors <- httpServer.ListenAndServe() }()
+	go func() {
+		if httpTLSCertificate != "" {
+			httpErrors <- httpServer.ListenAndServeTLS(httpTLSCertificate, httpTLSKey)
+			return
+		}
+		httpErrors <- httpServer.ListenAndServe()
+	}()
 	grpcErrors := make(chan error, 1)
 	if grpcServer != nil {
 		go func() { grpcErrors <- grpcServer.Serve(grpcListener) }()
@@ -759,6 +775,21 @@ func bootstrap() error {
 			}
 		}
 		actors := map[string]struct{ Role, PasswordHash string }{}
+		if passwordPath := strings.TrimSpace(os.Getenv("MOLEJO_OWNER_PASSWORD_FILE")); passwordPath != "" {
+			password, err := os.ReadFile(passwordPath)
+			if err != nil {
+				return fmt.Errorf("read owner password: %w", err)
+			}
+			value := strings.TrimSpace(string(password))
+			if err = auth.ValidatePassword(value); err != nil {
+				return fmt.Errorf("invalid owner password: %w", err)
+			}
+			hash, hashErr := auth.HashPassword(value)
+			if hashErr != nil {
+				return hashErr
+			}
+			actors["owner"] = struct{ Role, PasswordHash string }{Role: "owner", PasswordHash: hash}
+		}
 		for _, key := range []string{"owner", "tester-1", "tester-2"} {
 			hash := strings.TrimSpace(os.Getenv("MOLEJO_" + strings.ToUpper(strings.ReplaceAll(key, "-", "_")) + "_PASSWORD_HASH"))
 			if hash == "" {
@@ -773,7 +804,23 @@ func bootstrap() error {
 		if len(actors) == 0 {
 			return fmt.Errorf("configure at least one MOLEJO_*_PASSWORD_HASH")
 		}
-		return s.Bootstrap(context.Background(), domain.Workspace{PublicID: workspaceID, Name: "Beta Workspace", Namespace: env("MOLEJO_WORKSPACE_NAMESPACE", "molejo-workspaces")}, actors)
+		ctx := context.Background()
+		if err := s.Bootstrap(ctx, domain.Workspace{PublicID: workspaceID, Name: "Beta Workspace", Namespace: env("MOLEJO_WORKSPACE_NAMESPACE", "molejo-workspaces")}, actors); err != nil {
+			return err
+		}
+		installationID := strings.TrimSpace(os.Getenv("MOLEJO_AGENT_INSTALLATION_ID"))
+		tokenHashHex := strings.TrimSpace(os.Getenv("MOLEJO_AGENT_ENROLLMENT_TOKEN_HASH_HEX"))
+		if installationID == "" && tokenHashHex == "" {
+			return nil
+		}
+		if installationID == "" || tokenHashHex == "" {
+			return fmt.Errorf("Agent bootstrap configuration is incomplete")
+		}
+		tokenHash, err := hex.DecodeString(tokenHashHex)
+		if err != nil || len(tokenHash) != sha256.Size {
+			return fmt.Errorf("Agent bootstrap token hash is invalid")
+		}
+		return s.EnsureBootstrapAgentInstallation(ctx, installationID, env("MOLEJO_AGENT_INSTALLATION_NAME", "Local cluster"), tokenHash, time.Now().UTC().Add(30*time.Minute))
 	})
 }
 

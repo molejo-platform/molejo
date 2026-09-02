@@ -122,6 +122,12 @@ func (p *Pipeline) renderChartResources(ctx context.Context, chart string, diges
 		if err != nil {
 			return "", err
 		}
+		rendered = excludeYAMLKind(rendered, "Namespace")
+		templated := injectControlPlaneChartValues(rendered)
+		if templated == rendered {
+			return "", fmt.Errorf("control plane chart is missing its PostgreSQL PVC template marker")
+		}
+		rendered = templated
 		rendered += "\n"
 	default:
 		return "", fmt.Errorf("unknown chart %q", chart)
@@ -138,6 +144,13 @@ func (p *Pipeline) renderChartResources(ctx context.Context, chart string, diges
 		return "", fmt.Errorf("chart %s retains an unresolved image digest", chart)
 	}
 	return rendered, nil
+}
+
+func injectControlPlaneChartValues(rendered string) string {
+	return strings.ReplaceAll(rendered,
+		"      accessModes:\n      - ReadWriteOnce\n      resources:",
+		"      accessModes:\n      - ReadWriteOnce\n{{- with .Values.postgresql.storageClass }}\n      storageClassName: {{ . | quote }}\n{{- end }}\n      resources:",
+	)
 }
 
 func excludeYAMLKind(rendered, excludedKind string) string {
