@@ -26,7 +26,7 @@ func (h *generatedHandler) ListWorkspaces(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
-	items, nextCursor, err := h.server.Store.ListWorkspaces(r.Context(), user.ID, beforeID, limit)
+	items, nextCursor, err := h.server.store.ListWorkspaces(r.Context(), user.ID, beforeID, limit)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "storage_failed", "could not list workspaces", r)
 		return
@@ -39,7 +39,7 @@ func (h *generatedHandler) CreateWorkspace(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
-	context, err := h.server.Store.AuthorizationContext(r.Context(), user.ID, 0, "Installation", "default")
+	context, err := h.server.store.AuthorizationContext(r.Context(), user.ID, 0, "Installation", "default")
 	if err != nil || !authorization.Allowed(context, authorization.CreateWorkspace) {
 		writeError(w, http.StatusForbidden, "permission_denied", "installation administration is required", r)
 		return
@@ -62,7 +62,7 @@ func (h *generatedHandler) CreateWorkspace(w http.ResponseWriter, r *http.Reques
 		if err != nil {
 			break
 		}
-		workspace, operation, _, err := h.server.Store.CreateWorkspace(r.Context(), user.ID, workspaceID, operationID, name, domain.SHA256([]byte(idem)), payload)
+		workspace, operation, _, err := h.server.store.CreateWorkspace(r.Context(), user.ID, workspaceID, operationID, name, domain.SHA256([]byte(idem)), payload)
 		if errors.Is(err, store.ErrPublicIDCollision) {
 			continue
 		}
@@ -93,7 +93,7 @@ func (h *generatedHandler) UpdateWorkspace(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
-	updated, err := h.server.Store.UpdateWorkspace(r.Context(), workspace.ID, int64(params.IfMatch), name)
+	updated, err := h.server.store.UpdateWorkspace(r.Context(), workspace.ID, int64(params.IfMatch), name)
 	if err != nil {
 		writeHierarchyError(w, r, err)
 		return
@@ -110,7 +110,7 @@ func (h *generatedHandler) ListProjects(w http.ResponseWriter, r *http.Request, 
 	if !ok {
 		return
 	}
-	items, nextCursor, err := h.server.Store.ListProjects(r.Context(), workspace.ID, beforeID, limit, params.IncludeArchived != nil && bool(*params.IncludeArchived))
+	items, nextCursor, err := h.server.store.ListProjects(r.Context(), workspace.ID, beforeID, limit, params.IncludeArchived != nil && bool(*params.IncludeArchived))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "storage_failed", "could not list projects", r)
 		return
@@ -132,7 +132,7 @@ func (h *generatedHandler) CreateProject(w http.ResponseWriter, r *http.Request,
 		if err != nil {
 			break
 		}
-		project, err := h.server.Store.CreateProject(r.Context(), workspace.ID, publicID, name, nameKey)
+		project, err := h.server.store.CreateProject(r.Context(), workspace.ID, publicID, name, nameKey)
 		if errors.Is(err, store.ErrPublicIDCollision) {
 			continue
 		}
@@ -151,7 +151,7 @@ func (h *generatedHandler) GetProject(w http.ResponseWriter, r *http.Request, wo
 	if !ok {
 		return
 	}
-	project, err := h.server.Store.FindProject(r.Context(), workspace.ID, string(projectID))
+	project, err := h.server.store.FindProject(r.Context(), workspace.ID, string(projectID))
 	if err != nil {
 		writeHierarchyError(w, r, err)
 		return
@@ -168,7 +168,7 @@ func (h *generatedHandler) UpdateProject(w http.ResponseWriter, r *http.Request,
 	if !ok {
 		return
 	}
-	project, err := h.server.Store.UpdateProject(r.Context(), workspace.ID, string(projectID), int64(params.IfMatch), name, nameKey)
+	project, err := h.server.store.UpdateProject(r.Context(), workspace.ID, string(projectID), int64(params.IfMatch), name, nameKey)
 	if err != nil {
 		writeHierarchyError(w, r, err)
 		return
@@ -181,7 +181,7 @@ func (h *generatedHandler) ArchiveProject(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
-	if _, err := h.server.Store.ArchiveProject(r.Context(), workspace.ID, string(projectID), int64(params.IfMatch)); err != nil {
+	if _, err := h.server.store.ArchiveProject(r.Context(), workspace.ID, string(projectID), int64(params.IfMatch)); err != nil {
 		writeHierarchyError(w, r, err)
 		return
 	}
@@ -197,7 +197,7 @@ func (h *generatedHandler) ListEnvironments(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return
 	}
-	items, nextCursor, err := h.server.Store.ListEnvironments(r.Context(), workspace.ID, string(projectID), beforeID, limit, params.IncludeArchived != nil && bool(*params.IncludeArchived))
+	items, nextCursor, err := h.server.store.ListEnvironments(r.Context(), workspace.ID, string(projectID), beforeID, limit, params.IncludeArchived != nil && bool(*params.IncludeArchived))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "storage_failed", "could not list environments", r)
 		return
@@ -219,7 +219,7 @@ func (h *generatedHandler) CreateEnvironment(w http.ResponseWriter, r *http.Requ
 		if err != nil {
 			break
 		}
-		environment, err := h.server.Store.CreateEnvironment(r.Context(), workspace.ID, string(projectID), publicID, name, nameKey)
+		environment, err := h.server.store.CreateEnvironment(r.Context(), workspace.ID, string(projectID), publicID, name, nameKey)
 		if errors.Is(err, store.ErrPublicIDCollision) {
 			continue
 		}
@@ -238,7 +238,7 @@ func (h *generatedHandler) GetEnvironment(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
-	environment, err := h.server.Store.FindEnvironment(r.Context(), workspace.ID, string(projectID), string(environmentID))
+	environment, err := h.server.store.FindEnvironment(r.Context(), workspace.ID, string(projectID), string(environmentID))
 	if err != nil {
 		writeHierarchyError(w, r, err)
 		return
@@ -255,7 +255,7 @@ func (h *generatedHandler) UpdateEnvironment(w http.ResponseWriter, r *http.Requ
 	if !ok {
 		return
 	}
-	environment, err := h.server.Store.UpdateEnvironment(r.Context(), workspace.ID, string(projectID), string(environmentID), int64(params.IfMatch), name, nameKey)
+	environment, err := h.server.store.UpdateEnvironment(r.Context(), workspace.ID, string(projectID), string(environmentID), int64(params.IfMatch), name, nameKey)
 	if err != nil {
 		writeHierarchyError(w, r, err)
 		return
@@ -268,7 +268,7 @@ func (h *generatedHandler) ArchiveEnvironment(w http.ResponseWriter, r *http.Req
 	if !ok {
 		return
 	}
-	if _, err := h.server.Store.ArchiveEnvironment(r.Context(), workspace.ID, string(projectID), string(environmentID), int64(params.IfMatch)); err != nil {
+	if _, err := h.server.store.ArchiveEnvironment(r.Context(), workspace.ID, string(projectID), string(environmentID), int64(params.IfMatch)); err != nil {
 		writeHierarchyError(w, r, err)
 		return
 	}
@@ -284,7 +284,7 @@ func (h *generatedHandler) ListApps(w http.ResponseWriter, r *http.Request, work
 	if !ok {
 		return
 	}
-	items, nextCursor, err := h.server.Store.ListApps(r.Context(), workspace.ID, string(projectID), beforeID, limit, params.IncludeArchived != nil && bool(*params.IncludeArchived))
+	items, nextCursor, err := h.server.store.ListApps(r.Context(), workspace.ID, string(projectID), beforeID, limit, params.IncludeArchived != nil && bool(*params.IncludeArchived))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "storage_failed", "could not list apps", r)
 		return
@@ -306,7 +306,7 @@ func (h *generatedHandler) CreateApp(w http.ResponseWriter, r *http.Request, wor
 		if err != nil {
 			break
 		}
-		app, err := h.server.Store.CreateApp(r.Context(), workspace.ID, string(projectID), publicID, name, nameKey)
+		app, err := h.server.store.CreateApp(r.Context(), workspace.ID, string(projectID), publicID, name, nameKey)
 		if errors.Is(err, store.ErrPublicIDCollision) {
 			continue
 		}
@@ -325,7 +325,7 @@ func (h *generatedHandler) GetApp(w http.ResponseWriter, r *http.Request, worksp
 	if !ok {
 		return
 	}
-	app, err := h.server.Store.FindApp(r.Context(), workspace.ID, string(projectID), string(appID))
+	app, err := h.server.store.FindApp(r.Context(), workspace.ID, string(projectID), string(appID))
 	if err != nil {
 		writeHierarchyError(w, r, err)
 		return
@@ -342,7 +342,7 @@ func (h *generatedHandler) UpdateApp(w http.ResponseWriter, r *http.Request, wor
 	if !ok {
 		return
 	}
-	app, err := h.server.Store.UpdateApp(r.Context(), workspace.ID, string(projectID), string(appID), int64(params.IfMatch), name, nameKey)
+	app, err := h.server.store.UpdateApp(r.Context(), workspace.ID, string(projectID), string(appID), int64(params.IfMatch), name, nameKey)
 	if err != nil {
 		writeHierarchyError(w, r, err)
 		return
@@ -355,7 +355,7 @@ func (h *generatedHandler) ArchiveApp(w http.ResponseWriter, r *http.Request, wo
 	if !ok {
 		return
 	}
-	if _, err := h.server.Store.ArchiveApp(r.Context(), workspace.ID, string(projectID), string(appID), int64(params.IfMatch)); err != nil {
+	if _, err := h.server.store.ArchiveApp(r.Context(), workspace.ID, string(projectID), string(appID), int64(params.IfMatch)); err != nil {
 		writeHierarchyError(w, r, err)
 		return
 	}
@@ -368,7 +368,7 @@ func (h *generatedHandler) authorizeUser(w http.ResponseWriter, r *http.Request,
 		writeError(w, http.StatusUnauthorized, "unauthenticated", "authentication required", r)
 		return identity.User{}, false
 	}
-	user, err := h.server.Store.User(r.Context(), userID)
+	user, err := h.server.store.User(r.Context(), userID)
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, "unauthenticated", "authentication required", r)
 		return identity.User{}, false
@@ -385,7 +385,7 @@ func (h *generatedHandler) authorizeWorkspace(w http.ResponseWriter, r *http.Req
 	if !ok {
 		return identity.User{}, domain.Workspace{}, false
 	}
-	workspace, err := h.server.Store.FindWorkspaceForUser(r.Context(), user.ID, publicID)
+	workspace, err := h.server.store.FindWorkspaceForUser(r.Context(), user.ID, publicID)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "resource_not_found", "resource was not found", r)
 		return identity.User{}, domain.Workspace{}, false
@@ -396,7 +396,7 @@ func (h *generatedHandler) authorizeWorkspace(w http.ResponseWriter, r *http.Req
 		permission = mutationPermission(r)
 		resourceType, resourceID = authorizationResource(r.URL.Path, workspace.PublicID)
 	}
-	context, err := h.server.Store.AuthorizationContext(r.Context(), user.ID, workspace.ID, resourceType, resourceID)
+	context, err := h.server.store.AuthorizationContext(r.Context(), user.ID, workspace.ID, resourceType, resourceID)
 	if err != nil || !authorization.Allowed(context, permission) {
 		writeError(w, http.StatusForbidden, "permission_denied", "permission is required", r)
 		return identity.User{}, domain.Workspace{}, false
@@ -435,7 +435,7 @@ func authorizationResource(path, workspaceID string) (string, string) {
 }
 
 func (h *generatedHandler) projectExists(w http.ResponseWriter, r *http.Request, workspaceID int64, projectID string) bool {
-	if _, err := h.server.Store.FindProject(r.Context(), workspaceID, projectID); err != nil {
+	if _, err := h.server.store.FindProject(r.Context(), workspaceID, projectID); err != nil {
 		writeHierarchyError(w, r, err)
 		return false
 	}

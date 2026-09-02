@@ -32,7 +32,7 @@ var migrationFS embed.FS
 type Store struct {
 	Pool        *pgxpool.Pool
 	queries     *storesqlc.Queries
-	Publication PublicationPolicy
+	publication PublicationPolicy
 }
 
 type PublicationPolicy struct {
@@ -65,7 +65,17 @@ func New(ctx context.Context, dsn string) (*Store, error) {
 		pool.Close()
 		return nil, err
 	}
-	return &Store{Pool: pool, queries: storesqlc.New(pool), Publication: NewPublicationPolicy("molejo.dev", "", false, 0, 0)}, nil
+	return &Store{Pool: pool, queries: storesqlc.New(pool), publication: NewPublicationPolicy("molejo.dev", "", false, 0, 0)}, nil
+}
+
+// SetPublicationPolicy configures the product policy used by transactional publication operations.
+func (s *Store) SetPublicationPolicy(policy PublicationPolicy) {
+	s.publication = policy
+}
+
+// PublicationPolicy returns the configured immutable publication policy.
+func (s *Store) PublicationPolicy() PublicationPolicy {
+	return s.publication
 }
 
 func (s *Store) Close() { s.Pool.Close() }

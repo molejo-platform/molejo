@@ -23,7 +23,7 @@ func (h *generatedHandler) CreateAgentInstallation(w http.ResponseWriter, r *htt
 	if !ok {
 		return
 	}
-	if h.server.AgentSigner == nil {
+	if h.server.agentSigner == nil {
 		writeError(w, http.StatusServiceUnavailable, "agent_pairing_unavailable", "Agent pairing is not configured", r)
 		return
 	}
@@ -50,7 +50,7 @@ func (h *generatedHandler) CreateAgentInstallation(w http.ResponseWriter, r *htt
 	expiresAt := time.Now().UTC().Add(agentEnrollmentTTL)
 	event := h.server.auditEvent(r, "installation.agent.create", "AgentInstallation", publicID, audit.Succeeded)
 	event.ActorUserID = &administrator.ID
-	installation, err := h.server.Store.CreateAgentInstallation(r.Context(), publicID, name, auth.HashToken(token), expiresAt, event)
+	installation, err := h.server.store.CreateAgentInstallation(r.Context(), publicID, name, auth.HashToken(token), expiresAt, event)
 	if err != nil {
 		writeIdentityError(w, r, err)
 		return
@@ -59,7 +59,7 @@ func (h *generatedHandler) CreateAgentInstallation(w http.ResponseWriter, r *htt
 }
 
 func (h *generatedHandler) EnrollAgent(w http.ResponseWriter, r *http.Request) {
-	if h.server.AgentSigner == nil {
+	if h.server.agentSigner == nil {
 		writeError(w, http.StatusServiceUnavailable, "agent_pairing_unavailable", "Agent pairing is not configured", r)
 		return
 	}
@@ -75,8 +75,8 @@ func (h *generatedHandler) EnrollAgent(w http.ResponseWriter, r *http.Request) {
 	csrPEM := []byte(*input.CsrPem)
 	csrFingerprint := sha256.Sum256(csrPEM)
 	event := h.server.auditEvent(r, "installation.agent.enroll", "AgentInstallation", "", audit.Succeeded)
-	certificate, err := h.server.Store.EnrollAgent(r.Context(), auth.HashToken(*input.EnrollmentToken), input.AttemptId, csrFingerprint[:], time.Now().UTC(), func(installationID string) (store.AgentCertificate, error) {
-		issued, issueErr := h.server.AgentSigner.Sign(installationID, csrPEM, time.Now().UTC())
+	certificate, err := h.server.store.EnrollAgent(r.Context(), auth.HashToken(*input.EnrollmentToken), input.AttemptId, csrFingerprint[:], time.Now().UTC(), func(installationID string) (store.AgentCertificate, error) {
+		issued, issueErr := h.server.agentSigner.Sign(installationID, csrPEM, time.Now().UTC())
 		return store.AgentCertificate{CertificatePEM: issued.CertificatePEM, CACertificatePEM: issued.CACertificatePEM, Serial: issued.Serial, Fingerprint: issued.Fingerprint, NotAfter: issued.NotAfter}, issueErr
 	}, event)
 	if err != nil {

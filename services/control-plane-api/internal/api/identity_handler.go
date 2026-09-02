@@ -17,7 +17,7 @@ import (
 const passwordResetTTL = 15 * time.Minute
 
 func (h *generatedHandler) GetAuthenticationCapabilities(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]bool{"password": true, "totp": h.server.Config.TOTPEnabled, "passkey": false})
+	writeJSON(w, http.StatusOK, map[string]bool{"password": true, "totp": h.server.config.TOTPEnabled, "passkey": false})
 }
 
 func (h *generatedHandler) GetOwnProfile(w http.ResponseWriter, r *http.Request) {
@@ -44,7 +44,7 @@ func (h *generatedHandler) UpdateOwnProfile(w http.ResponseWriter, r *http.Reque
 	}
 	event := h.server.auditEvent(r, "identity.profile.update", "User", user.PublicID, audit.Succeeded)
 	event.ActorUserID = &user.ID
-	updated, err := h.server.Store.UpdateOwnProfile(r.Context(), user.ID, int64(params.IfMatch), displayName, event)
+	updated, err := h.server.store.UpdateOwnProfile(r.Context(), user.ID, int64(params.IfMatch), displayName, event)
 	if err != nil {
 		writeIdentityError(w, r, err)
 		return
@@ -65,7 +65,7 @@ func (h *generatedHandler) ChangeOwnPassword(w http.ResponseWriter, r *http.Requ
 		writeError(w, http.StatusBadRequest, "invalid_json", "request body is invalid", r)
 		return
 	}
-	_, currentHash, err := h.server.Store.AuthenticateUser(r.Context(), user.Username)
+	_, currentHash, err := h.server.store.AuthenticateUser(r.Context(), user.Username)
 	if err != nil || !auth.VerifyPassword(input.CurrentPassword, currentHash) {
 		writeError(w, http.StatusUnauthorized, "current_password_invalid", "current password is invalid", r)
 		return
@@ -81,7 +81,7 @@ func (h *generatedHandler) ChangeOwnPassword(w http.ResponseWriter, r *http.Requ
 	}
 	event := h.server.auditEvent(r, "identity.password.change", "User", user.PublicID, audit.Succeeded)
 	event.ActorUserID = &user.ID
-	if err = h.server.Store.ChangePassword(r.Context(), user.ID, passwordHash, event); err != nil {
+	if err = h.server.store.ChangePassword(r.Context(), user.ID, passwordHash, event); err != nil {
 		writeError(w, http.StatusInternalServerError, "password_failed", "password could not be changed", r)
 		return
 	}
@@ -95,7 +95,7 @@ func (h *generatedHandler) ListOwnSessions(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusUnauthorized, "unauthenticated", "authentication required", r)
 		return
 	}
-	items, err := h.server.Store.ListUserSessions(r.Context(), principal.UserID, principal.SessionID)
+	items, err := h.server.store.ListUserSessions(r.Context(), principal.UserID, principal.SessionID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "storage_failed", "sessions could not be listed", r)
 		return
@@ -112,7 +112,7 @@ func (h *generatedHandler) RevokeOwnSession(w http.ResponseWriter, r *http.Reque
 	event := h.server.auditEvent(r, "authentication.session.revoke", "Session", string(sessionID), audit.Succeeded)
 	event.ActorUserID = &principal.UserID
 	event.SessionID = &principal.SessionID
-	if err := h.server.Store.RevokeUserSession(r.Context(), principal.UserID, string(sessionID), event); err != nil {
+	if err := h.server.store.RevokeUserSession(r.Context(), principal.UserID, string(sessionID), event); err != nil {
 		writeIdentityError(w, r, err)
 		return
 	}
@@ -134,7 +134,7 @@ func (h *generatedHandler) RequestPasswordReset(w http.ResponseWriter, r *http.R
 }
 
 func (h *generatedHandler) VerifyPasswordReset(w http.ResponseWriter, r *http.Request) {
-	if len(h.server.PasswordResetKey) < 32 {
+	if len(h.server.passwordResetKey) < 32 {
 		writeError(w, http.StatusServiceUnavailable, "password_reset_unavailable", "password reset is not configured", r)
 		return
 	}
@@ -153,8 +153,8 @@ func (h *generatedHandler) VerifyPasswordReset(w http.ResponseWriter, r *http.Re
 	}
 	ipKey := auth.HashToken("reset-ip:" + h.server.remoteIP(r))
 	userKey := auth.HashToken("reset-user:" + username)
-	ipAllowed, ipErr := h.server.Store.AuthenticationAllowed(r.Context(), ipKey)
-	userAllowed, userErr := h.server.Store.AuthenticationAllowed(r.Context(), userKey)
+	ipAllowed, ipErr := h.server.store.AuthenticationAllowed(r.Context(), ipKey)
+	userAllowed, userErr := h.server.store.AuthenticationAllowed(r.Context(), userKey)
 	if ipErr != nil || userErr != nil {
 		writeError(w, http.StatusServiceUnavailable, "password_reset_unavailable", "password reset is temporarily unavailable", r)
 		return
@@ -163,16 +163,16 @@ func (h *generatedHandler) VerifyPasswordReset(w http.ResponseWriter, r *http.Re
 		writeError(w, http.StatusTooManyRequests, "password_reset_rate_limited", "too many reset attempts", r)
 		return
 	}
-	user, ticket, err := h.server.Store.VerifyPasswordResetGrant(r.Context(), username, auth.HashResetCode(h.server.PasswordResetKey, input.Code))
+	user, ticket, err := h.server.store.VerifyPasswordResetGrant(r.Context(), username, auth.HashResetCode(h.server.passwordResetKey, input.Code))
 	if err != nil {
-		_ = h.server.Store.RecordAuthenticationFailure(r.Context(), ipKey)
-		_ = h.server.Store.RecordAuthenticationFailure(r.Context(), userKey)
+		_ = h.server.store.RecordAuthenticationFailure(r.Context(), ipKey)
+		_ = h.server.store.RecordAuthenticationFailure(r.Context(), userKey)
 		_ = h.server.recordAudit(r, audit.Event{Action: "identity.password_reset.verify", TargetType: "User", Outcome: audit.Failed, Reason: "invalid_code"})
 		writeError(w, http.StatusBadRequest, "reset_code_invalid", "reset code is invalid or expired", r)
 		return
 	}
-	_ = h.server.Store.ClearAuthenticationFailures(r.Context(), ipKey)
-	_ = h.server.Store.ClearAuthenticationFailures(r.Context(), userKey)
+	_ = h.server.store.ClearAuthenticationFailures(r.Context(), ipKey)
+	_ = h.server.store.ClearAuthenticationFailures(r.Context(), userKey)
 	_ = h.server.recordAudit(r, audit.Event{Action: "identity.password_reset.verify", TargetType: "User", TargetPublicID: user.PublicID, Outcome: audit.Succeeded})
 	writeJSON(w, http.StatusOK, map[string]string{"ticket": ticket})
 }
@@ -198,7 +198,7 @@ func (h *generatedHandler) CompletePasswordReset(w http.ResponseWriter, r *http.
 		return
 	}
 	event := h.server.auditEvent(r, "identity.password_reset.complete", "User", "", audit.Succeeded)
-	if err = h.server.Store.CompletePasswordReset(r.Context(), username, input.Ticket, passwordHash, event); err != nil {
+	if err = h.server.store.CompletePasswordReset(r.Context(), username, input.Ticket, passwordHash, event); err != nil {
 		writeError(w, http.StatusBadRequest, "password_reset_invalid", "password reset request is invalid", r)
 		return
 	}
@@ -214,7 +214,7 @@ func (h *generatedHandler) ListUsers(w http.ResponseWriter, r *http.Request, par
 	if !ok {
 		return
 	}
-	items, next, err := h.server.Store.ListUsers(r.Context(), beforeID, limit)
+	items, next, err := h.server.store.ListUsers(r.Context(), beforeID, limit)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "storage_failed", "users could not be listed", r)
 		return
@@ -256,7 +256,7 @@ func (h *generatedHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		}
 		event := h.server.auditEvent(r, "identity.user.create", "User", publicID, audit.Succeeded)
 		event.ActorUserID = &administrator.ID
-		created, createErr := h.server.Store.CreateUser(r.Context(), identity.User{PublicID: publicID, Username: username, DisplayName: displayName}, passwordHash, input.InstallationAdministrator, event)
+		created, createErr := h.server.store.CreateUser(r.Context(), identity.User{PublicID: publicID, Username: username, DisplayName: displayName}, passwordHash, input.InstallationAdministrator, event)
 		if errors.Is(createErr, store.ErrPublicIDCollision) {
 			continue
 		}
@@ -282,7 +282,7 @@ func (h *generatedHandler) UpdateUserStatus(w http.ResponseWriter, r *http.Reque
 	}
 	event := h.server.auditEvent(r, "identity.user.status.update", "User", string(userID), audit.Succeeded)
 	event.ActorUserID = &administrator.ID
-	updated, err := h.server.Store.SetUserStatus(r.Context(), string(userID), string(input.Status), int64(params.IfMatch), event)
+	updated, err := h.server.store.SetUserStatus(r.Context(), string(userID), string(input.Status), int64(params.IfMatch), event)
 	if err != nil {
 		writeIdentityError(w, r, err)
 		return
@@ -295,11 +295,11 @@ func (h *generatedHandler) CreatePasswordResetGrant(w http.ResponseWriter, r *ht
 	if !ok {
 		return
 	}
-	if len(h.server.PasswordResetKey) < 32 {
+	if len(h.server.passwordResetKey) < 32 {
 		writeError(w, http.StatusServiceUnavailable, "password_reset_unavailable", "password reset is not configured", r)
 		return
 	}
-	user, err := h.server.Store.FindUser(r.Context(), string(userID))
+	user, err := h.server.store.FindUser(r.Context(), string(userID))
 	if err != nil {
 		writeIdentityError(w, r, err)
 		return
@@ -317,8 +317,8 @@ func (h *generatedHandler) CreatePasswordResetGrant(w http.ResponseWriter, r *ht
 	expiresAt := time.Now().Add(passwordResetTTL)
 	event := h.server.auditEvent(r, "identity.password_reset.grant.create", "User", user.PublicID, audit.Succeeded)
 	event.ActorUserID = &administrator.ID
-	grant := store.PasswordResetGrant{PublicID: publicID, UserID: user.ID, CodeHash: auth.HashResetCode(h.server.PasswordResetKey, code), ExpiresAt: expiresAt}
-	if err = h.server.Store.CreatePasswordResetGrant(r.Context(), grant, administrator.ID, event); err != nil {
+	grant := store.PasswordResetGrant{PublicID: publicID, UserID: user.ID, CodeHash: auth.HashResetCode(h.server.passwordResetKey, code), ExpiresAt: expiresAt}
+	if err = h.server.store.CreatePasswordResetGrant(r.Context(), grant, administrator.ID, event); err != nil {
 		writeError(w, http.StatusInternalServerError, "password_reset_failed", "reset code could not be created", r)
 		return
 	}
@@ -330,7 +330,7 @@ func (h *generatedHandler) ListWorkspaceMembers(w http.ResponseWriter, r *http.R
 	if !ok {
 		return
 	}
-	items, err := h.server.Store.ListWorkspaceMemberships(r.Context(), workspace.ID)
+	items, err := h.server.store.ListWorkspaceMemberships(r.Context(), workspace.ID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "storage_failed", "members could not be listed", r)
 		return
@@ -357,7 +357,7 @@ func (h *generatedHandler) CreateWorkspaceMember(w http.ResponseWriter, r *http.
 		writeError(w, http.StatusBadRequest, "membership_invalid", "membership is invalid", r)
 		return
 	}
-	user, err := h.server.Store.FindUserByUsername(r.Context(), username)
+	user, err := h.server.store.FindUserByUsername(r.Context(), username)
 	if err != nil {
 		writeIdentityError(w, r, err)
 		return
@@ -365,7 +365,7 @@ func (h *generatedHandler) CreateWorkspaceMember(w http.ResponseWriter, r *http.
 	event := h.server.auditEvent(r, "authorization.membership.create", "User", user.PublicID, audit.Succeeded)
 	event.ActorUserID = &actor.ID
 	event.WorkspaceID = &workspace.ID
-	item, err := h.server.Store.PutWorkspaceMembership(r.Context(), workspace.ID, user.PublicID, input.Role, input.Status, nil, event)
+	item, err := h.server.store.PutWorkspaceMembership(r.Context(), workspace.ID, user.PublicID, input.Role, input.Status, nil, event)
 	if err != nil {
 		writeIdentityError(w, r, err)
 		return
@@ -391,7 +391,7 @@ func (h *generatedHandler) PutWorkspaceMember(w http.ResponseWriter, r *http.Req
 	event := h.server.auditEvent(r, "authorization.membership.put", "User", string(userID), audit.Succeeded)
 	event.ActorUserID = &actor.ID
 	event.WorkspaceID = &workspace.ID
-	item, err := h.server.Store.PutWorkspaceMembership(r.Context(), workspace.ID, string(userID), string(input.Role), string(input.Status), version, event)
+	item, err := h.server.store.PutWorkspaceMembership(r.Context(), workspace.ID, string(userID), string(input.Role), string(input.Status), version, event)
 	if err != nil {
 		writeIdentityError(w, r, err)
 		return
@@ -407,7 +407,7 @@ func (h *generatedHandler) DeleteWorkspaceMember(w http.ResponseWriter, r *http.
 	event := h.server.auditEvent(r, "authorization.membership.delete", "User", string(userID), audit.Succeeded)
 	event.ActorUserID = &actor.ID
 	event.WorkspaceID = &workspace.ID
-	if err := h.server.Store.DeleteWorkspaceMembership(r.Context(), workspace.ID, string(userID), event); err != nil {
+	if err := h.server.store.DeleteWorkspaceMembership(r.Context(), workspace.ID, string(userID), event); err != nil {
 		writeIdentityError(w, r, err)
 		return
 	}
@@ -419,7 +419,7 @@ func (h *generatedHandler) ListWorkspaceGroups(w http.ResponseWriter, r *http.Re
 	if !ok {
 		return
 	}
-	items, err := h.server.Store.ListWorkspaceGroups(r.Context(), workspace.ID)
+	items, err := h.server.store.ListWorkspaceGroups(r.Context(), workspace.ID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "storage_failed", "groups could not be listed", r)
 		return
@@ -450,7 +450,7 @@ func (h *generatedHandler) CreateWorkspaceGroup(w http.ResponseWriter, r *http.R
 	event := h.server.auditEvent(r, "authorization.group.create", "Group", publicID, audit.Succeeded)
 	event.ActorUserID = &actor.ID
 	event.WorkspaceID = &workspace.ID
-	group, err := h.server.Store.CreateWorkspaceGroup(r.Context(), store.Group{PublicID: publicID, WorkspaceID: workspace.ID, Name: name}, nameKey, event)
+	group, err := h.server.store.CreateWorkspaceGroup(r.Context(), store.Group{PublicID: publicID, WorkspaceID: workspace.ID, Name: name}, nameKey, event)
 	if err != nil {
 		writeIdentityError(w, r, err)
 		return
@@ -463,7 +463,7 @@ func (h *generatedHandler) ListWorkspaceGroupMembers(w http.ResponseWriter, r *h
 	if !ok {
 		return
 	}
-	items, err := h.server.Store.ListWorkspaceGroupMembers(r.Context(), workspace.ID, string(groupID))
+	items, err := h.server.store.ListWorkspaceGroupMembers(r.Context(), workspace.ID, string(groupID))
 	if err != nil {
 		writeIdentityError(w, r, err)
 		return
@@ -494,9 +494,9 @@ func (h *generatedHandler) mutateGroupMember(w http.ResponseWriter, r *http.Requ
 	event.Metadata = map[string]any{"userId": string(userID)}
 	var err error
 	if add {
-		err = h.server.Store.AddWorkspaceGroupMember(r.Context(), workspace.ID, string(groupID), string(userID), event)
+		err = h.server.store.AddWorkspaceGroupMember(r.Context(), workspace.ID, string(groupID), string(userID), event)
 	} else {
-		err = h.server.Store.RemoveWorkspaceGroupMember(r.Context(), workspace.ID, string(groupID), string(userID), event)
+		err = h.server.store.RemoveWorkspaceGroupMember(r.Context(), workspace.ID, string(groupID), string(userID), event)
 	}
 	if err != nil {
 		writeIdentityError(w, r, err)
@@ -514,7 +514,7 @@ func (h *generatedHandler) ListAuditEvents(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
-	items, next, err := h.server.Store.ListAuditEvents(r.Context(), workspace.ID, beforeID, limit)
+	items, next, err := h.server.store.ListAuditEvents(r.Context(), workspace.ID, beforeID, limit)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "storage_failed", "audit events could not be listed", r)
 		return
@@ -527,7 +527,7 @@ func (h *generatedHandler) ListWorkspaceAccessGrants(w http.ResponseWriter, r *h
 	if !ok {
 		return
 	}
-	items, err := h.server.Store.ListWorkspaceAccessGrants(r.Context(), workspace.ID)
+	items, err := h.server.store.ListWorkspaceAccessGrants(r.Context(), workspace.ID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "storage_failed", "access grants could not be listed", r)
 		return
@@ -559,7 +559,7 @@ func (h *generatedHandler) CreateWorkspaceAccessGrant(w http.ResponseWriter, r *
 	event := h.server.auditEvent(r, "authorization.access_grant.create", "AccessGrant", publicID, audit.Succeeded)
 	event.ActorUserID = &actor.ID
 	event.WorkspaceID = &workspace.ID
-	grant, err := h.server.Store.CreateWorkspaceAccessGrant(r.Context(), store.AccessGrant{PublicID: publicID, WorkspaceID: workspace.ID, SubjectType: input.SubjectType, SubjectPublicID: input.SubjectID, ResourceType: input.ResourceType, ResourcePublicID: input.ResourceID, Relation: input.Relation}, actor.ID, event)
+	grant, err := h.server.store.CreateWorkspaceAccessGrant(r.Context(), store.AccessGrant{PublicID: publicID, WorkspaceID: workspace.ID, SubjectType: input.SubjectType, SubjectPublicID: input.SubjectID, ResourceType: input.ResourceType, ResourcePublicID: input.ResourceID, Relation: input.Relation}, actor.ID, event)
 	if err != nil {
 		writeIdentityError(w, r, err)
 		return
@@ -575,7 +575,7 @@ func (h *generatedHandler) DeleteWorkspaceAccessGrant(w http.ResponseWriter, r *
 	event := h.server.auditEvent(r, "authorization.access_grant.delete", "AccessGrant", string(accessGrantID), audit.Succeeded)
 	event.ActorUserID = &actor.ID
 	event.WorkspaceID = &workspace.ID
-	if err := h.server.Store.DeleteWorkspaceAccessGrant(r.Context(), workspace.ID, string(accessGrantID), event); err != nil {
+	if err := h.server.store.DeleteWorkspaceAccessGrant(r.Context(), workspace.ID, string(accessGrantID), event); err != nil {
 		writeIdentityError(w, r, err)
 		return
 	}
@@ -587,7 +587,7 @@ func (h *generatedHandler) authorizeInstallation(w http.ResponseWriter, r *http.
 	if !ok {
 		return identity.User{}, false
 	}
-	context, err := h.server.Store.AuthorizationContext(r.Context(), user.ID, 0, "Installation", "default")
+	context, err := h.server.store.AuthorizationContext(r.Context(), user.ID, 0, "Installation", "default")
 	if err != nil || !authorization.Allowed(context, permission) {
 		writeError(w, http.StatusForbidden, "permission_denied", "installation administration is required", r)
 		return identity.User{}, false
@@ -600,12 +600,12 @@ func (h *generatedHandler) authorizeWorkspacePermission(w http.ResponseWriter, r
 	if !ok {
 		return identity.User{}, domain.Workspace{}, false
 	}
-	workspace, err := h.server.Store.FindWorkspaceForUser(r.Context(), user.ID, publicID)
+	workspace, err := h.server.store.FindWorkspaceForUser(r.Context(), user.ID, publicID)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "resource_not_found", "resource was not found", r)
 		return identity.User{}, domain.Workspace{}, false
 	}
-	context, err := h.server.Store.AuthorizationContext(r.Context(), user.ID, workspace.ID, "Workspace", workspace.PublicID)
+	context, err := h.server.store.AuthorizationContext(r.Context(), user.ID, workspace.ID, "Workspace", workspace.PublicID)
 	if err != nil || !authorization.Allowed(context, permission) {
 		writeError(w, http.StatusForbidden, "permission_denied", "permission is required", r)
 		return identity.User{}, domain.Workspace{}, false

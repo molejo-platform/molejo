@@ -15,7 +15,7 @@ func (h *generatedHandler) ListStorageProfiles(w http.ResponseWriter, r *http.Re
 	if !ok {
 		return
 	}
-	items, err := h.server.Store.ListStorageProfiles(r.Context(), workspace.ID)
+	items, err := h.server.store.ListStorageProfiles(r.Context(), workspace.ID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "storage_failed", "storage profiles could not be listed", r)
 		return
@@ -31,7 +31,7 @@ func (h *generatedHandler) GetAppEnvironmentVolume(w http.ResponseWriter, r *htt
 	if _, ok = h.appEnvironment(w, r, workspace.ID, string(projectID), string(appID), string(appEnvironmentID)); !ok {
 		return
 	}
-	volume, err := h.server.Store.FindAppVolume(r.Context(), workspace.ID, string(appEnvironmentID))
+	volume, err := h.server.store.FindAppVolume(r.Context(), workspace.ID, string(appEnvironmentID))
 	if err != nil {
 		writeVolumeError(w, r, err)
 		return
@@ -57,7 +57,7 @@ func (h *generatedHandler) ExpandAppEnvironmentVolume(w http.ResponseWriter, r *
 		writeError(w, http.StatusBadRequest, "volume_size_invalid", "sizeGiB must be positive", r)
 		return
 	}
-	volume, operation, _, err := h.server.Store.ExpandAppVolume(r.Context(), workspace.ID, actor.ID, string(appEnvironmentID), int64(input.SizeGiB), int64(params.IfMatch), auth.HashToken(idempotencyKey), scopedBuildPayloadHash(r, payloadHash))
+	volume, operation, _, err := h.server.store.ExpandAppVolume(r.Context(), workspace.ID, actor.ID, string(appEnvironmentID), int64(input.SizeGiB), int64(params.IfMatch), auth.HashToken(idempotencyKey), scopedBuildPayloadHash(r, payloadHash))
 	if err != nil {
 		writeVolumeError(w, r, err)
 		return
@@ -80,7 +80,7 @@ func (h *generatedHandler) DeleteAppEnvironmentVolume(w http.ResponseWriter, r *
 		writeError(w, http.StatusBadRequest, "idempotency_required", "Idempotency-Key is required", r)
 		return
 	}
-	volume, operation, _, err := h.server.Store.DeleteAppVolume(r.Context(), workspace.ID, actor.ID, string(appEnvironmentID), int64(params.IfMatch), auth.HashToken(idempotencyKey), scopedBuildPayloadHash(r, payloadHash))
+	volume, operation, _, err := h.server.store.DeleteAppVolume(r.Context(), workspace.ID, actor.ID, string(appEnvironmentID), int64(params.IfMatch), auth.HashToken(idempotencyKey), scopedBuildPayloadHash(r, payloadHash))
 	if err != nil {
 		writeVolumeError(w, r, err)
 		return

@@ -48,7 +48,7 @@ func (h *generatedHandler) ListAppEnvironmentRuntimeLogs(w http.ResponseWriter, 
 	if !ok {
 		return
 	}
-	from, to, ok := observabilityRange(w, r, params.From, params.To, h.server.Config.ObservabilityLogMaxWindow)
+	from, to, ok := observabilityRange(w, r, params.From, params.To, h.server.config.ObservabilityLogMaxWindow)
 	if !ok {
 		return
 	}
@@ -67,14 +67,14 @@ func (h *generatedHandler) ListAppEnvironmentRuntimeLogs(w http.ResponseWriter, 
 		}
 		query.Snapshot, query.Before = snapshot, &before
 	} else {
-		watermark, err := h.server.Observability.LogWatermark(r.Context())
+		watermark, err := h.server.observability.LogWatermark(r.Context())
 		if err != nil {
 			h.writeObservabilityError(w, r, err)
 			return
 		}
 		query.Snapshot = watermark
 	}
-	page, err := h.server.Observability.Logs(r.Context(), runtimeScope(workspace, appEnvironment), query)
+	page, err := h.server.observability.Logs(r.Context(), runtimeScope(workspace, appEnvironment), query)
 	if err != nil {
 		h.writeObservabilityError(w, r, err)
 		return
@@ -92,12 +92,12 @@ func (h *generatedHandler) GetAppEnvironmentRuntimeMetrics(w http.ResponseWriter
 	if !ok {
 		return
 	}
-	from, to, ok := observabilityRange(w, r, params.From, params.To, h.server.Config.ObservabilityMetricMaxWindow)
+	from, to, ok := observabilityRange(w, r, params.From, params.To, h.server.config.ObservabilityMetricMaxWindow)
 	if !ok {
 		return
 	}
 	step := observabilityMetricStep(to.Sub(from))
-	metrics, err := h.server.Observability.Metrics(r.Context(), runtimeScope(workspace, appEnvironment), observability.MetricQuery{From: from, To: to, Step: step})
+	metrics, err := h.server.observability.Metrics(r.Context(), runtimeScope(workspace, appEnvironment), observability.MetricQuery{From: from, To: to, Step: step})
 	if err != nil {
 		h.writeObservabilityError(w, r, err)
 		return
@@ -110,7 +110,7 @@ func (h *generatedHandler) ListAppEnvironmentRuntimeEvents(w http.ResponseWriter
 	if !ok {
 		return
 	}
-	from, to, ok := observabilityRange(w, r, params.From, params.To, h.server.Config.ObservabilityEventMaxWindow)
+	from, to, ok := observabilityRange(w, r, params.From, params.To, h.server.config.ObservabilityEventMaxWindow)
 	if !ok {
 		return
 	}
@@ -118,13 +118,13 @@ func (h *generatedHandler) ListAppEnvironmentRuntimeEvents(w http.ResponseWriter
 	if params.Limit != nil {
 		limit = *params.Limit
 	}
-	operations, err := h.server.Store.ListAppEnvironmentOperations(r.Context(), workspace.ID, appEnvironment.ID, from, to, limit)
+	operations, err := h.server.store.ListAppEnvironmentOperations(r.Context(), workspace.ID, appEnvironment.ID, from, to, limit)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "storage_failed", "runtime events could not be read", r)
 		return
 	}
 	items := operationEvents(operations)
-	kubernetesEvents, backendErr := h.server.Observability.Events(r.Context(), runtimeScope(workspace, appEnvironment), observability.EventQuery{From: from, To: to, Limit: limit})
+	kubernetesEvents, backendErr := h.server.observability.Events(r.Context(), runtimeScope(workspace, appEnvironment), observability.EventQuery{From: from, To: to, Limit: limit})
 	if backendErr != nil {
 		h.server.logger().Warn("runtime event backend unavailable", "request_id", requestID(r), "app_environment_id", appEnvironment.PublicID)
 	} else {
@@ -142,7 +142,7 @@ func (h *generatedHandler) StreamAppEnvironmentRuntimeLogs(w http.ResponseWriter
 	if !ok {
 		return
 	}
-	if !h.server.logLiveLimiter.acquire(actor.ID, h.server.Config.ObservabilityLivePerUser) {
+	if !h.server.logLiveLimiter.acquire(actor.ID, h.server.config.ObservabilityLivePerUser) {
 		writeError(w, http.StatusTooManyRequests, "live_stream_limit", "too many live log streams", r)
 		return
 	}
@@ -158,7 +158,7 @@ func (h *generatedHandler) StreamAppEnvironmentRuntimeLogs(w http.ResponseWriter
 	var cursor observability.LogCursor
 	var err error
 	if encodedCursor == "" {
-		cursor, err = h.server.Observability.LogWatermark(r.Context())
+		cursor, err = h.server.observability.LogWatermark(r.Context())
 	} else {
 		cursor, err = decodeLiveLogCursor(encodedCursor)
 	}
@@ -185,13 +185,13 @@ func (h *generatedHandler) StreamAppEnvironmentRuntimeLogs(w http.ResponseWriter
 	} else {
 		cursor = next
 	}
-	ticker := time.NewTicker(h.server.Config.ObservabilityLivePoll)
+	ticker := time.NewTicker(h.server.config.ObservabilityLivePoll)
 	defer ticker.Stop()
 	heartbeat := time.NewTicker(15 * time.Second)
 	defer heartbeat.Stop()
 	reauthorize := time.NewTicker(30 * time.Second)
 	defer reauthorize.Stop()
-	timeout := time.NewTimer(h.server.Config.ObservabilityLiveTTL)
+	timeout := time.NewTimer(h.server.config.ObservabilityLiveTTL)
 	defer timeout.Stop()
 	for {
 		select {
@@ -206,7 +206,7 @@ func (h *generatedHandler) StreamAppEnvironmentRuntimeLogs(w http.ResponseWriter
 			}
 		case <-reauthorize.C:
 			currentActor, _, authenticated := h.server.session(r)
-			currentWorkspace, authErr := h.server.Store.FindWorkspaceForUser(r.Context(), currentActor, workspace.PublicID)
+			currentWorkspace, authErr := h.server.store.FindWorkspaceForUser(r.Context(), currentActor, workspace.PublicID)
 			if !authenticated || currentActor != actor.ID || authErr != nil || currentWorkspace.ID != workspace.ID {
 				_ = writeSSE(w, flusher, "event: end\ndata: {\"reason\":\"authorization_changed\"}\n\n")
 				return
@@ -227,7 +227,7 @@ func (h *generatedHandler) drainLiveLogs(ctx context.Context, w http.ResponseWri
 		maximumPages = 20
 	)
 	for page := 0; page < maximumPages; page++ {
-		batch, err := h.server.Observability.LiveLogs(ctx, scope, observability.LiveLogQuery{After: cursor, Search: search, Limit: batchSize})
+		batch, err := h.server.observability.LiveLogs(ctx, scope, observability.LiveLogQuery{After: cursor, Search: search, Limit: batchSize})
 		if err != nil {
 			_ = writeSSE(w, flusher, "event: telemetry-error\ndata: {\"code\":\"observability_unavailable\"}\n\n")
 			return cursor, false
@@ -251,7 +251,7 @@ func (h *generatedHandler) StreamAppEnvironmentRuntimeMetrics(w http.ResponseWri
 	if !ok {
 		return
 	}
-	if !h.server.metricsLiveLimiter.acquire(actor.ID, h.server.Config.ObservabilityMetricsLivePerUser) {
+	if !h.server.metricsLiveLimiter.acquire(actor.ID, h.server.config.ObservabilityMetricsLivePerUser) {
 		writeError(w, http.StatusTooManyRequests, "metrics_stream_limit", "too many live metric streams", r)
 		return
 	}
@@ -280,13 +280,13 @@ func (h *generatedHandler) StreamAppEnvironmentRuntimeMetrics(w http.ResponseWri
 		return
 	}
 
-	poll := time.NewTicker(h.server.Config.ObservabilityMetricsLivePoll)
+	poll := time.NewTicker(h.server.config.ObservabilityMetricsLivePoll)
 	defer poll.Stop()
 	heartbeat := time.NewTicker(15 * time.Second)
 	defer heartbeat.Stop()
 	reauthorize := time.NewTicker(30 * time.Second)
 	defer reauthorize.Stop()
-	timeout := time.NewTimer(h.server.Config.ObservabilityLiveTTL)
+	timeout := time.NewTimer(h.server.config.ObservabilityLiveTTL)
 	defer timeout.Stop()
 	for {
 		select {
@@ -301,7 +301,7 @@ func (h *generatedHandler) StreamAppEnvironmentRuntimeMetrics(w http.ResponseWri
 			}
 		case <-reauthorize.C:
 			currentActor, _, authenticated := h.server.session(r)
-			currentWorkspace, authErr := h.server.Store.FindWorkspaceForUser(r.Context(), currentActor, workspace.PublicID)
+			currentWorkspace, authErr := h.server.store.FindWorkspaceForUser(r.Context(), currentActor, workspace.PublicID)
 			if !authenticated || currentActor != actor.ID || authErr != nil || currentWorkspace.ID != workspace.ID {
 				_ = writeSSE(w, flusher, "event: end\ndata: {\"reason\":\"authorization_changed\"}\n\n")
 				return

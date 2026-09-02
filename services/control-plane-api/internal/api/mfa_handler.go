@@ -23,7 +23,7 @@ func (h *generatedHandler) GetOwnMFA(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	status, err := h.server.Store.UserMFAStatus(r.Context(), user.ID)
+	status, err := h.server.store.UserMFAStatus(r.Context(), user.ID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "storage_failed", "MFA status could not be read", r)
 		return
@@ -36,7 +36,7 @@ func (h *generatedHandler) BeginTOTPEnrollment(w http.ResponseWriter, r *http.Re
 	if !ok {
 		return
 	}
-	if !h.server.Config.TOTPEnabled || len(h.server.PasswordResetKey) < 32 {
+	if !h.server.config.TOTPEnabled || len(h.server.passwordResetKey) < 32 {
 		writeError(w, http.StatusServiceUnavailable, "totp_unavailable", "TOTP is not configured", r)
 		return
 	}
@@ -45,12 +45,12 @@ func (h *generatedHandler) BeginTOTPEnrollment(w http.ResponseWriter, r *http.Re
 		writeError(w, http.StatusBadRequest, "invalid_json", "request body is invalid", r)
 		return
 	}
-	_, passwordHash, err := h.server.Store.AuthenticateUser(r.Context(), user.Username)
+	_, passwordHash, err := h.server.store.AuthenticateUser(r.Context(), user.Username)
 	if err != nil || !auth.VerifyPassword(*input.Password, passwordHash) {
 		writeError(w, http.StatusUnauthorized, "current_password_invalid", "current password is invalid", r)
 		return
 	}
-	status, err := h.server.Store.UserMFAStatus(r.Context(), user.ID)
+	status, err := h.server.store.UserMFAStatus(r.Context(), user.ID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "storage_failed", "MFA status could not be read", r)
 		return
@@ -65,11 +65,11 @@ func (h *generatedHandler) BeginTOTPEnrollment(w http.ResponseWriter, r *http.Re
 		return
 	}
 	reference := fmt.Sprintf("identity/totp/%s", user.PublicID)
-	version, err := h.server.AuthenticationSecrets.Put(r.Context(), reference, key.Secret(), 0)
+	version, err := h.server.authenticationSecrets.Put(r.Context(), reference, key.Secret(), 0)
 	if errors.Is(err, parameters.ErrConflict) {
-		currentVersion, inspectErr := h.server.AuthenticationSecrets.CurrentVersion(r.Context(), reference)
+		currentVersion, inspectErr := h.server.authenticationSecrets.CurrentVersion(r.Context(), reference)
 		if inspectErr == nil {
-			version, err = h.server.AuthenticationSecrets.Put(r.Context(), reference, key.Secret(), currentVersion)
+			version, err = h.server.authenticationSecrets.Put(r.Context(), reference, key.Secret(), currentVersion)
 		}
 	}
 	if err != nil {
@@ -78,13 +78,13 @@ func (h *generatedHandler) BeginTOTPEnrollment(w http.ResponseWriter, r *http.Re
 	}
 	challengeToken, err := h.server.newToken(32)
 	if err != nil {
-		_ = h.server.AuthenticationSecrets.Delete(r.Context(), reference)
+		_ = h.server.authenticationSecrets.Delete(r.Context(), reference)
 		writeError(w, http.StatusInternalServerError, "totp_enrollment_failed", "TOTP enrollment could not start", r)
 		return
 	}
 	payload := map[string]any{"secretReference": reference, "secretVersion": version}
-	if err = h.server.Store.CreateAuthenticationChallenge(r.Context(), auth.HashToken(challengeToken), user.ID, "TOTPEnrollment", payload, time.Now().Add(authenticationChallengeTTL)); err != nil {
-		_ = h.server.AuthenticationSecrets.Delete(r.Context(), reference)
+	if err = h.server.store.CreateAuthenticationChallenge(r.Context(), auth.HashToken(challengeToken), user.ID, "TOTPEnrollment", payload, time.Now().Add(authenticationChallengeTTL)); err != nil {
+		_ = h.server.authenticationSecrets.Delete(r.Context(), reference)
 		writeError(w, http.StatusInternalServerError, "totp_enrollment_failed", "TOTP enrollment could not start", r)
 		return
 	}
@@ -101,7 +101,7 @@ func (h *generatedHandler) ConfirmTOTPEnrollment(w http.ResponseWriter, r *http.
 		writeError(w, http.StatusBadRequest, "invalid_json", "request body is invalid", r)
 		return
 	}
-	challenge, err := h.server.Store.AuthenticationChallenge(r.Context(), auth.HashToken(*input.ChallengeToken), "TOTPEnrollment")
+	challenge, err := h.server.store.AuthenticationChallenge(r.Context(), auth.HashToken(*input.ChallengeToken), "TOTPEnrollment")
 	if err != nil || challenge.User.ID != user.ID {
 		writeError(w, http.StatusBadRequest, "totp_challenge_invalid", "TOTP challenge is invalid or expired", r)
 		return
@@ -111,13 +111,13 @@ func (h *generatedHandler) ConfirmTOTPEnrollment(w http.ResponseWriter, r *http.
 		writeError(w, http.StatusBadRequest, "totp_challenge_invalid", "TOTP challenge is invalid or expired", r)
 		return
 	}
-	secret, err := h.server.AuthenticationSecrets.Get(r.Context(), reference, version)
+	secret, err := h.server.authenticationSecrets.Get(r.Context(), reference, version)
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "totp_unavailable", "TOTP is temporarily unavailable", r)
 		return
 	}
 	if _, valid := validTOTPStep(secret, *input.Code, time.Now()); !valid {
-		_ = h.server.Store.RecordAuthenticationChallengeFailure(r.Context(), challenge.ID)
+		_ = h.server.store.RecordAuthenticationChallengeFailure(r.Context(), challenge.ID)
 		writeError(w, http.StatusBadRequest, "totp_code_invalid", "TOTP code is invalid", r)
 		return
 	}
@@ -129,11 +129,11 @@ func (h *generatedHandler) ConfirmTOTPEnrollment(w http.ResponseWriter, r *http.
 			writeError(w, http.StatusInternalServerError, "totp_enrollment_failed", "TOTP enrollment could not complete", r)
 			return
 		}
-		recoveryHashes[index] = auth.HashResetCode(h.server.PasswordResetKey, recoveryCodes[index])
+		recoveryHashes[index] = auth.HashResetCode(h.server.passwordResetKey, recoveryCodes[index])
 	}
 	event := h.server.auditEvent(r, "authentication.totp.enable", "User", user.PublicID, audit.Succeeded)
 	event.ActorUserID = &user.ID
-	if err = h.server.Store.EnableTOTP(r.Context(), challenge.ID, user.ID, reference, version, recoveryHashes, event); err != nil {
+	if err = h.server.store.EnableTOTP(r.Context(), challenge.ID, user.ID, reference, version, recoveryHashes, event); err != nil {
 		writeIdentityError(w, r, err)
 		return
 	}
@@ -141,7 +141,7 @@ func (h *generatedHandler) ConfirmTOTPEnrollment(w http.ResponseWriter, r *http.
 }
 
 func (h *generatedHandler) CompleteTOTPLogin(w http.ResponseWriter, r *http.Request) {
-	if !h.server.Config.TOTPEnabled || len(h.server.PasswordResetKey) < 32 {
+	if !h.server.config.TOTPEnabled || len(h.server.passwordResetKey) < 32 {
 		writeError(w, http.StatusServiceUnavailable, "totp_unavailable", "TOTP is not configured", r)
 		return
 	}
@@ -150,12 +150,12 @@ func (h *generatedHandler) CompleteTOTPLogin(w http.ResponseWriter, r *http.Requ
 		writeError(w, http.StatusBadRequest, "invalid_json", "request body is invalid", r)
 		return
 	}
-	challenge, err := h.server.Store.AuthenticationChallenge(r.Context(), auth.HashToken(*input.ChallengeToken), "Login")
+	challenge, err := h.server.store.AuthenticationChallenge(r.Context(), auth.HashToken(*input.ChallengeToken), "Login")
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "totp_challenge_invalid", "TOTP challenge is invalid or expired", r)
 		return
 	}
-	credential, err := h.server.Store.TOTPCredential(r.Context(), challenge.User.ID)
+	credential, err := h.server.store.TOTPCredential(r.Context(), challenge.User.ID)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "totp_challenge_invalid", "TOTP challenge is invalid or expired", r)
 		return
@@ -164,9 +164,9 @@ func (h *generatedHandler) CompleteTOTPLogin(w http.ResponseWriter, r *http.Requ
 	event.ActorUserID = &challenge.User.ID
 	code := strings.ToUpper(strings.TrimSpace(*input.Code))
 	if strings.Contains(code, "-") {
-		err = h.server.Store.CompleteRecoveryChallenge(r.Context(), challenge.ID, challenge.User.ID, auth.HashResetCode(h.server.PasswordResetKey, code), event)
+		err = h.server.store.CompleteRecoveryChallenge(r.Context(), challenge.ID, challenge.User.ID, auth.HashResetCode(h.server.passwordResetKey, code), event)
 	} else {
-		secret, getErr := h.server.AuthenticationSecrets.Get(r.Context(), credential.Reference, credential.Version)
+		secret, getErr := h.server.authenticationSecrets.Get(r.Context(), credential.Reference, credential.Version)
 		if getErr != nil {
 			writeError(w, http.StatusServiceUnavailable, "totp_unavailable", "TOTP is temporarily unavailable", r)
 			return
@@ -175,11 +175,11 @@ func (h *generatedHandler) CompleteTOTPLogin(w http.ResponseWriter, r *http.Requ
 		if !valid || step <= credential.LastUsedStep {
 			err = parameters.ErrConflict
 		} else {
-			err = h.server.Store.CompleteTOTPChallenge(r.Context(), challenge.ID, challenge.User.ID, step, event)
+			err = h.server.store.CompleteTOTPChallenge(r.Context(), challenge.ID, challenge.User.ID, step, event)
 		}
 	}
 	if err != nil {
-		_ = h.server.Store.RecordAuthenticationChallengeFailure(r.Context(), challenge.ID)
+		_ = h.server.store.RecordAuthenticationChallengeFailure(r.Context(), challenge.ID)
 		writeError(w, http.StatusBadRequest, "totp_code_invalid", "TOTP code or recovery code is invalid", r)
 		return
 	}
@@ -196,19 +196,19 @@ func (h *generatedHandler) DisableOwnTOTP(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusBadRequest, "invalid_json", "request body is invalid", r)
 		return
 	}
-	_, passwordHash, err := h.server.Store.AuthenticateUser(r.Context(), user.Username)
+	_, passwordHash, err := h.server.store.AuthenticateUser(r.Context(), user.Username)
 	if err != nil || !auth.VerifyPassword(*input.Password, passwordHash) {
 		writeError(w, http.StatusUnauthorized, "current_password_invalid", "current password is invalid", r)
 		return
 	}
 	event := h.server.auditEvent(r, "authentication.totp.disable", "User", user.PublicID, audit.Succeeded)
 	event.ActorUserID = &user.ID
-	reference, err := h.server.Store.DisableTOTP(r.Context(), user.ID, event)
+	reference, err := h.server.store.DisableTOTP(r.Context(), user.ID, event)
 	if err != nil {
 		writeIdentityError(w, r, err)
 		return
 	}
-	if err = h.server.AuthenticationSecrets.Delete(r.Context(), reference); err != nil {
+	if err = h.server.authenticationSecrets.Delete(r.Context(), reference); err != nil {
 		h.server.logger().Error("TOTP secret deletion failed", "request_id", requestID(r), "user_id", user.PublicID, "error", err)
 	}
 	h.server.clearSessionCookies(w, r)

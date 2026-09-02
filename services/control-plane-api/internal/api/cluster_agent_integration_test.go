@@ -23,7 +23,7 @@ func TestAgentPairingAPIRequiresInstallationAdministratorAndReturnsTokenOnce(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	server.AgentSigner = signer
+	server.agentSigner = signer
 
 	response := hierarchyRequest(t, server, owner, http.MethodPost, "/api/v1/admin/agent-installations", `{"name":"Lab cluster"}`, nil)
 	if response.Code != http.StatusCreated {

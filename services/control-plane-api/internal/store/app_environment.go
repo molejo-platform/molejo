@@ -746,7 +746,7 @@ func (s *Store) completeDeployment(ctx context.Context, operation domain.Operati
 			return ErrLeaseLost
 		}
 	}
-	if err = activatePublicationClaims(ctx, tx, operation.AppEnvironmentID, deployed.ConfigurationVersion, deployed.WorkloadKind, deployed.Configuration, s.Publication); err != nil {
+	if err = activatePublicationClaims(ctx, tx, operation.AppEnvironmentID, deployed.ConfigurationVersion, deployed.WorkloadKind, deployed.Configuration, s.publication); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)

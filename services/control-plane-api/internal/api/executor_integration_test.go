@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/domain"
+	"github.com/molejo-platform/molejo/services/control-plane-api/internal/operationworker"
+	"github.com/molejo-platform/molejo/services/control-plane-api/internal/parameters"
 	controlruntime "github.com/molejo-platform/molejo/services/control-plane-api/internal/runtime"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/store"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/testsupport"
@@ -21,7 +23,7 @@ import (
 
 func TestWorkerAppliesAnImmutableDeploymentAndCorrelatesItsLogs(t *testing.T) {
 	ctx := context.Background()
-	s, workspaceID, actorID, workspaceNamespace := newExecutorIntegrationFixture(t)
+	s, workspaceID, actorID, _ := newExecutorIntegrationFixture(t)
 	target, releaseID, image := createExecutorTargetAndRelease(t, s, workspaceID, actorID)
 	plainValue := "https://internal.example"
 	plain, err := s.CreateParameter(ctx, workspaceID, actorID, mustAPIID(t, "par"), "/test/internal-url", domain.ParameterPlainText, "", domain.ParameterValue{PlainTextValue: &plainValue})
@@ -45,10 +47,9 @@ func TestWorkerAppliesAnImmutableDeploymentAndCorrelatesItsLogs(t *testing.T) {
 	}
 	runtimeClient := &recordingRuntime{}
 	var output bytes.Buffer
-	server := NewServer(s, runtimeClient, Config{OperationLease: time.Minute, WorkspaceNamespace: workspaceNamespace}, slog.New(slog.NewJSONHandler(&output, nil)))
-	server.ParameterSecrets = &recordingSecretStore{values: map[string]string{secretReference: "secret-runtime-value"}, versions: map[string]int64{secretReference: 1}}
+	worker := operationworker.Worker{Store: s, Publication: s.PublicationPolicy(), Runtime: runtimeClient, ParameterSecrets: &recordingSecretStore{values: map[string]string{secretReference: "secret-runtime-value"}, versions: map[string]int64{secretReference: 1}}, OperationLease: time.Minute, Logger: slog.New(slog.NewJSONHandler(&output, nil))}
 
-	if processed, runErr := server.RunOnce(ctx, "worker-correlation"); runErr != nil || !processed {
+	if processed, runErr := worker.RunOnce(ctx, "worker-correlation"); runErr != nil || !processed {
 		t.Fatalf("run operation: processed=%v err=%v", processed, runErr)
 	}
 	current, err := s.FindAppEnvironment(ctx, workspaceID, target.PublicID)
@@ -80,18 +81,28 @@ func containsVariable(items []domain.Variable, name, value string) bool {
 	return false
 }
 
+func newOperationWorker(storage *store.Store, client controlruntime.Client) operationworker.Worker {
+	return operationworker.Worker{
+		Store:            storage,
+		Publication:      storage.PublicationPolicy(),
+		Runtime:          client,
+		ParameterSecrets: parameters.UnavailableStore{},
+		OperationLease:   time.Minute,
+	}
+}
+
 func TestWorkerRetriesAppEnvironmentDeletionUntilRuntimeAbsenceIsObserved(t *testing.T) {
 	ctx := context.Background()
-	s, workspaceID, actorID, workspaceNamespace := newExecutorIntegrationFixture(t)
+	s, workspaceID, actorID, _ := newExecutorIntegrationFixture(t)
 	target, _, _ := createExecutorTargetAndRelease(t, s, workspaceID, actorID)
 	operation, err := s.DeleteAppEnvironment(ctx, workspaceID, actorID, target.PublicID, target.Version, domain.SHA256([]byte("delete-target")), domain.SHA256([]byte("delete-target-payload")))
 	if err != nil {
 		t.Fatal(err)
 	}
 	runtimeClient := &recordingRuntime{exists: true}
-	server := NewServer(s, runtimeClient, Config{OperationLease: time.Minute, WorkspaceNamespace: workspaceNamespace}, nil)
+	worker := newOperationWorker(s, runtimeClient)
 
-	if processed, runErr := server.RunOnce(ctx, "delete-worker"); runErr != nil || !processed {
+	if processed, runErr := worker.RunOnce(ctx, "delete-worker"); runErr != nil || !processed {
 		t.Fatalf("first delete: processed=%v err=%v", processed, runErr)
 	}
 	currentOperation, err := s.GetOperationForUser(ctx, actorID, operation.PublicID)
@@ -105,7 +116,7 @@ func TestWorkerRetriesAppEnvironmentDeletionUntilRuntimeAbsenceIsObserved(t *tes
 	if _, err = s.Pool.Exec(ctx, `UPDATE operations SET next_attempt_at=now() WHERE id=$1`, currentOperation.ID); err != nil {
 		t.Fatal(err)
 	}
-	if processed, runErr := server.RunOnce(ctx, "delete-worker"); runErr != nil || !processed {
+	if processed, runErr := worker.RunOnce(ctx, "delete-worker"); runErr != nil || !processed {
 		t.Fatalf("second delete: processed=%v err=%v", processed, runErr)
 	}
 	if _, err = s.FindAppEnvironment(ctx, workspaceID, target.PublicID); !errors.Is(err, store.ErrNotFound) {
@@ -118,7 +129,7 @@ func TestWorkerRetriesAppEnvironmentDeletionUntilRuntimeAbsenceIsObserved(t *tes
 
 func TestWorkerRetriesVolumeProvisioningAfterATemporaryRuntimeFailure(t *testing.T) {
 	ctx := context.Background()
-	s, workspaceID, actorID, workspaceNamespace := newExecutorIntegrationFixture(t)
+	s, workspaceID, actorID, _ := newExecutorIntegrationFixture(t)
 	if err := s.ConfigureStorageProfile(ctx, store.StorageProfileInstallation{
 		ID: "persistent-standard", Name: "Persistent storage", MinimumSizeGiB: 1,
 		MaximumSizeGiB: 10, TotalCapacityGiB: 10, WorkspaceQuotaGiB: 10,
@@ -143,8 +154,8 @@ func TestWorkerRetriesVolumeProvisioningAfterATemporaryRuntimeFailure(t *testing
 		t.Fatal(err)
 	}
 	runtimeClient := &recordingRuntime{volumeApplyErr: errors.New("temporary runtime failure")}
-	server := NewServer(s, runtimeClient, Config{OperationLease: time.Minute, WorkspaceNamespace: workspaceNamespace}, nil)
-	if processed, runErr := server.RunOnce(ctx, "volume-worker"); runErr != nil || !processed {
+	worker := newOperationWorker(s, runtimeClient)
+	if processed, runErr := worker.RunOnce(ctx, "volume-worker"); runErr != nil || !processed {
 		t.Fatalf("failed volume attempt: processed=%v err=%v", processed, runErr)
 	}
 	var operationID int64
@@ -159,7 +170,7 @@ func TestWorkerRetriesVolumeProvisioningAfterATemporaryRuntimeFailure(t *testing
 	if _, err = s.Pool.Exec(ctx, `UPDATE operations SET next_attempt_at=now() WHERE id=$1`, operationID); err != nil {
 		t.Fatal(err)
 	}
-	if processed, runErr := server.RunOnce(ctx, "volume-worker"); runErr != nil || !processed {
+	if processed, runErr := worker.RunOnce(ctx, "volume-worker"); runErr != nil || !processed {
 		t.Fatalf("retried volume attempt: processed=%v err=%v", processed, runErr)
 	}
 	current, err := s.FindAppVolume(ctx, workspaceID, target.PublicID)
@@ -170,7 +181,7 @@ func TestWorkerRetriesVolumeProvisioningAfterATemporaryRuntimeFailure(t *testing
 
 func TestWorkerAllowsFirstStatefulDeploymentToBindAWaitingVolume(t *testing.T) {
 	ctx := context.Background()
-	s, workspaceID, actorID, workspaceNamespace := newExecutorIntegrationFixture(t)
+	s, workspaceID, actorID, _ := newExecutorIntegrationFixture(t)
 	if err := s.ConfigureStorageProfile(ctx, store.StorageProfileInstallation{
 		ID: "persistent-standard", Name: "Persistent storage", MinimumSizeGiB: 1,
 		MaximumSizeGiB: 10, TotalCapacityGiB: 10, WorkspaceQuotaGiB: 10,
@@ -197,8 +208,8 @@ func TestWorkerAllowsFirstStatefulDeploymentToBindAWaitingVolume(t *testing.T) {
 	runtimeClient := &recordingRuntime{volumeObservation: controlruntime.VolumeObservation{
 		Exists: true, State: domain.VolumeStateProvisioning, Message: "waiting for first consumer",
 	}}
-	server := NewServer(s, runtimeClient, Config{OperationLease: time.Minute, WorkspaceNamespace: workspaceNamespace}, nil)
-	if processed, runErr := server.RunOnce(ctx, "stateful-worker"); runErr != nil || !processed {
+	worker := newOperationWorker(s, runtimeClient)
+	if processed, runErr := worker.RunOnce(ctx, "stateful-worker"); runErr != nil || !processed {
 		t.Fatalf("prepare volume: processed=%v err=%v", processed, runErr)
 	}
 	currentVolume, err := s.FindAppVolume(ctx, workspaceID, target.PublicID)
@@ -217,7 +228,7 @@ func TestWorkerAllowsFirstStatefulDeploymentToBindAWaitingVolume(t *testing.T) {
 	runtimeClient.volumeObservation = controlruntime.VolumeObservation{
 		Exists: true, State: domain.VolumeStateReady, Message: "persistent storage is ready", ObservedSizeGiB: 1,
 	}
-	if processed, runErr := server.RunOnce(ctx, "stateful-worker"); runErr != nil || !processed {
+	if processed, runErr := worker.RunOnce(ctx, "stateful-worker"); runErr != nil || !processed {
 		t.Fatalf("deploy stateful workload: processed=%v err=%v", processed, runErr)
 	}
 	currentVolume, err = s.FindAppVolume(ctx, workspaceID, target.PublicID)
@@ -242,7 +253,7 @@ func TestSessionReadKeepsTheExistingSessionStable(t *testing.T) {
 	if err := s.CreateSession(ctx, actorID, domain.SHA256([]byte(oldToken)), csrf, time.Now().Add(time.Hour)); err != nil {
 		t.Fatal(err)
 	}
-	server := NewServer(s, nil, Config{CookieName: "molejo_session", SessionTTL: time.Hour, SessionIdleTTL: time.Hour}, nil)
+	server := NewServer(Config{CookieName: "molejo_session", SessionTTL: time.Hour, SessionIdleTTL: time.Hour}, Dependencies{Store: s})
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/session", nil)
 	request.AddCookie(&http.Cookie{Name: "molejo_session", Value: oldToken})
 	request.AddCookie(&http.Cookie{Name: "molejo_session_csrf", Value: csrfToken})
@@ -268,7 +279,7 @@ func TestLogoutDoesNotClaimSuccessWhenRevocationFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	brokenStore.Close()
-	server := NewServer(brokenStore, nil, Config{CookieName: "molejo_session"}, nil)
+	server := NewServer(Config{CookieName: "molejo_session"}, Dependencies{Store: brokenStore})
 	request := httptest.NewRequest(http.MethodDelete, "/api/v1/session", nil)
 	request.AddCookie(&http.Cookie{Name: "molejo_session", Value: "session-token"})
 	recorder := httptest.NewRecorder()

@@ -18,7 +18,7 @@ import (
 
 func TestIdentityAPICreatesIndependentUserMembershipAndGroup(t *testing.T) {
 	storage, workspace, server, owner := newHierarchyAPITestFixture(t)
-	server.PasswordResetKey = []byte("01234567890123456789012345678901")
+	server.passwordResetKey = []byte("01234567890123456789012345678901")
 
 	response := hierarchyRequest(t, server, owner, http.MethodPost, "/api/v1/admin/users", `{"username":"new.user","displayName":"New User","password":"correct horse battery staple","installationAdministrator":false}`, nil)
 	if response.Code != http.StatusCreated {
@@ -101,9 +101,9 @@ func TestTOTPAPIRequiresTheSecondFactorAndIssuesAAL2Session(t *testing.T) {
 		t.Fatal(err)
 	}
 	backend := &recordingSecretStore{values: map[string]string{}, versions: map[string]int64{}}
-	server.AuthenticationSecrets = backend
-	server.PasswordResetKey = []byte("01234567890123456789012345678901")
-	server.Config.TOTPEnabled = true
+	server.authenticationSecrets = backend
+	server.passwordResetKey = []byte("01234567890123456789012345678901")
+	server.config.TOTPEnabled = true
 
 	response := hierarchyRequest(t, server, owner, http.MethodPost, "/api/v1/users/me/mfa/totp/enrollment", `{"password":"`+password+`"}`, nil)
 	if response.Code != http.StatusCreated {

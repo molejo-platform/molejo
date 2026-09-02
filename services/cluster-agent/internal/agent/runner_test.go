@@ -48,7 +48,7 @@ func TestRunnerResumesTokenRemovalAfterCertificateWasPersisted(t *testing.T) {
 	connector := &callbackConnector{}
 	certificate := agentidentity.Certificate{InstallationID: "agi-abcdefghijklmnopqrst", CertificatePEM: []byte("certificate"), CACertificatePEM: []byte("ca"), ExpiresAt: time.Now().Add(time.Hour)}
 	runner := NewRunner(store, fixedEnroller{certificate: certificate}, connector, status)
-	runner.ValidateCertificate = func(agentidentity.StoredIdentity, agentidentity.Certificate, time.Time) error { return nil }
+	runner.validateCertificate = func(agentidentity.StoredIdentity, agentidentity.Certificate, time.Time) error { return nil }
 
 	if err := runner.ReconcileOnce(t.Context()); err == nil || len(store.identity.CertificatePEM) == 0 || store.token == "" {
 		t.Fatalf("first reconcile err=%v certificate=%q token=%q", err, store.identity.CertificatePEM, store.token)
@@ -61,7 +61,7 @@ func TestRunnerResumesTokenRemovalAfterCertificateWasPersisted(t *testing.T) {
 
 type fixedEnroller struct{ certificate agentidentity.Certificate }
 
-func (e fixedEnroller) Enroll(context.Context, string, string, []byte) (agentidentity.Certificate, error) {
+func (e fixedEnroller) Enroll(context.Context, EnrollmentRequest) (agentidentity.Certificate, error) {
 	return e.certificate, nil
 }
 
@@ -92,7 +92,7 @@ func TestRunnerEnrollsPersistsAndPairs(t *testing.T) {
 	connector := &callbackConnector{}
 	certificate := agentidentity.Certificate{InstallationID: "agi-abcdefghijklmnopqrst", CertificatePEM: []byte("certificate"), CACertificatePEM: []byte("ca"), ExpiresAt: time.Now().Add(time.Hour)}
 	runner := NewRunner(store, fixedEnroller{certificate: certificate}, connector, status)
-	runner.ValidateCertificate = func(agentidentity.StoredIdentity, agentidentity.Certificate, time.Time) error { return nil }
+	runner.validateCertificate = func(agentidentity.StoredIdentity, agentidentity.Certificate, time.Time) error { return nil }
 	err := runner.ReconcileOnce(t.Context())
 	if err == nil || !connector.called || !connector.paired || !store.cleared || status.Snapshot().State != StateConnecting {
 		t.Fatalf("connector=%v cleared=%v state=%+v err=%v", connector.called, store.cleared, status.Snapshot(), err)

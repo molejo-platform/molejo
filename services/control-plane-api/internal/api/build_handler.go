@@ -20,7 +20,7 @@ func (h *generatedHandler) ListAppBuilds(w http.ResponseWriter, r *http.Request,
 	if !ok {
 		return
 	}
-	items, nextCursor, err := h.server.Store.ListBuilds(r.Context(), workspace.ID, string(projectID), string(appID), beforeID, limit)
+	items, nextCursor, err := h.server.store.ListBuilds(r.Context(), workspace.ID, string(projectID), string(appID), beforeID, limit)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "storage_failed", "could not list builds", r)
 		return
@@ -52,7 +52,7 @@ func (h *generatedHandler) CreateAppBuild(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusBadRequest, "app_environment_invalid", err.Error(), r)
 		return
 	}
-	if existing, found, err := h.server.Store.FindBuildByIdempotency(r.Context(), workspace.ID, actor.ID, idempotencyHash, payloadHash); err != nil {
+	if existing, found, err := h.server.store.FindBuildByIdempotency(r.Context(), workspace.ID, actor.ID, idempotencyHash, payloadHash); err != nil {
 		writeBuildError(w, r, err)
 		return
 	} else if found {
@@ -62,7 +62,7 @@ func (h *generatedHandler) CreateAppBuild(w http.ResponseWriter, r *http.Request
 	if !h.githubAvailable(w, r) {
 		return
 	}
-	source, err := h.server.Store.GitHubBuildSource(r.Context(), workspace.ID, string(projectID), string(appID), input.AppEnvironmentID)
+	source, err := h.server.store.GitHubBuildSource(r.Context(), workspace.ID, string(projectID), string(appID), input.AppEnvironmentID)
 	if err != nil {
 		writeBuildError(w, r, err)
 		return
@@ -76,7 +76,7 @@ func (h *generatedHandler) CreateAppBuild(w http.ResponseWriter, r *http.Request
 		}
 		ref = input.CommitSHA
 	}
-	metadata, err := h.server.GitHub.Commit(r.Context(), source.InstallationExternalID, source.RepositoryID, ref)
+	metadata, err := h.server.github.Commit(r.Context(), source.InstallationExternalID, source.RepositoryID, ref)
 	if err != nil {
 		if errors.Is(err, githubapp.ErrNotFound) {
 			if input.CommitSHA != "" {
@@ -95,7 +95,7 @@ func (h *generatedHandler) CreateAppBuild(w http.ResponseWriter, r *http.Request
 		if idErr != nil {
 			break
 		}
-		build, _, createErr := h.server.Store.CreateBuildWithMetadata(r.Context(), workspace.ID, actor.ID, publicID, string(projectID), string(appID), input.AppEnvironmentID, branch, metadata, idempotencyHash, payloadHash)
+		build, _, createErr := h.server.store.CreateBuildWithMetadata(r.Context(), workspace.ID, actor.ID, publicID, string(projectID), string(appID), input.AppEnvironmentID, branch, metadata, idempotencyHash, payloadHash)
 		if errors.Is(createErr, store.ErrPublicIDCollision) {
 			continue
 		}
@@ -128,7 +128,7 @@ func (h *generatedHandler) ListAppBuildLogs(w http.ResponseWriter, r *http.Reque
 	if _, ok = h.appBuild(w, r, workspace.ID, string(projectID), string(appID), string(buildID)); !ok {
 		return
 	}
-	items, err := h.server.Store.ListBuildLogs(r.Context(), workspace.ID, string(buildID))
+	items, err := h.server.store.ListBuildLogs(r.Context(), workspace.ID, string(buildID))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "storage_failed", "could not read build logs", r)
 		return
@@ -145,7 +145,7 @@ func (h *generatedHandler) ListAppReleases(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
-	items, nextCursor, err := h.server.Store.ListReleases(r.Context(), workspace.ID, string(projectID), string(appID), beforeID, limit)
+	items, nextCursor, err := h.server.store.ListReleases(r.Context(), workspace.ID, string(projectID), string(appID), beforeID, limit)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "storage_failed", "could not list releases", r)
 		return
@@ -159,7 +159,7 @@ func scopedBuildPayloadHash(r *http.Request, bodyHash []byte) []byte {
 }
 
 func (h *generatedHandler) appBuild(w http.ResponseWriter, r *http.Request, workspaceID int64, projectID, appID, buildID string) (domain.Build, bool) {
-	build, err := h.server.Store.FindBuild(r.Context(), workspaceID, buildID)
+	build, err := h.server.store.FindBuild(r.Context(), workspaceID, buildID)
 	if err != nil || build.ProjectPublicID != projectID || build.AppPublicID != appID {
 		if err != nil && !errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusInternalServerError, "storage_failed", "could not read build", r)
@@ -172,7 +172,7 @@ func (h *generatedHandler) appBuild(w http.ResponseWriter, r *http.Request, work
 }
 
 func (h *generatedHandler) appExists(w http.ResponseWriter, r *http.Request, workspaceID int64, projectID, appID string) bool {
-	_, err := h.server.Store.FindApp(r.Context(), workspaceID, projectID, appID)
+	_, err := h.server.store.FindApp(r.Context(), workspaceID, projectID, appID)
 	if err != nil {
 		writeBuildError(w, r, err)
 		return false

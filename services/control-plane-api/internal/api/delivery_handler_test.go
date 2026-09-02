@@ -32,8 +32,8 @@ func TestGitHubSignatureRequiresTheExactBodyAndSHA256Secret(t *testing.T) {
 func TestGitHubWebhookPersistsOnceAndRejectsDeliveryIDReuse(t *testing.T) {
 	storage, _, _, _ := newExecutorIntegrationFixture(t)
 	secret := bytes.Repeat([]byte("s"), 32)
-	server := NewServer(storage, nil, DefaultConfig(), nil)
-	server.GitHubWebhookSecret = secret
+	server := NewServer(DefaultConfig(), Dependencies{Store: storage})
+	server.githubWebhookSecret = secret
 	body := []byte(`{"zen":"Keep it logically awesome."}`)
 
 	first := webhookRequest(server, secret, "delivery-idempotent", "ping", body)
@@ -57,8 +57,8 @@ func TestGitHubWebhookPersistsOnceAndRejectsDeliveryIDReuse(t *testing.T) {
 func TestPrereleaseWebhookIsPersistedAsIgnored(t *testing.T) {
 	storage, _, _, _ := newExecutorIntegrationFixture(t)
 	secret := bytes.Repeat([]byte("s"), 32)
-	server := NewServer(storage, nil, DefaultConfig(), nil)
-	server.GitHubWebhookSecret = secret
+	server := NewServer(DefaultConfig(), Dependencies{Store: storage})
+	server.githubWebhookSecret = secret
 	body := []byte(`{"action":"published","installation":{"id":42},"repository":{"id":99,"full_name":"molejo/platform"},"release":{"tag_name":"v1.0.0-rc.1","target_commitish":"main","prerelease":true}}`)
 	response := webhookRequest(server, secret, "delivery-prerelease", "release", body)
 	if response.Code != http.StatusAccepted {

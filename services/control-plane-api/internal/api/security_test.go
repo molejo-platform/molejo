@@ -19,15 +19,17 @@ import (
 )
 
 func TestNewServerWithPartialConfigPreservesStorePublicationPolicy(t *testing.T) {
-	storage := &store.Store{Publication: store.NewPublicationPolicy("molejo.dev", "", true, 20000, 20015)}
-	NewServer(storage, nil, Config{OperationLease: time.Minute}, nil)
-	if len(storage.Publication.Domains) != 1 || storage.Publication.Domains[0].Suffix != "molejo.dev" || !storage.Publication.TCPEnabled || storage.Publication.TCPMinimumPort != 20000 || storage.Publication.TCPMaximumPort != 20015 {
-		t.Fatalf("publication policy=%+v", storage.Publication)
+	storage := &store.Store{}
+	storage.SetPublicationPolicy(store.NewPublicationPolicy("molejo.dev", "", true, 20000, 20015))
+	NewServer(Config{OperationLease: time.Minute}, Dependencies{Store: storage})
+	policy := storage.PublicationPolicy()
+	if len(policy.Domains) != 1 || policy.Domains[0].Suffix != "molejo.dev" || !policy.TCPEnabled || policy.TCPMinimumPort != 20000 || policy.TCPMaximumPort != 20015 {
+		t.Fatalf("publication policy=%+v", policy)
 	}
 }
 
 func TestHandlerPropagatesARequestID(t *testing.T) {
-	s := NewServer(nil, nil, DefaultConfig(), nil)
+	s := NewServer(DefaultConfig(), Dependencies{})
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	req.Host = "127.0.0.1:8080"
 	req.Header.Set("X-Request-ID", "client-request-123")
@@ -42,7 +44,7 @@ func TestHandlerPropagatesARequestID(t *testing.T) {
 
 func TestAcceptedOperationLogCorrelatesRequestAndOperation(t *testing.T) {
 	var output bytes.Buffer
-	server := NewServer(nil, nil, DefaultConfig(), slog.New(slog.NewJSONHandler(&output, nil)))
+	server := NewServer(DefaultConfig(), Dependencies{Logger: slog.New(slog.NewJSONHandler(&output, nil))})
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/app-environments/aev-123/deployments", nil)
 	request = request.WithContext(context.WithValue(request.Context(), requestIDContextKey{}, "request-123"))
 	server.logAcceptedOperation(request, domain.Operation{PublicID: "op-123", AppEnvironmentPublicID: "aev-123", DeploymentPublicID: "dpl-123", Kind: domain.OperationApplyDeployment})
@@ -56,7 +58,7 @@ func TestAcceptedOperationLogCorrelatesRequestAndOperation(t *testing.T) {
 }
 
 func TestOriginAllowed(t *testing.T) {
-	s := &Server{Config: Config{AllowedOrigin: "https://console.example"}}
+	s := &Server{config: Config{AllowedOrigin: "https://console.example"}}
 	request := httptest.NewRequest("POST", "/", nil)
 	if s.originAllowed(request) {
 		t.Fatal("sensitive request without Origin should be rejected")
@@ -73,7 +75,7 @@ func TestOriginAllowed(t *testing.T) {
 
 func TestSecurityMiddlewareRejectsUnknownHostsAndUntrustedForwardedTLS(t *testing.T) {
 	config := DefaultConfig()
-	server := NewServer(nil, nil, config, nil)
+	server := NewServer(config, Dependencies{})
 
 	unknown := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	unknown.Host = "evil.example"
@@ -98,7 +100,7 @@ func TestSecurityMiddlewareTrustsForwardedTLSOnlyFromConfiguredCIDRs(t *testing.
 	config := DefaultConfig()
 	config.PublicURL = "https://127.0.0.1:8080"
 	config.TrustedProxyCIDRs = []string{"10.0.0.0/8"}
-	server := NewServer(nil, nil, config, nil)
+	server := NewServer(config, Dependencies{})
 	request := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	request.Host = "127.0.0.1:8080"
 	request.RemoteAddr = "10.2.3.4:1234"
@@ -116,8 +118,8 @@ func TestHTTPTraceContainsOnlySanitizedRequestMetadata(t *testing.T) {
 	exporter := tracetest.NewInMemoryExporter()
 	provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
 	t.Cleanup(func() { _ = provider.Shutdown(context.Background()) })
-	server := NewServer(nil, nil, DefaultConfig(), nil)
-	server.Tracer = provider.Tracer("test")
+	server := NewServer(DefaultConfig(), Dependencies{})
+	server.tracer = provider.Tracer("test")
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/workspaces/ws-secret-value/projects/prj-secret-value/apps/app-secret-value/environments/aev-secret-value/deployments", strings.NewReader(`{"password":"do-not-record","csrf":"do-not-record"}`))
 	request.Host = "127.0.0.1:8080"
 	recorder := httptest.NewRecorder()
@@ -148,7 +150,7 @@ func TestHTTPTraceContainsOnlySanitizedRequestMetadata(t *testing.T) {
 }
 
 func TestCSRFValidation(t *testing.T) {
-	s := &Server{Config: Config{AllowedOrigin: "https://console.example"}}
+	s := &Server{config: Config{AllowedOrigin: "https://console.example"}}
 	req := httptest.NewRequest("POST", "/", nil)
 	req.Header.Set("Origin", "https://console.example")
 	token := "csrf-token"
@@ -179,11 +181,11 @@ func TestIdempotencyPayloadIncludesTheMutationPath(t *testing.T) {
 }
 
 func TestSessionEndpointsRejectInvalidOriginAndDisableCaching(t *testing.T) {
-	server := NewServer(nil, nil, Config{
+	server := NewServer(Config{
 		CookieName:    "molejo_session",
 		AllowedOrigin: "https://console.example",
 		AllowedHosts:  []string{"console.example"},
-	}, nil)
+	}, Dependencies{})
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/session", strings.NewReader(`{"username":"owner","password":"secret"}`))
 	request.Host = "console.example"
 	request.Header.Set("Content-Type", "application/json")

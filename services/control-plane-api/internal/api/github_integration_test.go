@@ -22,8 +22,8 @@ func TestGitHubConnectionRequiresOwnerBrowserStateAndUserInstallationAccess(t *t
 	config.PublicURL = "https://console.example"
 	config.AllowedOrigin = "https://console.example"
 	config.AllowedHosts = []string{"console.example"}
-	server := NewServer(storage, nil, config, nil)
-	server.GitHub = &fakeGitHubService{installation: githubapp.Installation{ID: 42, AccountID: 7, AccountLogin: "molejo", AccountType: "Organization", RepositorySelection: "selected"}, userAllowed: true}
+	server := NewServer(config, Dependencies{Store: storage})
+	server.github = &fakeGitHubService{installation: githubapp.Installation{ID: 42, AccountID: 7, AccountLogin: "molejo", AccountType: "Organization", RepositorySelection: "selected"}, userAllowed: true}
 	owner := createAPISession(t, storage, ownerID, "github-owner-session", "github-owner-csrf")
 
 	connect := hierarchyRequest(t, server, owner, http.MethodPost, "/api/v1/workspaces/"+workspace.PublicID+"/github/installations/connect", "", nil)
@@ -94,9 +94,9 @@ func TestAppSourceStoresOnlyTheVerifiedRepository(t *testing.T) {
 	config.PublicURL = "https://console.example"
 	config.AllowedOrigin = "https://console.example"
 	config.AllowedHosts = []string{"console.example"}
-	server := NewServer(storage, nil, config, nil)
+	server := NewServer(config, Dependencies{Store: storage})
 	github := &fakeGitHubService{}
-	server.GitHub = github
+	server.github = github
 	owner := createAPISession(t, storage, ownerID, "source-owner-session", "source-owner-csrf")
 	path := "/api/v1/workspaces/" + workspace.PublicID + "/projects/" + project.PublicID + "/apps/" + app.PublicID + "/source"
 	body := `{"installationId":"` + installation.PublicID + `","repositoryId":"99"}`

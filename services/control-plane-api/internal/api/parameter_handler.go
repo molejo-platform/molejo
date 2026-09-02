@@ -30,7 +30,7 @@ func (h *generatedHandler) ListParameters(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
-	items, nextCursor, err := h.server.Store.ListParameters(r.Context(), workspace.ID, beforeID, limit)
+	items, nextCursor, err := h.server.store.ListParameters(r.Context(), workspace.ID, beforeID, limit)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "storage_failed", "could not list Parameters", r)
 		return
@@ -55,7 +55,7 @@ func (h *generatedHandler) CreateParameter(w http.ResponseWriter, r *http.Reques
 				break
 			}
 			value := domain.ParameterValue{PlainTextValue: &input.Value}
-			item, createErr := h.server.Store.CreateParameter(r.Context(), workspace.ID, actor.ID, publicID, input.Path, input.Kind, input.Description, value)
+			item, createErr := h.server.store.CreateParameter(r.Context(), workspace.ID, actor.ID, publicID, input.Path, input.Kind, input.Description, value)
 			if errors.Is(createErr, store.ErrPublicIDCollision) {
 				continue
 			}
@@ -84,7 +84,7 @@ func (h *generatedHandler) CreateParameter(w http.ResponseWriter, r *http.Reques
 		if err != nil {
 			break
 		}
-		mutation, existing, beginErr := h.server.Store.BeginCreateSecretParameter(r.Context(), workspace.ID, actor.ID, publicID, input.Path, input.Description, secretReference(workspace.PublicID, publicID), fingerprint, auth.HashToken(idempotencyKey), payloadHash)
+		mutation, existing, beginErr := h.server.store.BeginCreateSecretParameter(r.Context(), workspace.ID, actor.ID, publicID, input.Path, input.Description, secretReference(workspace.PublicID, publicID), fingerprint, auth.HashToken(idempotencyKey), payloadHash)
 		if errors.Is(beginErr, store.ErrPublicIDCollision) {
 			continue
 		}
@@ -93,7 +93,7 @@ func (h *generatedHandler) CreateParameter(w http.ResponseWriter, r *http.Reques
 			return
 		}
 		if existing && mutation.State == "Ready" {
-			item, findErr := h.server.Store.FindParameter(r.Context(), workspace.ID, mutation.ParameterPublicID)
+			item, findErr := h.server.store.FindParameter(r.Context(), workspace.ID, mutation.ParameterPublicID)
 			if findErr != nil {
 				writeParameterError(w, r, findErr)
 				return
@@ -117,7 +117,7 @@ func (h *generatedHandler) GetParameter(w http.ResponseWriter, r *http.Request, 
 	if !ok {
 		return
 	}
-	item, err := h.server.Store.FindParameter(r.Context(), workspace.ID, string(parameterID))
+	item, err := h.server.store.FindParameter(r.Context(), workspace.ID, string(parameterID))
 	if err != nil {
 		writeParameterError(w, r, err)
 		return
@@ -135,7 +135,7 @@ func (h *generatedHandler) ReplaceParameter(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return
 	}
-	current, err := h.server.Store.FindParameter(r.Context(), workspace.ID, string(parameterID))
+	current, err := h.server.store.FindParameter(r.Context(), workspace.ID, string(parameterID))
 	if err != nil {
 		writeParameterError(w, r, err)
 		return
@@ -150,7 +150,7 @@ func (h *generatedHandler) ReplaceParameter(w http.ResponseWriter, r *http.Reque
 			return
 		}
 		value := domain.ParameterValue{PlainTextValue: &input.Value}
-		item, replaceErr := h.server.Store.ReplaceParameter(r.Context(), workspace.ID, actor.ID, current.PublicID, input.Path, input.Description, int64(params.IfMatch), value)
+		item, replaceErr := h.server.store.ReplaceParameter(r.Context(), workspace.ID, actor.ID, current.PublicID, input.Path, input.Description, int64(params.IfMatch), value)
 		if replaceErr != nil {
 			writeParameterError(w, r, replaceErr)
 			return
@@ -167,13 +167,13 @@ func (h *generatedHandler) ReplaceParameter(w http.ResponseWriter, r *http.Reque
 	if !h.secretBackendAvailable(w, r) {
 		return
 	}
-	mutation, existing, err := h.server.Store.BeginReplaceSecretParameter(r.Context(), workspace.ID, actor.ID, current.PublicID, input.Path, input.Description, int64(params.IfMatch), h.secretFingerprint(input.Value), auth.HashToken(idempotencyKey), payloadHash)
+	mutation, existing, err := h.server.store.BeginReplaceSecretParameter(r.Context(), workspace.ID, actor.ID, current.PublicID, input.Path, input.Description, int64(params.IfMatch), h.secretFingerprint(input.Value), auth.HashToken(idempotencyKey), payloadHash)
 	if err != nil {
 		writeParameterError(w, r, err)
 		return
 	}
 	if existing && mutation.State == "Ready" {
-		item, findErr := h.server.Store.FindParameter(r.Context(), workspace.ID, mutation.ParameterPublicID)
+		item, findErr := h.server.store.FindParameter(r.Context(), workspace.ID, mutation.ParameterPublicID)
 		if findErr != nil {
 			writeParameterError(w, r, findErr)
 			return
@@ -194,12 +194,12 @@ func (h *generatedHandler) ArchiveParameter(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return
 	}
-	item, err := h.server.Store.FindParameter(r.Context(), workspace.ID, string(parameterID))
+	item, err := h.server.store.FindParameter(r.Context(), workspace.ID, string(parameterID))
 	if err != nil {
 		writeParameterError(w, r, err)
 		return
 	}
-	if err = h.server.Store.ArchiveParameter(r.Context(), workspace.ID, item.PublicID, int64(params.IfMatch), h.server.Config.ParameterRetention); err != nil {
+	if err = h.server.store.ArchiveParameter(r.Context(), workspace.ID, item.PublicID, int64(params.IfMatch), h.server.config.ParameterRetention); err != nil {
 		writeParameterError(w, r, err)
 		return
 	}
@@ -228,7 +228,7 @@ func decodeParameterInput(w http.ResponseWriter, r *http.Request) (parameterInpu
 }
 
 func (h *generatedHandler) secretBackendAvailable(w http.ResponseWriter, r *http.Request) bool {
-	if h.server.ParameterSecrets == nil || len(h.server.SecretFingerprintKey) < 32 {
+	if h.server.parameterSecrets == nil || len(h.server.secretFingerprintKey) < 32 {
 		writeError(w, http.StatusServiceUnavailable, "secret_store_unavailable", "secret storage is not configured", r)
 		return false
 	}
@@ -236,15 +236,15 @@ func (h *generatedHandler) secretBackendAvailable(w http.ResponseWriter, r *http
 }
 
 func (h *generatedHandler) secretFingerprint(value string) []byte {
-	mac := hmac.New(sha256.New, h.server.SecretFingerprintKey)
+	mac := hmac.New(sha256.New, h.server.secretFingerprintKey)
 	_, _ = mac.Write([]byte(value))
 	return mac.Sum(nil)
 }
 
 func (h *generatedHandler) completeSecretMutation(w http.ResponseWriter, r *http.Request, mutation domain.SecretMutation, value string) (domain.Parameter, bool) {
-	backendVersion, err := h.server.ParameterSecrets.Put(r.Context(), mutation.Reference, value, mutation.ExpectedBackendVersion)
+	backendVersion, err := h.server.parameterSecrets.Put(r.Context(), mutation.Reference, value, mutation.ExpectedBackendVersion)
 	if errors.Is(err, parameters.ErrConflict) {
-		currentVersion, inspectErr := h.server.ParameterSecrets.CurrentVersion(r.Context(), mutation.Reference)
+		currentVersion, inspectErr := h.server.parameterSecrets.CurrentVersion(r.Context(), mutation.Reference)
 		if inspectErr == nil && currentVersion == mutation.BackendVersion {
 			backendVersion = currentVersion
 			err = nil
@@ -257,7 +257,7 @@ func (h *generatedHandler) completeSecretMutation(w http.ResponseWriter, r *http
 		writeError(w, http.StatusServiceUnavailable, "secret_store_unavailable", "secret storage is unavailable", r)
 		return domain.Parameter{}, false
 	}
-	item, err := h.server.Store.CompleteSecretMutation(r.Context(), mutation, backendVersion)
+	item, err := h.server.store.CompleteSecretMutation(r.Context(), mutation, backendVersion)
 	if err != nil {
 		writeParameterError(w, r, err)
 		return domain.Parameter{}, false

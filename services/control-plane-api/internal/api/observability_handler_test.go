@@ -158,7 +158,7 @@ func TestOperationEventsNeverExposeInternalFields(t *testing.T) {
 func TestObservabilityAPIResolvesScopeOnlyAfterFullAncestryAuthorization(t *testing.T) {
 	storage, workspace, server, owner := newHierarchyAPITestFixture(t)
 	reader := &recordingObservabilityReader{}
-	server.Observability = reader
+	server.observability = reader
 
 	projectResponse := hierarchyRequest(t, server, owner, http.MethodPost, "/api/v1/workspaces/"+workspace.PublicID+"/projects", `{"name":"Observability"}`, nil)
 	var project domain.Project
@@ -183,8 +183,8 @@ func TestObservabilityAPIResolvesScopeOnlyAfterFullAncestryAuthorization(t *test
 	if response.Code != http.StatusOK || reader.scope.Namespace != workspace.Namespace || reader.scope.RuntimeName != persisted.RuntimeName {
 		t.Fatalf("status=%d scope=%+v body=%s", response.Code, reader.scope, response.Body.String())
 	}
-	server.Config.ObservabilityLiveTTL = time.Millisecond
-	server.Config.ObservabilityMetricsLivePoll = time.Hour
+	server.config.ObservabilityLiveTTL = time.Millisecond
+	server.config.ObservabilityMetricsLivePoll = time.Hour
 	response = hierarchyRequest(t, server, owner, http.MethodGet, base+"/metrics/live", "", nil)
 	if response.Code != http.StatusOK || response.Header().Get("Content-Type") != "text/event-stream" || !strings.Contains(response.Body.String(), "event: metrics") || !strings.Contains(response.Body.String(), `"name":"available"`) {
 		t.Fatalf("live metrics status=%d content-type=%q body=%s", response.Code, response.Header().Get("Content-Type"), response.Body.String())

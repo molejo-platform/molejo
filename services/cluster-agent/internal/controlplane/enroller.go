@@ -1,4 +1,4 @@
-package agent
+package controlplane
 
 import (
 	"bytes"
@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/molejo-platform/molejo/services/cluster-agent/internal/agent"
 	agentidentity "github.com/molejo-platform/molejo/services/cluster-agent/internal/identity"
 )
 
@@ -32,8 +33,8 @@ func NewHTTPEnroller(endpoint string, client *http.Client) (*HTTPEnroller, error
 	return &HTTPEnroller{endpoint: parsed.String(), client: client}, nil
 }
 
-func (e *HTTPEnroller) Enroll(ctx context.Context, token, attemptID string, csrPEM []byte) (agentidentity.Certificate, error) {
-	body, err := json.Marshal(map[string]string{"enrollmentToken": token, "attemptId": attemptID, "csrPem": string(csrPEM)})
+func (e *HTTPEnroller) Enroll(ctx context.Context, enrollment agent.EnrollmentRequest) (agentidentity.Certificate, error) {
+	body, err := json.Marshal(map[string]string{"enrollmentToken": enrollment.Token, "attemptId": enrollment.AttemptID, "csrPem": string(enrollment.CSRPEM)})
 	if err != nil {
 		return agentidentity.Certificate{}, fmt.Errorf("encode enrollment request: %w", err)
 	}

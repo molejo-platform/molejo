@@ -18,7 +18,13 @@ type IdentityStore interface {
 }
 
 type Enroller interface {
-	Enroll(context.Context, string, string, []byte) (agentidentity.Certificate, error)
+	Enroll(context.Context, EnrollmentRequest) (agentidentity.Certificate, error)
+}
+
+type EnrollmentRequest struct {
+	Token     string
+	AttemptID string
+	CSRPEM    []byte
 }
 
 type Connector interface {
@@ -26,11 +32,11 @@ type Connector interface {
 }
 
 type Runner struct {
-	Store               IdentityStore
-	Enroller            Enroller
-	Connector           Connector
-	Status              *Status
-	ValidateCertificate func(agentidentity.StoredIdentity, agentidentity.Certificate, time.Time) error
+	store               IdentityStore
+	enroller            Enroller
+	connector           Connector
+	status              *Status
+	validateCertificate func(agentidentity.StoredIdentity, agentidentity.Certificate, time.Time) error
 	now                 func() time.Time
 	backoff             *Backoff
 }
@@ -39,7 +45,7 @@ func NewRunner(store IdentityStore, enroller Enroller, connector Connector, stat
 	if status == nil {
 		status = NewStatus()
 	}
-	return &Runner{Store: store, Enroller: enroller, Connector: connector, Status: status, ValidateCertificate: ValidateCertificate, now: func() time.Time { return time.Now().UTC() }, backoff: NewBackoff(uint64(time.Now().UnixNano()))}
+	return &Runner{store: store, enroller: enroller, connector: connector, status: status, validateCertificate: ValidateCertificate, now: func() time.Time { return time.Now().UTC() }, backoff: NewBackoff(uint64(time.Now().UnixNano()))}
 }
 
 func (r *Runner) Run(ctx context.Context) error {
@@ -66,10 +72,10 @@ func (r *Runner) Run(ctx context.Context) error {
 }
 
 func (r *Runner) ReconcileOnce(ctx context.Context) error {
-	if r.Store == nil {
+	if r.store == nil {
 		return r.fail("identity storage is unavailable", errors.New("identity storage is unavailable"))
 	}
-	stored, err := r.Store.LoadIdentity(ctx)
+	stored, err := r.store.LoadIdentity(ctx)
 	if err != nil {
 		return r.fail("identity Secret is not readable", err)
 	}
@@ -78,28 +84,28 @@ func (r *Runner) ReconcileOnce(ctx context.Context) error {
 		if err != nil {
 			return r.fail("identity Secret is not writable", err)
 		}
-		token, tokenErr := r.Store.EnrollmentToken(ctx)
+		token, tokenErr := r.store.EnrollmentToken(ctx)
 		if tokenErr != nil {
 			return r.fail("enrollment Secret is not readable", tokenErr)
 		}
 		if token == "" {
-			r.Status.Set(StateUnpaired, "waiting for an enrollment token")
+			r.status.Set(StateUnpaired, "waiting for an enrollment token")
 			return nil
 		}
-		if r.Enroller == nil {
-			r.Status.Set(StateUnconfigured, "enrollment endpoint is not configured")
+		if r.enroller == nil {
+			r.status.Set(StateUnconfigured, "enrollment endpoint is not configured")
 			return nil
 		}
-		r.Status.Set(StateEnrolling, "")
-		certificate, enrollErr := r.Enroller.Enroll(ctx, token, stored.AttemptID, stored.CSRPEM)
+		r.status.Set(StateEnrolling, "")
+		certificate, enrollErr := r.enroller.Enroll(ctx, EnrollmentRequest{Token: token, AttemptID: stored.AttemptID, CSRPEM: stored.CSRPEM})
 		if enrollErr != nil {
-			r.Status.Set(StateUnpaired, "enrollment has not completed")
+			r.status.Set(StateUnpaired, "enrollment has not completed")
 			return enrollErr
 		}
-		if err = r.ValidateCertificate(stored, certificate, r.now()); err != nil {
+		if err = r.validateCertificate(stored, certificate, r.now()); err != nil {
 			return r.fail("enrollment returned an invalid identity", err)
 		}
-		if err = r.Store.SaveCertificate(ctx, certificate); err != nil {
+		if err = r.store.SaveCertificate(ctx, certificate); err != nil {
 			return r.fail("identity Secret is not writable", err)
 		}
 		stored.InstallationID, stored.CertificatePEM, stored.CACertificatePEM, stored.ExpiresAt = certificate.InstallationID, certificate.CertificatePEM, certificate.CACertificatePEM, certificate.ExpiresAt
@@ -107,28 +113,28 @@ func (r *Runner) ReconcileOnce(ctx context.Context) error {
 	if err = r.clearEnrollmentToken(ctx); err != nil {
 		return r.fail("enrollment token could not be cleared", err)
 	}
-	if r.Connector == nil {
-		r.Status.Set(StateUnconfigured, "gRPC endpoint is not configured")
+	if r.connector == nil {
+		r.status.Set(StateUnconfigured, "gRPC endpoint is not configured")
 		return nil
 	}
 	if stored.ExpiresAt.IsZero() || !stored.ExpiresAt.After(r.now()) {
 		return r.fail("Agent certificate is expired", errors.New("Agent certificate is expired"))
 	}
-	r.Status.Set(StateConnecting, "")
-	err = r.Connector.Connect(ctx, stored, func() { r.Status.Set(StatePaired, "") })
+	r.status.Set(StateConnecting, "")
+	err = r.connector.Connect(ctx, stored, func() { r.status.Set(StatePaired, "") })
 	if err != nil && ctx.Err() == nil {
-		r.Status.Set(StateConnecting, "connection interrupted")
+		r.status.Set(StateConnecting, "connection interrupted")
 		return err
 	}
 	return err
 }
 
 func (r *Runner) clearEnrollmentToken(ctx context.Context) error {
-	token, err := r.Store.EnrollmentToken(ctx)
+	token, err := r.store.EnrollmentToken(ctx)
 	if err != nil || token == "" {
 		return err
 	}
-	return r.Store.ClearEnrollmentToken(ctx)
+	return r.store.ClearEnrollmentToken(ctx)
 }
 
 func (r *Runner) ensureEnrollmentIdentity(ctx context.Context, stored agentidentity.StoredIdentity) (agentidentity.StoredIdentity, error) {
@@ -145,13 +151,13 @@ func (r *Runner) ensureEnrollmentIdentity(ctx context.Context, stored agentident
 		return agentidentity.StoredIdentity{}, err
 	}
 	stored.AttemptID, stored.PrivateKeyPEM, stored.CSRPEM = created.AttemptID, created.PrivateKeyPEM, created.CSRPEM
-	if err = r.Store.SaveEnrollmentIdentity(ctx, stored); err != nil {
+	if err = r.store.SaveEnrollmentIdentity(ctx, stored); err != nil {
 		return agentidentity.StoredIdentity{}, err
 	}
 	return stored, nil
 }
 
 func (r *Runner) fail(reason string, err error) error {
-	r.Status.Set(StateFailed, reason)
+	r.status.Set(StateFailed, reason)
 	return fmt.Errorf("%s: %w", reason, err)
 }

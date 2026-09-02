@@ -17,7 +17,7 @@ import (
 )
 
 func (h *generatedHandler) ReceiveGitHubWebhook(w http.ResponseWriter, r *http.Request) {
-	if len(h.server.GitHubWebhookSecret) < 32 || h.server.Store == nil {
+	if len(h.server.githubWebhookSecret) < 32 || h.server.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "github_webhook_unavailable", "GitHub webhook receiver is not configured", r)
 		return
 	}
@@ -37,7 +37,7 @@ func (h *generatedHandler) ReceiveGitHubWebhook(w http.ResponseWriter, r *http.R
 		writeError(w, http.StatusBadRequest, "github_payload_invalid", "GitHub webhook payload could not be read", r)
 		return
 	}
-	if !validGitHubSignature(body, r.Header.Get("X-Hub-Signature-256"), h.server.GitHubWebhookSecret) {
+	if !validGitHubSignature(body, r.Header.Get("X-Hub-Signature-256"), h.server.githubWebhookSecret) {
 		writeError(w, http.StatusUnauthorized, "github_signature_invalid", "GitHub webhook signature is invalid", r)
 		return
 	}
@@ -95,7 +95,7 @@ func (h *generatedHandler) ReceiveGitHubWebhook(w http.ResponseWriter, r *http.R
 		writeError(w, http.StatusBadRequest, "github_payload_invalid", err.Error(), r)
 		return
 	}
-	_, duplicate, err := h.server.Store.AcceptGitHubDelivery(r.Context(), delivery)
+	_, duplicate, err := h.server.store.AcceptGitHubDelivery(r.Context(), delivery)
 	if errors.Is(err, store.ErrConflict) {
 		writeError(w, http.StatusConflict, "github_delivery_conflict", "GitHub delivery ID was reused with different content", r)
 		return
@@ -117,7 +117,7 @@ func (h *generatedHandler) GetAppEnvironmentDeliveryPolicy(w http.ResponseWriter
 	if !ok {
 		return
 	}
-	policy, err := h.server.Store.DeliveryPolicy(r.Context(), workspace.ID, string(projectID), string(appID), string(appEnvironmentID))
+	policy, err := h.server.store.DeliveryPolicy(r.Context(), workspace.ID, string(projectID), string(appID), string(appEnvironmentID))
 	if err != nil {
 		writeDeliveryPolicyError(w, r, err)
 		return
@@ -138,7 +138,7 @@ func (h *generatedHandler) ReplaceAppEnvironmentDeliveryPolicy(w http.ResponseWr
 		writeError(w, http.StatusBadRequest, "invalid_json", "request body is invalid", r)
 		return
 	}
-	policy, err := h.server.Store.PutDeliveryPolicy(r.Context(), workspace.ID, actor.ID, string(projectID), string(appID), string(appEnvironmentID), int64(params.IfMatch), input.PushEnabled, input.ReleaseEnabled)
+	policy, err := h.server.store.PutDeliveryPolicy(r.Context(), workspace.ID, actor.ID, string(projectID), string(appID), string(appEnvironmentID), int64(params.IfMatch), input.PushEnabled, input.ReleaseEnabled)
 	if err != nil {
 		writeDeliveryPolicyError(w, r, err)
 		return

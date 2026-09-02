@@ -24,7 +24,7 @@ func (s *Server) generatedHandler() http.Handler {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 	router.Get("/readyz", func(w http.ResponseWriter, r *http.Request) {
-		if err := s.Store.SchemaReady(r.Context()); err != nil {
+		if err := s.store.SchemaReady(r.Context()); err != nil {
 			s.logger().Error("schema readiness failed", "request_id", requestID(r), "error", err)
 			writeError(w, http.StatusServiceUnavailable, "database_unavailable", "service is not ready", r)
 			return
@@ -78,7 +78,7 @@ func (h *generatedHandler) GetOperation(w http.ResponseWriter, r *http.Request, 
 		writeError(w, http.StatusUnauthorized, "unauthenticated", "authentication required", r)
 		return
 	}
-	operation, err := h.server.Store.GetOperationForUser(r.Context(), userID, operationID)
+	operation, err := h.server.store.GetOperationForUser(r.Context(), userID, operationID)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "operation_not_found", "operation was not found", r)
 		return
@@ -96,7 +96,7 @@ func (h *generatedHandler) authorize(w http.ResponseWriter, r *http.Request, mut
 		writeError(w, http.StatusForbidden, "csrf_failed", "request could not be verified", r)
 		return 0, domain.Workspace{}, false
 	}
-	workspace, err := h.server.Store.WorkspaceForUser(r.Context(), userID)
+	workspace, err := h.server.store.WorkspaceForUser(r.Context(), userID)
 	if err != nil {
 		writeError(w, http.StatusForbidden, "workspace_forbidden", "workspace access is not configured", r)
 		return 0, domain.Workspace{}, false
@@ -105,7 +105,7 @@ func (h *generatedHandler) authorize(w http.ResponseWriter, r *http.Request, mut
 	if mutation {
 		permission = authorization.EditResources
 	}
-	context, err := h.server.Store.AuthorizationContext(r.Context(), userID, workspace.ID, "Workspace", workspace.PublicID)
+	context, err := h.server.store.AuthorizationContext(r.Context(), userID, workspace.ID, "Workspace", workspace.PublicID)
 	if err != nil || !authorization.Allowed(context, permission) {
 		writeError(w, http.StatusForbidden, "permission_denied", "permission is required", r)
 		return 0, domain.Workspace{}, false

@@ -29,7 +29,7 @@ func TestHierarchyAPIEnforcesMembershipRoleAndDeploymentAncestry(t *testing.T) {
 	config.AllowedOrigin = "https://console.example"
 	config.AllowedHosts = []string{"console.example"}
 	config.CookieName = "molejo_session"
-	server := NewServer(storage, nil, config, nil)
+	server := NewServer(config, Dependencies{Store: storage})
 	owner := createAPISession(t, storage, ownerID, "owner-session", "owner-csrf")
 
 	var workspaceAccepted struct {
@@ -273,7 +273,7 @@ func newHierarchyAPITestFixture(t *testing.T) (*store.Store, domain.Workspace, *
 	config.AllowedOrigin = "https://console.example"
 	config.AllowedHosts = []string{"console.example"}
 	config.CookieName = "molejo_session"
-	server := NewServer(storage, nil, config, nil)
+	server := NewServer(config, Dependencies{Store: storage})
 	owner := createAPISession(t, storage, ownerID, "focused-owner-session", "focused-owner-csrf")
 	return storage, workspace, server, owner
 }

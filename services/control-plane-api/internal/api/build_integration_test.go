@@ -46,9 +46,9 @@ func TestBuildAPIUsesTheAppEnvironmentBranchAndDeploysAReleaseSnapshot(t *testin
 	config.AllowedOrigin = "https://console.example"
 	config.AllowedHosts = []string{"console.example"}
 	config.AllowedRegistries = []string{"registry.example"}
-	server := NewServer(storage, nil, config, nil)
+	server := NewServer(config, Dependencies{Store: storage})
 	const commitSHA = "0123456789abcdef0123456789abcdef01234567"
-	server.GitHub = &fakeGitHubService{commitSHA: commitSHA}
+	server.github = &fakeGitHubService{commitSHA: commitSHA}
 	owner := createAPISession(t, storage, ownerID, "build-owner-session", "build-owner-csrf")
 	base := "/api/v1/workspaces/" + workspace.PublicID + "/projects/" + project.PublicID + "/apps/" + app.PublicID
 	body := `{"appEnvironmentId":"` + target.PublicID + `"}`
@@ -62,14 +62,14 @@ func TestBuildAPIUsesTheAppEnvironmentBranchAndDeploysAReleaseSnapshot(t *testin
 	if build.AppEnvironmentPublicID != target.PublicID || build.SourceBranch != "develop" || build.CommitSHA != commitSHA || build.RepositoryFullName != "molejo/platform" {
 		t.Fatalf("build=%+v", build)
 	}
-	if refs := server.GitHub.(*fakeGitHubService).resolvedRefs; len(refs) != 1 || refs[0] != "develop" {
+	if refs := server.github.(*fakeGitHubService).resolvedRefs; len(refs) != 1 || refs[0] != "develop" {
 		t.Fatalf("resolved refs=%v", refs)
 	}
 	response = hierarchyRequest(t, server, owner, http.MethodPost, base+"/builds", body, map[string]string{"Idempotency-Key": "build-target"})
 	var retried domain.Build
 	decodeResponse(t, response, &retried)
-	if response.Code != http.StatusAccepted || retried.PublicID != build.PublicID || len(server.GitHub.(*fakeGitHubService).resolvedRefs) != 1 {
-		t.Fatalf("idempotent retry status=%d build=%+v refs=%v", response.Code, retried, server.GitHub.(*fakeGitHubService).resolvedRefs)
+	if response.Code != http.StatusAccepted || retried.PublicID != build.PublicID || len(server.github.(*fakeGitHubService).resolvedRefs) != 1 {
+		t.Fatalf("idempotent retry status=%d build=%+v refs=%v", response.Code, retried, server.github.(*fakeGitHubService).resolvedRefs)
 	}
 
 	claimed, ok, err := storage.ClaimNextBuild(ctx, "integration-builder", time.Minute)

@@ -7,7 +7,7 @@ import (
 )
 
 func TestGeneratedChiRouterValidatesContractParametersBeforeTheHandler(t *testing.T) {
-	server := NewServer(nil, nil, DefaultConfig(), nil)
+	server := NewServer(DefaultConfig(), Dependencies{})
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/workspaces?limit=abc", nil)
 	request.Host = "127.0.0.1:8080"
 	recorder := httptest.NewRecorder()
@@ -20,7 +20,7 @@ func TestGeneratedChiRouterValidatesContractParametersBeforeTheHandler(t *testin
 }
 
 func TestGeneratedChiRouterKeepsAppEnvironmentDeletionOnTheResourcePath(t *testing.T) {
-	server := NewServer(nil, nil, DefaultConfig(), nil)
+	server := NewServer(DefaultConfig(), Dependencies{})
 	request := httptest.NewRequest(http.MethodDelete, "/api/v1/workspaces/ws-aaaaaaaaaaaaaaaaaaaa/projects/prj-aaaaaaaaaaaaaaaaaaaa/apps/app-aaaaaaaaaaaaaaaaaaaa/environments/aev-aaaaaaaaaaaaaaaaaaaa", nil)
 	request.Host = "127.0.0.1:8080"
 	request.Header.Set("Idempotency-Key", "router-delete")

@@ -1,4 +1,4 @@
-package agent
+package controlplane
 
 import (
 	"encoding/json"
@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/molejo-platform/molejo/services/cluster-agent/internal/agent"
 )
 
 func TestHTTPEnrollerSendsBoundedEnrollmentRequest(t *testing.T) {
@@ -28,7 +30,7 @@ func TestHTTPEnrollerSendsBoundedEnrollmentRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	certificate, err := enroller.Enroll(t.Context(), "token", "attempt", []byte("csr"))
+	certificate, err := enroller.Enroll(t.Context(), agent.EnrollmentRequest{Token: "token", AttemptID: "attempt", CSRPEM: []byte("csr")})
 	if err != nil || certificate.InstallationID != "agi-abcdefghijklmnopqrst" {
 		t.Fatalf("certificate=%+v err=%v", certificate, err)
 	}

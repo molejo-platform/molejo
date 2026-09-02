@@ -27,7 +27,7 @@ func (h *generatedHandler) ListAppEnvironments(w http.ResponseWriter, r *http.Re
 	if !ok {
 		return
 	}
-	items, nextCursor, err := h.server.Store.ListAppEnvironments(r.Context(), workspace.ID, string(projectID), string(appID), beforeID, limit)
+	items, nextCursor, err := h.server.store.ListAppEnvironments(r.Context(), workspace.ID, string(projectID), string(appID), beforeID, limit)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "storage_failed", "could not list App Environments", r)
 		return
@@ -40,7 +40,7 @@ func (h *generatedHandler) ListEnvironmentApps(w http.ResponseWriter, r *http.Re
 	if !ok {
 		return
 	}
-	if _, err := h.server.Store.FindEnvironment(r.Context(), workspace.ID, string(projectID), string(environmentID)); err != nil {
+	if _, err := h.server.store.FindEnvironment(r.Context(), workspace.ID, string(projectID), string(environmentID)); err != nil {
 		writeHierarchyError(w, r, err)
 		return
 	}
@@ -48,7 +48,7 @@ func (h *generatedHandler) ListEnvironmentApps(w http.ResponseWriter, r *http.Re
 	if !ok {
 		return
 	}
-	items, nextCursor, err := h.server.Store.ListEnvironmentApps(r.Context(), workspace.ID, string(projectID), string(environmentID), beforeID, limit)
+	items, nextCursor, err := h.server.store.ListEnvironmentApps(r.Context(), workspace.ID, string(projectID), string(environmentID), beforeID, limit)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "storage_failed", "could not list Environment Apps", r)
 		return
@@ -70,7 +70,7 @@ func (h *generatedHandler) CreateAppEnvironment(w http.ResponseWriter, r *http.R
 		if err != nil {
 			break
 		}
-		item, _, err := h.server.Store.CreateAppEnvironmentWithWorkload(r.Context(), workspace.ID, actor.ID, publicID, string(projectID), string(appID), input.EnvironmentID, input.Branch, input.WorkloadKind, input.Configuration, input.Volume)
+		item, _, err := h.server.store.CreateAppEnvironmentWithWorkload(r.Context(), workspace.ID, actor.ID, publicID, string(projectID), string(appID), input.EnvironmentID, input.Branch, input.WorkloadKind, input.Configuration, input.Volume)
 		if errors.Is(err, store.ErrPublicIDCollision) {
 			continue
 		}
@@ -93,8 +93,8 @@ func (h *generatedHandler) GetAppEnvironment(w http.ResponseWriter, r *http.Requ
 	if !ok {
 		return
 	}
-	if h.server.Runtime != nil && item.CurrentDeploymentPublicID != "" {
-		observation, err := h.server.Runtime.ObserveDeployment(r.Context(), workspace.Namespace, item.RuntimeName)
+	if h.server.runtime != nil && item.CurrentDeploymentPublicID != "" {
+		observation, err := h.server.runtime.ObserveDeployment(r.Context(), workspace.Namespace, item.RuntimeName)
 		if err != nil {
 			item.State = domain.Unknown
 			item.Message = "runtime observation unavailable"
@@ -118,7 +118,7 @@ func (h *generatedHandler) UpdateAppEnvironment(w http.ResponseWriter, r *http.R
 	if !ok {
 		return
 	}
-	item, err := h.server.Store.UpdateAppEnvironment(r.Context(), workspace.ID, actor.ID, string(appEnvironmentID), input.Branch, input.Configuration, int64(params.IfMatch))
+	item, err := h.server.store.UpdateAppEnvironment(r.Context(), workspace.ID, actor.ID, string(appEnvironmentID), input.Branch, input.Configuration, int64(params.IfMatch))
 	if err != nil {
 		writeAppEnvironmentError(w, r, err)
 		return
@@ -139,7 +139,7 @@ func (h *generatedHandler) DeleteAppEnvironment(w http.ResponseWriter, r *http.R
 		writeError(w, http.StatusBadRequest, "idempotency_required", "Idempotency-Key is required", r)
 		return
 	}
-	operation, err := h.server.Store.DeleteAppEnvironment(r.Context(), workspace.ID, actor.ID, string(appEnvironmentID), int64(params.IfMatch), auth.HashToken(idempotencyKey), scopedBuildPayloadHash(r, payloadHash))
+	operation, err := h.server.store.DeleteAppEnvironment(r.Context(), workspace.ID, actor.ID, string(appEnvironmentID), int64(params.IfMatch), auth.HashToken(idempotencyKey), scopedBuildPayloadHash(r, payloadHash))
 	if err != nil {
 		writeAppEnvironmentError(w, r, err)
 		return
@@ -161,7 +161,7 @@ func (h *generatedHandler) ListAppEnvironmentDeployments(w http.ResponseWriter, 
 	if !ok {
 		return
 	}
-	items, nextCursor, err := h.server.Store.ListDeployments(r.Context(), workspace.ID, appEnvironment.ID, beforeID, limit)
+	items, nextCursor, err := h.server.store.ListDeployments(r.Context(), workspace.ID, appEnvironment.ID, beforeID, limit)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "storage_failed", "could not list Deployments", r)
 		return
@@ -200,7 +200,7 @@ func (h *generatedHandler) CreateAppEnvironmentDeployment(w http.ResponseWriter,
 		if err != nil {
 			break
 		}
-		deployment, operation, _, err := h.server.Store.CreateDeployment(r.Context(), workspace.ID, actor.ID, string(appEnvironmentID), deploymentID, input.ReleaseID, input.ConfigurationVersion, int64(params.IfMatch), expectedCurrentDeploymentID, auth.HashToken(idempotencyKey), scopedBuildPayloadHash(r, payloadHash))
+		deployment, operation, _, err := h.server.store.CreateDeployment(r.Context(), workspace.ID, actor.ID, string(appEnvironmentID), deploymentID, input.ReleaseID, input.ConfigurationVersion, int64(params.IfMatch), expectedCurrentDeploymentID, auth.HashToken(idempotencyKey), scopedBuildPayloadHash(r, payloadHash))
 		if errors.Is(err, store.ErrPublicIDCollision) {
 			continue
 		}
@@ -232,7 +232,7 @@ func (h *generatedHandler) PreviewAppEnvironmentDeployment(w http.ResponseWriter
 		writeError(w, http.StatusBadRequest, "invalid_json", "request body is invalid", r)
 		return
 	}
-	preview, err := h.server.Store.PreviewDeployment(r.Context(), workspace.ID, target.ID, input.ReleaseID, input.ConfigurationVersion)
+	preview, err := h.server.store.PreviewDeployment(r.Context(), workspace.ID, target.ID, input.ReleaseID, input.ConfigurationVersion)
 	if err != nil {
 		writeAppEnvironmentError(w, r, err)
 		return
@@ -253,7 +253,7 @@ func (h *generatedHandler) ListAppEnvironmentConfigurationVersions(w http.Respon
 	if !ok {
 		return
 	}
-	items, nextCursor, err := h.server.Store.ListConfigurationRevisions(r.Context(), workspace.ID, target.ID, beforeVersion, limit)
+	items, nextCursor, err := h.server.store.ListConfigurationRevisions(r.Context(), workspace.ID, target.ID, beforeVersion, limit)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "storage_failed", "could not list configuration versions", r)
 		return
@@ -270,7 +270,7 @@ func (h *generatedHandler) GetAppEnvironmentDeployment(w http.ResponseWriter, r 
 	if !ok {
 		return
 	}
-	deployment, err := h.server.Store.FindDeployment(r.Context(), workspace.ID, appEnvironment.ID, string(deploymentID))
+	deployment, err := h.server.store.FindDeployment(r.Context(), workspace.ID, appEnvironment.ID, string(deploymentID))
 	if err != nil {
 		writeAppEnvironmentError(w, r, err)
 		return
@@ -301,12 +301,12 @@ func (h *generatedHandler) appEnvironmentInput(w http.ResponseWriter, r *http.Re
 	}
 	input.Branch = branch
 	input.Configuration = domain.NormalizeRuntimeConfig(input.Configuration)
-	if err = domain.ValidateRuntimeConfig(input.Configuration, h.server.Config.MaxReplicas, h.server.Config.MaxCPU, h.server.Config.MaxMemory); err != nil {
+	if err = domain.ValidateRuntimeConfig(input.Configuration, h.server.config.MaxReplicas, h.server.config.MaxCPU, h.server.config.MaxMemory); err != nil {
 		writeError(w, http.StatusBadRequest, "configuration_invalid", err.Error(), r)
 		return appEnvironmentInput{}, false
 	}
 	for _, endpoint := range input.Configuration.PublicEndpoints {
-		if endpoint.Type == domain.EndpointTCP && !h.server.Config.PublicTCPEnabled {
+		if endpoint.Type == domain.EndpointTCP && !h.server.config.PublicTCPEnabled {
 			writeError(w, http.StatusConflict, "public_tcp_unavailable", "public TCP endpoints are unavailable in this installation", r)
 			return appEnvironmentInput{}, false
 		}
@@ -315,7 +315,7 @@ func (h *generatedHandler) appEnvironmentInput(w http.ResponseWriter, r *http.Re
 }
 
 func (h *generatedHandler) appEnvironment(w http.ResponseWriter, r *http.Request, workspaceID int64, projectID, appID, publicID string) (domain.AppEnvironment, bool) {
-	item, err := h.server.Store.FindAppEnvironmentForApp(r.Context(), workspaceID, projectID, appID, publicID)
+	item, err := h.server.store.FindAppEnvironmentForApp(r.Context(), workspaceID, projectID, appID, publicID)
 	if err != nil {
 		writeAppEnvironmentError(w, r, err)
 		return domain.AppEnvironment{}, false

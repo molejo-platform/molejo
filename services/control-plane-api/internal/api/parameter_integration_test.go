@@ -18,8 +18,8 @@ import (
 func TestParameterAPIKeepsSecretsWriteOnlyAndWorkspaceScoped(t *testing.T) {
 	storage, workspace, server, owner := newHierarchyAPITestFixture(t)
 	backend := &recordingSecretStore{values: map[string]string{}, versions: map[string]int64{}}
-	server.ParameterSecrets = backend
-	server.SecretFingerprintKey = []byte(strings.Repeat("k", 32))
+	server.parameterSecrets = backend
+	server.secretFingerprintKey = []byte(strings.Repeat("k", 32))
 
 	plainResponse := hierarchyRequest(t, server, owner, http.MethodPost, "/api/v1/workspaces/"+workspace.PublicID+"/parameters", `{"path":"/shared/api/url","type":"PlainText","description":"Internal endpoint","value":"https://api.internal"}`, map[string]string{"Idempotency-Key": "create-api-url"})
 	if plainResponse.Code != http.StatusCreated || !strings.Contains(plainResponse.Body.String(), "https://api.internal") {
@@ -102,8 +102,8 @@ func TestParameterAPIRejectsSecretsWithoutConfiguredBackend(t *testing.T) {
 func TestPendingSecretReplacementReservesItsPathAndBlocksArchive(t *testing.T) {
 	_, workspace, server, owner := newHierarchyAPITestFixture(t)
 	backend := &recordingSecretStore{values: map[string]string{}, versions: map[string]int64{}}
-	server.ParameterSecrets = backend
-	server.SecretFingerprintKey = []byte(strings.Repeat("k", 32))
+	server.parameterSecrets = backend
+	server.secretFingerprintKey = []byte(strings.Repeat("k", 32))
 
 	createdResponse := hierarchyRequest(t, server, owner, http.MethodPost, "/api/v1/workspaces/"+workspace.PublicID+"/parameters", `{"path":"/old/path","type":"Secret","value":"initial"}`, map[string]string{"Idempotency-Key": "create-pending-test"})
 	if createdResponse.Code != http.StatusCreated {
@@ -130,9 +130,10 @@ func TestPendingSecretReplacementReservesItsPathAndBlocksArchive(t *testing.T) {
 func TestParameterMaintenanceRecoversCommittedOpenBaoWriteAndPurgesArchivedValue(t *testing.T) {
 	storage, workspace, server, _ := newHierarchyAPITestFixture(t)
 	backend := &recordingSecretStore{values: map[string]string{}, versions: map[string]int64{}}
-	server.ParameterSecrets = backend
-	server.SecretFingerprintKey = []byte(strings.Repeat("k", 32))
-	server.Config.ParameterMutationTimeout = time.Minute
+	server.parameterSecrets = backend
+	server.secretFingerprintKey = []byte(strings.Repeat("k", 32))
+	server.config.ParameterMutationTimeout = time.Minute
+	worker := parameters.Worker{Store: storage, Secrets: backend, MutationTimeout: time.Minute}
 
 	publicID := mustAPIID(t, "par")
 	reference := secretReference(workspace.PublicID, publicID)
@@ -150,7 +151,7 @@ func TestParameterMaintenanceRecoversCommittedOpenBaoWriteAndPurgesArchivedValue
 	if _, err = storage.FindParameter(context.Background(), workspace.ID, publicID); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("pending Parameter was visible before recovery: %v", err)
 	}
-	worked, err := server.RunParameterMaintenanceOnce(context.Background())
+	worked, err := worker.RunOnce(context.Background())
 	if err != nil || !worked {
 		t.Fatalf("maintenance recovery worked=%v err=%v", worked, err)
 	}
@@ -161,7 +162,7 @@ func TestParameterMaintenanceRecoversCommittedOpenBaoWriteAndPurgesArchivedValue
 	if err = storage.ArchiveParameter(context.Background(), workspace.ID, publicID, parameter.Version, 0); err != nil {
 		t.Fatal(err)
 	}
-	worked, err = server.RunParameterMaintenanceOnce(context.Background())
+	worked, err = worker.RunOnce(context.Background())
 	if err != nil || !worked || backend.value(reference) != "" {
 		t.Fatalf("maintenance purge worked=%v err=%v backend_value_present=%v", worked, err, backend.value(reference) != "")
 	}
@@ -178,7 +179,7 @@ func TestParameterMaintenanceRecoversCommittedOpenBaoWriteAndPurgesArchivedValue
 	if err = storage.ArchiveParameter(context.Background(), workspace.ID, plain.PublicID, plain.Version, 0); err != nil {
 		t.Fatal(err)
 	}
-	if worked, err = server.RunParameterMaintenanceOnce(context.Background()); err != nil || !worked {
+	if worked, err = worker.RunOnce(context.Background()); err != nil || !worked {
 		t.Fatalf("plaintext purge worked=%v err=%v", worked, err)
 	}
 	var storedPlain *string

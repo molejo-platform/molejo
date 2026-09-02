@@ -72,13 +72,13 @@ func inheritAllocatedPorts(configuration, current domain.RuntimeConfig) domain.R
 func (s *Store) reservePublicationClaims(ctx context.Context, tx pgx.Tx, appEnvironmentID, configurationVersion int64, workloadKind domain.WorkloadKind, configuration domain.RuntimeConfig) (domain.RuntimeConfig, error) {
 	for index := range configuration.PublicEndpoints {
 		endpoint := &configuration.PublicEndpoints[index]
-		hostname, err := s.Publication.Resolve(workloadKind, *endpoint)
+		hostname, err := s.publication.Resolve(workloadKind, *endpoint)
 		if err != nil {
 			return domain.RuntimeConfig{}, err
 		}
 		var externalPort *int32
 		if endpoint.Type == domain.EndpointTCP {
-			if !s.Publication.TCPEnabled || s.Publication.TCPMinimumPort < 1 || s.Publication.TCPMaximumPort < s.Publication.TCPMinimumPort {
+			if !s.publication.TCPEnabled || s.publication.TCPMinimumPort < 1 || s.publication.TCPMaximumPort < s.publication.TCPMinimumPort {
 				return domain.RuntimeConfig{}, ErrPublicationUnavailable
 			}
 			if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext('molejo-public-tcp-pool'))`); err != nil {
@@ -89,7 +89,7 @@ func (s *Store) reservePublicationClaims(ctx context.Context, tx pgx.Tx, appEnvi
 				_ = tx.QueryRow(ctx, `SELECT external_port FROM publication_claims WHERE app_environment_id=$1 AND endpoint_name=$2 AND endpoint_type='TCP' AND hostname=$3 ORDER BY current_configuration_version DESC NULLS LAST,desired_configuration_version DESC NULLS LAST LIMIT 1`, appEnvironmentID, endpoint.Name, hostname).Scan(&allocated)
 			}
 			if allocated == 0 {
-				if err := tx.QueryRow(ctx, `SELECT candidate FROM generate_series($1::integer,$2::integer) candidate WHERE NOT EXISTS (SELECT 1 FROM publication_claims WHERE external_port=candidate) ORDER BY candidate LIMIT 1`, s.Publication.TCPMinimumPort, s.Publication.TCPMaximumPort).Scan(&allocated); errors.Is(err, pgx.ErrNoRows) {
+				if err := tx.QueryRow(ctx, `SELECT candidate FROM generate_series($1::integer,$2::integer) candidate WHERE NOT EXISTS (SELECT 1 FROM publication_claims WHERE external_port=candidate) ORDER BY candidate LIMIT 1`, s.publication.TCPMinimumPort, s.publication.TCPMaximumPort).Scan(&allocated); errors.Is(err, pgx.ErrNoRows) {
 					return domain.RuntimeConfig{}, ErrPublicationUnavailable
 				} else if err != nil {
 					return domain.RuntimeConfig{}, err
