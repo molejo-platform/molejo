@@ -18,13 +18,13 @@ Execute staging antes de production:
 molejoctl cluster tls prepare \
   --kube-context molejo-k3s \
   --file deploy/examples/tls-molejo-dev-staging.yaml \
-  --credential-env TF_VAR_cloudflare_api_token \
+  --credential-env CLOUDFLARE_API_TOKEN \
   --yes
 
 molejoctl cluster tls prepare \
   --kube-context molejo-k3s \
   --file deploy/examples/tls-molejo-dev-production.yaml \
-  --credential-env TF_VAR_cloudflare_api_token \
+  --credential-env CLOUDFLARE_API_TOKEN \
   --yes
 ```
 
