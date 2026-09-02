@@ -24,6 +24,37 @@ var (
 	errHostnameConflict  = errors.New("public hostname is already owned by another AppDeployment")
 )
 
+type projectionFailure struct {
+	decision workloadDecision
+	requeue  time.Duration
+	report   bool
+}
+
+func classifyProjectionFailure(err error) (projectionFailure, bool) {
+	switch {
+	case errors.Is(err, errHostnameConflict):
+		return projectionFailure{decision: workloadDecision{
+			state:   workloadStateDegraded,
+			reason:  platformv1alpha1.ReasonHostnameConflict,
+			message: "The requested public hostname is not available.",
+		}, requeue: ownershipConflictRequeueAfter}, true
+	case errors.Is(err, errOwnershipConflict):
+		return projectionFailure{decision: workloadDecision{
+			state:   workloadStateDegraded,
+			reason:  platformv1alpha1.ReasonOwnershipConflict,
+			message: "A required Kubernetes child is not controlled by this AppDeployment.",
+		}, requeue: ownershipConflictRequeueAfter}, true
+	case isPersistentReconcileError(err):
+		return projectionFailure{decision: workloadDecision{
+			state:   workloadStateDegraded,
+			reason:  platformv1alpha1.ReasonReconcileFailed,
+			message: "A required Kubernetes child could not be reconciled.",
+		}, requeue: persistentFailureRequeueAfter, report: true}, true
+	default:
+		return projectionFailure{}, false
+	}
+}
+
 func (r *AppDeploymentReconciler) handleProjectionFailure(
 	ctx context.Context,
 	span trace.Span,
@@ -33,17 +64,18 @@ func (r *AppDeploymentReconciler) handleProjectionFailure(
 	if markCanceledReconciliation(ctx, span, err) {
 		return ctrl.Result{}, nil
 	}
-	if errors.Is(err, errHostnameConflict) {
-		decision := workloadDecision{
-			state:   workloadStateDegraded,
-			reason:  platformv1alpha1.ReasonHostnameConflict,
-			message: "The requested public hostname is not available.",
+	failure, handled := classifyProjectionFailure(err)
+	if handled {
+		if failure.report {
+			markReconcileFailure(span, err)
+			logReconcileFailure(ctx, appDeployment, err)
+		} else {
+			span.SetAttributes(
+				attribute.String("molejo.reconciliation.state", string(failure.decision.state)),
+				attribute.String("molejo.reconciliation.reason", failure.decision.reason),
+			)
 		}
-		span.SetAttributes(
-			attribute.String("molejo.reconciliation.state", string(decision.state)),
-			attribute.String("molejo.reconciliation.reason", decision.reason),
-		)
-		if statusErr := r.updateFailureStatus(ctx, appDeployment, decision); statusErr != nil {
+		if statusErr := r.updateFailureStatus(ctx, appDeployment, failure.decision); statusErr != nil {
 			if markCanceledReconciliation(ctx, span, statusErr) {
 				return ctrl.Result{}, nil
 			}
@@ -51,47 +83,10 @@ func (r *AppDeploymentReconciler) handleProjectionFailure(
 			logReconcileFailure(ctx, appDeployment, statusErr)
 			return ctrl.Result{}, statusErr
 		}
-		return ctrl.Result{RequeueAfter: ownershipConflictRequeueAfter}, nil
+		return ctrl.Result{RequeueAfter: failure.requeue}, nil
 	}
-	if errors.Is(err, errOwnershipConflict) {
-		decision := workloadDecision{
-			state:   workloadStateDegraded,
-			reason:  platformv1alpha1.ReasonOwnershipConflict,
-			message: "A required Kubernetes child is not controlled by this AppDeployment.",
-		}
-		span.SetAttributes(
-			attribute.String("molejo.reconciliation.state", string(decision.state)),
-			attribute.String("molejo.reconciliation.reason", decision.reason),
-		)
-		if statusErr := r.updateFailureStatus(ctx, appDeployment, decision); statusErr != nil {
-			if markCanceledReconciliation(ctx, span, statusErr) {
-				return ctrl.Result{}, nil
-			}
-			markReconcileFailure(span, statusErr)
-			logReconcileFailure(ctx, appDeployment, statusErr)
-			return ctrl.Result{}, statusErr
-		}
-		return ctrl.Result{RequeueAfter: ownershipConflictRequeueAfter}, nil
-	}
-
 	markReconcileFailure(span, err)
 	logReconcileFailure(ctx, appDeployment, err)
-	if isPersistentReconcileError(err) {
-		decision := workloadDecision{
-			state:   workloadStateDegraded,
-			reason:  platformv1alpha1.ReasonReconcileFailed,
-			message: "A required Kubernetes child could not be reconciled.",
-		}
-		if statusErr := r.updateFailureStatus(ctx, appDeployment, decision); statusErr != nil {
-			if markCanceledReconciliation(ctx, span, statusErr) {
-				return ctrl.Result{}, nil
-			}
-			markReconcileFailure(span, statusErr)
-			logReconcileFailure(ctx, appDeployment, statusErr)
-			return ctrl.Result{}, statusErr
-		}
-		return ctrl.Result{RequeueAfter: persistentFailureRequeueAfter}, nil
-	}
 	return ctrl.Result{}, err
 }
 
