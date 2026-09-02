@@ -30,7 +30,7 @@ func TestControlChannelHelloHasBoundedWait(t *testing.T) {
 	stream := &blockingAgentStream{ctx: ctx, helloSent: true}
 	defer cancel()
 
-	err := runControlChannel(ctx, stream, "agi-abcdefghijklmnopqrst", "test", nil, 20*time.Millisecond)
+	err := runControlChannel(ctx, stream, "agi-abcdefghijklmnopqrst", "test", AgentMetadata{}, nil, nil, 20*time.Millisecond)
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("error=%v, want deadline exceeded", err)
 	}
@@ -42,7 +42,7 @@ func TestControlChannelHeartbeatHasBoundedWait(t *testing.T) {
 	defer cancel()
 	paired := false
 
-	err := runControlChannel(ctx, stream, "agi-abcdefghijklmnopqrst", "test", func() { paired = true }, 20*time.Millisecond)
+	err := runControlChannel(ctx, stream, "agi-abcdefghijklmnopqrst", "test", AgentMetadata{}, nil, func() { paired = true }, 20*time.Millisecond)
 	if !paired || !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("paired=%v error=%v, want paired heartbeat deadline", paired, err)
 	}

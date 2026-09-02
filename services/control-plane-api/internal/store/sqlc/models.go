@@ -46,6 +46,9 @@ type AgentInstallation struct {
 	CreatedBy              int64              `json:"created_by"`
 	CreatedAt              pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+	ClusterUid             pgtype.Text        `json:"cluster_uid"`
+	KubernetesVersion      string             `json:"kubernetes_version"`
+	CapabilitiesJson       []byte             `json:"capabilities_json"`
 }
 
 type App struct {
@@ -340,29 +343,30 @@ type InstallationRoleAssignment struct {
 }
 
 type Operation struct {
-	ID                int64              `json:"id"`
-	PublicID          string             `json:"public_id"`
-	WorkspaceID       int64              `json:"workspace_id"`
-	AppEnvironmentID  pgtype.Int8        `json:"app_environment_id"`
-	DeploymentID      pgtype.Int8        `json:"deployment_id"`
-	RequestedByUserID int64              `json:"requested_by_user_id"`
-	Kind              string             `json:"kind"`
-	Status            string             `json:"status"`
-	IdempotencyHash   []byte             `json:"idempotency_hash"`
-	PayloadHash       []byte             `json:"payload_hash"`
-	DesiredVersion    int64              `json:"desired_version"`
-	Attempts          int32              `json:"attempts"`
-	NextAttemptAt     pgtype.Timestamptz `json:"next_attempt_at"`
-	LeaseUntil        pgtype.Timestamptz `json:"lease_until"`
-	WorkerID          pgtype.Text        `json:"worker_id"`
-	FencingToken      int64              `json:"fencing_token"`
-	ErrorCode         string             `json:"error_code"`
-	ErrorMessage      string             `json:"error_message"`
-	StartedAt         pgtype.Timestamptz `json:"started_at"`
-	CompletedAt       pgtype.Timestamptz `json:"completed_at"`
-	CreatedAt         pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
-	AppVolumeID       pgtype.Int8        `json:"app_volume_id"`
+	ID                  int64              `json:"id"`
+	PublicID            string             `json:"public_id"`
+	WorkspaceID         int64              `json:"workspace_id"`
+	AppEnvironmentID    pgtype.Int8        `json:"app_environment_id"`
+	DeploymentID        pgtype.Int8        `json:"deployment_id"`
+	RequestedByUserID   int64              `json:"requested_by_user_id"`
+	Kind                string             `json:"kind"`
+	Status              string             `json:"status"`
+	IdempotencyHash     []byte             `json:"idempotency_hash"`
+	PayloadHash         []byte             `json:"payload_hash"`
+	DesiredVersion      int64              `json:"desired_version"`
+	Attempts            int32              `json:"attempts"`
+	NextAttemptAt       pgtype.Timestamptz `json:"next_attempt_at"`
+	LeaseUntil          pgtype.Timestamptz `json:"lease_until"`
+	WorkerID            pgtype.Text        `json:"worker_id"`
+	FencingToken        int64              `json:"fencing_token"`
+	ErrorCode           string             `json:"error_code"`
+	ErrorMessage        string             `json:"error_message"`
+	StartedAt           pgtype.Timestamptz `json:"started_at"`
+	CompletedAt         pgtype.Timestamptz `json:"completed_at"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+	AppVolumeID         pgtype.Int8        `json:"app_volume_id"`
+	AgentInstallationID pgtype.Int8        `json:"agent_installation_id"`
 }
 
 type Parameter struct {

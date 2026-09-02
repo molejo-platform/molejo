@@ -29,6 +29,8 @@ import (
 //go:embed migrations/*.sql
 var migrationFS embed.FS
 
+var ErrAgentUnavailable = errors.New("no active cluster Agent is available")
+
 type Store struct {
 	Pool        *pgxpool.Pool
 	queries     *storesqlc.Queries
@@ -79,6 +81,15 @@ func (s *Store) PublicationPolicy() PublicationPolicy {
 }
 
 func (s *Store) Close() { s.Pool.Close() }
+
+func activeAgentInstallationID(ctx context.Context, query rowQuerier) (int64, error) {
+	var id int64
+	err := query.QueryRow(ctx, `SELECT CASE WHEN count(*)=1 THEN min(id) ELSE 0 END FROM agent_installations WHERE status='Active'`).Scan(&id)
+	if err == nil && id == 0 {
+		return 0, ErrAgentUnavailable
+	}
+	return id, err
+}
 
 func embeddedMigrations() ([]migration, error) {
 	entries, err := fs.ReadDir(migrationFS, "migrations")

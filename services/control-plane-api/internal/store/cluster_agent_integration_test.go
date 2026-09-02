@@ -129,7 +129,7 @@ func TestAgentActivationRejectsUnknownRevokedAndExpiredIdentities(t *testing.T) 
 	now := time.Now().UTC().Truncate(time.Second)
 	fingerprint := []byte("fingerprint")
 
-	if _, err := storage.ActivateAgent(t.Context(), newID(t, "agi"), fingerprint, now, audit.Event{}); !errors.Is(err, ErrAgentIdentityMismatch) {
+	if _, err := storage.ActivateAgent(t.Context(), newID(t, "agi"), fingerprint, "cluster-test-uid", "v1.36.3", []string{"runtime.v1alpha1"}, now, audit.Event{}); !errors.Is(err, ErrAgentIdentityMismatch) {
 		t.Fatalf("unknown installation error=%v", err)
 	}
 
@@ -151,7 +151,7 @@ func TestAgentActivationRejectsUnknownRevokedAndExpiredIdentities(t *testing.T) 
 	if _, err := storage.Pool.Exec(t.Context(), `UPDATE agent_installations SET status='Revoked' WHERE public_id=$1`, revokedID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := storage.ActivateAgent(t.Context(), revokedID, fingerprint, now, audit.Event{}); !errors.Is(err, ErrAgentIdentityMismatch) {
+	if _, err := storage.ActivateAgent(t.Context(), revokedID, fingerprint, "cluster-test-uid", "v1.36.3", []string{"runtime.v1alpha1"}, now, audit.Event{}); !errors.Is(err, ErrAgentIdentityMismatch) {
 		t.Fatalf("revoked installation error=%v", err)
 	}
 
@@ -159,7 +159,7 @@ func TestAgentActivationRejectsUnknownRevokedAndExpiredIdentities(t *testing.T) 
 	if _, err := storage.Pool.Exec(t.Context(), `UPDATE agent_installations SET certificate_not_after=$2 WHERE public_id=$1`, expiredID, now.Add(-time.Second)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := storage.ActivateAgent(t.Context(), expiredID, fingerprint, now, audit.Event{}); !errors.Is(err, ErrAgentIdentityMismatch) {
+	if _, err := storage.ActivateAgent(t.Context(), expiredID, fingerprint, "cluster-test-uid", "v1.36.3", []string{"runtime.v1alpha1"}, now, audit.Event{}); !errors.Is(err, ErrAgentIdentityMismatch) {
 		t.Fatalf("expired certificate error=%v", err)
 	}
 }

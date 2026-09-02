@@ -7,13 +7,12 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 
 	platformv1alpha1 "github.com/molejo-platform/molejo/packages/kubernetes-api/apis/platform/v1alpha1"
-	"github.com/molejo-platform/molejo/services/control-plane-api/internal/domain"
+	"github.com/molejo-platform/molejo/packages/runtimecontract"
 )
 
 func TestEnvtestEnsuresExactWorkspaceAndAppDeploymentIdempotently(t *testing.T) {
@@ -34,9 +33,6 @@ func TestEnvtestEnsuresExactWorkspaceAndAppDeploymentIdempotently(t *testing.T) 
 	if err := corev1.AddToScheme(scheme); err != nil {
 		t.Fatal(err)
 	}
-	if err := rbacv1.AddToScheme(scheme); err != nil {
-		t.Fatal(err)
-	}
 	if err := platformv1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatal(err)
 	}
@@ -47,9 +43,9 @@ func TestEnvtestEnsuresExactWorkspaceAndAppDeploymentIdempotently(t *testing.T) 
 	adapter := &KubernetesClient{client: runtimeClient, fieldManager: "envtest-control-plane", applyTimeout: 5 * time.Second}
 	ctx := context.Background()
 	intent := runtimeTestIntent("envtest")
-	intent.Variables = []domain.Variable{{Name: "APP_MODE", Value: "test"}}
+	intent.Variables = []runtimecontract.Variable{{Name: "APP_MODE", Value: "test"}}
 	intent.ConfigurationVersion = 3
-	intent.SecretVariables = []domain.Variable{{Name: "API_TOKEN", Value: "runtime-only-secret"}}
+	intent.SecretVariables = []runtimecontract.Variable{{Name: "API_TOKEN", Value: "runtime-only-secret"}}
 
 	for range 2 {
 		if err := adapter.EnsureWorkspace(ctx, "molejo-workspaces"); err != nil {

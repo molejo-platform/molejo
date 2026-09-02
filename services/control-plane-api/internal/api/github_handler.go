@@ -284,9 +284,9 @@ func (h *generatedHandler) githubBrowser(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *generatedHandler) setGitHubCookie(w http.ResponseWriter, r *http.Request, value string) {
-	http.SetCookie(w, &http.Cookie{Name: h.server.config.GitHubCookieName, Value: value, Path: "/api/v1/github", HttpOnly: true, Secure: h.server.config.CookieSecure || h.server.isHTTPS(r), SameSite: http.SameSiteLaxMode, MaxAge: int(h.server.config.GitHubStateTTL.Seconds())})
+	http.SetCookie(w, &http.Cookie{Name: h.server.config.GitHubCookieName, Value: value, Path: "/api/v1/github", HttpOnly: true, Secure: h.server.config.CookieSecure, SameSite: http.SameSiteLaxMode, MaxAge: int(h.server.config.GitHubStateTTL.Seconds())})
 }
 
 func (h *generatedHandler) clearGitHubCookie(w http.ResponseWriter, r *http.Request) {
-	http.SetCookie(w, &http.Cookie{Name: h.server.config.GitHubCookieName, Value: "", Path: "/api/v1/github", HttpOnly: true, Secure: h.server.config.CookieSecure || h.server.isHTTPS(r), SameSite: http.SameSiteLaxMode, MaxAge: -1})
+	http.SetCookie(w, &http.Cookie{Name: h.server.config.GitHubCookieName, Value: "", Path: "/api/v1/github", HttpOnly: true, Secure: h.server.config.CookieSecure, SameSite: http.SameSiteLaxMode, MaxAge: -1})
 }

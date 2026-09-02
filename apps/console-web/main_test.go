@@ -9,7 +9,7 @@ import (
 
 func TestMockConsole(t *testing.T) {
 	t.Parallel()
-	handler, err := newHandler()
+	handler, err := newHandler("", nil)
 	if err != nil {
 		t.Fatalf("new handler: %v", err)
 	}

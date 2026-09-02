@@ -3,6 +3,7 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY contracts contracts
+COPY packages packages
 COPY services/cluster-agent services/cluster-agent
 
 ARG TARGETOS=linux

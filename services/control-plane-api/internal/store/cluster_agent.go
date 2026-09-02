@@ -3,6 +3,7 @@ package store
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -94,12 +95,18 @@ func (s *Store) EnsureBootstrapAgentInstallation(ctx context.Context, publicID, 
 		if _, err = tx.Exec(ctx, `INSERT INTO agent_enrollment_tokens(installation_id,token_hash,expires_at) VALUES($1,$2,$3)`, installationID, tokenHash, expiresAt); err != nil {
 			return err
 		}
+		if err = assignPendingOperationsToAgent(ctx, tx, installationID); err != nil {
+			return err
+		}
 		return tx.Commit(ctx)
 	}
 	if err != nil {
 		return err
 	}
 	if status == "Active" {
+		if err = assignPendingOperationsToAgent(ctx, tx, installationID); err != nil {
+			return err
+		}
 		return tx.Commit(ctx)
 	}
 	if status != "Pending" {
@@ -110,7 +117,15 @@ func (s *Store) EnsureBootstrapAgentInstallation(ctx context.Context, publicID, 
 	if err != nil {
 		return err
 	}
+	if err = assignPendingOperationsToAgent(ctx, tx, installationID); err != nil {
+		return err
+	}
 	return tx.Commit(ctx)
+}
+
+func assignPendingOperationsToAgent(ctx context.Context, tx pgx.Tx, installationID int64) error {
+	_, err := tx.Exec(ctx, `UPDATE operations SET agent_installation_id=$1,updated_at=now() WHERE agent_installation_id IS NULL AND status='Pending'`, installationID)
+	return err
 }
 
 func (s *Store) EnrollAgent(ctx context.Context, tokenHash []byte, attemptID string, csrFingerprint []byte, now time.Time, issue func(string) (AgentCertificate, error), event audit.Event) (AgentCertificate, error) {
@@ -168,7 +183,14 @@ func (s *Store) EnrollAgent(ctx context.Context, tokenHash []byte, attemptID str
 	return issued, tx.Commit(ctx)
 }
 
-func (s *Store) ActivateAgent(ctx context.Context, publicID string, fingerprint []byte, now time.Time, event audit.Event) (bool, error) {
+func (s *Store) ActivateAgent(ctx context.Context, publicID string, fingerprint []byte, clusterUID, kubernetesVersion string, capabilities []string, now time.Time, event audit.Event) (bool, error) {
+	if strings.TrimSpace(clusterUID) == "" || strings.TrimSpace(kubernetesVersion) == "" || len(capabilities) == 0 {
+		return false, ErrAgentIdentityMismatch
+	}
+	capabilitiesJSON, err := json.Marshal(capabilities)
+	if err != nil {
+		return false, err
+	}
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return false, err
@@ -177,17 +199,18 @@ func (s *Store) ActivateAgent(ctx context.Context, publicID string, fingerprint 
 	var status string
 	var storedFingerprint []byte
 	var notAfter time.Time
-	if err = tx.QueryRow(ctx, `SELECT status,certificate_fingerprint,certificate_not_after FROM agent_installations WHERE public_id=$1 FOR UPDATE`, publicID).Scan(&status, &storedFingerprint, &notAfter); err != nil {
+	var storedClusterUID *string
+	if err = tx.QueryRow(ctx, `SELECT status,certificate_fingerprint,certificate_not_after,cluster_uid FROM agent_installations WHERE public_id=$1 FOR UPDATE`, publicID).Scan(&status, &storedFingerprint, &notAfter, &storedClusterUID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return false, ErrAgentIdentityMismatch
 		}
 		return false, err
 	}
-	if status == "Revoked" || !bytes.Equal(storedFingerprint, fingerprint) || !notAfter.After(now) {
+	if status == "Revoked" || !bytes.Equal(storedFingerprint, fingerprint) || !notAfter.After(now) || (storedClusterUID != nil && *storedClusterUID != clusterUID) {
 		return false, ErrAgentIdentityMismatch
 	}
 	first := status == "Pending"
-	if _, err = tx.Exec(ctx, `UPDATE agent_installations SET status='Active',last_seen_at=$2,updated_at=$2 WHERE public_id=$1`, publicID, now); err != nil {
+	if _, err = tx.Exec(ctx, `UPDATE agent_installations SET status='Active',cluster_uid=$2,kubernetes_version=$3,capabilities_json=$4,last_seen_at=$5,updated_at=$5 WHERE public_id=$1`, publicID, clusterUID, kubernetesVersion, capabilitiesJSON, now); err != nil {
 		return false, err
 	}
 	if first {

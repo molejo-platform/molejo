@@ -3,26 +3,21 @@ package runtime
 import (
 	"context"
 	"errors"
-	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/tools/clientcmd"
-	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	platformv1alpha1 "github.com/molejo-platform/molejo/packages/kubernetes-api/apis/platform/v1alpha1"
-	"github.com/molejo-platform/molejo/services/control-plane-api/internal/domain"
+	"github.com/molejo-platform/molejo/packages/runtimecontract"
 )
 
 func TestObservationDoesNotReportReadyForAnUnobservedVersion(t *testing.T) {
@@ -38,7 +33,7 @@ func TestObservationDoesNotReportReadyForAnUnobservedVersion(t *testing.T) {
 	}
 
 	observation := observation(obj, obj.Status.ObservedRelease)
-	if observation.State == domain.Ready {
+	if observation.State == runtimecontract.StateReady {
 		t.Fatalf("stale observed generation was reported as Ready: %+v", observation)
 	}
 }
@@ -57,7 +52,7 @@ func TestObservationDoesNotReportReadyForAStaleRelease(t *testing.T) {
 		},
 	}
 
-	if got := observation(obj, image); got.State == domain.Ready {
+	if got := observation(obj, image); got.State == runtimecontract.StateReady {
 		t.Fatalf("stale observed release was reported as Ready: %+v", got)
 	}
 }
@@ -90,9 +85,9 @@ func TestApplyDeploymentKeepsTheRuntimeNameStableAcrossIntentUpdates(t *testing.
 	second.Resources.Limits.MemoryMiB = 384
 	second.Probes.Liveness.Path = "/live"
 	second.Probes.Readiness.Path = "/ready"
-	second.Exposure = domain.ExposurePublic
+	second.Exposure = runtimecontract.ExposurePublic
 	second.Slug = "demo-public"
-	second.Variables = []domain.Variable{{Name: "APP_MODE", Value: "production"}}
+	second.Variables = []runtimecontract.Variable{{Name: "APP_MODE", Value: "production"}}
 
 	if err := kubernetesClient.ApplyDeployment(context.Background(), "molejo-workspaces", "ap-deployment-id", first); err != nil {
 		t.Fatal(err)
@@ -141,7 +136,7 @@ func TestApplyVolumeChangesOnlyThePrivateInstallationBinding(t *testing.T) {
 			}
 			kubernetesClient := &KubernetesClient{client: fake.NewClientBuilder().WithScheme(scheme).Build(), fieldManager: "test-control-plane", applyTimeout: time.Second}
 			name := "vol-portability01"
-			intent := VolumeIntent{RuntimeBinding: binding, SizeGiB: 2, RetentionPolicy: domain.VolumeRetentionPreserve, DesiredState: domain.VolumeDesiredReady}
+			intent := VolumeIntent{RuntimeBinding: binding, SizeGiB: 2, RetentionPolicy: "Preserve", DesiredState: runtimecontract.VolumeDesiredReady}
 			if err := kubernetesClient.ApplyVolume(context.Background(), "molejo-workspaces", name, intent); err != nil {
 				t.Fatal(err)
 			}
@@ -266,9 +261,6 @@ func TestEnsureWorkspaceCreatesAndReusesTheManagedNamespace(t *testing.T) {
 	if err := corev1.AddToScheme(scheme); err != nil {
 		t.Fatal(err)
 	}
-	if err := rbacv1.AddToScheme(scheme); err != nil {
-		t.Fatal(err)
-	}
 	kubernetesClient := &KubernetesClient{
 		client:       fake.NewClientBuilder().WithScheme(scheme).Build(),
 		fieldManager: "test-control-plane",
@@ -288,17 +280,6 @@ func TestEnsureWorkspaceCreatesAndReusesTheManagedNamespace(t *testing.T) {
 	if current.Annotations[controlPlaneOwnerAnnotation] != workspaceOwnerValue {
 		t.Fatalf("namespace owner marker = %q", current.Annotations[controlPlaneOwnerAnnotation])
 	}
-	var role rbacv1.Role
-	if err := kubernetesClient.client.Get(context.Background(), client.ObjectKey{Namespace: "molejo-workspaces", Name: workspaceRuntimeAccessName}, &role); err != nil {
-		t.Fatal(err)
-	}
-	var binding rbacv1.RoleBinding
-	if err := kubernetesClient.client.Get(context.Background(), client.ObjectKey{Namespace: "molejo-workspaces", Name: workspaceRuntimeAccessName}, &binding); err != nil {
-		t.Fatal(err)
-	}
-	if len(binding.Subjects) != 1 || binding.Subjects[0].Name != runtimeWorkerServiceAccountName {
-		t.Fatalf("runtime binding subjects = %+v", binding.Subjects)
-	}
 }
 
 func TestEnsureWorkspaceRejectsAnUnmanagedNamespace(t *testing.T) {
@@ -316,95 +297,6 @@ func TestEnsureWorkspaceRejectsAnUnmanagedNamespace(t *testing.T) {
 	err := kubernetesClient.EnsureWorkspace(context.Background(), "molejo-workspaces")
 	if !errors.Is(err, ErrOwnershipConflict) {
 		t.Fatalf("expected ErrOwnershipConflict, got %v", err)
-	}
-}
-
-func TestEnsureWorkspaceRepairsOwnedRuntimeAccessAndRejectsUnownedAccess(t *testing.T) {
-	scheme := runtime.NewScheme()
-	if err := corev1.AddToScheme(scheme); err != nil {
-		t.Fatal(err)
-	}
-	if err := rbacv1.AddToScheme(scheme); err != nil {
-		t.Fatal(err)
-	}
-	namespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "molejo-workspaces", Annotations: map[string]string{controlPlaneOwnerAnnotation: workspaceOwnerValue}}}
-	ownedRole := &rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: workspaceRuntimeAccessName, Namespace: namespace.Name, Annotations: map[string]string{controlPlaneOwnerAnnotation: workspaceOwnerValue}}}
-	kubernetesClient := &KubernetesClient{client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(namespace, ownedRole).Build(), fieldManager: "test-control-plane", applyTimeout: time.Second}
-
-	if err := kubernetesClient.EnsureWorkspace(context.Background(), namespace.Name); err != nil {
-		t.Fatal(err)
-	}
-	var repaired rbacv1.Role
-	if err := kubernetesClient.client.Get(context.Background(), client.ObjectKey{Namespace: namespace.Name, Name: workspaceRuntimeAccessName}, &repaired); err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(repaired.Rules, workspaceRuntimeRules()) {
-		t.Fatalf("runtime role rules = %+v", repaired.Rules)
-	}
-
-	var unownedBinding rbacv1.RoleBinding
-	if err := kubernetesClient.client.Get(context.Background(), client.ObjectKey{Namespace: namespace.Name, Name: workspaceRuntimeAccessName}, &unownedBinding); err != nil {
-		t.Fatal(err)
-	}
-	unownedBinding.Annotations = nil
-	if err := kubernetesClient.client.Update(context.Background(), &unownedBinding); err != nil {
-		t.Fatal(err)
-	}
-	err := kubernetesClient.EnsureWorkspace(context.Background(), namespace.Name)
-	if !errors.Is(err, ErrOwnershipConflict) {
-		t.Fatalf("expected ErrOwnershipConflict, got %v", err)
-	}
-}
-
-func TestPreflightRejectsAnUnexpectedClusterUID(t *testing.T) {
-	scheme := runtime.NewScheme()
-	if err := corev1.AddToScheme(scheme); err != nil {
-		t.Fatal(err)
-	}
-	systemNamespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: metav1.NamespaceSystem, UID: "actual-cluster-uid"}}
-	kubernetesClient := &KubernetesClient{
-		client:             fake.NewClientBuilder().WithScheme(scheme).WithObjects(systemNamespace).Build(),
-		applyTimeout:       time.Second,
-		expectedClusterUID: "different-cluster-uid",
-	}
-
-	if err := kubernetesClient.Preflight(context.Background()); err == nil || !strings.Contains(err.Error(), "does not match") {
-		t.Fatalf("expected cluster identity mismatch, got %v", err)
-	}
-	kubernetesClient.expectedClusterUID = "actual-cluster-uid"
-	if err := kubernetesClient.Preflight(context.Background()); err != nil {
-		t.Fatalf("matching cluster identity was rejected: %v", err)
-	}
-}
-
-func TestExternalClientFailsClosedOnUnexpectedContextOrServer(t *testing.T) {
-	kubeconfig := filepath.Join(t.TempDir(), "kubeconfig")
-	raw := clientcmdapi.Config{
-		CurrentContext: "actual-context",
-		Contexts: map[string]*clientcmdapi.Context{
-			"actual-context": {Cluster: "actual-cluster", AuthInfo: "actor"},
-		},
-		Clusters: map[string]*clientcmdapi.Cluster{
-			"actual-cluster": {Server: "https://127.0.0.1:6443", InsecureSkipTLSVerify: true},
-		},
-		AuthInfos: map[string]*clientcmdapi.AuthInfo{"actor": {Token: "test-only"}},
-	}
-	if err := clientcmd.WriteToFile(raw, kubeconfig); err != nil {
-		t.Fatal(err)
-	}
-
-	base := ExternalConfig{Kubeconfig: kubeconfig, Context: "wrong-context", Server: "https://127.0.0.1:6443", ExpectedClusterUID: "expected-uid"}
-	if _, err := NewKubernetesClient(base, "test", time.Second); err == nil || !strings.Contains(err.Error(), "current context") {
-		t.Fatalf("unexpected context was not rejected: %v", err)
-	}
-	base.Context = "actual-context"
-	base.Server = "https://127.0.0.1:7443"
-	if _, err := NewKubernetesClient(base, "test", time.Second); err == nil || !strings.Contains(err.Error(), "expected server") {
-		t.Fatalf("unexpected server was not rejected: %v", err)
-	}
-	base.Server = "https://127.0.0.1:6443/"
-	if _, err := NewKubernetesClient(base, "test", time.Second); err != nil {
-		t.Fatalf("exact external identity was rejected: %v", err)
 	}
 }
 
@@ -484,19 +376,19 @@ func TestApplyDeploymentRejectsAnObjectCreatedAfterTheOwnershipCheck(t *testing.
 	}
 }
 
-func runtimeTestIntent(name string) domain.Intent {
-	return domain.Intent{
+func runtimeTestIntent(name string) runtimecontract.DeploymentIntent {
+	return runtimecontract.DeploymentIntent{
 		Image:    "ghcr.io/molejo-platform/testkit@sha256:" + strings.Repeat("a", 64),
 		Replicas: 1,
 		Port:     8080,
-		Resources: domain.Resources{
-			Requests: domain.ResourceValues{CPUMillis: 50, MemoryMiB: 64},
-			Limits:   domain.ResourceValues{CPUMillis: 250, MemoryMiB: 128},
+		Resources: runtimecontract.Resources{
+			Requests: runtimecontract.ResourceValues{CPUMillis: 50, MemoryMiB: 64},
+			Limits:   runtimecontract.ResourceValues{CPUMillis: 250, MemoryMiB: 128},
 		},
-		Probes: domain.Probes{
-			Liveness:  domain.Probe{Path: "/healthz"},
-			Readiness: domain.Probe{Path: "/readyz"},
+		Probes: runtimecontract.Probes{
+			Liveness:  runtimecontract.Probe{Path: "/healthz"},
+			Readiness: runtimecontract.Probe{Path: "/readyz"},
 		},
-		Exposure: domain.ExposurePrivate,
+		Exposure: runtimecontract.ExposurePrivate,
 	}
 }

@@ -295,9 +295,17 @@ func observeControlPlane(ctx context.Context, client kubernetes.Interface, relea
 }
 
 func ensureControlPlaneNamespace(ctx context.Context, client kubernetes.Interface) error {
+	desiredLabels := map[string]string{
+		"app.kubernetes.io/part-of":    "molejo-platform",
+		"app.kubernetes.io/managed-by": "Helm",
+	}
+	desiredAnnotations := map[string]string{
+		"meta.helm.sh/release-name":      controlPlaneRelease,
+		"meta.helm.sh/release-namespace": controlPlaneNamespace,
+	}
 	namespace, err := client.CoreV1().Namespaces().Get(ctx, controlPlaneNamespace, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
-		_, err = client.CoreV1().Namespaces().Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: controlPlaneNamespace, Labels: copyLabels(controlPlaneLabels)}}, metav1.CreateOptions{})
+		_, err = client.CoreV1().Namespaces().Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: controlPlaneNamespace, Labels: desiredLabels, Annotations: desiredAnnotations}}, metav1.CreateOptions{})
 		if err != nil {
 			return fmt.Errorf("create control plane namespace: %w", err)
 		}
@@ -309,7 +317,17 @@ func ensureControlPlaneNamespace(ctx context.Context, client kubernetes.Interfac
 	if namespace.Labels["app.kubernetes.io/part-of"] != "molejo-platform" {
 		return fmt.Errorf("namespace %s is not owned by Molejo", controlPlaneNamespace)
 	}
-	return nil
+	for key, value := range desiredLabels {
+		namespace.Labels[key] = value
+	}
+	if namespace.Annotations == nil {
+		namespace.Annotations = map[string]string{}
+	}
+	for key, value := range desiredAnnotations {
+		namespace.Annotations[key] = value
+	}
+	_, err = client.CoreV1().Namespaces().Update(ctx, namespace, metav1.UpdateOptions{})
+	return err
 }
 
 func resolvePostgresStorageClass(ctx context.Context, client kubernetes.Interface, requested string, pvcExists bool) (string, error) {
@@ -578,10 +596,14 @@ func waitForControlPlane(parent context.Context, client *kubernetes.Clientset) (
 		return nil, err
 	}
 	checks = append(checks, Check{Name: "Database bootstrap", Detail: "Complete", Healthy: true})
-	if err := waitForDeployment(ctx, client); err != nil {
+	if err := waitForDeployment(ctx, client, "control-plane-api"); err != nil {
 		return nil, err
 	}
 	checks = append(checks, Check{Name: "Control Plane API", Detail: "1/1 available", Healthy: true})
+	if err := waitForDeployment(ctx, client, "console-web"); err != nil {
+		return nil, err
+	}
+	checks = append(checks, Check{Name: "Console", Detail: "1/1 available", Healthy: true})
 	if err := waitForAgentPaired(ctx, client); err != nil {
 		return nil, err
 	}
@@ -633,9 +655,9 @@ func waitForJob(ctx context.Context, client kubernetes.Interface) error {
 	})
 }
 
-func waitForDeployment(ctx context.Context, client kubernetes.Interface) error {
-	return pollReady(ctx, "control plane API", func(ctx context.Context) (bool, error) {
-		deployment, err := client.AppsV1().Deployments(controlPlaneNamespace).Get(ctx, "control-plane-api", metav1.GetOptions{})
+func waitForDeployment(ctx context.Context, client kubernetes.Interface, name string) error {
+	return pollReady(ctx, name, func(ctx context.Context) (bool, error) {
+		deployment, err := client.AppsV1().Deployments(controlPlaneNamespace).Get(ctx, name, metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
 			return false, nil
 		}

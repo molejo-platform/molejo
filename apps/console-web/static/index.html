@@ -6,16 +6,131 @@
     <meta name="referrer" content="same-origin" />
     <title>Molejo Console</title>
     <style>
-      :root { color-scheme: dark; font-family: system-ui, sans-serif; }
-      body { display: grid; min-height: 100vh; margin: 0; place-items: center; background: #101612; color: #e8f0ea; }
-      main { max-width: 36rem; padding: 2rem; }
-      p { color: #aebbb1; line-height: 1.6; }
+      :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; background: #0b1518; color: #eef8f5; }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-height: 100vh; background: radial-gradient(circle at 80% 0, #123f43 0, transparent 32rem), #0b1518; }
+      main { width: min(68rem, calc(100% - 2rem)); margin: 0 auto; padding: 4rem 0; }
+      .brand { color: #a8c936; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+      h1 { margin: .6rem 0; font-size: clamp(2.2rem, 6vw, 4.5rem); line-height: .95; letter-spacing: -.055em; }
+      h2 { margin-top: 0; }
+      p { color: #a7b9b7; line-height: 1.6; }
+      .card { max-width: 32rem; margin-top: 3rem; padding: 1.5rem; border: 1px solid #244346; border-radius: 1rem; background: rgb(13 30 33 / .88); box-shadow: 0 1.5rem 5rem rgb(0 0 0 / .25); }
+      label { display: grid; gap: .45rem; margin: 1rem 0; color: #c8d6d4; font-size: .9rem; }
+      input { width: 100%; border: 1px solid #35575a; border-radius: .65rem; padding: .8rem .9rem; background: #091315; color: inherit; font: inherit; }
+      input:focus { outline: 2px solid #0e8f82; outline-offset: 2px; }
+      button { border: 0; border-radius: .65rem; padding: .8rem 1rem; background: #a8c936; color: #102025; font: inherit; font-weight: 800; cursor: pointer; }
+      button:disabled { cursor: progress; opacity: .6; }
+      .topbar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+      .quiet { background: transparent; color: #c8d6d4; border: 1px solid #35575a; }
+      .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 1rem; margin-top: 2rem; }
+      .workspace { padding: 1.2rem; border: 1px solid #244346; border-radius: .8rem; background: #0d1e21; }
+      .workspace strong { display: block; font-size: 1.1rem; }
+      .state { display: inline-block; margin-top: .8rem; color: #a8c936; font-size: .8rem; text-transform: uppercase; letter-spacing: .08em; }
+      .error { min-height: 1.4rem; color: #ff9b8f; }
+      [hidden] { display: none !important; }
     </style>
   </head>
   <body>
     <main>
-      <h1>Molejo Console</h1>
-      <p>Interface provisória da release alpha. O control plane ainda está em desenvolvimento.</p>
+      <section id="login" hidden>
+        <div class="brand">Molejo Console</div>
+        <h1>Seu produto,<br />em movimento.</h1>
+        <p>Entre no control plane desta instalação para acompanhar seus workspaces.</p>
+        <form class="card" id="login-form">
+          <h2>Entrar</h2>
+          <label>Usuário <input name="username" autocomplete="username" required minlength="3" /></label>
+          <label>Senha <input name="password" type="password" autocomplete="current-password" required /></label>
+          <p class="error" id="login-error" role="alert"></p>
+          <button type="submit">Acessar o console</button>
+        </form>
+      </section>
+
+      <section id="console" hidden>
+        <div class="topbar">
+          <div><div class="brand">Molejo Console</div><p id="identity"></p></div>
+          <button class="quiet" id="logout" type="button">Sair</button>
+        </div>
+        <h1>Workspaces</h1>
+        <p>Esta é a primeira superfície conectada ao control plane.</p>
+        <p class="error" id="console-error" role="alert"></p>
+        <div class="grid" id="workspaces"></div>
+      </section>
     </main>
+
+    <script>
+      let csrfToken = "";
+      const login = document.querySelector("#login");
+      const consoleView = document.querySelector("#console");
+      const loginForm = document.querySelector("#login-form");
+      const loginError = document.querySelector("#login-error");
+      const consoleError = document.querySelector("#console-error");
+
+      async function request(path, options = {}) {
+        const headers = { Accept: "application/json", ...(options.headers || {}) };
+        if (options.body) headers["Content-Type"] = "application/json";
+        if (csrfToken && options.method && options.method !== "GET") headers["X-CSRF-Token"] = csrfToken;
+        return fetch(path, { credentials: "same-origin", ...options, headers });
+      }
+
+      async function showConsole(session) {
+        csrfToken = session.csrfToken || "";
+        document.querySelector("#identity").textContent = `${session.user.displayName} · ${session.user.username}`;
+        login.hidden = true;
+        consoleView.hidden = false;
+        const response = await request("/api/v1/workspaces?limit=50");
+        if (!response.ok) throw new Error("Não foi possível carregar os workspaces.");
+        const data = await response.json();
+        const list = document.querySelector("#workspaces");
+        list.replaceChildren(...data.items.map((workspace) => {
+          const item = document.createElement("article");
+          item.className = "workspace";
+          const name = document.createElement("strong");
+          name.textContent = workspace.name;
+          const id = document.createElement("p");
+          id.textContent = workspace.id;
+          const state = document.createElement("span");
+          state.className = "state";
+          state.textContent = workspace.state;
+          item.append(name, id, state);
+          return item;
+        }));
+      }
+
+      loginForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        loginError.textContent = "";
+        const button = loginForm.querySelector("button");
+        button.disabled = true;
+        const values = new FormData(loginForm);
+        try {
+          const response = await request("/api/v1/session", { method: "POST", body: JSON.stringify({ username: values.get("username"), password: values.get("password") }) });
+          if (!response.ok) throw new Error("Usuário ou senha inválidos.");
+          await showConsole(await response.json());
+        } catch (error) {
+          loginError.textContent = error.message;
+        } finally {
+          button.disabled = false;
+        }
+      });
+
+      document.querySelector("#logout").addEventListener("click", async () => {
+        await request("/api/v1/session", { method: "DELETE" });
+        csrfToken = "";
+        consoleView.hidden = true;
+        login.hidden = false;
+        loginForm.reset();
+      });
+
+      (async () => {
+        try {
+          const response = await request("/api/v1/session");
+          if (response.ok) await showConsole(await response.json());
+          else login.hidden = false;
+        } catch (error) {
+          login.hidden = false;
+          consoleError.textContent = error.message;
+        }
+      })();
+    </script>
   </body>
 </html>

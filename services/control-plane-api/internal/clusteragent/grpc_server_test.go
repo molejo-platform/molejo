@@ -31,7 +31,7 @@ type recordingAgentRegistry struct {
 	activateErr error
 }
 
-func (r *recordingAgentRegistry) ActivateAgent(_ context.Context, publicID string, fingerprint []byte, _ time.Time, _ audit.Event) (bool, error) {
+func (r *recordingAgentRegistry) ActivateAgent(_ context.Context, publicID string, fingerprint []byte, _, _ string, _ []string, _ time.Time, _ audit.Event) (bool, error) {
 	r.activatedID, r.fingerprint = publicID, append([]byte(nil), fingerprint...)
 	return true, r.activateErr
 }
@@ -50,7 +50,7 @@ func TestGRPCServiceRejectsMismatchedOrInactiveInstallation(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			registry := &recordingAgentRegistry{activateErr: test.activationErr}
 			stream := authenticatedTestStream(t, registry, "agi-abcdefghijklmnopqrst")
-			if err := stream.Send(&clusteragentv1alpha1.ConnectRequest{Payload: &clusteragentv1alpha1.ConnectRequest_Hello{Hello: &clusteragentv1alpha1.AgentHello{InstallationId: test.helloID, AgentVersion: "test"}}}); err != nil {
+			if err := stream.Send(&clusteragentv1alpha1.ConnectRequest{Payload: &clusteragentv1alpha1.ConnectRequest_Hello{Hello: testAgentHello(test.helloID)}}); err != nil {
 				t.Fatal(err)
 			}
 			if _, err := stream.Recv(); status.Code(err) != codes.PermissionDenied {
@@ -81,7 +81,7 @@ func authenticatedTestStream(t *testing.T, registry AgentRegistry, installationI
 	roots.AppendCertsFromPEM(caCertificate)
 	listener := bufconn.Listen(1 << 20)
 	grpcServer := grpc.NewServer(grpc.Creds(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS13, Certificates: []tls.Certificate{serverCertificate}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: roots})))
-	clusteragentv1alpha1.RegisterClusterAgentServiceServer(grpcServer, NewGRPCService(registry, 30*time.Second))
+	clusteragentv1alpha1.RegisterClusterAgentServiceServer(grpcServer, NewGRPCService(registry, nil, 30*time.Second))
 	go func() { _ = grpcServer.Serve(listener) }()
 	t.Cleanup(grpcServer.Stop)
 	connection, err := grpc.NewClient("passthrough:///control-plane.test", grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) { return listener.Dial() }), grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS13, ServerName: "control-plane.test", RootCAs: roots, Certificates: []tls.Certificate{clientCertificate}})))
@@ -126,7 +126,7 @@ func TestGRPCServiceAuthenticatesHelloAndAcknowledgesHeartbeat(t *testing.T) {
 	registry := &recordingAgentRegistry{}
 	listener := bufconn.Listen(1 << 20)
 	grpcServer := grpc.NewServer(grpc.Creds(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS13, Certificates: []tls.Certificate{serverCertificate}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: roots})))
-	clusteragentv1alpha1.RegisterClusterAgentServiceServer(grpcServer, NewGRPCService(registry, 30*time.Second))
+	clusteragentv1alpha1.RegisterClusterAgentServiceServer(grpcServer, NewGRPCService(registry, nil, 30*time.Second))
 	go func() { _ = grpcServer.Serve(listener) }()
 	t.Cleanup(grpcServer.Stop)
 
@@ -139,7 +139,7 @@ func TestGRPCServiceAuthenticatesHelloAndAcknowledgesHeartbeat(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = stream.Send(&clusteragentv1alpha1.ConnectRequest{Payload: &clusteragentv1alpha1.ConnectRequest_Hello{Hello: &clusteragentv1alpha1.AgentHello{InstallationId: installationID, AgentVersion: "test"}}}); err != nil {
+	if err = stream.Send(&clusteragentv1alpha1.ConnectRequest{Payload: &clusteragentv1alpha1.ConnectRequest_Hello{Hello: testAgentHello(installationID)}}); err != nil {
 		t.Fatal(err)
 	}
 	hello, err := stream.Recv()
@@ -152,6 +152,16 @@ func TestGRPCServiceAuthenticatesHelloAndAcknowledgesHeartbeat(t *testing.T) {
 	ack, err := stream.Recv()
 	if err != nil || ack.GetHeartbeatAck().GetSequence() != 7 || registry.activatedID != installationID || registry.touchedID != installationID {
 		t.Fatalf("ack=%+v activated=%q touched=%q err=%v", ack, registry.activatedID, registry.touchedID, err)
+	}
+}
+
+func testAgentHello(installationID string) *clusteragentv1alpha1.AgentHello {
+	return &clusteragentv1alpha1.AgentHello{
+		InstallationId:    installationID,
+		AgentVersion:      "test",
+		ClusterUid:        "cluster-test-uid",
+		KubernetesVersion: "v1.36.3",
+		Capabilities:      []string{"runtime.v1alpha1"},
 	}
 }
 

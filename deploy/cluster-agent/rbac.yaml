@@ -22,3 +22,31 @@ subjects:
   - kind: ServiceAccount
     name: cluster-agent
     namespace: molejo-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: molejo-cluster-agent-runtime
+rules:
+  - apiGroups: [""]
+    resources: [namespaces]
+    verbs: [get, list, create]
+  - apiGroups: [""]
+    resources: [configmaps, secrets]
+    verbs: [get, list, create, delete]
+  - apiGroups: [platform.molejo.dev]
+    resources: [appdeployments, appvolumes]
+    verbs: [get, list, watch, create, update, patch, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: molejo-cluster-agent-runtime
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: molejo-cluster-agent-runtime
+subjects:
+  - kind: ServiceAccount
+    name: cluster-agent
+    namespace: molejo-system

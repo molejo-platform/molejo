@@ -4,35 +4,27 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/url"
 	"reflect"
 	"strconv"
-	"strings"
 	"time"
 
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	platformv1alpha1 "github.com/molejo-platform/molejo/packages/kubernetes-api/apis/platform/v1alpha1"
-	"github.com/molejo-platform/molejo/services/control-plane-api/internal/domain"
+	"github.com/molejo-platform/molejo/packages/runtimecontract"
 )
 
 const (
-	controlPlaneOwnerAnnotation     = "platform.molejo.dev/control-plane-owner"
-	workspaceOwnerValue             = "molejo-control-plane"
-	managedByLabel                  = "app.kubernetes.io/managed-by"
-	configurationVersionLabel       = "platform.molejo.dev/configuration-version"
-	workspaceRuntimeAccessName      = "control-plane-runtime"
-	runtimeWorkerServiceAccountName = "control-plane-runtime-worker"
-	controlPlaneNamespace           = "molejo-control-plane"
+	controlPlaneOwnerAnnotation = "platform.molejo.dev/control-plane-owner"
+	workspaceOwnerValue         = "molejo-control-plane"
+	managedByLabel              = "app.kubernetes.io/managed-by"
+	configurationVersionLabel   = "platform.molejo.dev/configuration-version"
 )
 
 var ErrOwnershipConflict = errors.New("runtime object is not owned by the control plane")
@@ -46,12 +38,7 @@ type Observation struct {
 	ObservedRelease    string
 }
 
-type VolumeIntent struct {
-	RuntimeBinding  string
-	SizeGiB         int64
-	RetentionPolicy string
-	DesiredState    string
-}
+type VolumeIntent = runtimecontract.VolumeIntent
 
 type VolumeObservation struct {
 	Exists          bool
@@ -64,75 +51,21 @@ type Client interface {
 	EnsureWorkspace(context.Context, string) error
 	ApplyVolume(context.Context, string, string, VolumeIntent) error
 	ObserveVolume(context.Context, string, string) (VolumeObservation, error)
-	ApplyDeployment(context.Context, string, string, domain.Intent) error
+	ApplyDeployment(context.Context, string, string, runtimecontract.DeploymentIntent) error
 	ObserveDeployment(context.Context, string, string) (Observation, error)
 	DeleteDeployment(context.Context, string, string) error
 	GarbageCollectConfiguration(context.Context, string, string) error
 }
 
 type KubernetesClient struct {
-	client             client.Client
-	fieldManager       string
-	applyTimeout       time.Duration
-	expectedClusterUID types.UID
+	client       client.Client
+	fieldManager string
+	applyTimeout time.Duration
 }
 
-type ExternalConfig struct {
-	Kubeconfig         string
-	Context            string
-	Server             string
-	ExpectedClusterUID string
-}
-
-func NewKubernetesClient(external ExternalConfig, fieldManager string, timeout time.Duration) (*KubernetesClient, error) {
-	if strings.TrimSpace(external.Kubeconfig) == "" || strings.TrimSpace(external.Context) == "" || strings.TrimSpace(external.Server) == "" || strings.TrimSpace(external.ExpectedClusterUID) == "" {
-		return nil, fmt.Errorf("kubeconfig, context, server, and expected cluster UID are required")
-	}
-	raw, err := clientcmd.LoadFromFile(external.Kubeconfig)
-	if err != nil {
-		return nil, err
-	}
-	if raw.CurrentContext != external.Context {
-		return nil, fmt.Errorf("kubeconfig current context %q does not match expected context %q", raw.CurrentContext, external.Context)
-	}
-	contextConfig, ok := raw.Contexts[external.Context]
-	if !ok || contextConfig == nil {
-		return nil, fmt.Errorf("expected kubeconfig context %q is missing", external.Context)
-	}
-	clusterConfig, ok := raw.Clusters[contextConfig.Cluster]
-	if !ok || clusterConfig == nil {
-		return nil, fmt.Errorf("cluster for kubeconfig context %q is missing", external.Context)
-	}
-	if normalizedServer(clusterConfig.Server) != normalizedServer(external.Server) {
-		return nil, fmt.Errorf("kubeconfig server %q does not match expected server %q", clusterConfig.Server, external.Server)
-	}
-	config, err := clientcmd.NewNonInteractiveClientConfig(*raw, external.Context, &clientcmd.ConfigOverrides{CurrentContext: external.Context}, nil).ClientConfig()
-	if err != nil {
-		return nil, err
-	}
-	return newKubernetesClient(config, fieldManager, timeout, external.ExpectedClusterUID)
-}
-
-func NewInClusterClient(fieldManager string, timeout time.Duration, expectedClusterUID string) (*KubernetesClient, error) {
-	if strings.TrimSpace(expectedClusterUID) == "" {
-		return nil, fmt.Errorf("expected cluster UID is required")
-	}
-	config, err := rest.InClusterConfig()
-	if err != nil {
-		return nil, err
-	}
-	return newKubernetesClient(config, fieldManager, timeout, expectedClusterUID)
-}
-
-func newKubernetesClient(config *rest.Config, fieldManager string, timeout time.Duration, expectedClusterUID string) (*KubernetesClient, error) {
+func NewKubernetesClient(config *rest.Config, fieldManager string, timeout time.Duration) (*KubernetesClient, error) {
 	scheme := runtime.NewScheme()
 	if err := corev1.AddToScheme(scheme); err != nil {
-		return nil, err
-	}
-	if err := appsv1.AddToScheme(scheme); err != nil {
-		return nil, err
-	}
-	if err := rbacv1.AddToScheme(scheme); err != nil {
 		return nil, err
 	}
 	if err := platformv1alpha1.AddToScheme(scheme); err != nil {
@@ -142,7 +75,7 @@ func newKubernetesClient(config *rest.Config, fieldManager string, timeout time.
 	if err != nil {
 		return nil, err
 	}
-	return &KubernetesClient{client: c, fieldManager: fieldManager, applyTimeout: timeout, expectedClusterUID: types.UID(expectedClusterUID)}, nil
+	return &KubernetesClient{client: c, fieldManager: fieldManager, applyTimeout: timeout}, nil
 }
 
 func (k *KubernetesClient) EnsureWorkspace(ctx context.Context, namespace string) error {
@@ -169,104 +102,11 @@ func (k *KubernetesClient) EnsureWorkspace(ctx context.Context, namespace string
 	if ns.Annotations[controlPlaneOwnerAnnotation] != workspaceOwnerValue {
 		return fmt.Errorf("%w: Namespace %s is not managed by the control plane", ErrOwnershipConflict, namespace)
 	}
-	return k.ensureWorkspaceRuntimeAccess(workspaceCtx, namespace)
-}
-
-func workspaceRuntimeRules() []rbacv1.PolicyRule {
-	return []rbacv1.PolicyRule{
-		{APIGroups: []string{"platform.molejo.dev"}, Resources: []string{"appdeployments", "appvolumes"}, Verbs: []string{"get", "list", "watch", "create", "patch", "delete"}},
-		{APIGroups: []string{"platform.molejo.dev"}, Resources: []string{"appdeployments/status", "appvolumes/status"}, Verbs: []string{"get"}},
-		{APIGroups: []string{""}, Resources: []string{"configmaps", "secrets"}, Verbs: []string{"get", "list", "create", "delete"}},
-	}
-}
-
-func (k *KubernetesClient) ensureWorkspaceRuntimeAccess(ctx context.Context, namespace string) error {
-	metadata := metav1.ObjectMeta{
-		Name:        workspaceRuntimeAccessName,
-		Namespace:   namespace,
-		Annotations: map[string]string{controlPlaneOwnerAnnotation: workspaceOwnerValue},
-		Labels:      map[string]string{managedByLabel: workspaceOwnerValue},
-	}
-	desiredRole := &rbacv1.Role{ObjectMeta: metadata, Rules: workspaceRuntimeRules()}
-	var role rbacv1.Role
-	err := k.client.Get(ctx, client.ObjectKeyFromObject(desiredRole), &role)
-	if apierrors.IsNotFound(err) {
-		if err := k.client.Create(ctx, desiredRole); err != nil {
-			return fmt.Errorf("create workspace runtime Role: %w", err)
-		}
-	} else if err != nil {
-		return fmt.Errorf("read workspace runtime Role: %w", err)
-	} else {
-		if role.Annotations[controlPlaneOwnerAnnotation] != workspaceOwnerValue {
-			return fmt.Errorf("%w: Role %s/%s is not managed by the control plane", ErrOwnershipConflict, namespace, workspaceRuntimeAccessName)
-		}
-		if !reflect.DeepEqual(role.Rules, desiredRole.Rules) || !reflect.DeepEqual(role.Labels, desiredRole.Labels) {
-			role.Rules = desiredRole.Rules
-			role.Labels = desiredRole.Labels
-			if err := k.client.Update(ctx, &role); err != nil {
-				return fmt.Errorf("update workspace runtime Role: %w", err)
-			}
-		}
-	}
-
-	desiredBinding := &rbacv1.RoleBinding{
-		ObjectMeta: metadata,
-		Subjects:   []rbacv1.Subject{{Kind: rbacv1.ServiceAccountKind, Name: runtimeWorkerServiceAccountName, Namespace: controlPlaneNamespace}},
-		RoleRef:    rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "Role", Name: workspaceRuntimeAccessName},
-	}
-	var binding rbacv1.RoleBinding
-	err = k.client.Get(ctx, client.ObjectKeyFromObject(desiredBinding), &binding)
-	if apierrors.IsNotFound(err) {
-		if err := k.client.Create(ctx, desiredBinding); err != nil {
-			return fmt.Errorf("create workspace runtime RoleBinding: %w", err)
-		}
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("read workspace runtime RoleBinding: %w", err)
-	}
-	if binding.Annotations[controlPlaneOwnerAnnotation] != workspaceOwnerValue {
-		return fmt.Errorf("%w: RoleBinding %s/%s is not managed by the control plane", ErrOwnershipConflict, namespace, workspaceRuntimeAccessName)
-	}
-	if reflect.DeepEqual(binding.Subjects, desiredBinding.Subjects) && reflect.DeepEqual(binding.RoleRef, desiredBinding.RoleRef) && reflect.DeepEqual(binding.Labels, desiredBinding.Labels) {
-		return nil
-	}
-	binding.Subjects = desiredBinding.Subjects
-	binding.RoleRef = desiredBinding.RoleRef
-	binding.Labels = desiredBinding.Labels
-	if err := k.client.Update(ctx, &binding); err != nil {
-		return fmt.Errorf("update workspace runtime RoleBinding: %w", err)
-	}
 	return nil
 }
 
-func (k *KubernetesClient) Preflight(ctx context.Context) error {
-	if k.expectedClusterUID == "" {
-		return fmt.Errorf("expected cluster UID is required")
-	}
-	preflightCtx, cancel := context.WithTimeout(ctx, k.applyTimeout)
-	defer cancel()
-	var systemNamespace corev1.Namespace
-	if err := k.client.Get(preflightCtx, types.NamespacedName{Name: metav1.NamespaceSystem}, &systemNamespace); err != nil {
-		return fmt.Errorf("read cluster identity: %w", err)
-	}
-	if systemNamespace.UID != k.expectedClusterUID {
-		return fmt.Errorf("cluster UID %q does not match expected UID %q", systemNamespace.UID, k.expectedClusterUID)
-	}
-	return nil
-}
-
-func normalizedServer(value string) string {
-	parsed, err := url.Parse(strings.TrimSpace(value))
-	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
-		return ""
-	}
-	parsed.Path = strings.TrimRight(parsed.Path, "/")
-	return parsed.String()
-}
-
-func (k *KubernetesClient) ApplyDeployment(ctx context.Context, namespace, name string, intent domain.Intent) error {
-	intent = domain.NormalizeIntent(intent)
+func (k *KubernetesClient) ApplyDeployment(ctx context.Context, namespace, name string, intent runtimecontract.DeploymentIntent) error {
+	intent = normalizeIntent(intent)
 	applyCtx, cancel := context.WithTimeout(ctx, k.applyTimeout)
 	defer cancel()
 	exists, err := k.ownedObjectExists(applyCtx, namespace, name)
@@ -294,12 +134,12 @@ func (k *KubernetesClient) ApplyDeployment(ctx context.Context, namespace, name 
 			externalPort = &allocated
 		}
 		publicEndpoints = append(publicEndpoints, platformv1alpha1.AppDeploymentPublicEndpoint{Name: endpoint.Name, Type: platformv1alpha1.AppDeploymentPublicEndpointType(endpoint.Type), PortName: endpoint.PortName, HostnameLabel: endpoint.HostnameLabel, Hostname: endpoint.Hostname, ExternalPort: externalPort})
-		if endpoint.Type == domain.EndpointHTTP {
+		if endpoint.Type == runtimecontract.EndpointHTTP {
 			legacyExposure = platformv1alpha1.ExposurePublic
 			legacySlug = endpoint.HostnameLabel
 		}
 	}
-	configMapRef, secretRef := intent.ConfigMapRef, intent.SecretRef
+	configMapRef, secretRef := "", ""
 	if intent.ConfigurationVersion > 0 {
 		configMapRef, secretRef, err = k.materializeConfiguration(applyCtx, namespace, name, intent.ConfigurationVersion, intent.Variables, intent.SecretVariables)
 		if err != nil {
@@ -311,13 +151,13 @@ func (k *KubernetesClient) ApplyDeployment(ctx context.Context, namespace, name 
 		}
 	}
 	workload := platformv1alpha1.AppDeploymentWorkload{Kind: platformv1alpha1.WorkloadStateless, Stateless: &platformv1alpha1.StatelessWorkload{}}
-	if intent.WorkloadKind == domain.WorkloadStateful {
+	if intent.WorkloadKind == runtimecontract.WorkloadStateful {
 		if intent.Volume == nil {
 			return errors.New("stateful deployment requires an AppVolume")
 		}
 		workload = platformv1alpha1.AppDeploymentWorkload{Kind: platformv1alpha1.WorkloadStateful, Stateful: &platformv1alpha1.StatefulWorkload{VolumeRef: intent.Volume.PublicID, MountPath: intent.Volume.MountPath}}
 	}
-	probe := func(value domain.Probe) platformv1alpha1.AppDeploymentProbe {
+	probe := func(value runtimecontract.Probe) platformv1alpha1.AppDeploymentProbe {
 		return platformv1alpha1.AppDeploymentProbe{Type: value.Type, PortName: value.PortName, Path: value.Path}
 	}
 	startupProbe := probe(intent.Probes.Startup)
@@ -349,7 +189,7 @@ func (k *KubernetesClient) ApplyVolume(ctx context.Context, namespace, name stri
 		return err
 	}
 	desiredState := platformv1alpha1.VolumeDesiredReady
-	if intent.DesiredState == domain.VolumeDesiredDeleted {
+	if intent.DesiredState == runtimecontract.VolumeDesiredDeleted {
 		desiredState = platformv1alpha1.VolumeDesiredDeleted
 	}
 	obj := &platformv1alpha1.AppVolume{
@@ -372,7 +212,7 @@ func (k *KubernetesClient) ObserveVolume(ctx context.Context, namespace, name st
 	obj := &platformv1alpha1.AppVolume{}
 	if err := k.client.Get(observeCtx, types.NamespacedName{Namespace: namespace, Name: name}, obj); err != nil {
 		if apierrors.IsNotFound(err) {
-			return VolumeObservation{State: domain.VolumeStatePending, Message: "persistent storage intent not found"}, nil
+			return VolumeObservation{State: runtimecontract.VolumeStatePending, Message: "persistent storage intent not found"}, nil
 		}
 		return VolumeObservation{}, err
 	}
@@ -385,7 +225,7 @@ func (k *KubernetesClient) ObserveVolume(ctx context.Context, namespace, name st
 	return VolumeObservation{Exists: true, State: string(obj.Status.State), Message: message, ObservedSizeGiB: obj.Status.ObservedSizeGiB}, nil
 }
 
-func (k *KubernetesClient) materializeConfiguration(ctx context.Context, namespace, owner string, version int64, plain, secret []domain.Variable) (string, string, error) {
+func (k *KubernetesClient) materializeConfiguration(ctx context.Context, namespace, owner string, version int64, plain, secret []runtimecontract.Variable) (string, string, error) {
 	immutable := true
 	labels := map[string]string{managedByLabel: workspaceOwnerValue, configurationVersionLabel: strconv.FormatInt(version, 10)}
 	annotations := map[string]string{controlPlaneOwnerAnnotation: owner}
@@ -529,7 +369,7 @@ func (k *KubernetesClient) ObserveDeployment(ctx context.Context, namespace, nam
 	obj := &platformv1alpha1.AppDeployment{}
 	if err := k.client.Get(obsCtx, types.NamespacedName{Namespace: namespace, Name: name}, obj); err != nil {
 		if apierrors.IsNotFound(err) {
-			return Observation{State: domain.Unknown, Message: "runtime resource not found"}, nil
+			return Observation{State: runtimecontract.StateUnknown, Message: "runtime resource not found"}, nil
 		}
 		return Observation{}, err
 	}
@@ -571,7 +411,7 @@ func (k *KubernetesClient) ownedObjectExists(ctx context.Context, namespace, nam
 }
 
 func observation(obj *platformv1alpha1.AppDeployment, expectedRelease string) Observation {
-	o := Observation{Exists: true, State: domain.Progressing, Message: "reconciliation pending", Generation: obj.Generation, ObservedGeneration: obj.Status.ObservedGeneration, ObservedRelease: obj.Status.ObservedRelease}
+	o := Observation{Exists: true, State: runtimecontract.StateProgressing, Message: "reconciliation pending", Generation: obj.Generation, ObservedGeneration: obj.Status.ObservedGeneration, ObservedRelease: obj.Status.ObservedRelease}
 	ready := false
 	degraded := false
 	for _, condition := range obj.Status.Conditions {
@@ -588,9 +428,20 @@ func observation(obj *platformv1alpha1.AppDeployment, expectedRelease string) Ob
 		}
 	}
 	if degraded {
-		o.State = domain.Degraded
+		o.State = runtimecontract.StateDegraded
 	} else if ready && obj.Generation > 0 && obj.Status.ObservedGeneration == obj.Generation && (expectedRelease == "" || obj.Status.ObservedRelease == expectedRelease) {
-		o.State = domain.Ready
+		o.State = runtimecontract.StateReady
 	}
 	return o
+}
+
+func normalizeIntent(intent runtimecontract.DeploymentIntent) runtimecontract.DeploymentIntent {
+	if len(intent.Ports) == 0 && intent.Port != 0 {
+		intent.Ports = []runtimecontract.RuntimePort{{Name: "http", ContainerPort: intent.Port, Protocol: "TCP"}}
+	}
+	if len(intent.PublicEndpoints) == 0 && intent.Exposure == runtimecontract.ExposurePublic && intent.Slug != "" {
+		intent.PublicEndpoints = []runtimecontract.PublicEndpoint{{Name: "web", Type: runtimecontract.EndpointHTTP, PortName: "http", HostnameLabel: intent.Slug}}
+	}
+	intent.Port, intent.Exposure, intent.Slug = 0, "", ""
+	return intent
 }

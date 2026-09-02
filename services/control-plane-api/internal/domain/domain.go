@@ -376,6 +376,7 @@ type Deployment struct {
 
 type Operation struct {
 	ID                     int64      `json:"-"`
+	AgentInstallationID    int64      `json:"-"`
 	PublicID               string     `json:"id"`
 	AppEnvironmentID       int64      `json:"-"`
 	AppEnvironmentPublicID string     `json:"appEnvironmentId,omitempty"`

@@ -56,10 +56,10 @@ WHERE o.requested_by_user_id = $1
 
 -- name: InsertWorkspaceOperation :one
 INSERT INTO operations(
-    public_id, workspace_id, app_environment_id, deployment_id, requested_by_user_id, kind, status,
+    public_id, workspace_id, app_environment_id, deployment_id, requested_by_user_id, kind, status, agent_installation_id,
     idempotency_hash, payload_hash, desired_version
 )
-VALUES ($1, $2, NULL, NULL, $3, 'EnsureWorkspace', 'Pending', $4, $5, 1)
+VALUES ($1, $2, NULL, NULL, $3, 'EnsureWorkspace', 'Pending', $4, $5, $6, 1)
 RETURNING id, public_id, workspace_id, requested_by_user_id AS actor_id, kind, status,
           desired_version, attempts, created_at, updated_at, error_code, error_message;
 

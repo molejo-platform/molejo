@@ -642,6 +642,17 @@ func (s *Store) ListAppEnvironmentOperations(ctx context.Context, workspaceID, a
 }
 
 func (s *Store) ClaimNext(ctx context.Context, worker string, lease time.Duration) (domain.Operation, domain.AppEnvironment, domain.Deployment, bool, error) {
+	return s.claimNext(ctx, worker, "", lease)
+}
+
+func (s *Store) ClaimNextForAgent(ctx context.Context, worker, installationID string, lease time.Duration) (domain.Operation, domain.AppEnvironment, domain.Deployment, bool, error) {
+	if installationID == "" {
+		return domain.Operation{}, domain.AppEnvironment{}, domain.Deployment{}, false, ErrAgentUnavailable
+	}
+	return s.claimNext(ctx, worker, installationID, lease)
+}
+
+func (s *Store) claimNext(ctx context.Context, worker, installationID string, lease time.Duration) (domain.Operation, domain.AppEnvironment, domain.Deployment, bool, error) {
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return domain.Operation{}, domain.AppEnvironment{}, domain.Deployment{}, false, err
@@ -649,13 +660,15 @@ func (s *Store) ClaimNext(ctx context.Context, worker string, lease time.Duratio
 	defer tx.Rollback(ctx)
 	var operation domain.Operation
 	err = tx.QueryRow(ctx, `WITH candidate AS (
-		SELECT id FROM operations WHERE (status='Pending' OR (status='Running' AND lease_until < now())) AND next_attempt_at <= now()
-		ORDER BY id FOR UPDATE SKIP LOCKED LIMIT 1
+		SELECT o.id FROM operations o LEFT JOIN agent_installations ai ON ai.id=o.agent_installation_id
+		WHERE (o.status='Pending' OR (o.status='Running' AND o.lease_until < now())) AND o.next_attempt_at <= now()
+		AND ($3='' OR ai.public_id=$3)
+		ORDER BY o.id FOR UPDATE OF o SKIP LOCKED LIMIT 1
 	) UPDATE operations o SET status='Running',attempts=attempts+1,started_at=COALESCE(started_at,now()),
 		lease_until=now()+$1::interval,worker_id=$2,fencing_token=fencing_token+1,updated_at=now()
 	FROM candidate c WHERE o.id=c.id
-	RETURNING o.id,o.public_id,o.workspace_id,COALESCE(o.app_environment_id,0),COALESCE(o.deployment_id,0),COALESCE(o.app_volume_id,0),o.requested_by_user_id,o.kind,o.status,o.desired_version,o.attempts,o.worker_id,o.fencing_token,o.lease_until,o.created_at,o.updated_at`, fmt.Sprintf("%f seconds", lease.Seconds()), worker).
-		Scan(&operation.ID, &operation.PublicID, &operation.WorkspaceID, &operation.AppEnvironmentID, &operation.DeploymentID, &operation.AppVolumeID,
+	RETURNING o.id,o.public_id,o.workspace_id,COALESCE(o.agent_installation_id,0),COALESCE(o.app_environment_id,0),COALESCE(o.deployment_id,0),COALESCE(o.app_volume_id,0),o.requested_by_user_id,o.kind,o.status,o.desired_version,o.attempts,o.worker_id,o.fencing_token,o.lease_until,o.created_at,o.updated_at`, fmt.Sprintf("%f seconds", lease.Seconds()), worker, installationID).
+		Scan(&operation.ID, &operation.PublicID, &operation.WorkspaceID, &operation.AgentInstallationID, &operation.AppEnvironmentID, &operation.DeploymentID, &operation.AppVolumeID,
 			&operation.ActorID, &operation.Kind, &operation.Status, &operation.DesiredVersion, &operation.Attempts,
 			&operation.WorkerID, &operation.FencingToken, &operation.LeaseUntil, &operation.CreatedAt, &operation.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -844,6 +857,10 @@ func (s *Store) ReleaseClaims(ctx context.Context, workerID string) error {
 }
 
 func insertOperation(ctx context.Context, tx pgx.Tx, workspaceID, appEnvironmentID, deploymentID, actorID int64, kind string, idempotencyHash, payloadHash []byte, desiredVersion int64) (domain.Operation, error) {
+	agentInstallationID, err := activeAgentInstallationID(ctx, tx)
+	if err != nil {
+		return domain.Operation{}, err
+	}
 	for range 3 {
 		if _, err := tx.Exec(ctx, `SAVEPOINT operation_public_id`); err != nil {
 			return domain.Operation{}, err
@@ -853,10 +870,10 @@ func insertOperation(ctx context.Context, tx pgx.Tx, workspaceID, appEnvironment
 			return domain.Operation{}, err
 		}
 		var item domain.Operation
-		err = tx.QueryRow(ctx, `INSERT INTO operations(public_id,workspace_id,app_environment_id,deployment_id,requested_by_user_id,kind,status,idempotency_hash,payload_hash,desired_version)
-			VALUES($1,$2,NULLIF($3,0),NULLIF($4,0),$5,$6,'Pending',$7,$8,$9)
+		err = tx.QueryRow(ctx, `INSERT INTO operations(public_id,workspace_id,app_environment_id,deployment_id,requested_by_user_id,kind,status,idempotency_hash,payload_hash,desired_version,agent_installation_id)
+			VALUES($1,$2,NULLIF($3,0),NULLIF($4,0),$5,$6,'Pending',$7,$8,$9,$10)
 			RETURNING id,public_id,workspace_id,COALESCE(app_environment_id,0),COALESCE(deployment_id,0),requested_by_user_id,kind,status,desired_version,attempts,created_at,updated_at`,
-			publicID, workspaceID, appEnvironmentID, deploymentID, actorID, kind, idempotencyHash, payloadHash, desiredVersion).
+			publicID, workspaceID, appEnvironmentID, deploymentID, actorID, kind, idempotencyHash, payloadHash, desiredVersion, agentInstallationID).
 			Scan(&item.ID, &item.PublicID, &item.WorkspaceID, &item.AppEnvironmentID, &item.DeploymentID,
 				&item.ActorID, &item.Kind, &item.Status, &item.DesiredVersion, &item.Attempts, &item.CreatedAt, &item.UpdatedAt)
 		if uniqueConstraint(err) == "operations_public_id_key" {

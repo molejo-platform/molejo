@@ -1,20 +1,25 @@
-// Package operationworker converges durable control-plane operations against the runtime.
+// Package operationworker builds durable runtime commands and records results
+// returned by authenticated cluster Agents.
 package operationworker
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"log/slog"
+	"strconv"
+	"sync"
 	"time"
 
+	clusteragentv1alpha1 "github.com/molejo-platform/molejo/contracts/molejo/clusteragent/v1alpha1"
+	"github.com/molejo-platform/molejo/packages/runtimecontract"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/domain"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/parameters"
-	"github.com/molejo-platform/molejo/services/control-plane-api/internal/runtime"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/store"
 )
 
-// Store is the durable operation contract consumed by the worker.
 type Store interface {
-	ClaimNext(context.Context, string, time.Duration) (domain.Operation, domain.AppEnvironment, domain.Deployment, bool, error)
+	ClaimNextForAgent(context.Context, string, string, time.Duration) (domain.Operation, domain.AppEnvironment, domain.Deployment, bool, error)
 	Workspace(context.Context, int64) (domain.Workspace, error)
 	CompleteWorkspace(context.Context, domain.Operation) error
 	VolumeRuntime(context.Context, int64, int64) (store.VolumeRuntime, error)
@@ -25,108 +30,152 @@ type Store interface {
 	CompleteStatefulDeployment(context.Context, domain.Operation, string, string, string, int64) error
 	CompleteDeployment(context.Context, domain.Operation, string, string) error
 	Fail(context.Context, domain.Operation, string, string, bool) error
-	ReleaseClaims(context.Context, string) error
 }
 
-// PublicationResolver resolves a configured public endpoint into its hostname.
 type PublicationResolver interface {
 	Resolve(domain.WorkloadKind, domain.PublicEndpoint) (string, error)
 }
 
-// Worker claims and converges queued runtime operations.
+type activeCommand struct {
+	installationID string
+	operation      domain.Operation
+}
+
 type Worker struct {
 	Store            Store
 	Publication      PublicationResolver
-	Runtime          runtime.Client
 	ParameterSecrets parameters.SecretValueStore
 	OperationLease   time.Duration
+	CommandTimeout   time.Duration
 	Logger           *slog.Logger
+
+	mu     sync.Mutex
+	active map[string]activeCommand
 }
 
-// RunOnce claims and processes at most one operation.
-func (w Worker) RunOnce(ctx context.Context, workerID string) (bool, error) {
-	op, appEnvironment, deployment, ok, err := w.Store.ClaimNext(ctx, workerID, w.OperationLease)
+func (w *Worker) NextCommand(ctx context.Context, installationID string) (*clusteragentv1alpha1.RuntimeCommand, bool, error) {
+	w.ensureState()
+	w.mu.Lock()
+	for _, command := range w.active {
+		if command.installationID == installationID {
+			w.mu.Unlock()
+			return nil, false, nil
+		}
+	}
+	w.mu.Unlock()
+
+	workerID := "agent:" + installationID
+	op, appEnvironment, deployment, ok, err := w.Store.ClaimNextForAgent(ctx, workerID, installationID, w.lease())
 	if err != nil || !ok {
-		return ok, err
+		return nil, ok, err
 	}
-	w.logger().Info("operation claimed", "operation_id", op.PublicID, "app_environment_id", op.AppEnvironmentPublicID, "deployment_id", op.DeploymentPublicID, "operation_kind", op.Kind, "worker_id", workerID, "attempt", op.Attempts)
-	if w.Runtime == nil {
-		return true, w.failOperation(ctx, op, "runtime_unconfigured", "runtime is not configured", false)
+	payload, err := w.commandPayload(ctx, op, appEnvironment, deployment)
+	if err != nil {
+		_ = w.Store.Fail(ctx, op, "command_unavailable", "runtime command could not be prepared", true)
+		return nil, false, err
 	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		_ = w.Store.Fail(ctx, op, "command_invalid", "runtime command could not be encoded", false)
+		return nil, false, err
+	}
+	commandID := op.PublicID + ":" + strconv.FormatInt(op.FencingToken, 10)
+	command := &clusteragentv1alpha1.RuntimeCommand{
+		CommandId: commandID, OperationId: op.PublicID, DesiredVersion: op.DesiredVersion,
+		FencingToken: op.FencingToken, DeadlineUnix: time.Now().Add(w.commandTimeout()).Unix(),
+		Kind: op.Kind, PayloadJson: raw,
+	}
+	w.mu.Lock()
+	w.active[commandID] = activeCommand{installationID: installationID, operation: op}
+	w.mu.Unlock()
+	w.logger().Info("runtime command dispatched", "operation_id", op.PublicID, "command_id", commandID, "installation_id", installationID, "operation_kind", op.Kind)
+	return command, true, nil
+}
+
+func (w *Worker) HandleResult(ctx context.Context, installationID string, result *clusteragentv1alpha1.RuntimeResult) error {
+	command, ok := w.take(result.GetCommandId())
+	if !ok || command.installationID != installationID || command.operation.FencingToken != result.GetFencingToken() {
+		return store.ErrLeaseLost
+	}
+	op := command.operation
+	if result.GetErrorCode() != "" {
+		return w.Store.Fail(ctx, op, result.GetErrorCode(), result.GetMessage(), result.GetRetryable())
+	}
+	if result.GetState() != runtimecontract.StateReady {
+		return w.Store.Fail(ctx, op, "runtime_not_ready", "runtime has not reached the requested state", true)
+	}
+	switch op.Kind {
+	case domain.OperationEnsureWorkspace:
+		return w.Store.CompleteWorkspace(ctx, op)
+	case domain.OperationEnsureVolume, domain.OperationExpandVolume, domain.OperationDeleteVolume:
+		return w.Store.CompleteVolume(ctx, op, result.GetVolumeState(), result.GetVolumeMessage(), result.GetObservedSizeGib())
+	case domain.OperationDeleteAppEnv:
+		return w.Store.CompleteAppEnvironmentDeletion(ctx, op, result.GetMessage())
+	case domain.OperationApplyDeployment:
+		if result.GetObservedRelease() == "" {
+			return w.Store.Fail(ctx, op, "runtime_observation_failed", "runtime release was not observed", true)
+		}
+		if result.GetVolumeState() != "" {
+			return w.Store.CompleteStatefulDeployment(ctx, op, result.GetMessage(), result.GetObservedRelease(), result.GetVolumeMessage(), result.GetObservedSizeGib())
+		}
+		return w.Store.CompleteDeployment(ctx, op, result.GetMessage(), result.GetObservedRelease())
+	default:
+		return w.Store.Fail(ctx, op, "command_invalid", "runtime operation is unsupported", false)
+	}
+}
+
+func (w *Worker) Abandon(ctx context.Context, installationID, commandID string) error {
+	command, ok := w.take(commandID)
+	if !ok || command.installationID != installationID {
+		return nil
+	}
+	return w.Store.Fail(ctx, command.operation, "agent_disconnected", "cluster Agent disconnected during command execution", true)
+}
+
+func (w *Worker) commandPayload(ctx context.Context, op domain.Operation, appEnvironment domain.AppEnvironment, deployment domain.Deployment) (runtimecontract.Payload, error) {
 	workspaceID := appEnvironment.WorkspaceID
 	if op.Kind == domain.OperationEnsureWorkspace {
 		workspaceID = op.WorkspaceID
 	}
 	workspace, err := w.Store.Workspace(ctx, workspaceID)
 	if err != nil {
-		return true, w.failOperation(ctx, op, "workspace_unavailable", "workspace is not available", true)
+		return runtimecontract.Payload{}, err
 	}
-	if err = w.Runtime.EnsureWorkspace(ctx, workspace.Namespace); err != nil {
-		return true, w.failOperation(ctx, op, "workspace_unavailable", "workspace is not available", true)
-	}
-	if op.Kind == domain.OperationEnsureWorkspace {
-		return true, w.Store.CompleteWorkspace(ctx, op)
+	payload := runtimecontract.Payload{Namespace: workspace.Namespace, Name: appEnvironment.RuntimeName}
+	if op.Kind == domain.OperationEnsureWorkspace || op.Kind == domain.OperationDeleteAppEnv {
+		return payload, nil
 	}
 	if op.AppVolumeID != 0 {
 		volumeRuntime, volumeErr := w.Store.VolumeRuntime(ctx, workspaceID, op.AppVolumeID)
 		if volumeErr != nil {
-			return true, w.failOperation(ctx, op, "volume_unavailable", "persistent storage intent is unavailable", true)
+			return runtimecontract.Payload{}, volumeErr
 		}
-		if err = w.Runtime.ApplyVolume(ctx, workspace.Namespace, volumeRuntime.Volume.PublicID, runtime.VolumeIntent{
+		payload.Name = volumeRuntime.Volume.PublicID
+		payload.Volume = &runtimecontract.VolumeIntent{
 			RuntimeBinding: volumeRuntime.RuntimeBinding, SizeGiB: volumeRuntime.Volume.SizeGiB,
 			RetentionPolicy: volumeRuntime.Volume.RetentionPolicy, DesiredState: volumeRuntime.Volume.DesiredState,
-		}); err != nil {
-			return true, w.failOperation(ctx, op, "runtime_error", "persistent storage operation failed", true)
 		}
-		observation, observeErr := w.Runtime.ObserveVolume(ctx, workspace.Namespace, volumeRuntime.Volume.PublicID)
-		if observeErr != nil {
-			return true, w.failOperation(ctx, op, "runtime_observation_failed", "persistent storage observation failed", true)
-		}
-		expectedState := domain.VolumeStateReady
-		if op.Kind == domain.OperationDeleteVolume {
-			expectedState = domain.VolumeStateRetained
-		}
-		waitingForFirstConsumer := op.Kind == domain.OperationEnsureVolume && observation.Exists && observation.State == domain.VolumeStateProvisioning
-		if !waitingForFirstConsumer && (!observation.Exists || observation.State != expectedState || (expectedState == domain.VolumeStateReady && observation.ObservedSizeGiB < volumeRuntime.Volume.SizeGiB)) {
-			return true, w.failOperation(ctx, op, "runtime_not_ready", "persistent storage has not reached the requested state", true)
-		}
-		return true, w.Store.CompleteVolume(ctx, op, observation.State, observation.Message, observation.ObservedSizeGiB)
-	}
-	if op.Kind == domain.OperationDeleteAppEnv {
-		if err = w.Runtime.DeleteDeployment(ctx, workspace.Namespace, appEnvironment.RuntimeName); err != nil {
-			return true, w.failOperation(ctx, op, "runtime_error", "runtime operation failed", true)
-		}
-		observation, observeErr := w.Runtime.ObserveDeployment(ctx, workspace.Namespace, appEnvironment.RuntimeName)
-		if observeErr != nil {
-			return true, w.failOperation(ctx, op, "runtime_observation_failed", "runtime observation failed", true)
-		}
-		if observation.Exists {
-			return true, w.failOperation(ctx, op, "runtime_deletion_pending", "runtime removal is not yet observed", true)
-		}
-		if err = w.Runtime.GarbageCollectConfiguration(ctx, workspace.Namespace, appEnvironment.RuntimeName); err != nil {
-			return true, w.failOperation(ctx, op, "configuration_cleanup_failed", "runtime configuration cleanup failed", true)
-		}
-		return true, w.Store.CompleteAppEnvironmentDeletion(ctx, op, observation.Message)
+		return payload, nil
 	}
 	intent := domain.IntentFromConfiguration(deployment.Image, deployment.Configuration)
 	intent.WorkloadKind = deployment.WorkloadKind
 	for index := range intent.PublicEndpoints {
 		intent.PublicEndpoints[index].Hostname, err = w.Publication.Resolve(deployment.WorkloadKind, intent.PublicEndpoints[index])
 		if err != nil {
-			return true, w.failOperation(ctx, op, "publication_invalid", "public endpoint configuration is unavailable", false)
+			return runtimecontract.Payload{}, err
 		}
 	}
 	if deployment.WorkloadKind == domain.WorkloadStateful {
 		volume, volumeErr := w.Store.FindAppVolume(ctx, deployment.WorkspaceID, appEnvironment.PublicID)
-		if volumeErr != nil || volume.PublicID != deployment.AppVolumePublicID || (volume.State != domain.VolumeStateProvisioning && volume.State != domain.VolumeStateReady) {
-			return true, w.failOperation(ctx, op, "volume_unavailable", "persistent storage is unavailable", true)
+		if volumeErr != nil {
+			return runtimecontract.Payload{}, volumeErr
 		}
 		intent.Volume = &volume
 	}
 	intent.ConfigurationVersion = deployment.ConfigurationVersion
 	resolved, err := w.Store.ResolveParameterBindings(ctx, deployment.WorkspaceID, deployment.Configuration.Parameters)
 	if err != nil {
-		return true, w.failOperation(ctx, op, "configuration_unavailable", "configuration references are unavailable", false)
+		return runtimecontract.Payload{}, err
 	}
 	for _, parameter := range resolved {
 		switch parameter.Kind {
@@ -135,71 +184,84 @@ func (w Worker) RunOnce(ctx context.Context, workerID string) (bool, error) {
 		case domain.ParameterSecret:
 			value, secretErr := w.ParameterSecrets.Get(ctx, parameter.SecretReference, parameter.SecretBackendVersion)
 			if secretErr != nil {
-				return true, w.failOperation(ctx, op, "secret_unavailable", "secret configuration is unavailable", true)
+				return runtimecontract.Payload{}, secretErr
 			}
 			intent.SecretVariables = append(intent.SecretVariables, domain.Variable{Name: parameter.Binding.Name, Value: value})
 		default:
-			return true, w.failOperation(ctx, op, "configuration_invalid", "configuration reference type is invalid", false)
+			return runtimecontract.Payload{}, fmt.Errorf("unsupported parameter kind %q", parameter.Kind)
 		}
 	}
-	if err = w.Runtime.ApplyDeployment(ctx, workspace.Namespace, appEnvironment.RuntimeName, intent); err != nil {
-		return true, w.failOperation(ctx, op, "runtime_error", "runtime operation failed", true)
-	}
-	observation, err := w.Runtime.ObserveDeployment(ctx, workspace.Namespace, appEnvironment.RuntimeName)
-	if err != nil {
-		return true, w.failOperation(ctx, op, "runtime_observation_failed", "runtime observation failed", true)
-	}
-	if observation.State != domain.Ready || !observation.Exists || observation.ObservedRelease != deployment.Image {
-		return true, w.failOperation(ctx, op, "runtime_not_ready", "runtime has not observed the requested release", true)
-	}
-	var volumeObservation runtime.VolumeObservation
-	if deployment.WorkloadKind == domain.WorkloadStateful {
-		volumeObservation, err = w.Runtime.ObserveVolume(ctx, workspace.Namespace, deployment.AppVolumePublicID)
-		if err != nil {
-			return true, w.failOperation(ctx, op, "runtime_observation_failed", "persistent storage observation failed", true)
-		}
-		if !volumeObservation.Exists || volumeObservation.State != domain.VolumeStateReady || volumeObservation.ObservedSizeGiB < intent.Volume.SizeGiB {
-			return true, w.failOperation(ctx, op, "runtime_not_ready", "persistent storage has not reached the requested state", true)
-		}
-	}
-	if err = w.Runtime.GarbageCollectConfiguration(ctx, workspace.Namespace, appEnvironment.RuntimeName); err != nil {
-		return true, w.failOperation(ctx, op, "configuration_cleanup_failed", "runtime configuration cleanup failed", true)
-	}
-	if deployment.WorkloadKind == domain.WorkloadStateful {
-		return true, w.Store.CompleteStatefulDeployment(ctx, op, observation.Message, observation.ObservedRelease, volumeObservation.Message, volumeObservation.ObservedSizeGiB)
-	}
-	return true, w.Store.CompleteDeployment(ctx, op, observation.Message, observation.ObservedRelease)
+	converted := deploymentIntent(intent)
+	payload.Deployment = &converted
+	return payload, nil
 }
 
-func (w Worker) failOperation(ctx context.Context, operation domain.Operation, code, message string, retryable bool) error {
-	w.logger().Warn("operation failed", "operation_id", operation.PublicID, "app_environment_id", operation.AppEnvironmentPublicID, "deployment_id", operation.DeploymentPublicID, "operation_kind", operation.Kind, "worker_id", operation.WorkerID, "error_code", code, "retryable", retryable)
-	return w.Store.Fail(ctx, operation, code, message, retryable)
+func deploymentIntent(intent domain.Intent) runtimecontract.DeploymentIntent {
+	converted := runtimecontract.DeploymentIntent{
+		Image: intent.Image, Replicas: intent.Replicas, ConfigurationVersion: intent.ConfigurationVersion,
+		WorkloadKind: string(intent.WorkloadKind), Port: intent.Port, Exposure: intent.Exposure, Slug: intent.Slug,
+		Resources: runtimecontract.Resources{
+			Requests: runtimecontract.ResourceValues{CPUMillis: intent.Resources.Requests.CPUMillis, MemoryMiB: intent.Resources.Requests.MemoryMiB},
+			Limits:   runtimecontract.ResourceValues{CPUMillis: intent.Resources.Limits.CPUMillis, MemoryMiB: intent.Resources.Limits.MemoryMiB},
+		},
+		Probes: runtimecontract.Probes{
+			Startup:   runtimecontract.Probe{Type: intent.Probes.Startup.Type, PortName: intent.Probes.Startup.PortName, Path: intent.Probes.Startup.Path},
+			Liveness:  runtimecontract.Probe{Type: intent.Probes.Liveness.Type, PortName: intent.Probes.Liveness.PortName, Path: intent.Probes.Liveness.Path},
+			Readiness: runtimecontract.Probe{Type: intent.Probes.Readiness.Type, PortName: intent.Probes.Readiness.PortName, Path: intent.Probes.Readiness.Path},
+		},
+	}
+	for _, port := range intent.Ports {
+		converted.Ports = append(converted.Ports, runtimecontract.RuntimePort{Name: port.Name, ContainerPort: port.ContainerPort, Protocol: port.Protocol})
+	}
+	for _, endpoint := range intent.PublicEndpoints {
+		converted.PublicEndpoints = append(converted.PublicEndpoints, runtimecontract.PublicEndpoint{Name: endpoint.Name, Type: endpoint.Type, PortName: endpoint.PortName, HostnameLabel: endpoint.HostnameLabel, Hostname: endpoint.Hostname, ExternalPort: endpoint.ExternalPort})
+	}
+	for _, variable := range intent.Variables {
+		converted.Variables = append(converted.Variables, runtimecontract.Variable{Name: variable.Name, Value: variable.Value})
+	}
+	for _, variable := range intent.SecretVariables {
+		converted.SecretVariables = append(converted.SecretVariables, runtimecontract.Variable{Name: variable.Name, Value: variable.Value})
+	}
+	if intent.Volume != nil {
+		converted.Volume = &runtimecontract.AppVolume{PublicID: intent.Volume.PublicID, MountPath: intent.Volume.MountPath, SizeGiB: intent.Volume.SizeGiB, RetentionPolicy: intent.Volume.RetentionPolicy}
+	}
+	return converted
 }
 
-// Run processes operations until the context is canceled.
-func (w Worker) Run(ctx context.Context, workerID string) {
-	defer func() {
-		releaseCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := w.Store.ReleaseClaims(releaseCtx, workerID); err != nil {
-			w.logger().Error("release worker claims", "worker_id", workerID, "error", err)
-		}
-	}()
-	ticker := time.NewTicker(500 * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			if _, err := w.RunOnce(ctx, workerID); err != nil {
-				w.logger().Error("run operation", "error", err)
-			}
-		}
+func (w *Worker) ensureState() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.active == nil {
+		w.active = map[string]activeCommand{}
 	}
 }
 
-func (w Worker) logger() *slog.Logger {
+func (w *Worker) take(commandID string) (activeCommand, bool) {
+	w.ensureState()
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	command, ok := w.active[commandID]
+	if ok {
+		delete(w.active, commandID)
+	}
+	return command, ok
+}
+
+func (w *Worker) lease() time.Duration {
+	if w.OperationLease > 0 {
+		return w.OperationLease
+	}
+	return 30 * time.Second
+}
+
+func (w *Worker) commandTimeout() time.Duration {
+	if w.CommandTimeout > 0 {
+		return w.CommandTimeout
+	}
+	return 20 * time.Second
+}
+
+func (w *Worker) logger() *slog.Logger {
 	if w.Logger != nil {
 		return w.Logger
 	}

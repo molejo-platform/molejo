@@ -47,20 +47,31 @@ func TestControlPlanePostgresUsesPortablePersistentStorage(t *testing.T) {
 	}
 }
 
-func TestControlPlaneDeploymentContainsOnlyAPI(t *testing.T) {
+func TestControlPlaneDeploymentsSeparateAPIAndConsole(t *testing.T) {
 	contents, err := os.ReadFile("../../deploy/control-plane/deployments.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
-	var deployment appsv1.Deployment
-	if err = yaml.Unmarshal(contents, &deployment); err != nil {
-		t.Fatal(err)
+	deployments := map[string]appsv1.Deployment{}
+	for _, document := range strings.Split(string(contents), "---") {
+		var deployment appsv1.Deployment
+		if err = yaml.Unmarshal([]byte(document), &deployment); err != nil {
+			t.Fatal(err)
+		}
+		if deployment.Kind == "Deployment" {
+			deployments[deployment.Name] = deployment
+		}
 	}
-	if deployment.Name != "control-plane-api" || len(deployment.Spec.Template.Spec.Containers) != 1 {
-		t.Fatalf("deployment=%+v", deployment.Spec.Template.Spec.Containers)
+	apiDeployment, apiFound := deployments["control-plane-api"]
+	consoleDeployment, consoleFound := deployments["console-web"]
+	if !apiFound || !consoleFound || len(apiDeployment.Spec.Template.Spec.Containers) != 1 || len(consoleDeployment.Spec.Template.Spec.Containers) != 1 {
+		t.Fatalf("deployments=%+v", deployments)
+	}
+	if apiDeployment.Spec.Template.Spec.Containers[0].Name != "api" || consoleDeployment.Spec.Template.Spec.Containers[0].Name != "console" {
+		t.Fatalf("API and console boundaries are not explicit")
 	}
 	text := string(contents)
-	for _, forbidden := range []string{"console-web", "OpenBao", "ClickHouse", "GitHub", "HTTPRoute"} {
+	for _, forbidden := range []string{"OpenBao", "ClickHouse", "GitHub", "HTTPRoute"} {
 		if strings.Contains(text, forbidden) {
 			t.Fatalf("control plane deployment retains %q", forbidden)
 		}

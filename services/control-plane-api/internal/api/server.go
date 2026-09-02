@@ -25,7 +25,6 @@ import (
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/identity"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/observability"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/parameters"
-	"github.com/molejo-platform/molejo/services/control-plane-api/internal/runtime"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/store"
 )
 
@@ -77,7 +76,6 @@ func DefaultConfig() Config {
 
 type Server struct {
 	store                 *store.Store
-	runtime               runtime.Client
 	config                Config
 	log                   *slog.Logger
 	tracer                trace.Tracer
@@ -106,7 +104,6 @@ type AgentCertificateSigner interface {
 // Dependencies declares every external collaborator used by the HTTP API.
 type Dependencies struct {
 	Store                 *store.Store
-	Runtime               runtime.Client
 	Logger                *slog.Logger
 	Tracer                trace.Tracer
 	GitHub                githubapp.Service
@@ -144,7 +141,7 @@ func NewServer(cfg Config, dependencies Dependencies) *Server {
 	if dependencies.Observability == nil {
 		dependencies.Observability = observability.UnavailableReader{}
 	}
-	return &Server{store: dependencies.Store, runtime: dependencies.Runtime, config: cfg, log: logger, tracer: dependencies.Tracer, github: dependencies.GitHub, githubWebhookSecret: dependencies.GitHubWebhookSecret, parameterSecrets: dependencies.ParameterSecrets, secretFingerprintKey: dependencies.SecretFingerprintKey, passwordResetKey: dependencies.PasswordResetKey, authenticationSecrets: dependencies.AuthenticationSecrets, observability: dependencies.Observability, agentSigner: dependencies.AgentSigner, logLiveLimiter: &concurrencyLimiter{active: map[int64]int{}}, metricsLiveLimiter: &concurrencyLimiter{active: map[int64]int{}}, metricSnapshots: newMetricSnapshotCache(cfg.ObservabilityMetricsLivePoll), token: randomToken, deploymentID: func() (string, error) { return domain.NewPublicID("dpl") }, parameterID: func() (string, error) { return domain.NewPublicID("par") }, dummyPasswordHash: dummyHash}
+	return &Server{store: dependencies.Store, config: cfg, log: logger, tracer: dependencies.Tracer, github: dependencies.GitHub, githubWebhookSecret: dependencies.GitHubWebhookSecret, parameterSecrets: dependencies.ParameterSecrets, secretFingerprintKey: dependencies.SecretFingerprintKey, passwordResetKey: dependencies.PasswordResetKey, authenticationSecrets: dependencies.AuthenticationSecrets, observability: dependencies.Observability, agentSigner: dependencies.AgentSigner, logLiveLimiter: &concurrencyLimiter{active: map[int64]int{}}, metricsLiveLimiter: &concurrencyLimiter{active: map[int64]int{}}, metricSnapshots: newMetricSnapshotCache(cfg.ObservabilityMetricsLivePoll), token: randomToken, deploymentID: func() (string, error) { return domain.NewPublicID("dpl") }, parameterID: func() (string, error) { return domain.NewPublicID("par") }, dummyPasswordHash: dummyHash}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -239,7 +236,7 @@ func (s *Server) issueSession(w http.ResponseWriter, r *http.Request, user ident
 		writeError(w, http.StatusInternalServerError, "session_failed", "could not create session", r)
 		return
 	}
-	http.SetCookie(w, &http.Cookie{Name: s.config.CookieName, Value: token, Path: "/", HttpOnly: true, Secure: s.config.CookieSecure || s.isHTTPS(r), SameSite: http.SameSiteStrictMode, MaxAge: int(s.config.SessionTTL.Seconds())})
+	http.SetCookie(w, &http.Cookie{Name: s.config.CookieName, Value: token, Path: "/", HttpOnly: true, Secure: s.config.CookieSecure, SameSite: http.SameSiteStrictMode, MaxAge: int(s.config.SessionTTL.Seconds())})
 	s.setCSRFCookie(w, r, csrf, int(s.config.SessionTTL.Seconds()))
 	w.Header().Set("Cache-Control", "no-store")
 	s.writeSession(w, user, assuranceLevel, csrf, installationAdmin, workspaceRoles)
@@ -321,11 +318,11 @@ func (s *Server) writeSession(w http.ResponseWriter, user identity.User, assuran
 }
 
 func (s *Server) setCSRFCookie(w http.ResponseWriter, r *http.Request, value string, maxAge int) {
-	http.SetCookie(w, &http.Cookie{Name: s.config.CookieName + "_csrf", Value: value, Path: "/", HttpOnly: false, Secure: s.config.CookieSecure || s.isHTTPS(r), SameSite: http.SameSiteStrictMode, MaxAge: maxAge})
+	http.SetCookie(w, &http.Cookie{Name: s.config.CookieName + "_csrf", Value: value, Path: "/", HttpOnly: false, Secure: s.config.CookieSecure, SameSite: http.SameSiteStrictMode, MaxAge: maxAge})
 }
 
 func (s *Server) clearSessionCookies(w http.ResponseWriter, r *http.Request) {
-	http.SetCookie(w, &http.Cookie{Name: s.config.CookieName, Value: "", Path: "/", HttpOnly: true, Secure: s.config.CookieSecure || s.isHTTPS(r), MaxAge: -1, SameSite: http.SameSiteStrictMode})
+	http.SetCookie(w, &http.Cookie{Name: s.config.CookieName, Value: "", Path: "/", HttpOnly: true, Secure: s.config.CookieSecure, MaxAge: -1, SameSite: http.SameSiteStrictMode})
 	s.setCSRFCookie(w, r, "", -1)
 }
 

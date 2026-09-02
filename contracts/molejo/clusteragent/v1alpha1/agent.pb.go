@@ -27,6 +27,7 @@ type ConnectRequest struct {
 	//
 	//	*ConnectRequest_Hello
 	//	*ConnectRequest_Heartbeat
+	//	*ConnectRequest_RuntimeResult
 	Payload       isConnectRequest_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -87,6 +88,15 @@ func (x *ConnectRequest) GetHeartbeat() *Heartbeat {
 	return nil
 }
 
+func (x *ConnectRequest) GetRuntimeResult() *RuntimeResult {
+	if x != nil {
+		if x, ok := x.Payload.(*ConnectRequest_RuntimeResult); ok {
+			return x.RuntimeResult
+		}
+	}
+	return nil
+}
+
 type isConnectRequest_Payload interface {
 	isConnectRequest_Payload()
 }
@@ -99,9 +109,15 @@ type ConnectRequest_Heartbeat struct {
 	Heartbeat *Heartbeat `protobuf:"bytes,2,opt,name=heartbeat,proto3,oneof"`
 }
 
+type ConnectRequest_RuntimeResult struct {
+	RuntimeResult *RuntimeResult `protobuf:"bytes,3,opt,name=runtime_result,json=runtimeResult,proto3,oneof"`
+}
+
 func (*ConnectRequest_Hello) isConnectRequest_Payload() {}
 
 func (*ConnectRequest_Heartbeat) isConnectRequest_Payload() {}
+
+func (*ConnectRequest_RuntimeResult) isConnectRequest_Payload() {}
 
 type ConnectResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -109,6 +125,7 @@ type ConnectResponse struct {
 	//
 	//	*ConnectResponse_Hello
 	//	*ConnectResponse_HeartbeatAck
+	//	*ConnectResponse_RuntimeCommand
 	Payload       isConnectResponse_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -169,6 +186,15 @@ func (x *ConnectResponse) GetHeartbeatAck() *HeartbeatAck {
 	return nil
 }
 
+func (x *ConnectResponse) GetRuntimeCommand() *RuntimeCommand {
+	if x != nil {
+		if x, ok := x.Payload.(*ConnectResponse_RuntimeCommand); ok {
+			return x.RuntimeCommand
+		}
+	}
+	return nil
+}
+
 type isConnectResponse_Payload interface {
 	isConnectResponse_Payload()
 }
@@ -181,16 +207,25 @@ type ConnectResponse_HeartbeatAck struct {
 	HeartbeatAck *HeartbeatAck `protobuf:"bytes,2,opt,name=heartbeat_ack,json=heartbeatAck,proto3,oneof"`
 }
 
+type ConnectResponse_RuntimeCommand struct {
+	RuntimeCommand *RuntimeCommand `protobuf:"bytes,3,opt,name=runtime_command,json=runtimeCommand,proto3,oneof"`
+}
+
 func (*ConnectResponse_Hello) isConnectResponse_Payload() {}
 
 func (*ConnectResponse_HeartbeatAck) isConnectResponse_Payload() {}
 
+func (*ConnectResponse_RuntimeCommand) isConnectResponse_Payload() {}
+
 type AgentHello struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	InstallationId string                 `protobuf:"bytes,1,opt,name=installation_id,json=installationId,proto3" json:"installation_id,omitempty"`
-	AgentVersion   string                 `protobuf:"bytes,2,opt,name=agent_version,json=agentVersion,proto3" json:"agent_version,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	InstallationId    string                 `protobuf:"bytes,1,opt,name=installation_id,json=installationId,proto3" json:"installation_id,omitempty"`
+	AgentVersion      string                 `protobuf:"bytes,2,opt,name=agent_version,json=agentVersion,proto3" json:"agent_version,omitempty"`
+	ClusterUid        string                 `protobuf:"bytes,3,opt,name=cluster_uid,json=clusterUid,proto3" json:"cluster_uid,omitempty"`
+	KubernetesVersion string                 `protobuf:"bytes,4,opt,name=kubernetes_version,json=kubernetesVersion,proto3" json:"kubernetes_version,omitempty"`
+	Capabilities      []string               `protobuf:"bytes,5,rep,name=capabilities,proto3" json:"capabilities,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *AgentHello) Reset() {
@@ -235,6 +270,27 @@ func (x *AgentHello) GetAgentVersion() string {
 		return x.AgentVersion
 	}
 	return ""
+}
+
+func (x *AgentHello) GetClusterUid() string {
+	if x != nil {
+		return x.ClusterUid
+	}
+	return ""
+}
+
+func (x *AgentHello) GetKubernetesVersion() string {
+	if x != nil {
+		return x.KubernetesVersion
+	}
+	return ""
+}
+
+func (x *AgentHello) GetCapabilities() []string {
+	if x != nil {
+		return x.Capabilities
+	}
+	return nil
 }
 
 type ControlPlaneHello struct {
@@ -401,23 +457,237 @@ func (x *HeartbeatAck) GetReceivedAtUnix() int64 {
 	return 0
 }
 
+type RuntimeCommand struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	CommandId      string                 `protobuf:"bytes,1,opt,name=command_id,json=commandId,proto3" json:"command_id,omitempty"`
+	OperationId    string                 `protobuf:"bytes,2,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"`
+	DesiredVersion int64                  `protobuf:"varint,3,opt,name=desired_version,json=desiredVersion,proto3" json:"desired_version,omitempty"`
+	FencingToken   int64                  `protobuf:"varint,4,opt,name=fencing_token,json=fencingToken,proto3" json:"fencing_token,omitempty"`
+	DeadlineUnix   int64                  `protobuf:"varint,5,opt,name=deadline_unix,json=deadlineUnix,proto3" json:"deadline_unix,omitempty"`
+	Kind           string                 `protobuf:"bytes,6,opt,name=kind,proto3" json:"kind,omitempty"`
+	PayloadJson    []byte                 `protobuf:"bytes,7,opt,name=payload_json,json=payloadJson,proto3" json:"payload_json,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *RuntimeCommand) Reset() {
+	*x = RuntimeCommand{}
+	mi := &file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RuntimeCommand) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RuntimeCommand) ProtoMessage() {}
+
+func (x *RuntimeCommand) ProtoReflect() protoreflect.Message {
+	mi := &file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RuntimeCommand.ProtoReflect.Descriptor instead.
+func (*RuntimeCommand) Descriptor() ([]byte, []int) {
+	return file_molejo_clusteragent_v1alpha1_agent_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *RuntimeCommand) GetCommandId() string {
+	if x != nil {
+		return x.CommandId
+	}
+	return ""
+}
+
+func (x *RuntimeCommand) GetOperationId() string {
+	if x != nil {
+		return x.OperationId
+	}
+	return ""
+}
+
+func (x *RuntimeCommand) GetDesiredVersion() int64 {
+	if x != nil {
+		return x.DesiredVersion
+	}
+	return 0
+}
+
+func (x *RuntimeCommand) GetFencingToken() int64 {
+	if x != nil {
+		return x.FencingToken
+	}
+	return 0
+}
+
+func (x *RuntimeCommand) GetDeadlineUnix() int64 {
+	if x != nil {
+		return x.DeadlineUnix
+	}
+	return 0
+}
+
+func (x *RuntimeCommand) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *RuntimeCommand) GetPayloadJson() []byte {
+	if x != nil {
+		return x.PayloadJson
+	}
+	return nil
+}
+
+type RuntimeResult struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	CommandId       string                 `protobuf:"bytes,1,opt,name=command_id,json=commandId,proto3" json:"command_id,omitempty"`
+	FencingToken    int64                  `protobuf:"varint,2,opt,name=fencing_token,json=fencingToken,proto3" json:"fencing_token,omitempty"`
+	State           string                 `protobuf:"bytes,3,opt,name=state,proto3" json:"state,omitempty"`
+	Message         string                 `protobuf:"bytes,4,opt,name=message,proto3" json:"message,omitempty"`
+	ObservedRelease string                 `protobuf:"bytes,5,opt,name=observed_release,json=observedRelease,proto3" json:"observed_release,omitempty"`
+	VolumeState     string                 `protobuf:"bytes,6,opt,name=volume_state,json=volumeState,proto3" json:"volume_state,omitempty"`
+	VolumeMessage   string                 `protobuf:"bytes,7,opt,name=volume_message,json=volumeMessage,proto3" json:"volume_message,omitempty"`
+	ObservedSizeGib int64                  `protobuf:"varint,8,opt,name=observed_size_gib,json=observedSizeGib,proto3" json:"observed_size_gib,omitempty"`
+	ErrorCode       string                 `protobuf:"bytes,9,opt,name=error_code,json=errorCode,proto3" json:"error_code,omitempty"`
+	Retryable       bool                   `protobuf:"varint,10,opt,name=retryable,proto3" json:"retryable,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *RuntimeResult) Reset() {
+	*x = RuntimeResult{}
+	mi := &file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RuntimeResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RuntimeResult) ProtoMessage() {}
+
+func (x *RuntimeResult) ProtoReflect() protoreflect.Message {
+	mi := &file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RuntimeResult.ProtoReflect.Descriptor instead.
+func (*RuntimeResult) Descriptor() ([]byte, []int) {
+	return file_molejo_clusteragent_v1alpha1_agent_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *RuntimeResult) GetCommandId() string {
+	if x != nil {
+		return x.CommandId
+	}
+	return ""
+}
+
+func (x *RuntimeResult) GetFencingToken() int64 {
+	if x != nil {
+		return x.FencingToken
+	}
+	return 0
+}
+
+func (x *RuntimeResult) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+func (x *RuntimeResult) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *RuntimeResult) GetObservedRelease() string {
+	if x != nil {
+		return x.ObservedRelease
+	}
+	return ""
+}
+
+func (x *RuntimeResult) GetVolumeState() string {
+	if x != nil {
+		return x.VolumeState
+	}
+	return ""
+}
+
+func (x *RuntimeResult) GetVolumeMessage() string {
+	if x != nil {
+		return x.VolumeMessage
+	}
+	return ""
+}
+
+func (x *RuntimeResult) GetObservedSizeGib() int64 {
+	if x != nil {
+		return x.ObservedSizeGib
+	}
+	return 0
+}
+
+func (x *RuntimeResult) GetErrorCode() string {
+	if x != nil {
+		return x.ErrorCode
+	}
+	return ""
+}
+
+func (x *RuntimeResult) GetRetryable() bool {
+	if x != nil {
+		return x.Retryable
+	}
+	return false
+}
+
 var File_molejo_clusteragent_v1alpha1_agent_proto protoreflect.FileDescriptor
 
 const file_molejo_clusteragent_v1alpha1_agent_proto_rawDesc = "" +
 	"\n" +
-	"(molejo/clusteragent/v1alpha1/agent.proto\x12\x1cmolejo.clusteragent.v1alpha1\"\xa6\x01\n" +
+	"(molejo/clusteragent/v1alpha1/agent.proto\x12\x1cmolejo.clusteragent.v1alpha1\"\xfc\x01\n" +
 	"\x0eConnectRequest\x12@\n" +
 	"\x05hello\x18\x01 \x01(\v2(.molejo.clusteragent.v1alpha1.AgentHelloH\x00R\x05hello\x12G\n" +
-	"\theartbeat\x18\x02 \x01(\v2'.molejo.clusteragent.v1alpha1.HeartbeatH\x00R\theartbeatB\t\n" +
-	"\apayload\"\xb8\x01\n" +
+	"\theartbeat\x18\x02 \x01(\v2'.molejo.clusteragent.v1alpha1.HeartbeatH\x00R\theartbeat\x12T\n" +
+	"\x0eruntime_result\x18\x03 \x01(\v2+.molejo.clusteragent.v1alpha1.RuntimeResultH\x00R\rruntimeResultB\t\n" +
+	"\apayload\"\x91\x02\n" +
 	"\x0fConnectResponse\x12G\n" +
 	"\x05hello\x18\x01 \x01(\v2/.molejo.clusteragent.v1alpha1.ControlPlaneHelloH\x00R\x05hello\x12Q\n" +
-	"\rheartbeat_ack\x18\x02 \x01(\v2*.molejo.clusteragent.v1alpha1.HeartbeatAckH\x00R\fheartbeatAckB\t\n" +
-	"\apayload\"Z\n" +
+	"\rheartbeat_ack\x18\x02 \x01(\v2*.molejo.clusteragent.v1alpha1.HeartbeatAckH\x00R\fheartbeatAck\x12W\n" +
+	"\x0fruntime_command\x18\x03 \x01(\v2,.molejo.clusteragent.v1alpha1.RuntimeCommandH\x00R\x0eruntimeCommandB\t\n" +
+	"\apayload\"\xce\x01\n" +
 	"\n" +
 	"AgentHello\x12'\n" +
 	"\x0finstallation_id\x18\x01 \x01(\tR\x0einstallationId\x12#\n" +
-	"\ragent_version\x18\x02 \x01(\tR\fagentVersion\"\xa6\x01\n" +
+	"\ragent_version\x18\x02 \x01(\tR\fagentVersion\x12\x1f\n" +
+	"\vcluster_uid\x18\x03 \x01(\tR\n" +
+	"clusterUid\x12-\n" +
+	"\x12kubernetes_version\x18\x04 \x01(\tR\x11kubernetesVersion\x12\"\n" +
+	"\fcapabilities\x18\x05 \x03(\tR\fcapabilities\"\xa6\x01\n" +
 	"\x11ControlPlaneHello\x12)\n" +
 	"\x10protocol_version\x18\x01 \x01(\tR\x0fprotocolVersion\x12<\n" +
 	"\x1aheartbeat_interval_seconds\x18\x02 \x01(\x05R\x18heartbeatIntervalSeconds\x12(\n" +
@@ -428,7 +698,30 @@ const file_molejo_clusteragent_v1alpha1_agent_proto_rawDesc = "" +
 	"sentAtUnix\"T\n" +
 	"\fHeartbeatAck\x12\x1a\n" +
 	"\bsequence\x18\x01 \x01(\x04R\bsequence\x12(\n" +
-	"\x10received_at_unix\x18\x02 \x01(\x03R\x0ereceivedAtUnix2\x81\x01\n" +
+	"\x10received_at_unix\x18\x02 \x01(\x03R\x0ereceivedAtUnix\"\xfc\x01\n" +
+	"\x0eRuntimeCommand\x12\x1d\n" +
+	"\n" +
+	"command_id\x18\x01 \x01(\tR\tcommandId\x12!\n" +
+	"\foperation_id\x18\x02 \x01(\tR\voperationId\x12'\n" +
+	"\x0fdesired_version\x18\x03 \x01(\x03R\x0edesiredVersion\x12#\n" +
+	"\rfencing_token\x18\x04 \x01(\x03R\ffencingToken\x12#\n" +
+	"\rdeadline_unix\x18\x05 \x01(\x03R\fdeadlineUnix\x12\x12\n" +
+	"\x04kind\x18\x06 \x01(\tR\x04kind\x12!\n" +
+	"\fpayload_json\x18\a \x01(\fR\vpayloadJson\"\xe1\x02\n" +
+	"\rRuntimeResult\x12\x1d\n" +
+	"\n" +
+	"command_id\x18\x01 \x01(\tR\tcommandId\x12#\n" +
+	"\rfencing_token\x18\x02 \x01(\x03R\ffencingToken\x12\x14\n" +
+	"\x05state\x18\x03 \x01(\tR\x05state\x12\x18\n" +
+	"\amessage\x18\x04 \x01(\tR\amessage\x12)\n" +
+	"\x10observed_release\x18\x05 \x01(\tR\x0fobservedRelease\x12!\n" +
+	"\fvolume_state\x18\x06 \x01(\tR\vvolumeState\x12%\n" +
+	"\x0evolume_message\x18\a \x01(\tR\rvolumeMessage\x12*\n" +
+	"\x11observed_size_gib\x18\b \x01(\x03R\x0fobservedSizeGib\x12\x1d\n" +
+	"\n" +
+	"error_code\x18\t \x01(\tR\terrorCode\x12\x1c\n" +
+	"\tretryable\x18\n" +
+	" \x01(\bR\tretryable2\x81\x01\n" +
 	"\x13ClusterAgentService\x12j\n" +
 	"\aConnect\x12,.molejo.clusteragent.v1alpha1.ConnectRequest\x1a-.molejo.clusteragent.v1alpha1.ConnectResponse(\x010\x01B_Z]github.com/molejo-platform/molejo/contracts/molejo/clusteragent/v1alpha1;clusteragentv1alpha1b\x06proto3"
 
@@ -444,7 +737,7 @@ func file_molejo_clusteragent_v1alpha1_agent_proto_rawDescGZIP() []byte {
 	return file_molejo_clusteragent_v1alpha1_agent_proto_rawDescData
 }
 
-var file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_molejo_clusteragent_v1alpha1_agent_proto_goTypes = []any{
 	(*ConnectRequest)(nil),    // 0: molejo.clusteragent.v1alpha1.ConnectRequest
 	(*ConnectResponse)(nil),   // 1: molejo.clusteragent.v1alpha1.ConnectResponse
@@ -452,19 +745,23 @@ var file_molejo_clusteragent_v1alpha1_agent_proto_goTypes = []any{
 	(*ControlPlaneHello)(nil), // 3: molejo.clusteragent.v1alpha1.ControlPlaneHello
 	(*Heartbeat)(nil),         // 4: molejo.clusteragent.v1alpha1.Heartbeat
 	(*HeartbeatAck)(nil),      // 5: molejo.clusteragent.v1alpha1.HeartbeatAck
+	(*RuntimeCommand)(nil),    // 6: molejo.clusteragent.v1alpha1.RuntimeCommand
+	(*RuntimeResult)(nil),     // 7: molejo.clusteragent.v1alpha1.RuntimeResult
 }
 var file_molejo_clusteragent_v1alpha1_agent_proto_depIdxs = []int32{
 	2, // 0: molejo.clusteragent.v1alpha1.ConnectRequest.hello:type_name -> molejo.clusteragent.v1alpha1.AgentHello
 	4, // 1: molejo.clusteragent.v1alpha1.ConnectRequest.heartbeat:type_name -> molejo.clusteragent.v1alpha1.Heartbeat
-	3, // 2: molejo.clusteragent.v1alpha1.ConnectResponse.hello:type_name -> molejo.clusteragent.v1alpha1.ControlPlaneHello
-	5, // 3: molejo.clusteragent.v1alpha1.ConnectResponse.heartbeat_ack:type_name -> molejo.clusteragent.v1alpha1.HeartbeatAck
-	0, // 4: molejo.clusteragent.v1alpha1.ClusterAgentService.Connect:input_type -> molejo.clusteragent.v1alpha1.ConnectRequest
-	1, // 5: molejo.clusteragent.v1alpha1.ClusterAgentService.Connect:output_type -> molejo.clusteragent.v1alpha1.ConnectResponse
-	5, // [5:6] is the sub-list for method output_type
-	4, // [4:5] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	7, // 2: molejo.clusteragent.v1alpha1.ConnectRequest.runtime_result:type_name -> molejo.clusteragent.v1alpha1.RuntimeResult
+	3, // 3: molejo.clusteragent.v1alpha1.ConnectResponse.hello:type_name -> molejo.clusteragent.v1alpha1.ControlPlaneHello
+	5, // 4: molejo.clusteragent.v1alpha1.ConnectResponse.heartbeat_ack:type_name -> molejo.clusteragent.v1alpha1.HeartbeatAck
+	6, // 5: molejo.clusteragent.v1alpha1.ConnectResponse.runtime_command:type_name -> molejo.clusteragent.v1alpha1.RuntimeCommand
+	0, // 6: molejo.clusteragent.v1alpha1.ClusterAgentService.Connect:input_type -> molejo.clusteragent.v1alpha1.ConnectRequest
+	1, // 7: molejo.clusteragent.v1alpha1.ClusterAgentService.Connect:output_type -> molejo.clusteragent.v1alpha1.ConnectResponse
+	7, // [7:8] is the sub-list for method output_type
+	6, // [6:7] is the sub-list for method input_type
+	6, // [6:6] is the sub-list for extension type_name
+	6, // [6:6] is the sub-list for extension extendee
+	0, // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_molejo_clusteragent_v1alpha1_agent_proto_init() }
@@ -475,10 +772,12 @@ func file_molejo_clusteragent_v1alpha1_agent_proto_init() {
 	file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[0].OneofWrappers = []any{
 		(*ConnectRequest_Hello)(nil),
 		(*ConnectRequest_Heartbeat)(nil),
+		(*ConnectRequest_RuntimeResult)(nil),
 	}
 	file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[1].OneofWrappers = []any{
 		(*ConnectResponse_Hello)(nil),
 		(*ConnectResponse_HeartbeatAck)(nil),
+		(*ConnectResponse_RuntimeCommand)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -486,7 +785,7 @@ func file_molejo_clusteragent_v1alpha1_agent_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_molejo_clusteragent_v1alpha1_agent_proto_rawDesc), len(file_molejo_clusteragent_v1alpha1_agent_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   6,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

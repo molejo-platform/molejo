@@ -12,6 +12,7 @@ message ConnectRequest {
   oneof payload {
     AgentHello hello = 1;
     Heartbeat heartbeat = 2;
+    RuntimeResult runtime_result = 3;
   }
 }
 
@@ -19,12 +20,16 @@ message ConnectResponse {
   oneof payload {
     ControlPlaneHello hello = 1;
     HeartbeatAck heartbeat_ack = 2;
+    RuntimeCommand runtime_command = 3;
   }
 }
 
 message AgentHello {
   string installation_id = 1;
   string agent_version = 2;
+  string cluster_uid = 3;
+  string kubernetes_version = 4;
+  repeated string capabilities = 5;
 }
 
 message ControlPlaneHello {
@@ -41,4 +46,27 @@ message Heartbeat {
 message HeartbeatAck {
   uint64 sequence = 1;
   int64 received_at_unix = 2;
+}
+
+message RuntimeCommand {
+  string command_id = 1;
+  string operation_id = 2;
+  int64 desired_version = 3;
+  int64 fencing_token = 4;
+  int64 deadline_unix = 5;
+  string kind = 6;
+  bytes payload_json = 7;
+}
+
+message RuntimeResult {
+  string command_id = 1;
+  int64 fencing_token = 2;
+  string state = 3;
+  string message = 4;
+  string observed_release = 5;
+  string volume_state = 6;
+  string volume_message = 7;
+  int64 observed_size_gib = 8;
+  string error_code = 9;
+  bool retryable = 10;
 }

@@ -38,6 +38,20 @@ func TestResolvePostgresStorageClass(t *testing.T) {
 	}
 }
 
+func TestControlPlaneNamespaceCanBeAdoptedByHelm(t *testing.T) {
+	client := fake.NewClientset(&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: controlPlaneNamespace, Labels: map[string]string{"app.kubernetes.io/part-of": "molejo-platform", "app.kubernetes.io/managed-by": "molejoctl"}}})
+	if err := ensureControlPlaneNamespace(t.Context(), client); err != nil {
+		t.Fatal(err)
+	}
+	namespace, err := client.CoreV1().Namespaces().Get(t.Context(), controlPlaneNamespace, metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if namespace.Labels["app.kubernetes.io/managed-by"] != "Helm" || namespace.Annotations["meta.helm.sh/release-name"] != controlPlaneRelease {
+		t.Fatalf("namespace metadata=%+v %+v", namespace.Labels, namespace.Annotations)
+	}
+}
+
 func TestDatabaseCredentialIsGeneratedOnce(t *testing.T) {
 	client := fake.NewClientset()
 	first, err := ensureDatabaseSecret(t.Context(), client, true)

@@ -728,20 +728,21 @@ func (q *Queries) InsertWorkspace(ctx context.Context, arg InsertWorkspaceParams
 
 const insertWorkspaceOperation = `-- name: InsertWorkspaceOperation :one
 INSERT INTO operations(
-    public_id, workspace_id, app_environment_id, deployment_id, requested_by_user_id, kind, status,
+    public_id, workspace_id, app_environment_id, deployment_id, requested_by_user_id, kind, status, agent_installation_id,
     idempotency_hash, payload_hash, desired_version
 )
-VALUES ($1, $2, NULL, NULL, $3, 'EnsureWorkspace', 'Pending', $4, $5, 1)
+VALUES ($1, $2, NULL, NULL, $3, 'EnsureWorkspace', 'Pending', $4, $5, $6, 1)
 RETURNING id, public_id, workspace_id, requested_by_user_id AS actor_id, kind, status,
           desired_version, attempts, created_at, updated_at, error_code, error_message
 `
 
 type InsertWorkspaceOperationParams struct {
-	PublicID          string `json:"public_id"`
-	WorkspaceID       int64  `json:"workspace_id"`
-	RequestedByUserID int64  `json:"requested_by_user_id"`
-	IdempotencyHash   []byte `json:"idempotency_hash"`
-	PayloadHash       []byte `json:"payload_hash"`
+	PublicID            string      `json:"public_id"`
+	WorkspaceID         int64       `json:"workspace_id"`
+	RequestedByUserID   int64       `json:"requested_by_user_id"`
+	AgentInstallationID pgtype.Int8 `json:"agent_installation_id"`
+	IdempotencyHash     []byte      `json:"idempotency_hash"`
+	PayloadHash         []byte      `json:"payload_hash"`
 }
 
 type InsertWorkspaceOperationRow struct {
@@ -764,6 +765,7 @@ func (q *Queries) InsertWorkspaceOperation(ctx context.Context, arg InsertWorksp
 		arg.PublicID,
 		arg.WorkspaceID,
 		arg.RequestedByUserID,
+		arg.AgentInstallationID,
 		arg.IdempotencyHash,
 		arg.PayloadHash,
 	)

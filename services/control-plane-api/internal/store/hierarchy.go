@@ -73,9 +73,13 @@ func (s *Store) CreateWorkspace(ctx context.Context, userID int64, publicID, ope
 	if _, err = tx.Exec(ctx, `INSERT INTO workspace_memberships(workspace_id,user_id,role,status) VALUES($1,$2,'Owner','Active')`, workspace.ID, userID); err != nil {
 		return domain.Workspace{}, domain.Operation{}, false, err
 	}
+	agentInstallationID, err := activeAgentInstallationID(ctx, tx)
+	if err != nil {
+		return domain.Workspace{}, domain.Operation{}, false, err
+	}
 	operation, err := queries.InsertWorkspaceOperation(ctx, storesqlc.InsertWorkspaceOperationParams{
 		PublicID: operationID, WorkspaceID: workspace.ID, RequestedByUserID: userID,
-		IdempotencyHash: idempotencyHash, PayloadHash: payloadHash,
+		IdempotencyHash: idempotencyHash, PayloadHash: payloadHash, AgentInstallationID: pgtype.Int8{Int64: agentInstallationID, Valid: true},
 	})
 	if err != nil {
 		return domain.Workspace{}, domain.Operation{}, false, hierarchyWriteError(err)

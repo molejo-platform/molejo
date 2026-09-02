@@ -22,23 +22,30 @@ import (
 var ErrPeerIdentityMismatch = errors.New("agent peer identity does not match")
 
 type AgentRegistry interface {
-	ActivateAgent(context.Context, string, []byte, time.Time, audit.Event) (bool, error)
+	ActivateAgent(context.Context, string, []byte, string, string, []string, time.Time, audit.Event) (bool, error)
 	TouchAgent(context.Context, string, []byte, time.Time) error
+}
+
+type RuntimeDispatcher interface {
+	NextCommand(context.Context, string) (*clusteragentv1alpha1.RuntimeCommand, bool, error)
+	HandleResult(context.Context, string, *clusteragentv1alpha1.RuntimeResult) error
+	Abandon(context.Context, string, string) error
 }
 
 type GRPCService struct {
 	clusteragentv1alpha1.UnimplementedClusterAgentServiceServer
 	registry          AgentRegistry
+	dispatcher        RuntimeDispatcher
 	heartbeatInterval time.Duration
 	now               func() time.Time
 	eventID           func() (string, error)
 }
 
-func NewGRPCService(registry AgentRegistry, heartbeatInterval time.Duration) *GRPCService {
+func NewGRPCService(registry AgentRegistry, dispatcher RuntimeDispatcher, heartbeatInterval time.Duration) *GRPCService {
 	if heartbeatInterval <= 0 {
 		heartbeatInterval = 30 * time.Second
 	}
-	return &GRPCService{registry: registry, heartbeatInterval: heartbeatInterval, now: func() time.Time { return time.Now().UTC() }, eventID: func() (string, error) { return domain.NewPublicID("aud") }}
+	return &GRPCService{registry: registry, dispatcher: dispatcher, heartbeatInterval: heartbeatInterval, now: func() time.Time { return time.Now().UTC() }, eventID: func() (string, error) { return domain.NewPublicID("aud") }}
 }
 
 func (s *GRPCService) Connect(stream grpc.BidiStreamingServer[clusteragentv1alpha1.ConnectRequest, clusteragentv1alpha1.ConnectResponse]) error {
@@ -54,7 +61,8 @@ func (s *GRPCService) Connect(stream grpc.BidiStreamingServer[clusteragentv1alph
 		return err
 	}
 	hello := first.GetHello()
-	if hello == nil || hello.GetInstallationId() != installationID || strings.TrimSpace(hello.GetAgentVersion()) == "" || len(hello.GetAgentVersion()) > 64 {
+	if hello == nil || hello.GetInstallationId() != installationID || strings.TrimSpace(hello.GetAgentVersion()) == "" || len(hello.GetAgentVersion()) > 64 ||
+		strings.TrimSpace(hello.GetClusterUid()) == "" || strings.TrimSpace(hello.GetKubernetesVersion()) == "" || !hasRuntimeCapability(hello.GetCapabilities()) {
 		return status.Error(codes.PermissionDenied, "Agent identity does not match")
 	}
 	now := s.now()
@@ -62,7 +70,7 @@ func (s *GRPCService) Connect(stream grpc.BidiStreamingServer[clusteragentv1alph
 	if err != nil {
 		return status.Error(codes.Internal, "Pairing audit could not be created")
 	}
-	_, err = s.registry.ActivateAgent(stream.Context(), installationID, fingerprint, now, audit.Event{PublicID: auditID, Action: "installation.agent.pair", TargetType: "AgentInstallation", TargetPublicID: installationID, Outcome: audit.Succeeded})
+	_, err = s.registry.ActivateAgent(stream.Context(), installationID, fingerprint, hello.GetClusterUid(), hello.GetKubernetesVersion(), hello.GetCapabilities(), now, audit.Event{PublicID: auditID, Action: "installation.agent.pair", TargetType: "AgentInstallation", TargetPublicID: installationID, Outcome: audit.Succeeded})
 	if err != nil {
 		return status.Error(codes.PermissionDenied, "Agent identity was rejected")
 	}
@@ -85,10 +93,44 @@ func (s *GRPCService) Connect(stream grpc.BidiStreamingServer[clusteragentv1alph
 		if err = s.registry.TouchAgent(stream.Context(), installationID, fingerprint, now); err != nil {
 			return status.Error(codes.PermissionDenied, "Agent identity was rejected")
 		}
+		if s.dispatcher != nil {
+			command, ok, dispatchErr := s.dispatcher.NextCommand(stream.Context(), installationID)
+			if dispatchErr != nil {
+				return status.Error(codes.Unavailable, "runtime command is unavailable")
+			}
+			if ok {
+				if err = stream.Send(&clusteragentv1alpha1.ConnectResponse{Payload: &clusteragentv1alpha1.ConnectResponse_RuntimeCommand{RuntimeCommand: command}}); err != nil {
+					_ = s.dispatcher.Abandon(context.Background(), installationID, command.GetCommandId())
+					return err
+				}
+				resultRequest, resultErr := stream.Recv()
+				if resultErr != nil {
+					_ = s.dispatcher.Abandon(context.Background(), installationID, command.GetCommandId())
+					return resultErr
+				}
+				result := resultRequest.GetRuntimeResult()
+				if result == nil || result.GetCommandId() != command.GetCommandId() || result.GetFencingToken() != command.GetFencingToken() {
+					_ = s.dispatcher.Abandon(context.Background(), installationID, command.GetCommandId())
+					return status.Error(codes.InvalidArgument, "runtime result does not match command")
+				}
+				if err = s.dispatcher.HandleResult(stream.Context(), installationID, result); err != nil {
+					return status.Error(codes.Aborted, "runtime result was rejected")
+				}
+			}
+		}
 		if err = stream.Send(&clusteragentv1alpha1.ConnectResponse{Payload: &clusteragentv1alpha1.ConnectResponse_HeartbeatAck{HeartbeatAck: &clusteragentv1alpha1.HeartbeatAck{Sequence: heartbeat.GetSequence(), ReceivedAtUnix: now.Unix()}}}); err != nil {
 			return err
 		}
 	}
+}
+
+func hasRuntimeCapability(capabilities []string) bool {
+	for _, capability := range capabilities {
+		if capability == "runtime.v1alpha1" {
+			return true
+		}
+	}
+	return false
 }
 
 func peerIdentity(ctx context.Context) (string, []byte, error) {

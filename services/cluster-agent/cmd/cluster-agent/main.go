@@ -12,12 +12,14 @@ import (
 	"syscall"
 	"time"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 
 	"github.com/molejo-platform/molejo/services/cluster-agent/internal/agent"
 	"github.com/molejo-platform/molejo/services/cluster-agent/internal/controlplane"
 	agentkube "github.com/molejo-platform/molejo/services/cluster-agent/internal/kube"
+	agentruntime "github.com/molejo-platform/molejo/services/cluster-agent/internal/runtime"
 )
 
 var version = "dev"
@@ -45,6 +47,19 @@ func run() error {
 		return fmt.Errorf("create Kubernetes client: %w", err)
 	}
 	store := agentkube.NewSecretStore(client.CoreV1(), configuration.Namespace, configuration.IdentitySecret, configuration.EnrollmentSecret)
+	systemNamespace, err := client.CoreV1().Namespaces().Get(ctx, metav1.NamespaceSystem, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("read cluster identity: %w", err)
+	}
+	serverVersion, err := client.Discovery().ServerVersion()
+	if err != nil {
+		return fmt.Errorf("read Kubernetes version: %w", err)
+	}
+	runtimeClient, err := agentruntime.NewKubernetesClient(kubernetesConfig, "molejo-cluster-agent", 10*time.Second)
+	if err != nil {
+		return fmt.Errorf("create Agent runtime client: %w", err)
+	}
+	executor := agentruntime.NewExecutor(runtimeClient, 15*time.Second)
 	status := agent.NewStatus()
 	var enroller agent.Enroller
 	if configuration.EnrollmentURL != "" {
@@ -59,7 +74,12 @@ func run() error {
 	}
 	var connector agent.Connector
 	if configuration.GRPCAddress != "" {
-		connector, err = controlplane.NewGRPCConnector(configuration.GRPCAddress, configuration.GRPCServerName, version)
+		metadata := controlplane.AgentMetadata{
+			ClusterUID:        string(systemNamespace.UID),
+			KubernetesVersion: serverVersion.GitVersion,
+			Capabilities:      []string{"runtime.v1alpha1"},
+		}
+		connector, err = controlplane.NewGRPCConnector(configuration.GRPCAddress, configuration.GRPCServerName, version, metadata, executor)
 		if err != nil {
 			return err
 		}

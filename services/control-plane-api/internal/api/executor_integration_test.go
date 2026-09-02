@@ -1,10 +1,8 @@
 package api
 
 import (
-	"bytes"
 	"context"
-	"errors"
-	"log/slog"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -13,234 +11,49 @@ import (
 	"testing"
 	"time"
 
+	clusteragentv1alpha1 "github.com/molejo-platform/molejo/contracts/molejo/clusteragent/v1alpha1"
+	"github.com/molejo-platform/molejo/packages/runtimecontract"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/domain"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/operationworker"
-	"github.com/molejo-platform/molejo/services/control-plane-api/internal/parameters"
-	controlruntime "github.com/molejo-platform/molejo/services/control-plane-api/internal/runtime"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/store"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/testsupport"
 )
 
-func TestWorkerAppliesAnImmutableDeploymentAndCorrelatesItsLogs(t *testing.T) {
+const testAgentInstallationID = "agi-aaaaaaaaaaaaaaaaaaaa"
+
+func TestAgentCommandCompletesADeploymentWithoutControlPlaneKubernetesAccess(t *testing.T) {
 	ctx := context.Background()
 	s, workspaceID, actorID, _ := newExecutorIntegrationFixture(t)
 	target, releaseID, image := createExecutorTargetAndRelease(t, s, workspaceID, actorID)
-	plainValue := "https://internal.example"
-	plain, err := s.CreateParameter(ctx, workspaceID, actorID, mustAPIID(t, "par"), "/test/internal-url", domain.ParameterPlainText, "", domain.ParameterValue{PlainTextValue: &plainValue})
+	deployment, operation, _, err := s.CreateDeployment(ctx, workspaceID, actorID, target.PublicID, mustAPIID(t, "dpl"), releaseID, target.ConfigurationVersion, target.Version, "", domain.SHA256([]byte("agent-apply")), domain.SHA256([]byte("agent-apply-payload")))
 	if err != nil {
 		t.Fatal(err)
 	}
-	secretReference := "workspaces/test/parameters/runtime-token"
-	secret, err := s.CreateParameter(ctx, workspaceID, actorID, mustAPIID(t, "par"), "/test/runtime-token", domain.ParameterSecret, "", domain.ParameterValue{SecretReference: secretReference, SecretBackendVersion: 1, Fingerprint: bytes.Repeat([]byte{1}, 32)})
-	if err != nil {
+	worker := operationworker.Worker{Store: s, Publication: s.PublicationPolicy(), ParameterSecrets: &recordingSecretStore{}, OperationLease: time.Minute}
+	command, ok, err := worker.NextCommand(ctx, testAgentInstallationID)
+	if err != nil || !ok {
+		t.Fatalf("next command: ok=%v err=%v", ok, err)
+	}
+	if command.GetOperationId() != operation.PublicID || command.GetKind() != runtimecontract.OperationApplyDeployment {
+		t.Fatalf("command=%+v", command)
+	}
+	var payload runtimecontract.Payload
+	if err = json.Unmarshal(command.GetPayloadJson(), &payload); err != nil {
 		t.Fatal(err)
 	}
-	configuration := target.Configuration
-	configuration.Parameters = []domain.ParameterBinding{{Name: "INTERNAL_URL", ParameterPublicID: plain.PublicID, ParameterVersion: 1}, {Name: "RUNTIME_TOKEN", ParameterPublicID: secret.PublicID, ParameterVersion: 1}}
-	target, err = s.UpdateAppEnvironment(ctx, workspaceID, actorID, target.PublicID, target.SourceBranch, configuration, target.Version)
-	if err != nil {
-		t.Fatal(err)
+	if payload.Name != target.RuntimeName || payload.Deployment == nil || payload.Deployment.Image != image {
+		t.Fatalf("payload=%+v", payload)
 	}
-	deployment, operation, _, err := s.CreateDeployment(ctx, workspaceID, actorID, target.PublicID, mustAPIID(t, "dpl"), releaseID, target.ConfigurationVersion, target.Version, "", domain.SHA256([]byte("worker-apply")), domain.SHA256([]byte("worker-apply-payload")))
-	if err != nil {
+	result := &clusteragentv1alpha1.RuntimeResult{CommandId: command.GetCommandId(), FencingToken: command.GetFencingToken(), State: runtimecontract.StateReady, Message: "runtime ready", ObservedRelease: image}
+	if err = worker.HandleResult(ctx, testAgentInstallationID, result); err != nil {
 		t.Fatal(err)
-	}
-	runtimeClient := &recordingRuntime{}
-	var output bytes.Buffer
-	worker := operationworker.Worker{Store: s, Publication: s.PublicationPolicy(), Runtime: runtimeClient, ParameterSecrets: &recordingSecretStore{values: map[string]string{secretReference: "secret-runtime-value"}, versions: map[string]int64{secretReference: 1}}, OperationLease: time.Minute, Logger: slog.New(slog.NewJSONHandler(&output, nil))}
-
-	if processed, runErr := worker.RunOnce(ctx, "worker-correlation"); runErr != nil || !processed {
-		t.Fatalf("run operation: processed=%v err=%v", processed, runErr)
 	}
 	current, err := s.FindAppEnvironment(ctx, workspaceID, target.PublicID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if runtimeClient.name != target.RuntimeName || runtimeClient.intent.Image != image || current.CurrentDeploymentPublicID != deployment.PublicID || current.CurrentReleasePublicID != releaseID || current.State != domain.Ready {
-		t.Fatalf("runtime=%+v App Environment=%+v", runtimeClient, current)
-	}
-	if runtimeClient.intent.ConfigurationVersion != target.ConfigurationVersion || len(runtimeClient.intent.SecretVariables) != 1 || runtimeClient.intent.SecretVariables[0].Value != "secret-runtime-value" || !containsVariable(runtimeClient.intent.Variables, "INTERNAL_URL", plainValue) {
-		t.Fatalf("materialized intent=%+v", runtimeClient.intent)
-	}
-	if runtimeClient.garbageCollections != 1 {
-		t.Fatalf("configuration garbage collections = %d, want 1", runtimeClient.garbageCollections)
-	}
-	for _, expected := range []string{`"operation_id":"` + operation.PublicID + `"`, `"app_environment_id":"` + target.PublicID + `"`, `"deployment_id":"` + deployment.PublicID + `"`, `"worker_id":"worker-correlation"`} {
-		if !strings.Contains(output.String(), expected) {
-			t.Errorf("worker log is missing %s: %s", expected, output.String())
-		}
-	}
-}
-
-func containsVariable(items []domain.Variable, name, value string) bool {
-	for _, item := range items {
-		if item.Name == name && item.Value == value {
-			return true
-		}
-	}
-	return false
-}
-
-func newOperationWorker(storage *store.Store, client controlruntime.Client) operationworker.Worker {
-	return operationworker.Worker{
-		Store:            storage,
-		Publication:      storage.PublicationPolicy(),
-		Runtime:          client,
-		ParameterSecrets: parameters.UnavailableStore{},
-		OperationLease:   time.Minute,
-	}
-}
-
-func TestWorkerRetriesAppEnvironmentDeletionUntilRuntimeAbsenceIsObserved(t *testing.T) {
-	ctx := context.Background()
-	s, workspaceID, actorID, _ := newExecutorIntegrationFixture(t)
-	target, _, _ := createExecutorTargetAndRelease(t, s, workspaceID, actorID)
-	operation, err := s.DeleteAppEnvironment(ctx, workspaceID, actorID, target.PublicID, target.Version, domain.SHA256([]byte("delete-target")), domain.SHA256([]byte("delete-target-payload")))
-	if err != nil {
-		t.Fatal(err)
-	}
-	runtimeClient := &recordingRuntime{exists: true}
-	worker := newOperationWorker(s, runtimeClient)
-
-	if processed, runErr := worker.RunOnce(ctx, "delete-worker"); runErr != nil || !processed {
-		t.Fatalf("first delete: processed=%v err=%v", processed, runErr)
-	}
-	currentOperation, err := s.GetOperationForUser(ctx, actorID, operation.PublicID)
-	if err != nil || currentOperation.Status != domain.OperationPending {
-		t.Fatalf("operation after observed runtime=%+v err=%v", currentOperation, err)
-	}
-	if _, err = s.FindAppEnvironment(ctx, workspaceID, target.PublicID); err != nil {
-		t.Fatalf("target was archived before runtime absence: %v", err)
-	}
-	runtimeClient.exists = false
-	if _, err = s.Pool.Exec(ctx, `UPDATE operations SET next_attempt_at=now() WHERE id=$1`, currentOperation.ID); err != nil {
-		t.Fatal(err)
-	}
-	if processed, runErr := worker.RunOnce(ctx, "delete-worker"); runErr != nil || !processed {
-		t.Fatalf("second delete: processed=%v err=%v", processed, runErr)
-	}
-	if _, err = s.FindAppEnvironment(ctx, workspaceID, target.PublicID); !errors.Is(err, store.ErrNotFound) {
-		t.Fatalf("deleted target error=%v, want not found", err)
-	}
-	if runtimeClient.garbageCollections != 1 {
-		t.Fatalf("configuration garbage collections = %d, want 1", runtimeClient.garbageCollections)
-	}
-}
-
-func TestWorkerRetriesVolumeProvisioningAfterATemporaryRuntimeFailure(t *testing.T) {
-	ctx := context.Background()
-	s, workspaceID, actorID, _ := newExecutorIntegrationFixture(t)
-	if err := s.ConfigureStorageProfile(ctx, store.StorageProfileInstallation{
-		ID: "persistent-standard", Name: "Persistent storage", MinimumSizeGiB: 1,
-		MaximumSizeGiB: 10, TotalCapacityGiB: 10, WorkspaceQuotaGiB: 10,
-		Expandable: true, Durability: "NodeLocal", RuntimeBinding: "test-storage", Enabled: true,
-	}); err != nil {
-		t.Fatal(err)
-	}
-	project, err := s.CreateProject(ctx, workspaceID, mustAPIID(t, "prj"), "Platform", "platform")
-	if err != nil {
-		t.Fatal(err)
-	}
-	app, err := s.CreateApp(ctx, workspaceID, project.PublicID, mustAPIID(t, "app"), "API", "api")
-	if err != nil {
-		t.Fatal(err)
-	}
-	environment, err := s.CreateEnvironment(ctx, workspaceID, project.PublicID, mustAPIID(t, "env"), "Production", "production")
-	if err != nil {
-		t.Fatal(err)
-	}
-	target, volume, err := s.CreateAppEnvironmentWithWorkload(ctx, workspaceID, actorID, mustAPIID(t, "aev"), project.PublicID, app.PublicID, environment.PublicID, "main", domain.WorkloadStateful, apiRuntimeConfiguration("stateful-api"), &domain.VolumeRequest{StorageProfileID: "persistent-standard", SizeGiB: 1, MountPath: "/data"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	runtimeClient := &recordingRuntime{volumeApplyErr: errors.New("temporary runtime failure")}
-	worker := newOperationWorker(s, runtimeClient)
-	if processed, runErr := worker.RunOnce(ctx, "volume-worker"); runErr != nil || !processed {
-		t.Fatalf("failed volume attempt: processed=%v err=%v", processed, runErr)
-	}
-	var operationID int64
-	var status string
-	if err = s.Pool.QueryRow(ctx, `SELECT id,status FROM operations WHERE app_volume_id=$1 AND kind=$2`, volume.ID, domain.OperationEnsureVolume).Scan(&operationID, &status); err != nil {
-		t.Fatal(err)
-	}
-	if status != domain.OperationPending {
-		t.Fatalf("operation status after temporary failure=%s", status)
-	}
-	runtimeClient.volumeApplyErr = nil
-	if _, err = s.Pool.Exec(ctx, `UPDATE operations SET next_attempt_at=now() WHERE id=$1`, operationID); err != nil {
-		t.Fatal(err)
-	}
-	if processed, runErr := worker.RunOnce(ctx, "volume-worker"); runErr != nil || !processed {
-		t.Fatalf("retried volume attempt: processed=%v err=%v", processed, runErr)
-	}
-	current, err := s.FindAppVolume(ctx, workspaceID, target.PublicID)
-	if err != nil || current.State != domain.VolumeStateReady {
-		t.Fatalf("volume after retry=%+v err=%v", current, err)
-	}
-}
-
-func TestWorkerAllowsFirstStatefulDeploymentToBindAWaitingVolume(t *testing.T) {
-	ctx := context.Background()
-	s, workspaceID, actorID, _ := newExecutorIntegrationFixture(t)
-	if err := s.ConfigureStorageProfile(ctx, store.StorageProfileInstallation{
-		ID: "persistent-standard", Name: "Persistent storage", MinimumSizeGiB: 1,
-		MaximumSizeGiB: 10, TotalCapacityGiB: 10, WorkspaceQuotaGiB: 10,
-		Expandable: true, Durability: "NodeLocal", RuntimeBinding: "test-storage", Enabled: true,
-	}); err != nil {
-		t.Fatal(err)
-	}
-	project, err := s.CreateProject(ctx, workspaceID, mustAPIID(t, "prj"), "Platform", "platform")
-	if err != nil {
-		t.Fatal(err)
-	}
-	app, err := s.CreateApp(ctx, workspaceID, project.PublicID, mustAPIID(t, "app"), "API", "api")
-	if err != nil {
-		t.Fatal(err)
-	}
-	environment, err := s.CreateEnvironment(ctx, workspaceID, project.PublicID, mustAPIID(t, "env"), "Production", "production")
-	if err != nil {
-		t.Fatal(err)
-	}
-	target, _, err := s.CreateAppEnvironmentWithWorkload(ctx, workspaceID, actorID, mustAPIID(t, "aev"), project.PublicID, app.PublicID, environment.PublicID, "main", domain.WorkloadStateful, apiRuntimeConfiguration("stateful-api"), &domain.VolumeRequest{StorageProfileID: "persistent-standard", SizeGiB: 1, MountPath: "/data"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	runtimeClient := &recordingRuntime{volumeObservation: controlruntime.VolumeObservation{
-		Exists: true, State: domain.VolumeStateProvisioning, Message: "waiting for first consumer",
-	}}
-	worker := newOperationWorker(s, runtimeClient)
-	if processed, runErr := worker.RunOnce(ctx, "stateful-worker"); runErr != nil || !processed {
-		t.Fatalf("prepare volume: processed=%v err=%v", processed, runErr)
-	}
-	currentVolume, err := s.FindAppVolume(ctx, workspaceID, target.PublicID)
-	if err != nil || currentVolume.State != domain.VolumeStateProvisioning {
-		t.Fatalf("prepared volume=%+v err=%v", currentVolume, err)
-	}
-	target, err = s.FindAppEnvironment(ctx, workspaceID, target.PublicID)
-	if err != nil || target.State != domain.StatePending {
-		t.Fatalf("App Environment waiting for first deployment=%+v err=%v", target, err)
-	}
-	releaseID, image := createExecutorRelease(t, s, workspaceID, actorID, project, app, target)
-	deployment, _, _, err := s.CreateDeployment(ctx, workspaceID, actorID, target.PublicID, mustAPIID(t, "dpl"), releaseID, target.ConfigurationVersion, target.Version, "", domain.SHA256([]byte("first-stateful-deploy")), domain.SHA256([]byte("first-stateful-deploy-payload")))
-	if err != nil {
-		t.Fatalf("create first stateful deployment: %v", err)
-	}
-	runtimeClient.volumeObservation = controlruntime.VolumeObservation{
-		Exists: true, State: domain.VolumeStateReady, Message: "persistent storage is ready", ObservedSizeGiB: 1,
-	}
-	if processed, runErr := worker.RunOnce(ctx, "stateful-worker"); runErr != nil || !processed {
-		t.Fatalf("deploy stateful workload: processed=%v err=%v", processed, runErr)
-	}
-	currentVolume, err = s.FindAppVolume(ctx, workspaceID, target.PublicID)
-	if err != nil || currentVolume.State != domain.VolumeStateReady || !currentVolume.Attached {
-		t.Fatalf("bound volume=%+v err=%v", currentVolume, err)
-	}
-	currentTarget, err := s.FindAppEnvironment(ctx, workspaceID, target.PublicID)
-	if err != nil || currentTarget.CurrentDeploymentPublicID != deployment.PublicID || currentTarget.State != domain.Ready {
-		t.Fatalf("stateful App Environment=%+v err=%v", currentTarget, err)
-	}
-	if runtimeClient.intent.Volume == nil || runtimeClient.intent.Volume.PublicID != currentVolume.PublicID || runtimeClient.intent.Image != image {
-		t.Fatalf("stateful runtime intent=%+v", runtimeClient.intent)
+	if current.CurrentDeploymentPublicID != deployment.PublicID || current.CurrentReleasePublicID != releaseID || current.State != domain.Ready {
+		t.Fatalf("App Environment=%+v", current)
 	}
 }
 
@@ -289,49 +102,6 @@ func TestLogoutDoesNotClaimSuccessWhenRevocationFails(t *testing.T) {
 	if recorder.Code != http.StatusInternalServerError || recorder.Header().Get("Set-Cookie") != "" {
 		t.Fatalf("logout status=%d Set-Cookie=%q", recorder.Code, recorder.Header().Get("Set-Cookie"))
 	}
-}
-
-type recordingRuntime struct {
-	name               string
-	intent             domain.Intent
-	exists             bool
-	garbageCollections int
-	volumeApplyErr     error
-	volumeObservation  controlruntime.VolumeObservation
-}
-
-func (r *recordingRuntime) EnsureWorkspace(context.Context, string) error { return nil }
-
-func (r *recordingRuntime) ApplyVolume(context.Context, string, string, controlruntime.VolumeIntent) error {
-	return r.volumeApplyErr
-}
-
-func (r *recordingRuntime) ObserveVolume(context.Context, string, string) (controlruntime.VolumeObservation, error) {
-	if r.volumeObservation.State != "" {
-		return r.volumeObservation, nil
-	}
-	return controlruntime.VolumeObservation{Exists: true, State: domain.VolumeStateReady, ObservedSizeGiB: 1}, nil
-}
-
-func (r *recordingRuntime) ApplyDeployment(_ context.Context, _, name string, intent domain.Intent) error {
-	r.name = name
-	r.intent = intent
-	r.exists = true
-	return nil
-}
-
-func (r *recordingRuntime) ObserveDeployment(context.Context, string, string) (controlruntime.Observation, error) {
-	if !r.exists {
-		return controlruntime.Observation{Exists: false, State: domain.Unknown, Message: "runtime absent"}, nil
-	}
-	return controlruntime.Observation{Exists: true, State: domain.Ready, Message: "runtime ready", ObservedRelease: r.intent.Image}, nil
-}
-
-func (r *recordingRuntime) DeleteDeployment(context.Context, string, string) error { return nil }
-
-func (r *recordingRuntime) GarbageCollectConfiguration(context.Context, string, string) error {
-	r.garbageCollections++
-	return nil
 }
 
 func createExecutorTargetAndRelease(t *testing.T, s *store.Store, workspaceID, actorID int64) (domain.AppEnvironment, string, string) {
@@ -406,6 +176,9 @@ func newExecutorIntegrationFixture(t *testing.T) (*store.Store, int64, int64, st
 		t.Fatal(err)
 	}
 	if err = s.Pool.QueryRow(ctx, `SELECT id FROM users WHERE username=$1`, actorKey).Scan(&actorID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.Pool.Exec(ctx, `INSERT INTO agent_installations(public_id,name,status,cluster_uid,kubernetes_version,capabilities_json,created_by) VALUES($1,'test-agent','Active','cluster-test-uid','v1.36.3','["runtime.v1alpha1"]',$2)`, testAgentInstallationID, actorID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = s.Pool.Exec(ctx, `UPDATE workspaces SET bootstrap_state='Ready',updated_at=now() WHERE id=$1`, workspaceID); err != nil {

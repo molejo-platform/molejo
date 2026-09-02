@@ -18,6 +18,8 @@ spec:
         app.kubernetes.io/part-of: molejo-platform
     spec:
       serviceAccountName: cluster-agent
+      imagePullSecrets:
+        - name: registry-molejo
       automountServiceAccountToken: false
       # Keeps the Pod alive longer than the Agent's bounded lifecycle shutdown.
       terminationGracePeriodSeconds: 30

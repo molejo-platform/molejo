@@ -33,7 +33,6 @@ import (
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/observability"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/operationworker"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/parameters"
-	"github.com/molejo-platform/molejo/services/control-plane-api/internal/runtime"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/store"
 )
 
@@ -53,8 +52,6 @@ func Run(version string, args []string) error {
 		return bootstrap()
 	case "build-worker":
 		return runBuildWorker()
-	case "runtime-worker":
-		return runRuntimeWorker()
 	case "delivery-worker":
 		return runDeliveryWorker()
 	case "parameter-worker":
@@ -83,36 +80,6 @@ func Run(version string, args []string) error {
 		return err
 	}
 	s.SetPublicationPolicy(store.NewPublicationPolicy(cfg.PublicDomain, cfg.PublicStatefulDomain, cfg.PublicTCPEnabled, cfg.PublicTCPMinimumPort, cfg.PublicTCPMaximumPort))
-	runtimeTimeout := 10 * time.Second
-	if value := os.Getenv("MOLEJO_RUNTIME_TIMEOUT"); value != "" {
-		d, parseErr := time.ParseDuration(value)
-		if parseErr != nil || d <= 0 {
-			return fmt.Errorf("invalid MOLEJO_RUNTIME_TIMEOUT")
-		}
-		runtimeTimeout = d
-	}
-	var rt runtime.Client
-	if kubeconfig := os.Getenv("KUBECONFIG"); kubeconfig != "" {
-		rt, err = runtime.NewKubernetesClient(runtime.ExternalConfig{
-			Kubeconfig:         kubeconfig,
-			Context:            os.Getenv("MOLEJO_EXPECTED_KUBE_CONTEXT"),
-			Server:             os.Getenv("MOLEJO_EXPECTED_KUBE_SERVER"),
-			ExpectedClusterUID: os.Getenv("MOLEJO_EXPECTED_CLUSTER_UID"),
-		}, env("MOLEJO_FIELD_MANAGER", "molejo-control-plane"), runtimeTimeout)
-		if err != nil {
-			return err
-		}
-	} else if os.Getenv("MOLEJO_IN_CLUSTER") == "true" {
-		rt, err = runtime.NewInClusterClient(env("MOLEJO_FIELD_MANAGER", "molejo-control-plane"), runtimeTimeout, os.Getenv("MOLEJO_EXPECTED_CLUSTER_UID"))
-		if err != nil {
-			return err
-		}
-	}
-	if preflight, ok := rt.(interface{ Preflight(context.Context) error }); ok {
-		if err = preflight.Preflight(ctx); err != nil {
-			return fmt.Errorf("runtime preflight: %w", err)
-		}
-	}
 	observabilityBackend, err := observabilityReader()
 	if err != nil {
 		return err
@@ -133,13 +100,16 @@ func Run(version string, args []string) error {
 	if err != nil {
 		return err
 	}
-	agentSigner, grpcServer, grpcListener, err := configureAgentPairing(s)
+	dispatcher := &operationworker.Worker{
+		Store: s, Publication: s.PublicationPolicy(), ParameterSecrets: parameterSecrets,
+		OperationLease: cfg.OperationLease, CommandTimeout: 20 * time.Second, Logger: slog.Default(),
+	}
+	agentSigner, grpcServer, grpcListener, err := configureAgentPairing(s, dispatcher)
 	if err != nil {
 		return err
 	}
 	server := api.NewServer(cfg, api.Dependencies{
 		Store:                 s,
-		Runtime:               rt,
 		Logger:                slog.Default(),
 		GitHub:                github,
 		GitHubWebhookSecret:   githubWebhookSecret,
@@ -207,7 +177,7 @@ func gracefulStopGRPC(server *grpc.Server, timeout time.Duration) {
 	}
 }
 
-func configureAgentPairing(registry *store.Store) (api.AgentCertificateSigner, *grpc.Server, net.Listener, error) {
+func configureAgentPairing(registry *store.Store, dispatcher controlagent.RuntimeDispatcher) (api.AgentCertificateSigner, *grpc.Server, net.Listener, error) {
 	caCertificatePath := strings.TrimSpace(os.Getenv("MOLEJO_AGENT_CA_CERT_FILE"))
 	caKeyPath := strings.TrimSpace(os.Getenv("MOLEJO_AGENT_CA_KEY_FILE"))
 	serverCertificatePath := strings.TrimSpace(os.Getenv("MOLEJO_AGENT_SERVER_CERT_FILE"))
@@ -254,64 +224,8 @@ func configureAgentPairing(registry *store.Store) (api.AgentCertificateSigner, *
 		return nil, nil, nil, fmt.Errorf("listen for Agent gRPC: %w", err)
 	}
 	grpcServer := grpc.NewServer(grpc.Creds(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS13, Certificates: []tls.Certificate{serverCertificate}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: clientRoots})))
-	clusteragentv1alpha1.RegisterClusterAgentServiceServer(grpcServer, controlagent.NewGRPCService(registry, 30*time.Second))
+	clusteragentv1alpha1.RegisterClusterAgentServiceServer(grpcServer, controlagent.NewGRPCService(registry, dispatcher, 5*time.Second))
 	return signer, grpcServer, listener, nil
-}
-
-func runRuntimeWorker() error {
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer cancel()
-	databaseURL := strings.TrimSpace(os.Getenv("MOLEJO_DATABASE_URL"))
-	if databaseURL == "" {
-		return fmt.Errorf("MOLEJO_DATABASE_URL is required")
-	}
-	s, err := store.New(ctx, databaseURL)
-	if err != nil {
-		return err
-	}
-	defer s.Close()
-	if err = s.SchemaReady(ctx); err != nil {
-		return fmt.Errorf("runtime schema is not ready: %w", err)
-	}
-	if err = configureStorageProfile(ctx, s); err != nil {
-		return err
-	}
-	rt, err := runtimeClient(10 * time.Second)
-	if err != nil {
-		return err
-	}
-	if rt == nil {
-		return fmt.Errorf("runtime is not configured")
-	}
-	if preflight, ok := rt.(interface{ Preflight(context.Context) error }); ok {
-		if err = preflight.Preflight(ctx); err != nil {
-			return fmt.Errorf("runtime preflight: %w", err)
-		}
-	}
-	backend, err := openBaoStore()
-	if err != nil {
-		return err
-	}
-	cfg := api.DefaultConfig()
-	cfg.PublicDomain = env("MOLEJO_PUBLIC_DOMAIN", cfg.PublicDomain)
-	cfg.PublicStatefulDomain = os.Getenv("MOLEJO_PUBLIC_STATEFUL_DOMAIN")
-	s.SetPublicationPolicy(store.NewPublicationPolicy(cfg.PublicDomain, cfg.PublicStatefulDomain, false, cfg.PublicTCPMinimumPort, cfg.PublicTCPMaximumPort))
-	if value := os.Getenv("MOLEJO_OPERATION_LEASE"); value != "" {
-		cfg.OperationLease, err = durationEnv("MOLEJO_OPERATION_LEASE", cfg.OperationLease)
-		if err != nil {
-			return err
-		}
-	}
-	worker := operationworker.Worker{
-		Store:            s,
-		Publication:      s.PublicationPolicy(),
-		Runtime:          rt,
-		ParameterSecrets: backend,
-		OperationLease:   cfg.OperationLease,
-		Logger:           slog.Default(),
-	}
-	worker.Run(ctx, env("MOLEJO_RUNTIME_WORKER_ID", "runtime-worker-1"))
-	return nil
 }
 
 func runParameterWorker() error {
@@ -426,21 +340,6 @@ func openBaoStore() (parameters.SecretValueStore, error) {
 		return nil, err
 	}
 	return backend, nil
-}
-
-func runtimeClient(timeout time.Duration) (runtime.Client, error) {
-	if kubeconfig := os.Getenv("KUBECONFIG"); kubeconfig != "" {
-		return runtime.NewKubernetesClient(runtime.ExternalConfig{
-			Kubeconfig:         kubeconfig,
-			Context:            os.Getenv("MOLEJO_EXPECTED_KUBE_CONTEXT"),
-			Server:             os.Getenv("MOLEJO_EXPECTED_KUBE_SERVER"),
-			ExpectedClusterUID: os.Getenv("MOLEJO_EXPECTED_CLUSTER_UID"),
-		}, env("MOLEJO_FIELD_MANAGER", "molejo-control-plane"), timeout)
-	}
-	if os.Getenv("MOLEJO_IN_CLUSTER") == "true" {
-		return runtime.NewInClusterClient(env("MOLEJO_FIELD_MANAGER", "molejo-control-plane"), timeout, os.Getenv("MOLEJO_EXPECTED_CLUSTER_UID"))
-	}
-	return nil, nil
 }
 
 func runBuildWorker() error {

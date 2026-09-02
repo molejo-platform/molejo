@@ -93,16 +93,6 @@ func (h *generatedHandler) GetAppEnvironment(w http.ResponseWriter, r *http.Requ
 	if !ok {
 		return
 	}
-	if h.server.runtime != nil && item.CurrentDeploymentPublicID != "" {
-		observation, err := h.server.runtime.ObserveDeployment(r.Context(), workspace.Namespace, item.RuntimeName)
-		if err != nil {
-			item.State = domain.Unknown
-			item.Message = "runtime observation unavailable"
-		} else {
-			item.State = observation.State
-			item.Message = observation.Message
-		}
-	}
 	writeJSON(w, http.StatusOK, item)
 }
 
