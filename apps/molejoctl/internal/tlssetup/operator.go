@@ -1,4 +1,4 @@
-package cmd
+package tlssetup
 
 import (
 	"context"
@@ -15,9 +15,7 @@ import (
 
 	"helm.sh/helm/v4/pkg/action"
 	"helm.sh/helm/v4/pkg/chart/loader"
-	"helm.sh/helm/v4/pkg/cli"
 	"helm.sh/helm/v4/pkg/kube"
-	"helm.sh/helm/v4/pkg/registry"
 	"helm.sh/helm/v4/pkg/storage/driver"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -27,22 +25,39 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/molejo-platform/molejo/apps/molejoctl/internal/clustertls"
+	"github.com/molejo-platform/molejo/apps/molejoctl/internal/helmclient"
+	"github.com/molejo-platform/molejo/apps/molejoctl/internal/kubecontext"
 )
 
 const tlsOperationTimeout = 5 * time.Minute
 
 var tlsManagedLabels = map[string]string{"app.kubernetes.io/managed-by": "molejoctl"}
 
-type kubernetesTLSOperator struct {
+// Options configures one TLS preparation or verification run.
+type Options struct {
+	ContextName   string
+	SetupPath     string
+	CredentialEnv string
+	Yes           bool
+	Output        io.Writer
+}
+
+// Report contains the verified setup and certificate facts.
+type Report struct {
+	Setup       clustertls.Setup
+	Certificate clustertls.CertificateFacts
+	Changed     bool
+}
+
+// Operator executes the TLS functional core against Kubernetes and Helm.
+type Operator struct {
 	newEnvironment tlsEnvironmentFactory
 }
 
-func newKubernetesTLSOperator() tlsOperator {
-	return kubernetesTLSOperator{newEnvironment: newKubernetesTLSEnvironment}
-}
+// New constructs the production TLS operator.
+func New() *Operator { return &Operator{newEnvironment: newKubernetesTLSEnvironment} }
 
 type tlsEnvironment interface {
 	Discover(context.Context, clustertls.Setup) (clustertls.Facts, error)
@@ -62,64 +77,64 @@ type kubernetesTLSEnvironment struct {
 	clients     tlsClients
 }
 
-func (o kubernetesTLSOperator) Prepare(ctx context.Context, options tlsOptions) (tlsReport, error) {
-	setup, err := loadTLSSetup(options.setupPath)
+func (o *Operator) Prepare(ctx context.Context, options Options) (Report, error) {
+	setup, err := loadTLSSetup(options.SetupPath)
 	if err != nil {
-		return tlsReport{}, err
+		return Report{}, err
 	}
-	credential, err := credentialFromEnvironment(options.credentialEnv)
+	credential, err := credentialFromEnvironment(options.CredentialEnv)
 	if err != nil {
-		return tlsReport{}, err
+		return Report{}, err
 	}
-	environment, err := o.newEnvironment(options.contextName, credential)
+	environment, err := o.newEnvironment(options.ContextName, credential)
 	if err != nil {
-		return tlsReport{}, err
+		return Report{}, err
 	}
 
 	changed := false
 	for attempt := 0; attempt < 3; attempt++ {
 		facts, discoverErr := environment.Discover(ctx, setup)
 		if discoverErr != nil {
-			return tlsReport{}, discoverErr
+			return Report{}, discoverErr
 		}
 		plan := clustertls.BuildPreparePlan(setup, facts, len(credential) > 0)
 		if !plan.Valid() {
-			return tlsReport{}, diagnosticsError(plan.Diagnostics)
+			return Report{}, diagnosticsError(plan.Diagnostics)
 		}
 		if plan.Ready {
-			return tlsReport{setup: setup, certificate: facts.Certificate, changed: changed}, nil
+			return Report{Setup: setup, Certificate: facts.Certificate, Changed: changed}, nil
 		}
-		writeTLSPlan(options.output, plan.Operations)
-		if !options.yes {
-			return tlsReport{}, errors.New("TLS preparation has changes; inspect the plan and rerun with --yes")
+		writeTLSPlan(options.Output, plan.Operations)
+		if !options.Yes {
+			return Report{}, errors.New("TLS preparation has changes; inspect the plan and rerun with --yes")
 		}
 		for _, operation := range plan.Operations {
 			if err = environment.Execute(ctx, operation); err != nil {
-				return tlsReport{}, fmt.Errorf("execute %s: %w", operation.ID, err)
+				return Report{}, fmt.Errorf("execute %s: %w", operation.ID, err)
 			}
 		}
 		changed = true
 	}
-	return tlsReport{}, errors.New("TLS preparation did not converge after three planning passes")
+	return Report{}, errors.New("TLS preparation did not converge after three planning passes")
 }
 
-func (o kubernetesTLSOperator) Verify(ctx context.Context, options tlsOptions) (tlsReport, error) {
-	setup, err := loadTLSSetup(options.setupPath)
+func (o *Operator) Verify(ctx context.Context, options Options) (Report, error) {
+	setup, err := loadTLSSetup(options.SetupPath)
 	if err != nil {
-		return tlsReport{}, err
+		return Report{}, err
 	}
-	environment, err := o.newEnvironment(options.contextName, nil)
+	environment, err := o.newEnvironment(options.ContextName, nil)
 	if err != nil {
-		return tlsReport{}, err
+		return Report{}, err
 	}
 	facts, err := environment.Discover(ctx, setup)
 	if err != nil {
-		return tlsReport{}, err
+		return Report{}, err
 	}
 	if diagnostics := clustertls.Verify(setup, facts); len(diagnostics) > 0 {
-		return tlsReport{}, diagnosticsError(diagnostics)
+		return Report{}, diagnosticsError(diagnostics)
 	}
-	return tlsReport{setup: setup, certificate: facts.Certificate}, nil
+	return Report{Setup: setup, Certificate: facts.Certificate}, nil
 }
 
 func loadTLSSetup(path string) (clustertls.Setup, error) {
@@ -181,21 +196,10 @@ func writeTLSPlan(writer io.Writer, operations []clustertls.Operation) {
 }
 
 func newTLSClients(contextName string) (tlsClients, error) {
-	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
-	overrides := &clientcmd.ConfigOverrides{CurrentContext: contextName}
-	clientConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, overrides)
-	rawConfig, err := clientConfig.RawConfig()
+	restConfig, err := kubecontext.RESTConfig(contextName, 30*time.Second)
 	if err != nil {
-		return tlsClients{}, fmt.Errorf("load kubeconfig: %w", err)
+		return tlsClients{}, err
 	}
-	if _, exists := rawConfig.Contexts[contextName]; !exists {
-		return tlsClients{}, fmt.Errorf("context %q not found", contextName)
-	}
-	restConfig, err := clientConfig.ClientConfig()
-	if err != nil {
-		return tlsClients{}, fmt.Errorf("configure context %q: %w", contextName, err)
-	}
-	restConfig.Timeout = 30 * time.Second
 	kubernetesClient, err := kubernetes.NewForConfig(restConfig)
 	if err != nil {
 		return tlsClients{}, fmt.Errorf("create Kubernetes client: %w", err)
@@ -289,11 +293,11 @@ func inspectTLSSecret(secret *corev1.Secret, dnsNames []string, now time.Time) c
 }
 
 func inspectHelmRelease(contextName, namespace, name, expectedVersion string) (bool, bool, error) {
-	configuration, _, err := tlsHelmConfiguration(contextName, namespace)
+	helm, err := helmclient.New(contextName, namespace, nil)
 	if err != nil {
 		return false, false, err
 	}
-	metadata, err := action.NewGetMetadata(configuration).Run(name)
+	metadata, err := action.NewGetMetadata(helm.Configuration).Run(name)
 	if errors.Is(err, driver.ErrReleaseNotFound) {
 		return false, false, nil
 	}
@@ -394,7 +398,7 @@ func ensureTLSNamespace(ctx context.Context, client kubernetes.Interface, name s
 	if !apierrors.IsNotFound(err) {
 		return err
 	}
-	_, err = client.CoreV1().Namespaces().Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: name, Labels: copyLabels(tlsManagedLabels)}}, metav1.CreateOptions{})
+	_, err = client.CoreV1().Namespaces().Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: name, Labels: copyStringMap(tlsManagedLabels)}}, metav1.CreateOptions{})
 	return err
 }
 
@@ -405,7 +409,7 @@ func ensureTLSCredential(ctx context.Context, client kubernetes.Interface, refer
 	secrets := client.CoreV1().Secrets(reference.Namespace)
 	existing, err := secrets.Get(ctx, reference.Name, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
-		_, err = secrets.Create(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: reference.Name, Namespace: reference.Namespace, Labels: copyLabels(tlsManagedLabels)}, Type: corev1.SecretTypeOpaque, Data: map[string][]byte{"api-token": credential}}, metav1.CreateOptions{})
+		_, err = secrets.Create(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: reference.Name, Namespace: reference.Namespace, Labels: copyStringMap(tlsManagedLabels)}, Type: corev1.SecretTypeOpaque, Data: map[string][]byte{"api-token": credential}}, metav1.CreateOptions{})
 		return err
 	}
 	if err != nil {
@@ -415,34 +419,18 @@ func ensureTLSCredential(ctx context.Context, client kubernetes.Interface, refer
 		return fmt.Errorf("Secret %s/%s is not owned by molejoctl", reference.Namespace, reference.Name)
 	}
 	existing.Type = corev1.SecretTypeOpaque
-	existing.Labels = copyLabels(tlsManagedLabels)
+	existing.Labels = copyStringMap(tlsManagedLabels)
 	existing.Data = map[string][]byte{"api-token": credential}
 	_, err = secrets.Update(ctx, existing, metav1.UpdateOptions{})
 	return err
 }
 
-func tlsHelmConfiguration(contextName, namespace string) (*action.Configuration, *cli.EnvSettings, error) {
-	settings := cli.New()
-	settings.KubeContext = contextName
-	settings.SetNamespace(namespace)
-	registryClient, err := registry.NewClient(registry.ClientOptWriter(io.Discard), registry.ClientOptEnableCache(true))
-	if err != nil {
-		return nil, nil, fmt.Errorf("create Helm registry client: %w", err)
-	}
-	configuration := action.NewConfiguration()
-	configuration.RegistryClient = registryClient
-	if err = configuration.Init(settings.RESTClientGetter(), namespace, "secret"); err != nil {
-		return nil, nil, fmt.Errorf("configure Helm: %w", err)
-	}
-	return configuration, settings, nil
-}
-
 func ensureTLSHelmRelease(ctx context.Context, contextName string, release clustertls.HelmRelease) error {
-	configuration, settings, err := tlsHelmConfiguration(contextName, release.Namespace)
+	helm, err := helmclient.New(contextName, release.Namespace, nil)
 	if err != nil {
 		return err
 	}
-	metadata, err := action.NewGetMetadata(configuration).Run(release.Name)
+	metadata, err := action.NewGetMetadata(helm.Configuration).Run(release.Name)
 	if err == nil {
 		if metadata.Version != strings.TrimPrefix(release.Version, "v") && metadata.Version != release.Version {
 			return fmt.Errorf("Helm release %s has version %s, expected %s", release.Name, metadata.Version, release.Version)
@@ -452,7 +440,7 @@ func ensureTLSHelmRelease(ctx context.Context, contextName string, release clust
 	if !errors.Is(err, driver.ErrReleaseNotFound) {
 		return fmt.Errorf("inspect Helm release %s: %w", release.Name, err)
 	}
-	install := action.NewInstall(configuration)
+	install := action.NewInstall(helm.Configuration)
 	install.ReleaseName = release.Name
 	install.Namespace = release.Namespace
 	install.CreateNamespace = true
@@ -460,8 +448,8 @@ func ensureTLSHelmRelease(ctx context.Context, contextName string, release clust
 	install.WaitStrategy = kube.StatusWatcherStrategy
 	install.RollbackOnFailure = true
 	install.Version = release.Version
-	install.SetRegistryClient(configuration.RegistryClient)
-	chartPath, err := install.LocateChart(release.Chart, settings)
+	install.SetRegistryClient(helm.Registry)
+	chartPath, err := install.LocateChart(release.Chart, helm.Settings)
 	if err != nil {
 		return fmt.Errorf("locate chart %s:%s: %w", release.Chart, release.Version, err)
 	}
@@ -566,4 +554,12 @@ func parseGVR(value string) (schema.GroupVersionResource, error) {
 		return schema.GroupVersionResource{}, fmt.Errorf("invalid group/version/resource %q", value)
 	}
 	return schema.GroupVersionResource{Group: parts[0], Version: parts[1], Resource: parts[2]}, nil
+}
+
+func copyStringMap(source map[string]string) map[string]string {
+	result := make(map[string]string, len(source))
+	for key, value := range source {
+		result[key] = value
+	}
+	return result
 }

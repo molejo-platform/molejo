@@ -1,4 +1,4 @@
-package cmd
+package clusterdoctor
 
 import (
 	"bytes"
@@ -68,8 +68,8 @@ func TestDoctorHealthy(t *testing.T) {
 
 func TestDoctorInvalidContext(t *testing.T) {
 	output, err := executeDoctor(t, fakeDoctorClient{}, errors.New(`context "molejo-k3s" not found`))
-	if !errors.Is(err, errDoctorUnhealthy) {
-		t.Fatalf("error = %v, want %v", err, errDoctorUnhealthy)
+	if err == nil {
+		t.Fatal("expected unhealthy report")
 	}
 	if !strings.Contains(output, "FAIL  Kubernetes API") || !strings.Contains(output, "Result: unhealthy") {
 		t.Fatalf("unexpected output: %q", output)
@@ -86,24 +86,24 @@ func TestDoctorUnavailableDeployment(t *testing.T) {
 		},
 	}
 	output, err := executeDoctor(t, client, nil)
-	if !errors.Is(err, errDoctorUnhealthy) {
-		t.Fatalf("error = %v, want %v", err, errDoctorUnhealthy)
+	if err == nil {
+		t.Fatal("expected unhealthy report")
 	}
 	if !strings.Contains(output, "FAIL  Platform Operator") || !strings.Contains(output, "0/1 available") {
 		t.Fatalf("unexpected output: %q", output)
 	}
 }
 
-func executeDoctor(t *testing.T, client doctorClient, factoryErr error) (string, error) {
+func executeDoctor(t *testing.T, client Client, factoryErr error) (string, error) {
 	t.Helper()
-	runner := kubernetesDoctor{newClient: func(string) (doctorClient, error) {
+	runner := NewRunner(func(string) (Client, error) {
 		return client, factoryErr
-	}}
-	command := newDoctorCommand(runner)
+	})
 	output := &bytes.Buffer{}
-	command.SetOut(output)
-	command.SetErr(output)
-	command.SetArgs([]string{"--kube-context", "molejo-k3s"})
-	err := command.Execute()
-	return output.String(), err
+	report := runner.Run(t.Context(), "molejo-k3s")
+	report.WriteTo(output)
+	if report.Healthy() {
+		return output.String(), nil
+	}
+	return output.String(), errors.New("doctor found unhealthy components")
 }

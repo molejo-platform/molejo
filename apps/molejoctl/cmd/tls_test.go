@@ -10,21 +10,22 @@ import (
 	"time"
 
 	"github.com/molejo-platform/molejo/apps/molejoctl/internal/clustertls"
+	"github.com/molejo-platform/molejo/apps/molejoctl/internal/tlssetup"
 )
 
 type fakeTLSOperator struct {
-	prepareOptions tlsOptions
-	verifyOptions  tlsOptions
-	report         tlsReport
+	prepareOptions tlssetup.Options
+	verifyOptions  tlssetup.Options
+	report         tlssetup.Report
 	err            error
 }
 
-func (f *fakeTLSOperator) Prepare(_ context.Context, options tlsOptions) (tlsReport, error) {
+func (f *fakeTLSOperator) Prepare(_ context.Context, options tlssetup.Options) (tlssetup.Report, error) {
 	f.prepareOptions = options
 	return f.report, f.err
 }
 
-func (f *fakeTLSOperator) Verify(_ context.Context, options tlsOptions) (tlsReport, error) {
+func (f *fakeTLSOperator) Verify(_ context.Context, options tlssetup.Options) (tlssetup.Report, error) {
 	f.verifyOptions = options
 	return f.report, f.err
 }
@@ -35,7 +36,7 @@ func TestTLSPrepareUsesContextSetupAndCredentialSource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if operator.prepareOptions.contextName != "molejo-k3s" || operator.prepareOptions.setupPath != "tls.yaml" || operator.prepareOptions.credentialEnv != "CLOUDFLARE_TOKEN" || !operator.prepareOptions.yes {
+	if operator.prepareOptions.ContextName != "molejo-k3s" || operator.prepareOptions.SetupPath != "tls.yaml" || operator.prepareOptions.CredentialEnv != "CLOUDFLARE_TOKEN" || !operator.prepareOptions.Yes {
 		t.Fatalf("options=%+v", operator.prepareOptions)
 	}
 	if !strings.Contains(output, "Prepared TLS setup molejo-dev") || !strings.Contains(output, "Result: ready") {
@@ -49,7 +50,7 @@ func TestTLSVerifyIsReadOnlyCommand(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if operator.verifyOptions.contextName != "molejo-k3s" || operator.verifyOptions.setupPath != "tls.yaml" {
+	if operator.verifyOptions.ContextName != "molejo-k3s" || operator.verifyOptions.SetupPath != "tls.yaml" {
 		t.Fatalf("options=%+v", operator.verifyOptions)
 	}
 	if !strings.Contains(output, "Verified TLS setup molejo-dev") {
@@ -65,10 +66,10 @@ func TestTLSCommandReturnsFailure(t *testing.T) {
 	}
 }
 
-func readyTLSReport() tlsReport {
-	return tlsReport{
-		setup:       clustertls.Setup{Metadata: clustertls.Metadata{Name: "molejo-dev"}, Spec: clustertls.SetupSpec{DNSNames: []string{"*.molejo.dev"}, TargetSecretRef: clustertls.ObjectReference{Namespace: "molejo-system", Name: "molejo-dev-tls"}}},
-		certificate: clustertls.CertificateFacts{Valid: true, NotAfter: time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC)},
+func readyTLSReport() tlssetup.Report {
+	return tlssetup.Report{
+		Setup:       clustertls.Setup{Metadata: clustertls.Metadata{Name: "molejo-dev"}, Spec: clustertls.SetupSpec{DNSNames: []string{"*.molejo.dev"}, TargetSecretRef: clustertls.ObjectReference{Namespace: "molejo-system", Name: "molejo-dev-tls"}}},
+		Certificate: clustertls.CertificateFacts{Valid: true, NotAfter: time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC)},
 	}
 }
 

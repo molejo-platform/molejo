@@ -1,4 +1,4 @@
-package cmd
+package controlplaneinstall
 
 import (
 	"context"
@@ -16,9 +16,7 @@ import (
 
 	"helm.sh/helm/v4/pkg/action"
 	"helm.sh/helm/v4/pkg/chart/loader"
-	"helm.sh/helm/v4/pkg/cli"
 	"helm.sh/helm/v4/pkg/kube"
-	"helm.sh/helm/v4/pkg/registry"
 	"helm.sh/helm/v4/pkg/storage/driver"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -28,10 +26,13 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/clientcmd"
+
+	"github.com/molejo-platform/molejo/apps/molejoctl/internal/helmclient"
+	"github.com/molejo-platform/molejo/apps/molejoctl/internal/kubecontext"
 )
 
 const (
+	systemNamespace         = "molejo-system"
 	controlPlaneNamespace   = "molejo-control-plane"
 	controlPlaneRelease     = "molejo-control-plane"
 	controlPlaneChart       = "oci://ghcr.io/molejo-platform/charts/molejo-control-plane"
@@ -44,86 +45,109 @@ var controlPlaneLabels = map[string]string{
 	"app.kubernetes.io/managed-by": "molejoctl",
 }
 
-type kubernetesControlPlaneInstaller struct{}
-
-func newControlPlaneInstaller() controlPlaneInstaller {
-	return kubernetesControlPlaneInstaller{}
+// Options identifies the target and release selected by the CLI.
+type Options struct {
+	ContextName  string
+	Version      string
+	StorageClass string
 }
 
-func (kubernetesControlPlaneInstaller) Install(ctx context.Context, options controlPlaneInstallOptions) (controlPlaneInstallReport, error) {
-	client, err := kubernetesClientForContext(options.contextName)
+// Check is one readiness observation produced after installation.
+type Check struct {
+	Name    string
+	Detail  string
+	Healthy bool
+}
+
+// Report summarizes the converged installation without printing credentials by default.
+type Report struct {
+	AlreadyInstalled bool
+	OwnerPassword    string
+	DatabasePassword string
+	Checks           []Check
+}
+
+// Installer converges the control plane dependencies in one Kubernetes cluster.
+type Installer struct{}
+
+// New constructs the production control plane installer.
+func New() *Installer { return &Installer{} }
+
+// Install observes, plans, applies and verifies the control plane installation.
+func (*Installer) Install(ctx context.Context, options Options) (Report, error) {
+	client, err := kubernetesClientForContext(options.ContextName)
 	if err != nil {
-		return controlPlaneInstallReport{}, err
+		return Report{}, err
 	}
 	if err = requireClusterAgent(ctx, client); err != nil {
-		return controlPlaneInstallReport{}, err
+		return Report{}, err
 	}
-	helmState, err := inspectControlPlaneRelease(options.contextName)
+	helmState, err := inspectControlPlaneRelease(options.ContextName)
 	if err != nil {
-		return controlPlaneInstallReport{}, err
+		return Report{}, err
 	}
-	if helmState.installed && helmState.version != options.version {
-		return controlPlaneInstallReport{}, fmt.Errorf("release %s has version %s; upgrade to %s is not available yet", controlPlaneRelease, helmState.version, options.version)
+	if helmState.installed && helmState.version != options.Version {
+		return Report{}, fmt.Errorf("release %s has version %s; upgrade to %s is not available yet", controlPlaneRelease, helmState.version, options.Version)
 	}
 	if helmState.installed && helmState.status != "deployed" {
-		return controlPlaneInstallReport{}, fmt.Errorf("release %s is %s; run the documented teardown before retrying", controlPlaneRelease, helmState.status)
+		return Report{}, fmt.Errorf("release %s is %s; run the documented teardown before retrying", controlPlaneRelease, helmState.status)
 	}
 
 	observed, err := observeControlPlane(ctx, client, helmState.installed)
 	if err != nil {
-		return controlPlaneInstallReport{}, err
+		return Report{}, err
 	}
 	plan, err := buildControlPlaneInstallPlan(observed)
 	if err != nil {
-		return controlPlaneInstallReport{}, err
+		return Report{}, err
 	}
-	storageClass, err := resolvePostgresStorageClass(ctx, client, options.storageClass, observed.databasePVC)
+	storageClass, err := resolvePostgresStorageClass(ctx, client, options.StorageClass, observed.databasePVC)
 	if err != nil {
-		return controlPlaneInstallReport{}, err
+		return Report{}, err
 	}
 	if err = ensureControlPlaneNamespace(ctx, client); err != nil {
-		return controlPlaneInstallReport{}, err
+		return Report{}, err
 	}
 
 	database, err := ensureDatabaseSecret(ctx, client, plan.createDatabaseCredentials)
 	if err != nil {
-		return controlPlaneInstallReport{}, err
+		return Report{}, err
 	}
 	ca, err := ensureAgentCASecret(ctx, client, plan.createAgentCA)
 	if err != nil {
-		return controlPlaneInstallReport{}, err
+		return Report{}, err
 	}
 	if _, err = ensureServerIdentitySecret(ctx, client, ca, plan.createServerIdentity); err != nil {
-		return controlPlaneInstallReport{}, err
+		return Report{}, err
 	}
 	bootstrap, enrollmentToken, err := ensureBootstrapSecrets(ctx, client, plan.createBootstrapIdentity, observed.agentPaired)
 	if err != nil {
-		return controlPlaneInstallReport{}, err
+		return Report{}, err
 	}
 	agentChanged, err := ensureAgentConnection(ctx, client, ca.certificatePEM, enrollmentToken, !plan.configureAgent)
 	if err != nil {
-		return controlPlaneInstallReport{}, err
+		return Report{}, err
 	}
 	if agentChanged {
 		if err = restartClusterAgent(ctx, client); err != nil {
-			return controlPlaneInstallReport{}, err
+			return Report{}, err
 		}
 	}
 	if plan.installChart {
-		if err = installControlPlaneChart(ctx, options.contextName, options.version, storageClass); err != nil {
-			return controlPlaneInstallReport{}, err
+		if err = installControlPlaneChart(ctx, options.ContextName, options.Version, storageClass); err != nil {
+			return Report{}, err
 		}
 	}
 
 	checks, err := waitForControlPlane(ctx, client)
 	if err != nil {
-		return controlPlaneInstallReport{}, err
+		return Report{}, err
 	}
-	return controlPlaneInstallReport{
-		alreadyInstalled: helmState.installed && !agentChanged,
-		ownerPassword:    bootstrap.ownerPassword,
-		databasePassword: database.password,
-		checks:           checks,
+	return Report{
+		AlreadyInstalled: helmState.installed && !agentChanged,
+		OwnerPassword:    bootstrap.ownerPassword,
+		DatabasePassword: database.password,
+		Checks:           checks,
 	}, nil
 }
 
@@ -134,11 +158,11 @@ type controlPlaneReleaseState struct {
 }
 
 func inspectControlPlaneRelease(contextName string) (controlPlaneReleaseState, error) {
-	configuration, _, err := newControlPlaneHelmConfiguration(contextName)
+	helm, err := helmclient.New(contextName, controlPlaneNamespace, nil)
 	if err != nil {
 		return controlPlaneReleaseState{}, err
 	}
-	metadata, err := action.NewGetMetadata(configuration).Run(controlPlaneRelease)
+	metadata, err := action.NewGetMetadata(helm.Configuration).Run(controlPlaneRelease)
 	if errors.Is(err, driver.ErrReleaseNotFound) {
 		return controlPlaneReleaseState{}, nil
 	}
@@ -149,11 +173,11 @@ func inspectControlPlaneRelease(contextName string) (controlPlaneReleaseState, e
 }
 
 func installControlPlaneChart(ctx context.Context, contextName, version, storageClass string) error {
-	configuration, settings, err := newControlPlaneHelmConfiguration(contextName)
+	helm, err := helmclient.New(contextName, controlPlaneNamespace, nil)
 	if err != nil {
 		return err
 	}
-	install := action.NewInstall(configuration)
+	install := action.NewInstall(helm.Configuration)
 	install.ReleaseName = controlPlaneRelease
 	install.Namespace = controlPlaneNamespace
 	install.Timeout = controlPlaneInstallWait
@@ -161,8 +185,8 @@ func installControlPlaneChart(ctx context.Context, contextName, version, storage
 	install.WaitForJobs = true
 	install.RollbackOnFailure = true
 	install.Version = version
-	install.SetRegistryClient(configuration.RegistryClient)
-	chartPath, err := install.LocateChart(controlPlaneChart, settings)
+	install.SetRegistryClient(helm.Registry)
+	chartPath, err := install.LocateChart(controlPlaneChart, helm.Settings)
 	if err != nil {
 		return fmt.Errorf("locate chart %s:%s: %w", controlPlaneChart, version, err)
 	}
@@ -177,38 +201,11 @@ func installControlPlaneChart(ctx context.Context, contextName, version, storage
 	return nil
 }
 
-func newControlPlaneHelmConfiguration(contextName string) (*action.Configuration, *cli.EnvSettings, error) {
-	settings := cli.New()
-	settings.KubeContext = contextName
-	settings.SetNamespace(controlPlaneNamespace)
-	registryClient, err := registry.NewClient(registry.ClientOptEnableCache(true))
-	if err != nil {
-		return nil, nil, fmt.Errorf("create OCI registry client: %w", err)
-	}
-	configuration := action.NewConfiguration()
-	configuration.RegistryClient = registryClient
-	if err = configuration.Init(settings.RESTClientGetter(), controlPlaneNamespace, "secret"); err != nil {
-		return nil, nil, fmt.Errorf("configure control plane Helm client: %w", err)
-	}
-	return configuration, settings, nil
-}
-
 func kubernetesClientForContext(contextName string) (*kubernetes.Clientset, error) {
-	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
-	overrides := &clientcmd.ConfigOverrides{CurrentContext: contextName}
-	clientConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, overrides)
-	rawConfig, err := clientConfig.RawConfig()
+	restConfig, err := kubecontext.RESTConfig(contextName, 30*time.Second)
 	if err != nil {
-		return nil, fmt.Errorf("load kubeconfig: %w", err)
+		return nil, err
 	}
-	if _, exists := rawConfig.Contexts[contextName]; !exists {
-		return nil, fmt.Errorf("context %q not found", contextName)
-	}
-	restConfig, err := clientConfig.ClientConfig()
-	if err != nil {
-		return nil, fmt.Errorf("configure context %q: %w", contextName, err)
-	}
-	restConfig.Timeout = 30 * time.Second
 	client, err := kubernetes.NewForConfig(restConfig)
 	if err != nil {
 		return nil, fmt.Errorf("create Kubernetes client: %w", err)
@@ -565,33 +562,33 @@ func restartClusterAgent(ctx context.Context, client kubernetes.Interface) error
 	return nil
 }
 
-func waitForControlPlane(parent context.Context, client *kubernetes.Clientset) ([]doctorCheck, error) {
+func waitForControlPlane(parent context.Context, client *kubernetes.Clientset) ([]Check, error) {
 	ctx, cancel := context.WithTimeout(parent, controlPlaneReadyWait)
 	defer cancel()
-	checks := []doctorCheck{}
+	checks := []Check{}
 	if err := waitForPVC(ctx, client); err != nil {
 		return nil, err
 	}
-	checks = append(checks, doctorCheck{name: "PostgreSQL PVC", detail: "Bound", healthy: true})
+	checks = append(checks, Check{Name: "PostgreSQL PVC", Detail: "Bound", Healthy: true})
 	if err := waitForStatefulSet(ctx, client); err != nil {
 		return nil, err
 	}
-	checks = append(checks, doctorCheck{name: "PostgreSQL", detail: "1/1 ready", healthy: true})
+	checks = append(checks, Check{Name: "PostgreSQL", Detail: "1/1 ready", Healthy: true})
 	if err := waitForJob(ctx, client); err != nil {
 		return nil, err
 	}
-	checks = append(checks, doctorCheck{name: "Database bootstrap", detail: "Complete", healthy: true})
+	checks = append(checks, Check{Name: "Database bootstrap", Detail: "Complete", Healthy: true})
 	if err := waitForDeployment(ctx, client); err != nil {
 		return nil, err
 	}
-	checks = append(checks, doctorCheck{name: "Control Plane API", detail: "1/1 available", healthy: true})
+	checks = append(checks, Check{Name: "Control Plane API", Detail: "1/1 available", Healthy: true})
 	if err := waitForAgentPaired(ctx, client); err != nil {
 		return nil, err
 	}
 	if err := waitForEnrollmentTokenCleared(ctx, client); err != nil {
 		return nil, err
 	}
-	checks = append(checks, doctorCheck{name: "Cluster Agent", detail: "Paired", healthy: true})
+	checks = append(checks, Check{Name: "Cluster Agent", Detail: "Paired", Healthy: true})
 	return checks, nil
 }
 

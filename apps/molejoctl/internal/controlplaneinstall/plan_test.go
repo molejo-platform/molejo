@@ -1,4 +1,4 @@
-package cmd
+package controlplaneinstall
 
 import (
 	"strings"

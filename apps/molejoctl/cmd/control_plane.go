@@ -7,24 +7,15 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+
+	"github.com/molejo-platform/molejo/apps/molejoctl/internal/controlplaneinstall"
 )
 
-type controlPlaneInstallOptions struct {
-	contextName  string
-	version      string
-	storageClass string
-}
-
-type controlPlaneInstallReport struct {
-	alreadyInstalled bool
-	ownerPassword    string
-	databasePassword string
-	checks           []doctorCheck
-}
-
 type controlPlaneInstaller interface {
-	Install(context.Context, controlPlaneInstallOptions) (controlPlaneInstallReport, error)
+	Install(context.Context, controlplaneinstall.Options) (controlplaneinstall.Report, error)
 }
+
+func newControlPlaneInstaller() controlPlaneInstaller { return controlplaneinstall.New() }
 
 func newControlPlaneCommand(cliVersion string, installer controlPlaneInstaller) *cobra.Command {
 	command := &cobra.Command{
@@ -52,26 +43,26 @@ func newControlPlaneInstallCommand(cliVersion string, installer controlPlaneInst
 			if err != nil {
 				return err
 			}
-			report, err := installer.Install(command.Context(), controlPlaneInstallOptions{
-				contextName: contextName, version: version, storageClass: strings.TrimSpace(storageClass),
+			report, err := installer.Install(command.Context(), controlplaneinstall.Options{
+				ContextName: contextName, Version: version, StorageClass: strings.TrimSpace(storageClass),
 			})
 			if err != nil {
 				return fmt.Errorf("install Molejo control plane: %w", err)
 			}
 			verb := "Installed"
-			if report.alreadyInstalled {
+			if report.AlreadyInstalled {
 				verb = "Verified"
 			}
 			_, _ = fmt.Fprintf(command.OutOrStdout(), "%s Molejo control plane %s in context %s\n\n", verb, version, contextName)
-			for _, check := range report.checks {
+			for _, check := range report.Checks {
 				status := "PASS"
-				if !check.healthy {
+				if !check.Healthy {
 					status = "FAIL"
 				}
-				_, _ = fmt.Fprintf(command.OutOrStdout(), "%-5s %-22s %s\n", status, check.name, check.detail)
+				_, _ = fmt.Fprintf(command.OutOrStdout(), "%-5s %-22s %s\n", status, check.Name, check.Detail)
 			}
 			if showGeneratedCredentials {
-				_, _ = fmt.Fprintf(command.OutOrStdout(), "\nDatabase user: molejo_cp\nDatabase password: %s\nOwner: owner\nOwner password: %s\n", report.databasePassword, report.ownerPassword)
+				_, _ = fmt.Fprintf(command.OutOrStdout(), "\nDatabase user: molejo_cp\nDatabase password: %s\nOwner: owner\nOwner password: %s\n", report.DatabasePassword, report.OwnerPassword)
 			}
 			_, _ = fmt.Fprintln(command.OutOrStdout(), "\nResult: healthy")
 			return nil

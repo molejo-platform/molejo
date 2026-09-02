@@ -6,6 +6,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/molejo-platform/molejo/apps/molejoctl/internal/clusterinstall"
 )
 
 type fakeInstaller struct {
@@ -69,7 +71,7 @@ func TestInstallDevelopmentBuildAcceptsVersion(t *testing.T) {
 }
 
 func TestInstallReportsAlreadyInstalled(t *testing.T) {
-	installer := &fakeInstaller{result: installResult{alreadyInstalled: true}}
+	installer := &fakeInstaller{result: installResult{AlreadyInstalled: true}}
 	output, err := executeInstall(
 		t,
 		"v0.1.0-alpha.2",
@@ -103,7 +105,7 @@ func TestInstallReturnsUnhealthyDoctor(t *testing.T) {
 		t,
 		"v0.1.0-alpha.2",
 		&fakeInstaller{},
-		fakeDoctor{report: doctorReport{contextName: "molejo-k3s", checks: []doctorCheck{{name: "Cluster Agent", detail: "0/1 available"}}}},
+		fakeDoctor{report: doctorReport{ContextName: "molejo-k3s", Checks: []doctorCheck{{Name: "Cluster Agent", Detail: "0/1 available"}}}},
 		"--kube-context", "molejo-k3s",
 	)
 	if !errors.Is(err, errDoctorUnhealthy) {
@@ -122,17 +124,17 @@ func TestInstallRequiresKubeContext(t *testing.T) {
 }
 
 func TestExistingReleaseWithSameVersionIsIdempotent(t *testing.T) {
-	result, err := existingReleaseResult("0.1.0-alpha.2", "0.1.0-alpha.2")
+	result, err := clusterinstall.ExistingReleaseResult("0.1.0-alpha.2", "0.1.0-alpha.2")
 	if err != nil {
 		t.Fatalf("existing release: %v", err)
 	}
-	if !result.alreadyInstalled {
+	if !result.AlreadyInstalled {
 		t.Fatal("same version was not reported as already installed")
 	}
 }
 
 func TestExistingReleaseWithDifferentVersionRequiresUpgrade(t *testing.T) {
-	_, err := existingReleaseResult("0.1.0-alpha.1", "0.1.0-alpha.2")
+	_, err := clusterinstall.ExistingReleaseResult("0.1.0-alpha.1", "0.1.0-alpha.2")
 	if err == nil || !strings.Contains(err.Error(), "upgrade to 0.1.0-alpha.2 is not available yet") {
 		t.Fatalf("error = %v, want unavailable upgrade error", err)
 	}
@@ -140,8 +142,8 @@ func TestExistingReleaseWithDifferentVersionRequiresUpgrade(t *testing.T) {
 
 func healthyDoctorReport() doctorReport {
 	return doctorReport{
-		contextName: "molejo-k3s",
-		checks:      []doctorCheck{{name: "Kubernetes API", detail: "v1.36.3+k3s1", healthy: true}},
+		ContextName: "molejo-k3s",
+		Checks:      []doctorCheck{{Name: "Kubernetes API", Detail: "v1.36.3+k3s1", Healthy: true}},
 	}
 }
 

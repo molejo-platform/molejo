@@ -1,4 +1,4 @@
-package cmd
+package tlssetup
 
 import (
 	"bytes"
@@ -45,18 +45,18 @@ func TestTLSPrepareConvergesAndRequiresApproval(t *testing.T) {
 		CertManager: clustertls.CertManagerFacts{NamespaceExists: true, Installed: true, VersionMatches: true, Credential: clustertls.CredentialFacts{Exists: true, Owned: true, Usable: true, Matches: true}, Issuer: clustertls.ManagedResourceFacts{Exists: true, Owned: true, Ready: true, Matches: true}, Certificate: clustertls.ManagedResourceFacts{Exists: true, Owned: true, Ready: true, Matches: true}},
 	}
 	environment := &fakeTLSEnvironment{initial: clustertls.Facts{CertManager: clustertls.CertManagerFacts{NamespaceExists: true, Installed: true, VersionMatches: true, Credential: clustertls.CredentialFacts{Exists: true, Owned: true, Usable: true, Matches: true}}}, ready: readyFacts}
-	operator := kubernetesTLSOperator{newEnvironment: func(string, []byte) (tlsEnvironment, error) { return environment, nil }}
+	operator := Operator{newEnvironment: func(string, []byte) (tlsEnvironment, error) { return environment, nil }}
 	setupPath := writeTLSSetup(t, true)
 	t.Setenv("CLOUDFLARE_TOKEN", "test-token")
 
-	if _, err := operator.Prepare(t.Context(), tlsOptions{contextName: "molejo-k3s", setupPath: setupPath, credentialEnv: "CLOUDFLARE_TOKEN", output: &bytes.Buffer{}}); err == nil {
+	if _, err := operator.Prepare(t.Context(), Options{ContextName: "molejo-k3s", SetupPath: setupPath, CredentialEnv: "CLOUDFLARE_TOKEN", Output: &bytes.Buffer{}}); err == nil {
 		t.Fatal("expected approval error")
 	}
-	report, err := operator.Prepare(t.Context(), tlsOptions{contextName: "molejo-k3s", setupPath: setupPath, credentialEnv: "CLOUDFLARE_TOKEN", output: &bytes.Buffer{}, yes: true})
+	report, err := operator.Prepare(t.Context(), Options{ContextName: "molejo-k3s", SetupPath: setupPath, CredentialEnv: "CLOUDFLARE_TOKEN", Output: &bytes.Buffer{}, Yes: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !report.changed || !report.certificate.Valid || len(environment.operations) != 4 {
+	if !report.Changed || !report.Certificate.Valid || len(environment.operations) != 4 {
 		t.Fatalf("report=%+v operations=%d", report, len(environment.operations))
 	}
 }
@@ -64,9 +64,9 @@ func TestTLSPrepareConvergesAndRequiresApproval(t *testing.T) {
 func TestTLSVerifyOnlyRequiresExistingMaterial(t *testing.T) {
 	now := time.Date(2026, 9, 2, 0, 0, 0, 0, time.UTC)
 	environment := &fakeTLSEnvironment{initial: clustertls.Facts{Certificate: clustertls.CertificateFacts{Exists: true, Valid: true, KeyMatches: true, DNSNamesCovered: true, NotBefore: now, NotAfter: now.Add(90 * 24 * time.Hour)}}}
-	operator := kubernetesTLSOperator{newEnvironment: func(string, []byte) (tlsEnvironment, error) { return environment, nil }}
-	report, err := operator.Verify(t.Context(), tlsOptions{contextName: "molejo-k3s", setupPath: writeTLSSetup(t, false)})
-	if err != nil || !report.certificate.Valid || len(environment.operations) != 0 {
+	operator := Operator{newEnvironment: func(string, []byte) (tlsEnvironment, error) { return environment, nil }}
+	report, err := operator.Verify(t.Context(), Options{ContextName: "molejo-k3s", SetupPath: writeTLSSetup(t, false)})
+	if err != nil || !report.Certificate.Valid || len(environment.operations) != 0 {
 		t.Fatalf("report=%+v operations=%d err=%v", report, len(environment.operations), err)
 	}
 }

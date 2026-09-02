@@ -6,30 +6,32 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/molejo-platform/molejo/apps/molejoctl/internal/controlplaneinstall"
 )
 
 type fakeControlPlaneInstaller struct {
-	options controlPlaneInstallOptions
-	report  controlPlaneInstallReport
+	options controlplaneinstall.Options
+	report  controlplaneinstall.Report
 	err     error
 }
 
-func (f *fakeControlPlaneInstaller) Install(_ context.Context, options controlPlaneInstallOptions) (controlPlaneInstallReport, error) {
+func (f *fakeControlPlaneInstaller) Install(_ context.Context, options controlplaneinstall.Options) (controlplaneinstall.Report, error) {
 	f.options = options
 	return f.report, f.err
 }
 
 func TestControlPlaneInstallUsesContextAndVersion(t *testing.T) {
-	installer := &fakeControlPlaneInstaller{report: controlPlaneInstallReport{
-		ownerPassword:    "secret-owner-password",
-		databasePassword: "secret-database-password",
-		checks:           []doctorCheck{{name: "Cluster Agent", detail: "Paired", healthy: true}},
+	installer := &fakeControlPlaneInstaller{report: controlplaneinstall.Report{
+		OwnerPassword:    "secret-owner-password",
+		DatabasePassword: "secret-database-password",
+		Checks:           []controlplaneinstall.Check{{Name: "Cluster Agent", Detail: "Paired", Healthy: true}},
 	}}
 	output, err := executeControlPlaneInstall(t, "v0.1.0-alpha.3", installer, "--kube-context", "molejo-k3s", "--storage-class", "local-path")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if installer.options.contextName != "molejo-k3s" || installer.options.version != "0.1.0-alpha.3" || installer.options.storageClass != "local-path" {
+	if installer.options.ContextName != "molejo-k3s" || installer.options.Version != "0.1.0-alpha.3" || installer.options.StorageClass != "local-path" {
 		t.Fatalf("options=%+v", installer.options)
 	}
 	if !strings.Contains(output, "Cluster Agent") || !strings.Contains(output, "Result: healthy") {
@@ -41,7 +43,7 @@ func TestControlPlaneInstallUsesContextAndVersion(t *testing.T) {
 }
 
 func TestControlPlaneInstallShowsCredentialOnlyWhenRequested(t *testing.T) {
-	installer := &fakeControlPlaneInstaller{report: controlPlaneInstallReport{ownerPassword: "secret-owner-password", databasePassword: "secret-database-password"}}
+	installer := &fakeControlPlaneInstaller{report: controlplaneinstall.Report{OwnerPassword: "secret-owner-password", DatabasePassword: "secret-database-password"}}
 	output, err := executeControlPlaneInstall(t, "v0.1.0-alpha.3", installer, "--kube-context", "molejo-k3s", "--show-generated-credentials")
 	if err != nil {
 		t.Fatal(err)

@@ -2,6 +2,8 @@ package cmd
 
 import "github.com/spf13/cobra"
 
+const systemNamespace = "molejo-system"
+
 func newClusterCommand(version string, doctor doctorRunner, installer clusterInstaller, tls tlsOperator) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "cluster",
