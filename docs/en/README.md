@@ -72,6 +72,7 @@ Current component guides:
 - [Outbound Cluster Agent](operations/cluster-agent.md)
 - [Cluster TLS](operations/tls.md)
 - [K3s day-zero setup](operations/cluster-setup.md)
+- [Application registry access](operations/registry-access.md)
 - [Outbound Cluster Agent identity and pairing ADR](adr/0013-outbound-cluster-agent-identity-and-pairing.md)
 
 ## Contributing

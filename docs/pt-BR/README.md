@@ -74,6 +74,7 @@ Guias atuais dos componentes:
 - [Cluster Agent outbound](operations/cluster-agent.md)
 - [TLS do cluster](operations/tls.md)
 - [Setup day zero no K3s](operations/cluster-setup.md)
+- [Acesso ao registry de aplicações](operations/registry-access.md)
 - [ADR de identidade e pairing do Cluster Agent outbound](adr/0013-outbound-cluster-agent-identity-and-pairing.md)
 
 ## Contribuição
