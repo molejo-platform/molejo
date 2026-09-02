@@ -4,7 +4,7 @@ import "github.com/spf13/cobra"
 
 const systemNamespace = "molejo-system"
 
-func newClusterCommand(version string, doctor doctorRunner, installer clusterInstaller, tls tlsOperator, setup clusterSetupRunner) *cobra.Command {
+func newClusterCommand(version string, doctor doctorRunner, installer clusterInstaller, tls tlsOperator, setup clusterSetupRunner, registry registryRunner) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "cluster",
 		Short: "Install and diagnose Molejo in a Kubernetes cluster",
@@ -15,6 +15,7 @@ func newClusterCommand(version string, doctor doctorRunner, installer clusterIns
 		newInstallCommand(version, installer, doctor),
 		newTLSCommand(tls),
 		newClusterSetupCommand(setup),
+		newRegistryCommand(registry),
 	)
 	return command
 }
