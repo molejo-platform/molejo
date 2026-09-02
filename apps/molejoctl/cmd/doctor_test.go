@@ -13,6 +13,9 @@ type fakeDoctorClient struct {
 	namespaceErr error
 	resourceErr  map[string]error
 	deployments  map[string][2]int32
+	tlsDetail    string
+	tlsExists    bool
+	tlsErr       error
 }
 
 func (f fakeDoctorClient) ServerVersion() (string, error) {
@@ -37,6 +40,10 @@ func (f fakeDoctorClient) DeploymentAvailability(
 		return 0, 0, errors.New("deployment not found")
 	}
 	return availability[0], availability[1], nil
+}
+
+func (f fakeDoctorClient) TLSStatus(context.Context) (string, bool, error) {
+	return f.tlsDetail, f.tlsExists, f.tlsErr
 }
 
 func TestDoctorHealthy(t *testing.T) {
@@ -90,6 +97,23 @@ func TestDoctorUnavailableDeployment(t *testing.T) {
 		t.Fatalf("error = %v, want %v", err, errDoctorUnhealthy)
 	}
 	if !strings.Contains(output, "FAIL  Platform Operator") || !strings.Contains(output, "0/1 available") {
+		t.Fatalf("unexpected output: %q", output)
+	}
+}
+
+func TestDoctorReportsConfiguredTLS(t *testing.T) {
+	client := fakeDoctorClient{
+		version:     "v1.36.3+k3s1",
+		resourceErr: map[string]error{},
+		deployments: map[string][2]int32{"platform-operator": {1, 1}, "cluster-agent": {1, 1}},
+		tlsExists:   true,
+		tlsDetail:   "default expires 2026-12-01",
+	}
+	output, err := executeDoctor(t, client, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(output, "PASS  TLS Certificate") || !strings.Contains(output, "default expires 2026-12-01") {
 		t.Fatalf("unexpected output: %q", output)
 	}
 }

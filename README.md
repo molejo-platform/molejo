@@ -25,6 +25,7 @@ Current experimental components:
 
 - [Platform Operator](docs/en/operations/platform-operator.md)
 - [Outbound Cluster Agent](docs/en/operations/cluster-agent.md)
+- [Cluster TLS](docs/en/operations/tls.md)
 
 ## Contributing
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 	"time"
 
@@ -13,6 +14,8 @@ import (
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
+
+	"github.com/molejo-platform/molejo/apps/molejoctl/internal/clustertls"
 )
 
 const (
@@ -67,6 +70,7 @@ type doctorClient interface {
 	Namespace(context.Context, string) error
 	Resources(string, ...string) error
 	DeploymentAvailability(context.Context, string, string) (int32, int32, error)
+	TLSStatus(context.Context) (string, bool, error)
 }
 
 type doctorClientFactory func(string) (doctorClient, error)
@@ -113,6 +117,9 @@ func (d kubernetesDoctor) Run(parent context.Context, contextName string) doctor
 		deploymentCheck(ctx, client, "Platform Operator", "platform-operator"),
 		deploymentCheck(ctx, client, "Cluster Agent", "cluster-agent"),
 	)
+	if detail, exists, tlsErr := client.TLSStatus(ctx); exists || tlsErr != nil {
+		report.checks = append(report.checks, resultCheck("TLS Certificate", detail, tlsErr))
+	}
 	return report
 }
 
@@ -248,4 +255,32 @@ func (c realDoctorClient) DeploymentAvailability(
 		desired = *deployment.Spec.Replicas
 	}
 	return deployment.Status.AvailableReplicas, desired, nil
+}
+
+func (c realDoctorClient) TLSStatus(ctx context.Context) (string, bool, error) {
+	bindings, err := c.kubernetes.CoreV1().ConfigMaps(systemNamespace).List(ctx, metav1.ListOptions{LabelSelector: "app.kubernetes.io/managed-by=molejoctl,platform.molejo.dev/tls-profile"})
+	if err != nil {
+		return "", false, fmt.Errorf("list TLS bindings: %w", err)
+	}
+	if len(bindings.Items) == 0 {
+		return "", false, nil
+	}
+	details := make([]string, 0, len(bindings.Items))
+	for _, item := range bindings.Items {
+		binding, decodeErr := clustertls.DecodeBinding([]byte(item.Data[tlsBindingKey]))
+		if decodeErr != nil {
+			return "", true, decodeErr
+		}
+		secret, getErr := c.kubernetes.CoreV1().Secrets(binding.Spec.CertificateRef.Namespace).Get(ctx, binding.Spec.CertificateRef.Name, metav1.GetOptions{})
+		if getErr != nil {
+			return "", true, fmt.Errorf("TLS profile %s Secret unavailable: %w", binding.Metadata.Name, getErr)
+		}
+		facts := inspectTLSSecret(secret, binding.Spec.Domains, time.Now().UTC())
+		if !facts.Valid {
+			return "", true, fmt.Errorf("TLS profile %s: %s", binding.Metadata.Name, facts.Problem)
+		}
+		details = append(details, fmt.Sprintf("%s expires %s", binding.Metadata.Name, facts.NotAfter.Format("2006-01-02")))
+	}
+	sort.Strings(details)
+	return strings.Join(details, ", "), true, nil
 }
