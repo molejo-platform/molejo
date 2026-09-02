@@ -46,7 +46,7 @@ func newInstallCommand(cliVersion string, installer clusterInstaller, doctor doc
 			}
 
 			report := doctor.Run(command.Context(), contextName)
-			report.WriteTo(command.OutOrStdout())
+			report.Render(command.OutOrStdout())
 			if !report.Healthy() {
 				return errDoctorUnhealthy
 			}

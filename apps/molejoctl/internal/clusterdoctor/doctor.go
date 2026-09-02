@@ -45,7 +45,7 @@ func (r Report) Healthy() bool {
 }
 
 // WriteTo renders the stable human-readable CLI report.
-func (r Report) WriteTo(writer io.Writer) {
+func (r Report) Render(writer io.Writer) {
 	_, _ = fmt.Fprintf(writer, "Molejo doctor\nContext: %s\n\n", r.ContextName)
 	for _, check := range r.Checks {
 		status := "PASS"

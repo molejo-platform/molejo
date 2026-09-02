@@ -101,7 +101,7 @@ func executeDoctor(t *testing.T, client Client, factoryErr error) (string, error
 	})
 	output := &bytes.Buffer{}
 	report := runner.Run(t.Context(), "molejo-k3s")
-	report.WriteTo(output)
+	report.Render(output)
 	if report.Healthy() {
 		return output.String(), nil
 	}

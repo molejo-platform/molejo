@@ -31,7 +31,7 @@ func newDoctorCommand(runner doctorRunner) *cobra.Command {
 				return errors.New("context must not be empty")
 			}
 			report := runner.Run(command.Context(), contextName)
-			report.WriteTo(command.OutOrStdout())
+			report.Render(command.OutOrStdout())
 			if !report.Healthy() {
 				return errDoctorUnhealthy
 			}
