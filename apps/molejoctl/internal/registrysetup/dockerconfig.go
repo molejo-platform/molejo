@@ -42,7 +42,7 @@ func ReadDockerConfigSource(path string, stdin io.Reader) ([]byte, error) {
 		closeFile = file.Close
 	}
 	if closeFile != nil {
-		defer closeFile()
+		defer func() { _ = closeFile() }()
 	}
 	contents, err := io.ReadAll(io.LimitReader(reader, maxDockerConfigBytes+1))
 	if err != nil {
