@@ -94,7 +94,7 @@ func newHandler(apiAddress string, transport http.RoundTripper) (http.Handler, e
 			slog.Error("control plane API proxy failed", "error", proxyErr)
 			http.Error(response, "control plane API is unavailable", http.StatusBadGateway)
 		}
-		mux.Handle("/api/", proxy)
+		mux.Handle("/api/", http.StripPrefix("/api", proxy))
 	}
 	mux.Handle("/", http.FileServerFS(directory))
 	return mux, nil
