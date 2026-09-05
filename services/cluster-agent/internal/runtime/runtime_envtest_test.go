@@ -51,7 +51,7 @@ func TestEnvtestEnsuresExactWorkspaceAndAppDeploymentIdempotently(t *testing.T) 
 		if err := adapter.EnsureWorkspace(ctx, "molejo-workspaces"); err != nil {
 			t.Fatal(err)
 		}
-		if err := adapter.ApplyDeployment(ctx, "molejo-workspaces", "ap-aaaaaaaaaaaaaaaaaaaa", intent); err != nil {
+		if err := adapter.ApplyDeployment(ctx, "molejo-workspaces", "ap-aaaaaaaaaaaaaaaaaaaa", 1, intent); err != nil {
 			t.Fatal(err)
 		}
 	}

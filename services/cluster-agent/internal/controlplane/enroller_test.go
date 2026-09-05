@@ -23,7 +23,7 @@ func TestHTTPEnrollerSendsBoundedEnrollmentRequest(t *testing.T) {
 		if input["enrollmentToken"] != "token" || input["attemptId"] != "attempt" || input["csrPem"] != "csr" {
 			t.Fatalf("input=%v", input)
 		}
-		body, _ := json.Marshal(map[string]any{"installationId": "agi-abcdefghijklmnopqrst", "certificatePem": "certificate", "caCertificatePem": "ca", "expiresAt": time.Now().Add(time.Hour).UTC()})
+		body, _ := json.Marshal(map[string]any{"installationId": "agi-abcdefghijklmnopqrst", "certificatePem": "certificate", "caCertificatePem": "ca", "trustBundleId": strings.Repeat("a", 64), "expiresAt": time.Now().Add(time.Hour).UTC()})
 		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(string(body))), Header: make(http.Header)}, nil
 	})}
 	enroller, err := NewHTTPEnroller("https://control-plane.test/agent/v1/enroll", client)

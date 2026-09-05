@@ -15,7 +15,6 @@ type IdentityStore interface {
 	EnrollmentToken(context.Context) (string, error)
 	SaveCertificate(context.Context, agentidentity.Certificate) error
 	SaveRenewalIdentity(context.Context, agentidentity.StoredIdentity) error
-	ClearRenewalIdentity(context.Context) error
 	ClearEnrollmentToken(context.Context) error
 }
 
@@ -34,9 +33,8 @@ type EnrollmentRequest struct {
 }
 
 type RenewalRequest struct {
-	AttemptID     string
-	PrivateKeyPEM []byte
-	CSRPEM        []byte
+	AttemptID string
+	CSRPEM    []byte
 }
 
 type Connector interface {
@@ -130,7 +128,7 @@ func (r *Runner) ReconcileOnce(ctx context.Context) error {
 			return r.fail("identity Secret is not writable", err)
 		}
 		stored.InstallationID, stored.CertificatePEM, stored.CACertificatePEM = certificate.InstallationID, certificate.CertificatePEM, certificate.CACertificatePEM
-		stored.ServerCAPEM, stored.ExpiresAt = certificate.ServerCAPEM, certificate.ExpiresAt
+		stored.ServerCAPEM, stored.TrustBundleID, stored.ExpiresAt = certificate.ServerCAPEM, certificate.TrustBundleID, certificate.ExpiresAt
 	}
 	if err = r.clearEnrollmentToken(ctx); err != nil {
 		return r.fail("enrollment token could not be cleared", err)
@@ -155,6 +153,16 @@ func (r *Runner) ReconcileOnce(ctx context.Context) error {
 		connectFor = 5 * time.Minute
 	}
 	err = r.connectFor(ctx, stored, connectFor)
+	if errors.Is(err, agentidentity.ErrTrustBundleUpdateRequired) {
+		if r.renewer == nil {
+			return r.fail("trust bundle update requires certificate renewal", err)
+		}
+		stored, err = r.renewCertificate(ctx, stored)
+		if err != nil {
+			return r.fail("trust bundle update could not be persisted", err)
+		}
+		return r.connectFor(ctx, stored, min(5*time.Minute, stored.ExpiresAt.Sub(r.now())))
+	}
 	if err != nil && ctx.Err() == nil {
 		r.status.Set(StateConnecting, "connection interrupted")
 		return err
@@ -187,7 +195,7 @@ func (r *Runner) renewCertificate(ctx context.Context, stored agentidentity.Stor
 			return stored, err
 		}
 	}
-	certificate, err := r.renewer.Renew(ctx, stored, RenewalRequest{AttemptID: stored.RenewalAttemptID, PrivateKeyPEM: stored.RenewalKeyPEM, CSRPEM: stored.RenewalCSRPEM})
+	certificate, err := r.renewer.Renew(ctx, stored, RenewalRequest{AttemptID: stored.RenewalAttemptID, CSRPEM: stored.RenewalCSRPEM})
 	if err != nil {
 		return stored, err
 	}
@@ -200,11 +208,8 @@ func (r *Runner) renewCertificate(ctx context.Context, stored agentidentity.Stor
 	if err = r.store.SaveCertificate(ctx, certificate); err != nil {
 		return stored, err
 	}
-	if err = r.store.ClearRenewalIdentity(ctx); err != nil {
-		return stored, err
-	}
 	stored.PrivateKeyPEM, stored.CertificatePEM = certificate.PrivateKeyPEM, certificate.CertificatePEM
-	stored.CACertificatePEM, stored.ServerCAPEM, stored.ExpiresAt = certificate.CACertificatePEM, certificate.ServerCAPEM, certificate.ExpiresAt
+	stored.CACertificatePEM, stored.ServerCAPEM, stored.TrustBundleID, stored.ExpiresAt = certificate.CACertificatePEM, certificate.ServerCAPEM, certificate.TrustBundleID, certificate.ExpiresAt
 	stored.RenewalAttemptID, stored.RenewalKeyPEM, stored.RenewalCSRPEM = "", nil, nil
 	return stored, nil
 }

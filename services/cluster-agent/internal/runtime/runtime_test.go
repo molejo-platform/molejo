@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -63,7 +64,7 @@ func TestRuntimeObservationsIncludeOnlyControlPlaneOwnedObjects(t *testing.T) {
 		t.Fatal(err)
 	}
 	owned := &platformv1alpha1.AppDeployment{
-		ObjectMeta: metav1.ObjectMeta{Name: "ap-owned", Namespace: "workspace-one", Generation: 2, Annotations: map[string]string{controlPlaneOwnerAnnotation: "ap-owned"}},
+		ObjectMeta: metav1.ObjectMeta{Name: "ap-owned", Namespace: "workspace-one", Generation: 2, Annotations: map[string]string{controlPlaneOwnerAnnotation: "ap-owned", desiredVersionAnnotation: "3"}},
 		Spec:       platformv1alpha1.AppDeploymentSpec{Image: "registry.example/app@sha256:" + strings.Repeat("a", 64)},
 		Status:     platformv1alpha1.AppDeploymentStatus{ObservedGeneration: 2, ObservedRelease: "registry.example/app@sha256:" + strings.Repeat("a", 64)},
 	}
@@ -80,8 +81,26 @@ func TestRuntimeObservationsIncludeOnlyControlPlaneOwnedObjects(t *testing.T) {
 	if err != nil || len(observations) != 2 {
 		t.Fatalf("observations=%+v err=%v", observations, err)
 	}
-	if observations[0].GetName() != "ap-owned" || observations[1].GetName() != "vol-owned" {
+	if observations[0].GetName() != "ap-owned" || observations[0].GetDesiredVersion() != 3 || len(observations[0].GetSpecHash()) != 64 || observations[1].GetName() != "vol-owned" || len(observations[1].GetSpecHash()) != 64 {
 		t.Fatalf("unexpected observations: %+v", observations)
+	}
+}
+
+func TestRuntimeObservationsApplyLimitAfterOwnershipFiltering(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := platformv1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	objects := make([]client.Object, 0, 1002)
+	for index := range 1001 {
+		objects = append(objects, &platformv1alpha1.AppDeployment{ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("external-%04d", index), Namespace: "external"}})
+	}
+	objects = append(objects, &platformv1alpha1.AppDeployment{ObjectMeta: metav1.ObjectMeta{Name: "ap-owned", Namespace: "workspace-one", Annotations: map[string]string{controlPlaneOwnerAnnotation: "ap-owned"}}})
+	kubernetesClient := &KubernetesClient{client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build(), applyTimeout: time.Second}
+
+	observations, err := kubernetesClient.RuntimeObservations(t.Context())
+	if err != nil || len(observations) != 1 || observations[0].GetName() != "ap-owned" {
+		t.Fatalf("observations=%d err=%v", len(observations), err)
 	}
 }
 
@@ -117,10 +136,10 @@ func TestApplyDeploymentKeepsTheRuntimeNameStableAcrossIntentUpdates(t *testing.
 	second.Slug = "demo-public"
 	second.Variables = []runtimecontract.Variable{{Name: "APP_MODE", Value: "production"}}
 
-	if err := kubernetesClient.ApplyDeployment(context.Background(), "molejo-workspaces", "ap-deployment-id", first); err != nil {
+	if err := kubernetesClient.ApplyDeployment(context.Background(), "molejo-workspaces", "ap-deployment-id", 1, first); err != nil {
 		t.Fatal(err)
 	}
-	if err := kubernetesClient.ApplyDeployment(context.Background(), "molejo-workspaces", "ap-deployment-id", second); err != nil {
+	if err := kubernetesClient.ApplyDeployment(context.Background(), "molejo-workspaces", "ap-deployment-id", 2, second); err != nil {
 		t.Fatal(err)
 	}
 
@@ -130,6 +149,9 @@ func TestApplyDeploymentKeepsTheRuntimeNameStableAcrossIntentUpdates(t *testing.
 	}
 	if current.Spec.Image != second.Image {
 		t.Fatalf("expected the stable runtime to contain the latest image %q, got %q", second.Image, current.Spec.Image)
+	}
+	if current.Annotations[desiredVersionAnnotation] != "2" {
+		t.Fatalf("desired version annotation=%q, want 2", current.Annotations[desiredVersionAnnotation])
 	}
 	if current.Spec.Replicas == nil || *current.Spec.Replicas != second.Replicas || current.Spec.Port != second.Port {
 		t.Fatalf("runtime scale/port projection does not match intent: %+v", current.Spec)
@@ -145,6 +167,11 @@ func TestApplyDeploymentKeepsTheRuntimeNameStableAcrossIntentUpdates(t *testing.
 	}
 	if len(current.Spec.Variables) != 1 || current.Spec.Variables[0].Name != "APP_MODE" || current.Spec.Variables[0].Value != "production" {
 		t.Fatalf("runtime variables do not match intent: %+v", current.Spec.Variables)
+	}
+	originalHash := objectSpecHash(current.Spec)
+	(*current.Spec.Replicas)++
+	if objectSpecHash(current.Spec) == originalHash {
+		t.Fatal("replica drift did not change the canonical runtime spec hash")
 	}
 	list := &platformv1alpha1.AppDeploymentList{}
 	if err := kubernetesClient.client.List(context.Background(), list, client.InNamespace("molejo-workspaces")); err != nil {
@@ -165,7 +192,7 @@ func TestApplyVolumeChangesOnlyThePrivateInstallationBinding(t *testing.T) {
 			kubernetesClient := &KubernetesClient{client: fake.NewClientBuilder().WithScheme(scheme).Build(), fieldManager: "test-control-plane", applyTimeout: time.Second}
 			name := "vol-portability01"
 			intent := VolumeIntent{RuntimeBinding: binding, SizeGiB: 2, RetentionPolicy: "Preserve", DesiredState: runtimecontract.VolumeDesiredReady}
-			if err := kubernetesClient.ApplyVolume(context.Background(), "molejo-workspaces", name, intent); err != nil {
+			if err := kubernetesClient.ApplyVolume(context.Background(), "molejo-workspaces", name, 1, intent); err != nil {
 				t.Fatal(err)
 			}
 			current := &platformv1alpha1.AppVolume{}
@@ -212,7 +239,14 @@ func TestGarbageCollectConfigurationKeepsOnlyCurrentOwnedObjects(t *testing.T) {
 		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: owner + "-c3", Namespace: namespace}},
 	}
 	kubernetesClient := &KubernetesClient{
-		client:       fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build(),
+		client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).WithInterceptorFuncs(interceptor.Funcs{
+			List: func(ctx context.Context, underlying client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
+				if _, forbidden := list.(*corev1.SecretList); forbidden {
+					return errors.New("listing Secrets is forbidden")
+				}
+				return underlying.List(ctx, list, opts...)
+			},
+		}).Build(),
 		fieldManager: "test-control-plane",
 		applyTimeout: time.Second,
 	}
@@ -340,7 +374,7 @@ func TestApplyDeploymentRejectsAnUnownedRootObject(t *testing.T) {
 		applyTimeout: time.Second,
 	}
 
-	err := kubernetesClient.ApplyDeployment(context.Background(), "molejo-workspaces", "ap-deployment-id", runtimeTestIntent("demo"))
+	err := kubernetesClient.ApplyDeployment(context.Background(), "molejo-workspaces", "ap-deployment-id", 1, runtimeTestIntent("demo"))
 	if !errors.Is(err, ErrOwnershipConflict) {
 		t.Fatalf("expected ErrOwnershipConflict, got %v", err)
 	}
@@ -391,7 +425,7 @@ func TestApplyDeploymentRejectsAnObjectCreatedAfterTheOwnershipCheck(t *testing.
 		applyTimeout: time.Second,
 	}
 
-	err := kubernetesClient.ApplyDeployment(context.Background(), "molejo-workspaces", "ap-deployment-id", runtimeTestIntent("demo"))
+	err := kubernetesClient.ApplyDeployment(context.Background(), "molejo-workspaces", "ap-deployment-id", 1, runtimeTestIntent("demo"))
 	if !errors.Is(err, ErrOwnershipConflict) {
 		t.Fatalf("expected ErrOwnershipConflict, got %v", err)
 	}

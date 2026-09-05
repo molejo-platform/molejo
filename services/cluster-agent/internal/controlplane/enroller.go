@@ -61,14 +61,15 @@ func (e *HTTPEnroller) Enroll(ctx context.Context, enrollment agent.EnrollmentRe
 		CertificatePEM   string    `json:"certificatePem"`
 		CACertificatePEM string    `json:"caCertificatePem"`
 		ServerCAPEM      string    `json:"serverCaCertificatePem"`
+		TrustBundleID    string    `json:"trustBundleId"`
 		ExpiresAt        time.Time `json:"expiresAt"`
 	}
-	if err = json.Unmarshal(responseBody, &output); err != nil || output.InstallationID == "" || output.CertificatePEM == "" || output.CACertificatePEM == "" || output.ExpiresAt.IsZero() {
+	if err = json.Unmarshal(responseBody, &output); err != nil || output.InstallationID == "" || output.CertificatePEM == "" || output.CACertificatePEM == "" || output.TrustBundleID == "" || output.ExpiresAt.IsZero() {
 		return agentidentity.Certificate{}, errors.New("Agent enrollment response is invalid")
 	}
 	serverCA := output.ServerCAPEM
 	if serverCA == "" {
 		serverCA = output.CACertificatePEM
 	}
-	return agentidentity.Certificate{InstallationID: output.InstallationID, CertificatePEM: []byte(output.CertificatePEM), CACertificatePEM: []byte(output.CACertificatePEM), ServerCAPEM: []byte(serverCA), ExpiresAt: output.ExpiresAt}, nil
+	return agentidentity.Certificate{InstallationID: output.InstallationID, CertificatePEM: []byte(output.CertificatePEM), CACertificatePEM: []byte(output.CACertificatePEM), ServerCAPEM: []byte(serverCA), TrustBundleID: output.TrustBundleID, ExpiresAt: output.ExpiresAt}, nil
 }

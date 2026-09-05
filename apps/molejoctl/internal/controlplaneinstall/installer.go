@@ -114,6 +114,10 @@ func (*Installer) Install(ctx context.Context, options Options) (Report, error) 
 	if err != nil {
 		return Report{}, err
 	}
+	useServerCA, err := useDedicatedServerCA(helmState.installed, observed)
+	if err != nil {
+		return Report{}, err
+	}
 	storageClass, err := resolvePostgresStorageClass(ctx, client, options.StorageClass, observed.databasePVC)
 	if err != nil {
 		return Report{}, err
@@ -131,7 +135,7 @@ func (*Installer) Install(ctx context.Context, options Options) (Report, error) 
 		return Report{}, err
 	}
 	serverCA := agentCA
-	if useDedicatedServerCA(helmState.installed, observed) {
+	if useServerCA {
 		serverCA, err = ensureServerCASecret(ctx, client, plan.createServerCA)
 		if err != nil {
 			return Report{}, err
@@ -190,8 +194,20 @@ func (*Installer) Install(ctx context.Context, options Options) (Report, error) 
 	}, nil
 }
 
-func useDedicatedServerCA(releaseInstalled bool, observed controlPlaneObservedState) bool {
-	return !releaseInstalled || observed.serverCA || observed.serverCATrustUsed
+func useDedicatedServerCA(releaseInstalled bool, observed controlPlaneObservedState) (bool, error) {
+	if !releaseInstalled {
+		return true, nil
+	}
+	if observed.serverCATrustUsed {
+		if !observed.serverCA {
+			return false, errors.New("control plane deployment uses the dedicated server CA, but its Secret is missing")
+		}
+		return true, nil
+	}
+	if observed.serverCA {
+		return false, errors.New("dedicated server CA Secret exists, but the installed control plane does not trust it; finish or roll back the Helm migration before retrying")
+	}
+	return false, nil
 }
 
 type controlPlaneReleaseState struct {
@@ -584,6 +600,9 @@ func ensureServerIdentitySecret(ctx context.Context, client kubernetes.Interface
 			return serverIdentity{}, false, err
 		}
 		identity := serverIdentity{certificatePEM: secret.Data["tls.crt"], privateKeyPEM: secret.Data["tls.key"]}
+		if certificateAuthorityHasOverlap(ca) && serverIdentitySignedBy(identity, ca, time.Now().UTC()) {
+			return identity, false, nil
+		}
 		if serverIdentitySignedBy(identity, ca, time.Now().UTC().Add(30*24*time.Hour)) {
 			return identity, false, nil
 		}

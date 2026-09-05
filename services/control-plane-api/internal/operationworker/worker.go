@@ -5,6 +5,7 @@ package operationworker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -18,17 +19,29 @@ import (
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/store"
 )
 
+const (
+	DefaultCommandTimeout    = 20 * time.Second
+	commandLeaseSafetyMargin = 2 * time.Second
+)
+
+func ValidateTiming(operationLease, commandTimeout time.Duration) error {
+	if operationLease <= 0 || commandTimeout <= 0 || operationLease < commandTimeout+commandLeaseSafetyMargin {
+		return fmt.Errorf("operation lease must be at least %s for a %s command timeout", commandTimeout+commandLeaseSafetyMargin, commandTimeout)
+	}
+	return nil
+}
+
 type Store interface {
 	ClaimNextForAgent(context.Context, string, string, time.Duration) (domain.Operation, domain.AppEnvironment, domain.Deployment, bool, error)
 	Workspace(context.Context, int64) (domain.Workspace, error)
 	CompleteWorkspace(context.Context, domain.Operation) error
 	VolumeRuntime(context.Context, int64, int64) (store.VolumeRuntime, error)
-	CompleteVolume(context.Context, domain.Operation, string, string, int64) error
+	CompleteVolume(context.Context, domain.Operation, string, string, int64, string) error
 	CompleteAppEnvironmentDeletion(context.Context, domain.Operation, string) error
 	FindAppVolume(context.Context, int64, string) (domain.AppVolume, error)
 	ResolveParameterBindings(context.Context, int64, []domain.ParameterBinding) ([]domain.ResolvedParameter, error)
-	CompleteStatefulDeployment(context.Context, domain.Operation, string, string, string, int64) error
-	CompleteDeployment(context.Context, domain.Operation, string, string) error
+	CompleteStatefulDeployment(context.Context, domain.Operation, string, string, string, int64, string) error
+	CompleteDeployment(context.Context, domain.Operation, string, string, string) error
 	Fail(context.Context, domain.Operation, string, string, bool) error
 	ClaimedOperationForAgent(context.Context, string, string, int64) (domain.Operation, error)
 }
@@ -62,14 +75,36 @@ func (w *Worker) NextCommand(ctx context.Context, installationID string) (*clust
 		_ = w.Store.Fail(ctx, op, "command_invalid", "runtime command could not be encoded", false)
 		return nil, false, err
 	}
+	now := time.Now().UTC()
+	deadline, err := commandDeadline(now, w.commandTimeout(), op.LeaseUntil)
+	if err != nil {
+		_ = w.Store.Fail(ctx, op, "command_unavailable", "operation lease does not leave enough time to execute the runtime command", true)
+		return nil, false, err
+	}
 	commandID := op.PublicID + ":" + strconv.FormatInt(op.FencingToken, 10)
 	command := &clusteragentv1alpha1.RuntimeCommand{
 		CommandId: commandID, OperationId: op.PublicID, DesiredVersion: op.DesiredVersion,
-		FencingToken: op.FencingToken, DeadlineUnix: time.Now().Add(w.commandTimeout()).Unix(),
+		FencingToken: op.FencingToken, DeadlineUnix: deadline.Unix(),
 		Kind: op.Kind, PayloadJson: raw, PayloadSchemaVersion: "runtime.v1alpha1",
 	}
 	w.logger().Info("runtime command dispatched", "operation_id", op.PublicID, "command_id", commandID, "installation_id", installationID, "operation_kind", op.Kind)
 	return command, true, nil
+}
+
+func commandDeadline(now time.Time, timeout time.Duration, leaseUntil *time.Time) (time.Time, error) {
+	if leaseUntil == nil {
+		return time.Time{}, errors.New("operation lease is missing")
+	}
+	deadline := now.Add(timeout)
+	leaseDeadline := leaseUntil.Add(-commandLeaseSafetyMargin)
+	if leaseDeadline.Before(deadline) {
+		deadline = leaseDeadline
+	}
+	deadline = deadline.Truncate(time.Second)
+	if !deadline.After(now) {
+		return time.Time{}, errors.New("operation lease does not leave enough time for command execution")
+	}
+	return deadline, nil
 }
 
 func (w *Worker) HandleResult(ctx context.Context, installationID string, result *clusteragentv1alpha1.RuntimeResult) error {
@@ -87,11 +122,14 @@ func (w *Worker) HandleResult(ctx context.Context, installationID string, result
 	if result.GetState() != runtimecontract.StateReady {
 		return w.Store.Fail(ctx, op, "runtime_not_ready", "runtime has not reached the requested state", true)
 	}
+	if commandProducesRuntimeSpec(op.Kind) && (result.GetDesiredVersion() != op.DesiredVersion || !validSpecHash(result.GetSpecHash())) {
+		return w.Store.Fail(ctx, op, "runtime_observation_failed", "runtime desired state was not observed", true)
+	}
 	switch op.Kind {
 	case domain.OperationEnsureWorkspace:
 		return w.Store.CompleteWorkspace(ctx, op)
 	case domain.OperationEnsureVolume, domain.OperationExpandVolume, domain.OperationDeleteVolume:
-		return w.Store.CompleteVolume(ctx, op, result.GetVolumeState(), result.GetVolumeMessage(), result.GetObservedSizeGib())
+		return w.Store.CompleteVolume(ctx, op, result.GetVolumeState(), result.GetVolumeMessage(), result.GetObservedSizeGib(), result.GetSpecHash())
 	case domain.OperationDeleteAppEnv:
 		return w.Store.CompleteAppEnvironmentDeletion(ctx, op, result.GetMessage())
 	case domain.OperationApplyDeployment:
@@ -99,12 +137,28 @@ func (w *Worker) HandleResult(ctx context.Context, installationID string, result
 			return w.Store.Fail(ctx, op, "runtime_observation_failed", "runtime release was not observed", true)
 		}
 		if result.GetVolumeState() != "" {
-			return w.Store.CompleteStatefulDeployment(ctx, op, result.GetMessage(), result.GetObservedRelease(), result.GetVolumeMessage(), result.GetObservedSizeGib())
+			return w.Store.CompleteStatefulDeployment(ctx, op, result.GetMessage(), result.GetObservedRelease(), result.GetVolumeMessage(), result.GetObservedSizeGib(), result.GetSpecHash())
 		}
-		return w.Store.CompleteDeployment(ctx, op, result.GetMessage(), result.GetObservedRelease())
+		return w.Store.CompleteDeployment(ctx, op, result.GetMessage(), result.GetObservedRelease(), result.GetSpecHash())
 	default:
 		return w.Store.Fail(ctx, op, "command_invalid", "runtime operation is unsupported", false)
 	}
+}
+
+func commandProducesRuntimeSpec(kind string) bool {
+	return kind == domain.OperationEnsureVolume || kind == domain.OperationExpandVolume || kind == domain.OperationDeleteVolume || kind == domain.OperationApplyDeployment
+}
+
+func validSpecHash(value string) bool {
+	if len(value) != 64 {
+		return false
+	}
+	for _, character := range value {
+		if (character < '0' || character > '9') && (character < 'a' || character > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 func (w *Worker) Abandon(ctx context.Context, installationID, commandID string) error {
@@ -238,7 +292,7 @@ func (w *Worker) commandTimeout() time.Duration {
 	if w.CommandTimeout > 0 {
 		return w.CommandTimeout
 	}
-	return 20 * time.Second
+	return DefaultCommandTimeout
 }
 
 func (w *Worker) logger() *slog.Logger {

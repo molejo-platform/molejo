@@ -71,12 +71,7 @@ func (h *generatedHandler) CreateAppEnvironment(w http.ResponseWriter, r *http.R
 		if err != nil {
 			break
 		}
-		var item domain.AppEnvironment
-		if input.ClusterID == "" {
-			item, _, err = h.server.store.CreateAppEnvironmentWithWorkload(r.Context(), workspace.ID, actor.ID, publicID, string(projectID), string(appID), input.EnvironmentID, input.Branch, input.WorkloadKind, input.Configuration, input.Volume)
-		} else {
-			item, _, err = h.server.store.CreateAppEnvironmentOnCluster(r.Context(), workspace.ID, actor.ID, publicID, string(projectID), string(appID), input.EnvironmentID, input.ClusterID, input.Branch, input.WorkloadKind, input.Configuration, input.Volume)
-		}
+		item, _, err := h.server.store.CreateAppEnvironmentOnCluster(r.Context(), workspace.ID, actor.ID, publicID, string(projectID), string(appID), input.EnvironmentID, input.ClusterID, input.Branch, input.WorkloadKind, input.Configuration, input.Volume)
 		if errors.Is(err, store.ErrPublicIDCollision) {
 			continue
 		}
@@ -281,6 +276,10 @@ func (h *generatedHandler) appEnvironmentInput(w http.ResponseWriter, r *http.Re
 		return appEnvironmentInput{}, false
 	}
 	if requireEnvironment {
+		if input.ClusterID == "" {
+			writeError(w, http.StatusBadRequest, "cluster_required", "clusterId is required", r)
+			return appEnvironmentInput{}, false
+		}
 		if err := domain.ValidateEnvironmentID(input.EnvironmentID); err != nil {
 			writeError(w, http.StatusBadRequest, "environment_invalid", "environmentId is invalid", r)
 			return appEnvironmentInput{}, false

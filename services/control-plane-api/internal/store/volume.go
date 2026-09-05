@@ -294,7 +294,7 @@ func insertVolumeOperation(ctx context.Context, tx pgx.Tx, workspaceID, appEnvir
 	return domain.Operation{}, fmt.Errorf("allocate volume operation: %w", ErrPublicIDCollision)
 }
 
-func (s *Store) CompleteVolume(ctx context.Context, operation domain.Operation, state, message string, observedSizeGiB int64) error {
+func (s *Store) CompleteVolume(ctx context.Context, operation domain.Operation, state, message string, observedSizeGiB int64, specHash string) error {
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -303,7 +303,7 @@ func (s *Store) CompleteVolume(ctx context.Context, operation domain.Operation, 
 	if err = completeOperationLease(ctx, tx, operation); err != nil {
 		return err
 	}
-	tag, err := tx.Exec(ctx, `UPDATE app_volumes SET observed_state=$1,message=$2,observed_size_gib=$3,updated_at=now() WHERE id=$4 AND version=$5`, state, message, observedSizeGiB, operation.AppVolumeID, operation.DesiredVersion)
+	tag, err := tx.Exec(ctx, `UPDATE app_volumes SET observed_state=$1,message=$2,observed_size_gib=$3,runtime_desired_version=$5,runtime_spec_hash=$6,updated_at=now() WHERE id=$4 AND version=$5`, state, message, observedSizeGiB, operation.AppVolumeID, operation.DesiredVersion, specHash)
 	if err != nil || tag.RowsAffected() != 1 {
 		return ErrLeaseLost
 	}

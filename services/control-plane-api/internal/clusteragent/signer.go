@@ -33,7 +33,7 @@ type IssuedCertificate struct {
 }
 
 func NewSigner(certificatePEM, privateKeyPEM []byte, validity time.Duration) (*Signer, error) {
-	certificateBlock, _ := pem.Decode(certificatePEM)
+	certificateBlock, remainingCertificates := pem.Decode(certificatePEM)
 	privateKeyBlock, _ := pem.Decode(privateKeyPEM)
 	if certificateBlock == nil || privateKeyBlock == nil || validity <= 0 {
 		return nil, fmt.Errorf("agent CA material is invalid")
@@ -41,6 +41,17 @@ func NewSigner(certificatePEM, privateKeyPEM []byte, validity time.Duration) (*S
 	certificate, err := x509.ParseCertificate(certificateBlock.Bytes)
 	if err != nil || !certificate.IsCA {
 		return nil, fmt.Errorf("agent CA certificate is invalid")
+	}
+	for len(remainingCertificates) > 0 {
+		var block *pem.Block
+		block, remainingCertificates = pem.Decode(remainingCertificates)
+		if block == nil || block.Type != "CERTIFICATE" {
+			return nil, fmt.Errorf("agent CA bundle is invalid")
+		}
+		root, parseErr := x509.ParseCertificate(block.Bytes)
+		if parseErr != nil || !root.IsCA {
+			return nil, fmt.Errorf("agent CA bundle is invalid")
+		}
 	}
 	key, err := parseECDSAPrivateKey(privateKeyBlock.Bytes)
 	if err != nil {
@@ -112,4 +123,25 @@ func (s *Signer) Sign(installationID string, csrPEM []byte, now time.Time) (Issu
 		CACertificatePEM: append([]byte(nil), s.caPEM...),
 		Serial:           hex.EncodeToString(serialBytes), Fingerprint: digest[:], NotAfter: parsed.NotAfter,
 	}, nil
+}
+
+func (s *Signer) AuthorityID() string {
+	digest := sha256.Sum256(s.ca.Raw)
+	return hex.EncodeToString(digest[:])
+}
+
+func TrustBundleID(clientAuthorityID string, serverCAPEM []byte) (string, error) {
+	serverBlock, _ := pem.Decode(serverCAPEM)
+	if clientAuthorityID == "" || serverBlock == nil || serverBlock.Type != "CERTIFICATE" {
+		return "", errors.New("trust bundle is invalid")
+	}
+	serverCertificate, err := x509.ParseCertificate(serverBlock.Bytes)
+	if err != nil || !serverCertificate.IsCA {
+		return "", errors.New("server trust root is invalid")
+	}
+	digest := sha256.New()
+	digest.Write([]byte(clientAuthorityID))
+	digest.Write([]byte{0})
+	digest.Write(serverCertificate.Raw)
+	return hex.EncodeToString(digest.Sum(nil)), nil
 }

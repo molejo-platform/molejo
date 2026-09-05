@@ -45,4 +45,23 @@ func TestControlPlaneCertificateChain(t *testing.T) {
 	if serverIdentitySignedBy(identity, ca, now.AddDate(3, 0, 0)) {
 		t.Fatal("expired server identity was accepted")
 	}
+	newCA, err := newServerCertificateAuthority(now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	transitionBundle := certificateAuthority{certificatePEM: append(append([]byte(nil), newCA.certificatePEM...), ca.certificatePEM...), privateKeyPEM: newCA.privateKeyPEM}
+	if !certificateAuthorityHasOverlap(transitionBundle) || certificateAuthorityHasOverlap(newCA) {
+		t.Fatal("CA overlap detection is inconsistent")
+	}
+	if !serverIdentitySignedBy(identity, transitionBundle, now) {
+		t.Fatal("old server identity was not accepted during the two-root transition")
+	}
+	otherIdentity, err := newServerIdentity(ca, dnsNames, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity.privateKeyPEM = otherIdentity.privateKeyPEM
+	if serverIdentitySignedBy(identity, ca, now) {
+		t.Fatal("server identity with a mismatched private key was accepted")
+	}
 }

@@ -39,6 +39,6 @@ func agentTestCertificate(t *testing.T, installationID string) (agentidentity.St
 	leafDER, _ := x509.CreateCertificate(rand.Reader, leafTemplate, caTemplate, &key.PublicKey, caKey)
 	keyDER, _ := x509.MarshalPKCS8PrivateKey(key)
 	privateKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER})
-	certificate := agentidentity.Certificate{InstallationID: installationID, CertificatePEM: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: leafDER}), CACertificatePEM: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caDER}), ExpiresAt: leafTemplate.NotAfter}
+	certificate := agentidentity.Certificate{InstallationID: installationID, CertificatePEM: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: leafDER}), CACertificatePEM: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caDER}), TrustBundleID: "trust-v1", ExpiresAt: leafTemplate.NotAfter}
 	return agentidentity.StoredIdentity{PrivateKeyPEM: privateKeyPEM}, certificate, now
 }

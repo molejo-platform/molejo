@@ -4,6 +4,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
@@ -70,18 +71,36 @@ func newNamedCertificateAuthority(commonName string, now time.Time) (certificate
 }
 
 func serverIdentitySignedBy(identity serverIdentity, ca certificateAuthority, now time.Time) bool {
-	caBlock, _ := pem.Decode(ca.certificatePEM)
-	identityBlock, _ := pem.Decode(identity.certificatePEM)
-	if caBlock == nil || identityBlock == nil {
+	if _, err := tls.X509KeyPair(identity.certificatePEM, identity.privateKeyPEM); err != nil {
 		return false
 	}
-	caCertificate, caErr := x509.ParseCertificate(caBlock.Bytes)
+	identityBlock, _ := pem.Decode(identity.certificatePEM)
+	if identityBlock == nil {
+		return false
+	}
 	certificate, certificateErr := x509.ParseCertificate(identityBlock.Bytes)
-	if caErr != nil || certificateErr != nil {
+	if certificateErr != nil {
 		return false
 	}
 	roots := x509.NewCertPool()
-	roots.AddCert(caCertificate)
+	remaining := ca.certificatePEM
+	rootCount := 0
+	for len(remaining) > 0 {
+		var block *pem.Block
+		block, remaining = pem.Decode(remaining)
+		if block == nil || block.Type != "CERTIFICATE" {
+			return false
+		}
+		root, err := x509.ParseCertificate(block.Bytes)
+		if err != nil || !root.IsCA {
+			return false
+		}
+		roots.AddCert(root)
+		rootCount++
+	}
+	if rootCount == 0 {
+		return false
+	}
 	if _, err := certificate.Verify(x509.VerifyOptions{Roots: roots, CurrentTime: now, KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}); err != nil {
 		return false
 	}
@@ -91,6 +110,20 @@ func serverIdentitySignedBy(identity serverIdentity, ca certificateAuthority, no
 		}
 	}
 	return true
+}
+
+func certificateAuthorityHasOverlap(ca certificateAuthority) bool {
+	remaining := ca.certificatePEM
+	count := 0
+	for len(remaining) > 0 {
+		block, rest := pem.Decode(remaining)
+		if block == nil || block.Type != "CERTIFICATE" {
+			return false
+		}
+		remaining = rest
+		count++
+	}
+	return count > 1
 }
 
 func newServerIdentity(ca certificateAuthority, dnsNames []string, now time.Time) (serverIdentity, error) {

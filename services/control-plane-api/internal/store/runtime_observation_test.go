@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -41,14 +43,18 @@ func TestCompleteRuntimeSnapshotQueuesOneDurableRepairForMissingDeployment(t *te
 	if err != nil || !ok {
 		t.Fatalf("claim initial deployment ok=%v err=%v", ok, err)
 	}
-	if err = storage.CompleteDeployment(ctx, operation, "ready", image); err != nil {
+	if err = storage.CompleteDeployment(ctx, operation, "ready", image, strings.Repeat("a", 64)); err != nil {
+		t.Fatal(err)
+	}
+	const sessionID = "ags-runtime-observation"
+	if _, err = storage.Pool.Exec(ctx, `UPDATE agent_installations SET control_session_id=$2,control_session_sequence=1 WHERE public_id=$1`, target.ClusterPublicID, sessionID); err != nil {
 		t.Fatal(err)
 	}
 
-	if err = storage.ReconcileAgentObservations(ctx, target.ClusterPublicID, nil, true); err != nil {
+	if err = storage.ReconcileAgentObservations(ctx, target.ClusterPublicID, sessionID, 1, nil, true); err != nil {
 		t.Fatal(err)
 	}
-	if err = storage.ReconcileAgentObservations(ctx, target.ClusterPublicID, nil, true); err != nil {
+	if err = storage.ReconcileAgentObservations(ctx, target.ClusterPublicID, sessionID, 1, nil, true); err != nil {
 		t.Fatal(err)
 	}
 	var pending int
@@ -64,5 +70,11 @@ func TestCompleteRuntimeSnapshotQueuesOneDurableRepairForMissingDeployment(t *te
 	}
 	if auditEvents != 1 {
 		t.Fatalf("runtime repair audit events=%d, want 1", auditEvents)
+	}
+	if _, err = storage.Pool.Exec(ctx, `UPDATE agent_installations SET control_session_id='ags-replacement',control_session_sequence=1 WHERE public_id=$1`, target.ClusterPublicID); err != nil {
+		t.Fatal(err)
+	}
+	if err = storage.ReconcileAgentObservations(ctx, target.ClusterPublicID, sessionID, 1, nil, true); !errors.Is(err, ErrAgentIdentityMismatch) {
+		t.Fatalf("replaced session observation error=%v", err)
 	}
 }

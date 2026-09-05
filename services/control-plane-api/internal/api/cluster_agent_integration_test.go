@@ -10,6 +10,7 @@ import (
 	"encoding/pem"
 	"math/big"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -24,6 +25,8 @@ func TestAgentPairingAPIRequiresInstallationAdministratorAndReturnsTokenOnce(t *
 		t.Fatal(err)
 	}
 	server.agentSigner = signer
+	server.agentServerCAPEM = caCertificate
+	server.agentTrustBundleID = strings.Repeat("a", 64)
 
 	response := hierarchyRequest(t, server, owner, http.MethodPost, "/api/v1/admin/agent-installations", `{"name":"Lab cluster"}`, nil)
 	if response.Code != http.StatusCreated {

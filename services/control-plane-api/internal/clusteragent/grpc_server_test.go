@@ -11,6 +11,7 @@ import (
 	"encoding/pem"
 	"math/big"
 	"net"
+	"strings"
 	"testing"
 	"time"
 
@@ -28,14 +29,16 @@ import (
 type recordingAgentRegistry struct {
 	activatedID string
 	touchedID   string
+	sessionID   string
+	sequence    uint64
 	fingerprint []byte
 	activateErr error
 	observed    []store.RuntimeObservation
 	complete    bool
 }
 
-func (r *recordingAgentRegistry) ActivateAgent(_ context.Context, publicID string, fingerprint []byte, _, _, _ string, _ []string, _ time.Time, _ audit.Event) (bool, error) {
-	r.activatedID, r.fingerprint = publicID, append([]byte(nil), fingerprint...)
+func (r *recordingAgentRegistry) ActivateAgent(_ context.Context, publicID string, fingerprint []byte, _, _, _ string, _ []string, _, sessionID string, _ time.Time, _ audit.Event) (bool, error) {
+	r.activatedID, r.fingerprint, r.sessionID = publicID, append([]byte(nil), fingerprint...), sessionID
 	return true, r.activateErr
 }
 
@@ -48,7 +51,7 @@ func (r *recordingAgentRegistry) RenewAgent(_ context.Context, publicID string, 
 	return certificate, err
 }
 
-func (r *recordingAgentRegistry) ReconcileAgentObservations(_ context.Context, _ string, observations []store.RuntimeObservation, complete bool) error {
+func (r *recordingAgentRegistry) ReconcileAgentObservations(_ context.Context, _, _ string, _ uint64, observations []store.RuntimeObservation, complete bool) error {
 	r.observed, r.complete = observations, complete
 	return nil
 }
@@ -113,9 +116,9 @@ func authenticatedTestStream(t *testing.T, registry AgentRegistry, installationI
 	return stream
 }
 
-func (r *recordingAgentRegistry) TouchAgent(_ context.Context, publicID string, fingerprint []byte, _ time.Time) error {
-	r.touchedID = publicID
-	if string(fingerprint) != string(r.fingerprint) {
+func (r *recordingAgentRegistry) TouchAgent(_ context.Context, publicID string, fingerprint []byte, sessionID string, sequence uint64, _ time.Time) error {
+	r.touchedID, r.sequence = publicID, sequence
+	if string(fingerprint) != string(r.fingerprint) || sessionID != r.sessionID {
 		return ErrPeerIdentityMismatch
 	}
 	return nil
@@ -160,14 +163,14 @@ func TestGRPCServiceAuthenticatesHelloAndAcknowledgesHeartbeat(t *testing.T) {
 		t.Fatal(err)
 	}
 	hello, err := stream.Recv()
-	if err != nil || hello.GetHello().GetHeartbeatIntervalSeconds() != 30 {
+	if err != nil || hello.GetHello().GetHeartbeatIntervalSeconds() != 30 || hello.GetHello().GetSessionId() == "" {
 		t.Fatalf("hello=%+v err=%v", hello, err)
 	}
-	if err = stream.Send(&clusteragentv1alpha1.ConnectRequest{Payload: &clusteragentv1alpha1.ConnectRequest_Heartbeat{Heartbeat: &clusteragentv1alpha1.Heartbeat{Sequence: 7, SentAtUnix: time.Now().Unix(), ObservationSnapshotComplete: true, Observations: []*clusteragentv1alpha1.RuntimeObservation{{Kind: "AppDeployment", Namespace: "workspace-one", Name: "ap-test", State: "Ready"}}}}}); err != nil {
+	if err = stream.Send(&clusteragentv1alpha1.ConnectRequest{Payload: &clusteragentv1alpha1.ConnectRequest_Heartbeat{Heartbeat: &clusteragentv1alpha1.Heartbeat{Sequence: 7, SentAtUnix: time.Now().Unix(), SessionId: hello.GetHello().GetSessionId(), ObservationSnapshotComplete: true, Observations: []*clusteragentv1alpha1.RuntimeObservation{{Kind: "AppDeployment", Namespace: "workspace-one", Name: "ap-test", State: "Ready"}}}}}); err != nil {
 		t.Fatal(err)
 	}
 	ack, err := stream.Recv()
-	if err != nil || ack.GetHeartbeatAck().GetSequence() != 7 || registry.activatedID != installationID || registry.touchedID != installationID || !registry.complete || len(registry.observed) != 1 {
+	if err != nil || ack.GetHeartbeatAck().GetSequence() != 7 || registry.activatedID != installationID || registry.touchedID != installationID || registry.sequence != 7 || !registry.complete || len(registry.observed) != 1 {
 		t.Fatalf("ack=%+v activated=%q touched=%q err=%v", ack, registry.activatedID, registry.touchedID, err)
 	}
 }
@@ -194,7 +197,7 @@ func TestGRPCServiceRenewsAnAuthenticatedAgentCertificate(t *testing.T) {
 	listener := bufconn.Listen(1 << 20)
 	grpcServer := grpc.NewServer(grpc.Creds(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS13, Certificates: []tls.Certificate{serverCertificate}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: roots})))
 	service := NewGRPCService(&recordingAgentRegistry{}, nil, time.Second)
-	service.ConfigureCertificateRenewal(signer, caCertificate)
+	service.ConfigureCertificateRenewal(signer, caCertificate, strings.Repeat("a", 64))
 	clusteragentv1alpha1.RegisterClusterAgentServiceServer(grpcServer, service)
 	go func() { _ = grpcServer.Serve(listener) }()
 	t.Cleanup(grpcServer.Stop)

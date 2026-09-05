@@ -130,4 +130,4 @@ ALTER TABLE agent_installations
     DROP COLUMN IF EXISTS agent_version;
 ALTER TABLE agent_installations
     DROP CONSTRAINT agent_installations_public_id_valid,
-    ADD CONSTRAINT agent_installations_public_id_valid CHECK (public_id ~ '^agi-[a-z2-7]{20}$');
+    ADD CONSTRAINT agent_installations_public_id_valid CHECK (public_id ~ '^(agi|cls)-[a-z2-7]{20}$');

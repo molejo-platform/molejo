@@ -2,6 +2,8 @@ package runtime
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -26,6 +28,7 @@ const (
 	workspaceOwnerValue         = "molejo-control-plane"
 	managedByLabel              = "app.kubernetes.io/managed-by"
 	configurationVersionLabel   = "platform.molejo.dev/configuration-version"
+	desiredVersionAnnotation    = "platform.molejo.dev/desired-version"
 )
 
 var ErrOwnershipConflict = errors.New("runtime object is not owned by the control plane")
@@ -37,6 +40,8 @@ type Observation struct {
 	Generation         int64
 	ObservedGeneration int64
 	ObservedRelease    string
+	DesiredVersion     int64
+	SpecHash           string
 }
 
 type VolumeIntent = runtimecontract.VolumeIntent
@@ -46,13 +51,15 @@ type VolumeObservation struct {
 	State           string
 	Message         string
 	ObservedSizeGiB int64
+	DesiredVersion  int64
+	SpecHash        string
 }
 
 type Client interface {
 	EnsureWorkspace(context.Context, string) error
-	ApplyVolume(context.Context, string, string, VolumeIntent) error
+	ApplyVolume(context.Context, string, string, int64, VolumeIntent) error
 	ObserveVolume(context.Context, string, string) (VolumeObservation, error)
-	ApplyDeployment(context.Context, string, string, runtimecontract.DeploymentIntent) error
+	ApplyDeployment(context.Context, string, string, int64, runtimecontract.DeploymentIntent) error
 	ObserveDeployment(context.Context, string, string) (Observation, error)
 	DeleteDeployment(context.Context, string, string) error
 	GarbageCollectConfiguration(context.Context, string, string) error
@@ -106,7 +113,7 @@ func (k *KubernetesClient) EnsureWorkspace(ctx context.Context, namespace string
 	return nil
 }
 
-func (k *KubernetesClient) ApplyDeployment(ctx context.Context, namespace, name string, intent runtimecontract.DeploymentIntent) error {
+func (k *KubernetesClient) ApplyDeployment(ctx context.Context, namespace, name string, desiredVersion int64, intent runtimecontract.DeploymentIntent) error {
 	intent = normalizeIntent(intent)
 	applyCtx, cancel := context.WithTimeout(ctx, k.applyTimeout)
 	defer cancel()
@@ -162,7 +169,7 @@ func (k *KubernetesClient) ApplyDeployment(ctx context.Context, namespace, name 
 		return platformv1alpha1.AppDeploymentProbe{Type: value.Type, PortName: value.PortName, Path: value.Path}
 	}
 	startupProbe := probe(intent.Probes.Startup)
-	obj := &platformv1alpha1.AppDeployment{TypeMeta: metav1.TypeMeta{APIVersion: "platform.molejo.dev/v1alpha1", Kind: "AppDeployment"}, ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, Annotations: map[string]string{controlPlaneOwnerAnnotation: name}}, Spec: platformv1alpha1.AppDeploymentSpec{Workload: workload, Image: intent.Image, Replicas: &replicas, Ports: ports, Port: legacyPort, Resources: resourceSpec, Probes: platformv1alpha1.AppDeploymentProbes{Startup: &startupProbe, Liveness: probe(intent.Probes.Liveness), Readiness: probe(intent.Probes.Readiness)}, PublicEndpoints: publicEndpoints, Exposure: legacyExposure, Slug: legacySlug, Variables: variables, ConfigMapRef: configMapRef, SecretRef: secretRef}}
+	obj := &platformv1alpha1.AppDeployment{TypeMeta: metav1.TypeMeta{APIVersion: "platform.molejo.dev/v1alpha1", Kind: "AppDeployment"}, ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, Annotations: map[string]string{controlPlaneOwnerAnnotation: name, desiredVersionAnnotation: strconv.FormatInt(desiredVersion, 10)}}, Spec: platformv1alpha1.AppDeploymentSpec{Workload: workload, Image: intent.Image, Replicas: &replicas, Ports: ports, Port: legacyPort, Resources: resourceSpec, Probes: platformv1alpha1.AppDeploymentProbes{Startup: &startupProbe, Liveness: probe(intent.Probes.Liveness), Readiness: probe(intent.Probes.Readiness)}, PublicEndpoints: publicEndpoints, Exposure: legacyExposure, Slug: legacySlug, Variables: variables, ConfigMapRef: configMapRef, SecretRef: secretRef}}
 	if !exists {
 		if err := k.client.Create(applyCtx, obj, client.FieldOwner(k.fieldManager)); err != nil {
 			if apierrors.IsAlreadyExists(err) {
@@ -178,7 +185,7 @@ func (k *KubernetesClient) ApplyDeployment(ctx context.Context, namespace, name 
 	return nil
 }
 
-func (k *KubernetesClient) ApplyVolume(ctx context.Context, namespace, name string, intent VolumeIntent) error {
+func (k *KubernetesClient) ApplyVolume(ctx context.Context, namespace, name string, desiredVersion int64, intent VolumeIntent) error {
 	applyCtx, cancel := context.WithTimeout(ctx, k.applyTimeout)
 	defer cancel()
 	current := &platformv1alpha1.AppVolume{}
@@ -195,7 +202,7 @@ func (k *KubernetesClient) ApplyVolume(ctx context.Context, namespace, name stri
 	}
 	obj := &platformv1alpha1.AppVolume{
 		TypeMeta:   metav1.TypeMeta{APIVersion: "platform.molejo.dev/v1alpha1", Kind: "AppVolume"},
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, Annotations: map[string]string{controlPlaneOwnerAnnotation: name}},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, Annotations: map[string]string{controlPlaneOwnerAnnotation: name, desiredVersionAnnotation: strconv.FormatInt(desiredVersion, 10)}},
 		Spec:       platformv1alpha1.AppVolumeSpec{StorageClassName: intent.RuntimeBinding, SizeGiB: intent.SizeGiB, RetentionPolicy: platformv1alpha1.VolumeRetentionPreserve, DesiredState: desiredState},
 	}
 	if apierrors.IsNotFound(err) {
@@ -223,7 +230,7 @@ func (k *KubernetesClient) ObserveVolume(ctx context.Context, namespace, name st
 			message = condition.Message
 		}
 	}
-	return VolumeObservation{Exists: true, State: string(obj.Status.State), Message: message, ObservedSizeGiB: obj.Status.ObservedSizeGiB}, nil
+	return VolumeObservation{Exists: true, State: string(obj.Status.State), Message: message, ObservedSizeGiB: obj.Status.ObservedSizeGiB, DesiredVersion: objectDesiredVersion(obj), SpecHash: objectSpecHash(obj.Spec)}, nil
 }
 
 func (k *KubernetesClient) materializeConfiguration(ctx context.Context, namespace, owner string, version int64, plain, secret []runtimecontract.Variable) (string, string, error) {
@@ -327,23 +334,29 @@ func (k *KubernetesClient) GarbageCollectConfiguration(ctx context.Context, name
 		if _, current := keep[item.Name]; current || !ownedConfigurationObject(item, owner, false) {
 			continue
 		}
+		if err = k.deleteConfigurationSecret(gcCtx, namespace, item.Name, owner); err != nil {
+			return err
+		}
 		if err = k.client.Delete(gcCtx, item); err != nil && !apierrors.IsNotFound(err) {
 			return fmt.Errorf("delete stale configuration ConfigMap: %w", err)
 		}
 	}
+	return nil
+}
 
-	var secrets corev1.SecretList
-	if err = k.client.List(gcCtx, &secrets, client.InNamespace(namespace), client.MatchingLabels{managedByLabel: workspaceOwnerValue}); err != nil {
-		return fmt.Errorf("list configuration Secrets: %w", err)
+func (k *KubernetesClient) deleteConfigurationSecret(ctx context.Context, namespace, configMapName, owner string) error {
+	item := &corev1.Secret{}
+	key := types.NamespacedName{Namespace: namespace, Name: configMapName + "-secret"}
+	if err := k.client.Get(ctx, key, item); apierrors.IsNotFound(err) {
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("read stale configuration Secret: %w", err)
 	}
-	for i := range secrets.Items {
-		item := &secrets.Items[i]
-		if _, current := keep[item.Name]; current || !ownedConfigurationObject(item, owner, true) {
-			continue
-		}
-		if err = k.client.Delete(gcCtx, item); err != nil && !apierrors.IsNotFound(err) {
-			return fmt.Errorf("delete stale configuration Secret: %w", err)
-		}
+	if !ownedConfigurationObject(item, owner, true) {
+		return nil
+	}
+	if err := k.client.Delete(ctx, item); err != nil && !apierrors.IsNotFound(err) {
+		return fmt.Errorf("delete stale configuration Secret: %w", err)
 	}
 	return nil
 }
@@ -392,10 +405,6 @@ func (k *KubernetesClient) RuntimeObservations(ctx context.Context) ([]*clustera
 	if err := k.client.List(observeCtx, &volumes); err != nil {
 		return nil, fmt.Errorf("list AppVolume observations: %w", err)
 	}
-	if len(deployments.Items)+len(volumes.Items) > 1000 {
-		return nil, errors.New("runtime observation snapshot exceeds 1000 objects")
-	}
-
 	items := make([]*clusteragentv1alpha1.RuntimeObservation, 0, len(deployments.Items)+len(volumes.Items))
 	for index := range deployments.Items {
 		item := &deployments.Items[index]
@@ -407,7 +416,11 @@ func (k *KubernetesClient) RuntimeObservations(ctx context.Context) ([]*clustera
 			Kind: "AppDeployment", Namespace: item.Namespace, Name: item.Name,
 			State: observed.State, Message: observed.Message, Generation: observed.Generation,
 			ObservedGeneration: observed.ObservedGeneration, ObservedRelease: observed.ObservedRelease,
+			DesiredVersion: observed.DesiredVersion, SpecHash: observed.SpecHash,
 		})
+		if len(items) > 1000 {
+			return nil, errors.New("runtime observation snapshot exceeds 1000 objects")
+		}
 	}
 	for index := range volumes.Items {
 		item := &volumes.Items[index]
@@ -428,7 +441,11 @@ func (k *KubernetesClient) RuntimeObservations(ctx context.Context) ([]*clustera
 			Kind: "AppVolume", Namespace: item.Namespace, Name: item.Name, State: state,
 			Message: message, Generation: item.Generation, ObservedGeneration: item.Status.ObservedGeneration,
 			ObservedSizeGib: item.Status.ObservedSizeGiB,
+			DesiredVersion:  objectDesiredVersion(item), SpecHash: objectSpecHash(item.Spec),
 		})
+		if len(items) > 1000 {
+			return nil, errors.New("runtime observation snapshot exceeds 1000 objects")
+		}
 	}
 	return items, nil
 }
@@ -468,7 +485,7 @@ func (k *KubernetesClient) ownedObjectExists(ctx context.Context, namespace, nam
 }
 
 func observation(obj *platformv1alpha1.AppDeployment, expectedRelease string) Observation {
-	o := Observation{Exists: true, State: runtimecontract.StateProgressing, Message: "reconciliation pending", Generation: obj.Generation, ObservedGeneration: obj.Status.ObservedGeneration, ObservedRelease: obj.Status.ObservedRelease}
+	o := Observation{Exists: true, State: runtimecontract.StateProgressing, Message: "reconciliation pending", Generation: obj.Generation, ObservedGeneration: obj.Status.ObservedGeneration, ObservedRelease: obj.Status.ObservedRelease, DesiredVersion: objectDesiredVersion(obj), SpecHash: objectSpecHash(obj.Spec)}
 	ready := false
 	degraded := false
 	for _, condition := range obj.Status.Conditions {
@@ -490,6 +507,23 @@ func observation(obj *platformv1alpha1.AppDeployment, expectedRelease string) Ob
 		o.State = runtimecontract.StateReady
 	}
 	return o
+}
+
+func objectDesiredVersion(object metav1.Object) int64 {
+	version, err := strconv.ParseInt(object.GetAnnotations()[desiredVersionAnnotation], 10, 64)
+	if err != nil || version < 1 {
+		return 0
+	}
+	return version
+}
+
+func objectSpecHash(spec any) string {
+	encoded, err := json.Marshal(spec)
+	if err != nil {
+		return ""
+	}
+	digest := sha256.Sum256(encoded)
+	return fmt.Sprintf("%x", digest)
 }
 
 func normalizeIntent(intent runtimecontract.DeploymentIntent) runtimecontract.DeploymentIntent {

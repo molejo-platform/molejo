@@ -12,7 +12,7 @@ import (
 type unusedRuntimeClient struct{}
 
 func (unusedRuntimeClient) EnsureWorkspace(context.Context, string) error { return nil }
-func (unusedRuntimeClient) ApplyVolume(context.Context, string, string, VolumeIntent) error {
+func (unusedRuntimeClient) ApplyVolume(context.Context, string, string, int64, VolumeIntent) error {
 	return nil
 }
 
@@ -20,7 +20,7 @@ func (unusedRuntimeClient) ObserveVolume(context.Context, string, string) (Volum
 	return VolumeObservation{}, nil
 }
 
-func (unusedRuntimeClient) ApplyDeployment(context.Context, string, string, runtimecontract.DeploymentIntent) error {
+func (unusedRuntimeClient) ApplyDeployment(context.Context, string, string, int64, runtimecontract.DeploymentIntent) error {
 	return nil
 }
 

@@ -44,7 +44,15 @@ func TestAgentCommandCompletesADeploymentWithoutControlPlaneKubernetesAccess(t *
 	if payload.Name != target.RuntimeName || payload.Deployment == nil || payload.Deployment.Image != image {
 		t.Fatalf("payload=%+v", payload)
 	}
-	result := &clusteragentv1alpha1.RuntimeResult{CommandId: command.GetCommandId(), FencingToken: command.GetFencingToken(), State: runtimecontract.StateReady, Message: "runtime ready", ObservedRelease: image}
+	result := &clusteragentv1alpha1.RuntimeResult{
+		CommandId:       command.GetCommandId(),
+		FencingToken:    command.GetFencingToken(),
+		State:           runtimecontract.StateReady,
+		Message:         "runtime ready",
+		ObservedRelease: image,
+		DesiredVersion:  command.GetDesiredVersion(),
+		SpecHash:        strings.Repeat("a", 64),
+	}
 	if err = worker.HandleResult(ctx, testAgentInstallationID, result); err != nil {
 		t.Fatal(err)
 	}

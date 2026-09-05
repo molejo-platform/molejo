@@ -100,11 +100,14 @@ func Run(version string, args []string) error {
 	if err != nil {
 		return err
 	}
+	if err = operationworker.ValidateTiming(cfg.OperationLease, operationworker.DefaultCommandTimeout); err != nil {
+		return fmt.Errorf("invalid runtime command timing: %w", err)
+	}
 	dispatcher := &operationworker.Worker{
 		Store: s, Publication: s.PublicationPolicy(), ParameterSecrets: parameterSecrets,
-		OperationLease: cfg.OperationLease, CommandTimeout: 20 * time.Second, Logger: slog.Default(),
+		OperationLease: cfg.OperationLease, CommandTimeout: operationworker.DefaultCommandTimeout, Logger: slog.Default(),
 	}
-	agentSigner, agentServerCAPEM, grpcServer, grpcListener, err := configureAgentPairing(s, dispatcher)
+	agentSigner, agentServerCAPEM, agentTrustBundleID, grpcServer, grpcListener, err := configureAgentPairing(s, dispatcher)
 	if err != nil {
 		return err
 	}
@@ -120,6 +123,7 @@ func Run(version string, args []string) error {
 		Observability:         observabilityBackend,
 		AgentSigner:           agentSigner,
 		AgentServerCAPEM:      agentServerCAPEM,
+		AgentTrustBundleID:    agentTrustBundleID,
 	})
 	httpServer := &http.Server{Addr: env("MOLEJO_HTTP_ADDR", ":8080"), Handler: server.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 20 * time.Second, WriteTimeout: 20 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
 	httpTLSCertificate := strings.TrimSpace(os.Getenv("MOLEJO_HTTP_TLS_CERT_FILE"))
@@ -178,7 +182,7 @@ func gracefulStopGRPC(server *grpc.Server, timeout time.Duration) {
 	}
 }
 
-func configureAgentPairing(registry *store.Store, dispatcher controlagent.RuntimeDispatcher) (api.AgentCertificateSigner, []byte, *grpc.Server, net.Listener, error) {
+func configureAgentPairing(registry *store.Store, dispatcher controlagent.RuntimeDispatcher) (api.AgentCertificateSigner, []byte, string, *grpc.Server, net.Listener, error) {
 	caCertificatePath := strings.TrimSpace(os.Getenv("MOLEJO_AGENT_CA_CERT_FILE"))
 	caKeyPath := strings.TrimSpace(os.Getenv("MOLEJO_AGENT_CA_KEY_FILE"))
 	serverCertificatePath := strings.TrimSpace(os.Getenv("MOLEJO_AGENT_SERVER_CERT_FILE"))
@@ -191,55 +195,59 @@ func configureAgentPairing(registry *store.Store, dispatcher controlagent.Runtim
 		}
 	}
 	if provided == 0 {
-		return nil, nil, nil, nil, nil
+		return nil, nil, "", nil, nil, nil
 	}
 	if provided != len(configured) {
-		return nil, nil, nil, nil, fmt.Errorf("Agent pairing TLS configuration is incomplete")
+		return nil, nil, "", nil, nil, fmt.Errorf("Agent pairing TLS configuration is incomplete")
 	}
 	caCertificatePEM, err := os.ReadFile(caCertificatePath)
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("read Agent CA certificate: %w", err)
+		return nil, nil, "", nil, nil, fmt.Errorf("read Agent CA certificate: %w", err)
 	}
 	caKeyPEM, err := os.ReadFile(caKeyPath)
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("read Agent CA key: %w", err)
+		return nil, nil, "", nil, nil, fmt.Errorf("read Agent CA key: %w", err)
 	}
 	validity, err := durationEnv("MOLEJO_AGENT_CERTIFICATE_TTL", 7*24*time.Hour)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, "", nil, nil, err
 	}
 	signer, err := controlagent.NewSigner(caCertificatePEM, caKeyPEM, validity)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, "", nil, nil, err
 	}
 	serverCertificate, err := tls.LoadX509KeyPair(serverCertificatePath, serverKeyPath)
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("load Agent gRPC server identity: %w", err)
+		return nil, nil, "", nil, nil, fmt.Errorf("load Agent gRPC server identity: %w", err)
 	}
 	clientRoots := x509.NewCertPool()
 	if !clientRoots.AppendCertsFromPEM(caCertificatePEM) {
-		return nil, nil, nil, nil, fmt.Errorf("Agent CA certificate is invalid")
+		return nil, nil, "", nil, nil, fmt.Errorf("Agent CA certificate is invalid")
 	}
 	serverCAPEM := caCertificatePEM
 	if path := strings.TrimSpace(os.Getenv("MOLEJO_AGENT_SERVER_CA_CERT_FILE")); path != "" {
 		serverCAPEM, err = os.ReadFile(path)
 		if err != nil {
-			return nil, nil, nil, nil, fmt.Errorf("read Agent server CA certificate: %w", err)
+			return nil, nil, "", nil, nil, fmt.Errorf("read Agent server CA certificate: %w", err)
 		}
 		serverRoots := x509.NewCertPool()
 		if !serverRoots.AppendCertsFromPEM(serverCAPEM) {
-			return nil, nil, nil, nil, fmt.Errorf("Agent server CA certificate is invalid")
+			return nil, nil, "", nil, nil, fmt.Errorf("Agent server CA certificate is invalid")
 		}
+	}
+	trustBundleID, err := controlagent.TrustBundleID(signer.AuthorityID(), serverCAPEM)
+	if err != nil {
+		return nil, nil, "", nil, nil, err
 	}
 	listener, err := net.Listen("tcp", env("MOLEJO_AGENT_GRPC_ADDR", ":8443"))
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("listen for Agent gRPC: %w", err)
+		return nil, nil, "", nil, nil, fmt.Errorf("listen for Agent gRPC: %w", err)
 	}
 	grpcServer := grpc.NewServer(grpc.Creds(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS13, Certificates: []tls.Certificate{serverCertificate}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: clientRoots})))
 	service := controlagent.NewGRPCService(registry, dispatcher, 5*time.Second)
-	service.ConfigureCertificateRenewal(signer, serverCAPEM)
+	service.ConfigureCertificateRenewal(signer, serverCAPEM, trustBundleID)
 	clusteragentv1alpha1.RegisterClusterAgentServiceServer(grpcServer, service)
-	return signer, serverCAPEM, grpcServer, listener, nil
+	return signer, serverCAPEM, trustBundleID, grpcServer, listener, nil
 }
 
 func runParameterWorker() error {

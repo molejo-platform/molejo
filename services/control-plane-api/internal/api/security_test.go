@@ -201,3 +201,21 @@ func TestSessionEndpointsRejectInvalidOriginAndDisableCaching(t *testing.T) {
 		t.Fatalf("session Cache-Control = %q, want no-store", got)
 	}
 }
+
+func TestClusterEnrollmentEndpointsDisableCaching(t *testing.T) {
+	server := NewServer(Config{AllowedHosts: []string{"console.example"}}, Dependencies{})
+	for _, path := range []string{
+		"/api/v1/admin/clusters",
+		"/api/v1/admin/clusters/cls-abcdefghijklmnopqrst/enrollment-invitations",
+	} {
+		request := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{}`))
+		request.Host = "console.example"
+		recorder := httptest.NewRecorder()
+
+		server.Handler().ServeHTTP(recorder, request)
+
+		if got := recorder.Header().Get("Cache-Control"); got != "no-store" {
+			t.Fatalf("%s Cache-Control = %q, want no-store", path, got)
+		}
+	}
+}

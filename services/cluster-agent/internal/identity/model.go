@@ -1,6 +1,11 @@
 package identity
 
-import "time"
+import (
+	"errors"
+	"time"
+)
+
+var ErrTrustBundleUpdateRequired = errors.New("control plane trust bundle update is required")
 
 type StoredIdentity struct {
 	AttemptID        string
@@ -10,6 +15,7 @@ type StoredIdentity struct {
 	CertificatePEM   []byte
 	CACertificatePEM []byte
 	ServerCAPEM      []byte
+	TrustBundleID    string
 	ExpiresAt        time.Time
 	RenewalAttemptID string
 	RenewalKeyPEM    []byte
@@ -22,5 +28,6 @@ type Certificate struct {
 	CertificatePEM   []byte
 	CACertificatePEM []byte
 	ServerCAPEM      []byte
+	TrustBundleID    string
 	ExpiresAt        time.Time
 }

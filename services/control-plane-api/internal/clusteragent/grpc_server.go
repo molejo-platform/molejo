@@ -23,10 +23,10 @@ import (
 var ErrPeerIdentityMismatch = errors.New("agent peer identity does not match")
 
 type AgentRegistry interface {
-	ActivateAgent(context.Context, string, []byte, string, string, string, []string, time.Time, audit.Event) (bool, error)
-	TouchAgent(context.Context, string, []byte, time.Time) error
+	ActivateAgent(context.Context, string, []byte, string, string, string, []string, string, string, time.Time, audit.Event) (bool, error)
+	TouchAgent(context.Context, string, []byte, string, uint64, time.Time) error
 	RenewAgent(context.Context, string, []byte, string, []byte, time.Time, func(string) (store.AgentCertificate, error), audit.Event) (store.AgentCertificate, error)
-	ReconcileAgentObservations(context.Context, string, []store.RuntimeObservation, bool) error
+	ReconcileAgentObservations(context.Context, string, string, uint64, []store.RuntimeObservation, bool) error
 }
 
 type CertificateSigner interface {
@@ -46,23 +46,26 @@ type GRPCService struct {
 	heartbeatInterval time.Duration
 	now               func() time.Time
 	eventID           func() (string, error)
+	sessionID         func() (string, error)
 	signer            CertificateSigner
 	serverCAPEM       []byte
+	trustBundleID     string
 }
 
 // ConfigureCertificateRenewal enables authenticated key rotation. The server
 // trust root returned to the Agent is deliberately distinct from the CA that
 // signs Agent client identities.
-func (s *GRPCService) ConfigureCertificateRenewal(signer CertificateSigner, serverCAPEM []byte) {
+func (s *GRPCService) ConfigureCertificateRenewal(signer CertificateSigner, serverCAPEM []byte, trustBundleID string) {
 	s.signer = signer
 	s.serverCAPEM = append([]byte(nil), serverCAPEM...)
+	s.trustBundleID = trustBundleID
 }
 
 func NewGRPCService(registry AgentRegistry, dispatcher RuntimeDispatcher, heartbeatInterval time.Duration) *GRPCService {
 	if heartbeatInterval <= 0 {
 		heartbeatInterval = 30 * time.Second
 	}
-	return &GRPCService{registry: registry, dispatcher: dispatcher, heartbeatInterval: heartbeatInterval, now: func() time.Time { return time.Now().UTC() }, eventID: func() (string, error) { return domain.NewPublicID("aud") }}
+	return &GRPCService{registry: registry, dispatcher: dispatcher, heartbeatInterval: heartbeatInterval, now: func() time.Time { return time.Now().UTC() }, eventID: func() (string, error) { return domain.NewPublicID("aud") }, sessionID: func() (string, error) { return domain.NewPublicID("ags") }}
 }
 
 func (s *GRPCService) Connect(stream grpc.BidiStreamingServer[clusteragentv1alpha1.ConnectRequest, clusteragentv1alpha1.ConnectResponse]) error {
@@ -87,11 +90,15 @@ func (s *GRPCService) Connect(stream grpc.BidiStreamingServer[clusteragentv1alph
 	if err != nil {
 		return status.Error(codes.Internal, "Pairing audit could not be created")
 	}
-	_, err = s.registry.ActivateAgent(stream.Context(), installationID, fingerprint, hello.GetClusterUid(), hello.GetAgentVersion(), hello.GetKubernetesVersion(), hello.GetCapabilities(), now, audit.Event{PublicID: auditID, Action: "installation.agent.pair", TargetType: "Cluster", TargetPublicID: installationID, Outcome: audit.Succeeded})
+	sessionID, err := s.sessionID()
+	if err != nil {
+		return status.Error(codes.Internal, "Agent session could not be created")
+	}
+	_, err = s.registry.ActivateAgent(stream.Context(), installationID, fingerprint, hello.GetClusterUid(), hello.GetAgentVersion(), hello.GetKubernetesVersion(), hello.GetCapabilities(), hello.GetTrustBundleId(), sessionID, now, audit.Event{PublicID: auditID, Action: "installation.agent.pair", TargetType: "Cluster", TargetPublicID: installationID, Outcome: audit.Succeeded})
 	if err != nil {
 		return status.Error(codes.PermissionDenied, "Agent identity was rejected")
 	}
-	if err = stream.Send(&clusteragentv1alpha1.ConnectResponse{Payload: &clusteragentv1alpha1.ConnectResponse_Hello{Hello: &clusteragentv1alpha1.ControlPlaneHello{ProtocolVersion: "v1alpha1", HeartbeatIntervalSeconds: int32(s.heartbeatInterval / time.Second), ServerTimeUnix: now.Unix(), Capabilities: []string{"runtime.v1alpha1", "runtime-observation.v1alpha1", "certificate-renewal.v1alpha1"}}}}); err != nil {
+	if err = stream.Send(&clusteragentv1alpha1.ConnectResponse{Payload: &clusteragentv1alpha1.ConnectResponse_Hello{Hello: &clusteragentv1alpha1.ControlPlaneHello{ProtocolVersion: "v1alpha1", HeartbeatIntervalSeconds: int32(s.heartbeatInterval / time.Second), ServerTimeUnix: now.Unix(), Capabilities: []string{"runtime.v1alpha1", "runtime-observation.v1alpha1", "certificate-renewal.v1alpha1"}, SessionId: sessionID, TrustBundleId: s.trustBundleID}}}); err != nil {
 		return err
 	}
 	for {
@@ -106,8 +113,11 @@ func (s *GRPCService) Connect(stream grpc.BidiStreamingServer[clusteragentv1alph
 		if heartbeat == nil {
 			return status.Error(codes.InvalidArgument, "Heartbeat was expected")
 		}
+		if heartbeat.GetSessionId() != sessionID || heartbeat.GetSequence() == 0 {
+			return status.Error(codes.PermissionDenied, "Agent session was rejected")
+		}
 		now = s.now()
-		if err = s.registry.TouchAgent(stream.Context(), installationID, fingerprint, now); err != nil {
+		if err = s.registry.TouchAgent(stream.Context(), installationID, fingerprint, sessionID, heartbeat.GetSequence(), now); err != nil {
 			return status.Error(codes.PermissionDenied, "Agent identity was rejected")
 		}
 		if len(heartbeat.GetObservations()) > 0 || heartbeat.GetObservationSnapshotComplete() {
@@ -118,9 +128,10 @@ func (s *GRPCService) Connect(stream grpc.BidiStreamingServer[clusteragentv1alph
 					State: observation.GetState(), Message: observation.GetMessage(), Generation: observation.GetGeneration(),
 					ObservedGeneration: observation.GetObservedGeneration(), ObservedRelease: observation.GetObservedRelease(),
 					ObservedSizeGiB: observation.GetObservedSizeGib(),
+					DesiredVersion:  observation.GetDesiredVersion(), SpecHash: observation.GetSpecHash(),
 				})
 			}
-			if err = s.registry.ReconcileAgentObservations(stream.Context(), installationID, observations, heartbeat.GetObservationSnapshotComplete()); err != nil {
+			if err = s.registry.ReconcileAgentObservations(stream.Context(), installationID, sessionID, heartbeat.GetSequence(), observations, heartbeat.GetObservationSnapshotComplete()); err != nil {
 				if errors.Is(err, store.ErrAgentIdentityMismatch) {
 					return status.Error(codes.PermissionDenied, "Agent identity was rejected")
 				}
@@ -174,7 +185,7 @@ func (s *GRPCService) RenewCertificate(ctx context.Context, request *clusteragen
 	}
 	certificate, err := s.registry.RenewAgent(ctx, installationID, fingerprint, request.GetAttemptId(), csrFingerprint[:], now, func(publicID string) (store.AgentCertificate, error) {
 		issued, issueErr := s.signer.Sign(publicID, request.GetCsrPem(), now)
-		return store.AgentCertificate{CertificatePEM: issued.CertificatePEM, CACertificatePEM: issued.CACertificatePEM, ServerCAPEM: s.serverCAPEM, Serial: issued.Serial, Fingerprint: issued.Fingerprint, NotAfter: issued.NotAfter}, issueErr
+		return store.AgentCertificate{CertificatePEM: issued.CertificatePEM, CACertificatePEM: issued.CACertificatePEM, ServerCAPEM: s.serverCAPEM, Serial: issued.Serial, Fingerprint: issued.Fingerprint, NotAfter: issued.NotAfter, TrustBundleID: s.trustBundleID}, issueErr
 	}, audit.Event{PublicID: auditID, Action: "cluster.credential.renew", TargetType: "Cluster", TargetPublicID: installationID, Outcome: audit.Succeeded})
 	if err != nil {
 		if errors.Is(err, ErrInvalidCSR) {
@@ -185,7 +196,7 @@ func (s *GRPCService) RenewCertificate(ctx context.Context, request *clusteragen
 		}
 		return nil, status.Error(codes.Internal, "Agent certificate could not be renewed")
 	}
-	return &clusteragentv1alpha1.RenewCertificateResponse{InstallationId: certificate.InstallationID, CertificatePem: certificate.CertificatePEM, CaCertificatePem: certificate.CACertificatePEM, ServerCaCertificatePem: certificate.ServerCAPEM, ExpiresAtUnix: certificate.NotAfter.Unix()}, nil
+	return &clusteragentv1alpha1.RenewCertificateResponse{InstallationId: certificate.InstallationID, CertificatePem: certificate.CertificatePEM, CaCertificatePem: certificate.CACertificatePEM, ServerCaCertificatePem: certificate.ServerCAPEM, ExpiresAtUnix: certificate.NotAfter.Unix(), TrustBundleId: certificate.TrustBundleID}, nil
 }
 
 func hasRuntimeCapability(capabilities []string) bool {

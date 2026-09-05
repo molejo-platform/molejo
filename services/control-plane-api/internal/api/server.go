@@ -88,6 +88,7 @@ type Server struct {
 	observability         observability.Reader
 	agentSigner           AgentCertificateSigner
 	agentServerCAPEM      []byte
+	agentTrustBundleID    string
 	logLiveLimiter        *concurrencyLimiter
 	metricsLiveLimiter    *concurrencyLimiter
 	metricSnapshots       *metricSnapshotCache
@@ -116,6 +117,7 @@ type Dependencies struct {
 	Observability         observability.Reader
 	AgentSigner           AgentCertificateSigner
 	AgentServerCAPEM      []byte
+	AgentTrustBundleID    string
 }
 
 // NewServer constructs a fully initialized API server from explicit dependencies.
@@ -143,7 +145,7 @@ func NewServer(cfg Config, dependencies Dependencies) *Server {
 	if dependencies.Observability == nil {
 		dependencies.Observability = observability.UnavailableReader{}
 	}
-	return &Server{store: dependencies.Store, config: cfg, log: logger, tracer: dependencies.Tracer, github: dependencies.GitHub, githubWebhookSecret: dependencies.GitHubWebhookSecret, parameterSecrets: dependencies.ParameterSecrets, secretFingerprintKey: dependencies.SecretFingerprintKey, passwordResetKey: dependencies.PasswordResetKey, authenticationSecrets: dependencies.AuthenticationSecrets, observability: dependencies.Observability, agentSigner: dependencies.AgentSigner, agentServerCAPEM: append([]byte(nil), dependencies.AgentServerCAPEM...), logLiveLimiter: &concurrencyLimiter{active: map[int64]int{}}, metricsLiveLimiter: &concurrencyLimiter{active: map[int64]int{}}, metricSnapshots: newMetricSnapshotCache(cfg.ObservabilityMetricsLivePoll), token: randomToken, deploymentID: func() (string, error) { return domain.NewPublicID("dpl") }, parameterID: func() (string, error) { return domain.NewPublicID("par") }, dummyPasswordHash: dummyHash}
+	return &Server{store: dependencies.Store, config: cfg, log: logger, tracer: dependencies.Tracer, github: dependencies.GitHub, githubWebhookSecret: dependencies.GitHubWebhookSecret, parameterSecrets: dependencies.ParameterSecrets, secretFingerprintKey: dependencies.SecretFingerprintKey, passwordResetKey: dependencies.PasswordResetKey, authenticationSecrets: dependencies.AuthenticationSecrets, observability: dependencies.Observability, agentSigner: dependencies.AgentSigner, agentServerCAPEM: append([]byte(nil), dependencies.AgentServerCAPEM...), agentTrustBundleID: dependencies.AgentTrustBundleID, logLiveLimiter: &concurrencyLimiter{active: map[int64]int{}}, metricsLiveLimiter: &concurrencyLimiter{active: map[int64]int{}}, metricSnapshots: newMetricSnapshotCache(cfg.ObservabilityMetricsLivePoll), token: randomToken, deploymentID: func() (string, error) { return domain.NewPublicID("dpl") }, parameterID: func() (string, error) { return domain.NewPublicID("par") }, dummyPasswordHash: dummyHash}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -393,7 +395,7 @@ func securityMiddleware(s *Server, next http.Handler) http.Handler {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
-		if strings.HasPrefix(r.URL.Path, "/api/v1/session") || strings.HasPrefix(r.URL.Path, "/api/v1/users") || strings.HasPrefix(r.URL.Path, "/api/v1/admin/users") || strings.HasPrefix(r.URL.Path, "/api/v1/admin/agent-installations") || strings.HasPrefix(r.URL.Path, "/api/v1/password-resets") || strings.HasPrefix(r.URL.Path, "/agent/") {
+		if strings.HasPrefix(r.URL.Path, "/api/v1/session") || strings.HasPrefix(r.URL.Path, "/api/v1/users") || strings.HasPrefix(r.URL.Path, "/api/v1/admin/users") || strings.HasPrefix(r.URL.Path, "/api/v1/admin/clusters") || strings.HasPrefix(r.URL.Path, "/api/v1/admin/agent-installations") || strings.HasPrefix(r.URL.Path, "/api/v1/password-resets") || strings.HasPrefix(r.URL.Path, "/agent/") {
 			w.Header().Set("Cache-Control", "no-store")
 		}
 		if strings.HasPrefix(s.config.PublicURL, "https://") && s.isHTTPS(r) {

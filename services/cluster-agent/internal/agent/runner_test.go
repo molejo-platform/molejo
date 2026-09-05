@@ -30,7 +30,8 @@ func (s *memoryIdentityStore) EnrollmentToken(context.Context) (string, error) {
 
 func (s *memoryIdentityStore) SaveCertificate(_ context.Context, value agentidentity.Certificate) error {
 	s.identity.InstallationID, s.identity.PrivateKeyPEM, s.identity.CertificatePEM = value.InstallationID, value.PrivateKeyPEM, value.CertificatePEM
-	s.identity.CACertificatePEM, s.identity.ServerCAPEM, s.identity.ExpiresAt = value.CACertificatePEM, value.ServerCAPEM, value.ExpiresAt
+	s.identity.CACertificatePEM, s.identity.ServerCAPEM, s.identity.TrustBundleID, s.identity.ExpiresAt = value.CACertificatePEM, value.ServerCAPEM, value.TrustBundleID, value.ExpiresAt
+	s.identity.RenewalAttemptID, s.identity.RenewalKeyPEM, s.identity.RenewalCSRPEM = "", nil, nil
 	return nil
 }
 
@@ -40,7 +41,7 @@ type fixedRenewer struct {
 }
 
 func (r *fixedRenewer) Renew(_ context.Context, _ agentidentity.StoredIdentity, request RenewalRequest) (agentidentity.Certificate, error) {
-	r.called = request.AttemptID != "" && len(request.PrivateKeyPEM) > 0 && len(request.CSRPEM) > 0
+	r.called = request.AttemptID != "" && len(request.CSRPEM) > 0
 	return r.certificate, nil
 }
 
@@ -70,11 +71,6 @@ func TestRunnerRotatesCertificateBeforeConnecting(t *testing.T) {
 
 func (s *memoryIdentityStore) SaveRenewalIdentity(_ context.Context, value agentidentity.StoredIdentity) error {
 	s.identity = value
-	return nil
-}
-
-func (s *memoryIdentityStore) ClearRenewalIdentity(context.Context) error {
-	s.identity.RenewalAttemptID, s.identity.RenewalKeyPEM, s.identity.RenewalCSRPEM = "", nil, nil
 	return nil
 }
 
@@ -117,6 +113,45 @@ func (c *callbackConnector) Connect(_ context.Context, _ agentidentity.StoredIde
 	paired()
 	c.paired = true
 	return errors.New("stream closed")
+}
+
+type trustRotationConnector struct {
+	calls      int
+	observedID string
+}
+
+func (c *trustRotationConnector) Connect(_ context.Context, identity agentidentity.StoredIdentity, paired func()) error {
+	c.calls++
+	c.observedID = identity.TrustBundleID
+	if c.calls == 1 {
+		return agentidentity.ErrTrustBundleUpdateRequired
+	}
+	paired()
+	return errors.New("stream closed")
+}
+
+func TestRunnerRenewsImmediatelyWhenTrustBundleChanges(t *testing.T) {
+	now := time.Now().UTC()
+	store := &memoryIdentityStore{identity: agentidentity.StoredIdentity{
+		InstallationID: "cls-abcdefghijklmnopqrst", PrivateKeyPEM: []byte("old-key"), CertificatePEM: []byte("old-certificate"),
+		CACertificatePEM: []byte("old-ca"), ServerCAPEM: []byte("old-server-ca"), TrustBundleID: "old", ExpiresAt: now.Add(6 * 24 * time.Hour),
+	}}
+	renewer := &fixedRenewer{certificate: agentidentity.Certificate{
+		InstallationID: "cls-abcdefghijklmnopqrst", CertificatePEM: []byte("new-certificate"), CACertificatePEM: []byte("new-and-old-ca"),
+		ServerCAPEM: []byte("new-and-old-server-ca"), TrustBundleID: "new", ExpiresAt: now.Add(7 * 24 * time.Hour),
+	}}
+	connector := &trustRotationConnector{}
+	runner := NewRunner(store, nil, connector, NewStatus())
+	runner.now = func() time.Time { return now }
+	runner.validateCertificate = func(agentidentity.StoredIdentity, agentidentity.Certificate, time.Time) error { return nil }
+	runner.ConfigureRenewal(renewer, 24*time.Hour)
+
+	if err := runner.ReconcileOnce(t.Context()); err == nil {
+		t.Fatal("expected the replacement stream to close")
+	}
+	if !renewer.called || connector.calls != 2 || connector.observedID != "new" || store.identity.TrustBundleID != "new" {
+		t.Fatalf("renewer=%v connector=%+v identity=%+v", renewer.called, connector, store.identity)
+	}
 }
 
 func TestRunnerPersistsRetryIdentityBeforeWaitingForToken(t *testing.T) {

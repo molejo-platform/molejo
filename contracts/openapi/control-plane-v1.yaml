@@ -1874,6 +1874,7 @@ components:
         lastSeenAt: { type: string, format: date-time }
         revokedAt: { type: string, format: date-time }
         revocationReason: { type: string }
+        trustBundleId: { type: string, pattern: '^[0-9a-f]{64}$' }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
     AgentEnrollmentInvitation:
@@ -1895,13 +1896,14 @@ components:
         csrPem: { type: string, minLength: 1, maxLength: 4096, writeOnly: true }
     AgentEnrollmentResult:
       type: object
-      required: [installationId, certificatePem, caCertificatePem, serverCaCertificatePem, expiresAt]
+      required: [installationId, certificatePem, caCertificatePem, serverCaCertificatePem, trustBundleId, expiresAt]
       additionalProperties: false
       properties:
         installationId: { type: string, pattern: '^(cls|agi)-[a-z2-7]{20}$' }
         certificatePem: { type: string, writeOnly: true }
         caCertificatePem: { type: string }
         serverCaCertificatePem: { type: string }
+        trustBundleId: { type: string, pattern: '^[0-9a-f]{64}$' }
         expiresAt: { type: string, format: date-time }
     UserStatusInput:
       type: object

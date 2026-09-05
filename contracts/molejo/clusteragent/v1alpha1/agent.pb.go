@@ -225,6 +225,7 @@ type AgentHello struct {
 	KubernetesVersion         string                 `protobuf:"bytes,4,opt,name=kubernetes_version,json=kubernetesVersion,proto3" json:"kubernetes_version,omitempty"`
 	Capabilities              []string               `protobuf:"bytes,5,rep,name=capabilities,proto3" json:"capabilities,omitempty"`
 	SupportedProtocolVersions []string               `protobuf:"bytes,6,rep,name=supported_protocol_versions,json=supportedProtocolVersions,proto3" json:"supported_protocol_versions,omitempty"`
+	TrustBundleId             string                 `protobuf:"bytes,7,opt,name=trust_bundle_id,json=trustBundleId,proto3" json:"trust_bundle_id,omitempty"`
 	unknownFields             protoimpl.UnknownFields
 	sizeCache                 protoimpl.SizeCache
 }
@@ -301,12 +302,21 @@ func (x *AgentHello) GetSupportedProtocolVersions() []string {
 	return nil
 }
 
+func (x *AgentHello) GetTrustBundleId() string {
+	if x != nil {
+		return x.TrustBundleId
+	}
+	return ""
+}
+
 type ControlPlaneHello struct {
 	state                    protoimpl.MessageState `protogen:"open.v1"`
 	ProtocolVersion          string                 `protobuf:"bytes,1,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
 	HeartbeatIntervalSeconds int32                  `protobuf:"varint,2,opt,name=heartbeat_interval_seconds,json=heartbeatIntervalSeconds,proto3" json:"heartbeat_interval_seconds,omitempty"`
 	ServerTimeUnix           int64                  `protobuf:"varint,3,opt,name=server_time_unix,json=serverTimeUnix,proto3" json:"server_time_unix,omitempty"`
 	Capabilities             []string               `protobuf:"bytes,4,rep,name=capabilities,proto3" json:"capabilities,omitempty"`
+	SessionId                string                 `protobuf:"bytes,5,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	TrustBundleId            string                 `protobuf:"bytes,6,opt,name=trust_bundle_id,json=trustBundleId,proto3" json:"trust_bundle_id,omitempty"`
 	unknownFields            protoimpl.UnknownFields
 	sizeCache                protoimpl.SizeCache
 }
@@ -369,12 +379,27 @@ func (x *ControlPlaneHello) GetCapabilities() []string {
 	return nil
 }
 
+func (x *ControlPlaneHello) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *ControlPlaneHello) GetTrustBundleId() string {
+	if x != nil {
+		return x.TrustBundleId
+	}
+	return ""
+}
+
 type Heartbeat struct {
 	state                       protoimpl.MessageState `protogen:"open.v1"`
 	Sequence                    uint64                 `protobuf:"varint,1,opt,name=sequence,proto3" json:"sequence,omitempty"`
 	SentAtUnix                  int64                  `protobuf:"varint,2,opt,name=sent_at_unix,json=sentAtUnix,proto3" json:"sent_at_unix,omitempty"`
 	Observations                []*RuntimeObservation  `protobuf:"bytes,3,rep,name=observations,proto3" json:"observations,omitempty"`
 	ObservationSnapshotComplete bool                   `protobuf:"varint,4,opt,name=observation_snapshot_complete,json=observationSnapshotComplete,proto3" json:"observation_snapshot_complete,omitempty"`
+	SessionId                   string                 `protobuf:"bytes,5,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	unknownFields               protoimpl.UnknownFields
 	sizeCache                   protoimpl.SizeCache
 }
@@ -437,6 +462,13 @@ func (x *Heartbeat) GetObservationSnapshotComplete() bool {
 	return false
 }
 
+func (x *Heartbeat) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
 type RuntimeObservation struct {
 	state              protoimpl.MessageState `protogen:"open.v1"`
 	Kind               string                 `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
@@ -448,6 +480,8 @@ type RuntimeObservation struct {
 	ObservedGeneration int64                  `protobuf:"varint,7,opt,name=observed_generation,json=observedGeneration,proto3" json:"observed_generation,omitempty"`
 	ObservedRelease    string                 `protobuf:"bytes,8,opt,name=observed_release,json=observedRelease,proto3" json:"observed_release,omitempty"`
 	ObservedSizeGib    int64                  `protobuf:"varint,9,opt,name=observed_size_gib,json=observedSizeGib,proto3" json:"observed_size_gib,omitempty"`
+	DesiredVersion     int64                  `protobuf:"varint,10,opt,name=desired_version,json=desiredVersion,proto3" json:"desired_version,omitempty"`
+	SpecHash           string                 `protobuf:"bytes,11,opt,name=spec_hash,json=specHash,proto3" json:"spec_hash,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
@@ -543,6 +577,20 @@ func (x *RuntimeObservation) GetObservedSizeGib() int64 {
 		return x.ObservedSizeGib
 	}
 	return 0
+}
+
+func (x *RuntimeObservation) GetDesiredVersion() int64 {
+	if x != nil {
+		return x.DesiredVersion
+	}
+	return 0
+}
+
+func (x *RuntimeObservation) GetSpecHash() string {
+	if x != nil {
+		return x.SpecHash
+	}
+	return ""
 }
 
 type HeartbeatAck struct {
@@ -709,6 +757,8 @@ type RuntimeResult struct {
 	ObservedSizeGib int64                  `protobuf:"varint,8,opt,name=observed_size_gib,json=observedSizeGib,proto3" json:"observed_size_gib,omitempty"`
 	ErrorCode       string                 `protobuf:"bytes,9,opt,name=error_code,json=errorCode,proto3" json:"error_code,omitempty"`
 	Retryable       bool                   `protobuf:"varint,10,opt,name=retryable,proto3" json:"retryable,omitempty"`
+	DesiredVersion  int64                  `protobuf:"varint,11,opt,name=desired_version,json=desiredVersion,proto3" json:"desired_version,omitempty"`
+	SpecHash        string                 `protobuf:"bytes,12,opt,name=spec_hash,json=specHash,proto3" json:"spec_hash,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -813,6 +863,20 @@ func (x *RuntimeResult) GetRetryable() bool {
 	return false
 }
 
+func (x *RuntimeResult) GetDesiredVersion() int64 {
+	if x != nil {
+		return x.DesiredVersion
+	}
+	return 0
+}
+
+func (x *RuntimeResult) GetSpecHash() string {
+	if x != nil {
+		return x.SpecHash
+	}
+	return ""
+}
+
 type RenewCertificateRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	InstallationId string                 `protobuf:"bytes,1,opt,name=installation_id,json=installationId,proto3" json:"installation_id,omitempty"`
@@ -880,6 +944,7 @@ type RenewCertificateResponse struct {
 	CaCertificatePem       []byte                 `protobuf:"bytes,3,opt,name=ca_certificate_pem,json=caCertificatePem,proto3" json:"ca_certificate_pem,omitempty"`
 	ExpiresAtUnix          int64                  `protobuf:"varint,4,opt,name=expires_at_unix,json=expiresAtUnix,proto3" json:"expires_at_unix,omitempty"`
 	ServerCaCertificatePem []byte                 `protobuf:"bytes,5,opt,name=server_ca_certificate_pem,json=serverCaCertificatePem,proto3" json:"server_ca_certificate_pem,omitempty"`
+	TrustBundleId          string                 `protobuf:"bytes,6,opt,name=trust_bundle_id,json=trustBundleId,proto3" json:"trust_bundle_id,omitempty"`
 	unknownFields          protoimpl.UnknownFields
 	sizeCache              protoimpl.SizeCache
 }
@@ -949,6 +1014,13 @@ func (x *RenewCertificateResponse) GetServerCaCertificatePem() []byte {
 	return nil
 }
 
+func (x *RenewCertificateResponse) GetTrustBundleId() string {
+	if x != nil {
+		return x.TrustBundleId
+	}
+	return ""
+}
+
 var File_molejo_clusteragent_v1alpha1_agent_proto protoreflect.FileDescriptor
 
 const file_molejo_clusteragent_v1alpha1_agent_proto_rawDesc = "" +
@@ -963,7 +1035,7 @@ const file_molejo_clusteragent_v1alpha1_agent_proto_rawDesc = "" +
 	"\x05hello\x18\x01 \x01(\v2/.molejo.clusteragent.v1alpha1.ControlPlaneHelloH\x00R\x05hello\x12Q\n" +
 	"\rheartbeat_ack\x18\x02 \x01(\v2*.molejo.clusteragent.v1alpha1.HeartbeatAckH\x00R\fheartbeatAck\x12W\n" +
 	"\x0fruntime_command\x18\x03 \x01(\v2,.molejo.clusteragent.v1alpha1.RuntimeCommandH\x00R\x0eruntimeCommandB\t\n" +
-	"\apayload\"\x8e\x02\n" +
+	"\apayload\"\xb6\x02\n" +
 	"\n" +
 	"AgentHello\x12'\n" +
 	"\x0finstallation_id\x18\x01 \x01(\tR\x0einstallationId\x12#\n" +
@@ -972,18 +1044,24 @@ const file_molejo_clusteragent_v1alpha1_agent_proto_rawDesc = "" +
 	"clusterUid\x12-\n" +
 	"\x12kubernetes_version\x18\x04 \x01(\tR\x11kubernetesVersion\x12\"\n" +
 	"\fcapabilities\x18\x05 \x03(\tR\fcapabilities\x12>\n" +
-	"\x1bsupported_protocol_versions\x18\x06 \x03(\tR\x19supportedProtocolVersions\"\xca\x01\n" +
+	"\x1bsupported_protocol_versions\x18\x06 \x03(\tR\x19supportedProtocolVersions\x12&\n" +
+	"\x0ftrust_bundle_id\x18\a \x01(\tR\rtrustBundleId\"\x91\x02\n" +
 	"\x11ControlPlaneHello\x12)\n" +
 	"\x10protocol_version\x18\x01 \x01(\tR\x0fprotocolVersion\x12<\n" +
 	"\x1aheartbeat_interval_seconds\x18\x02 \x01(\x05R\x18heartbeatIntervalSeconds\x12(\n" +
 	"\x10server_time_unix\x18\x03 \x01(\x03R\x0eserverTimeUnix\x12\"\n" +
-	"\fcapabilities\x18\x04 \x03(\tR\fcapabilities\"\xe3\x01\n" +
+	"\fcapabilities\x18\x04 \x03(\tR\fcapabilities\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x05 \x01(\tR\tsessionId\x12&\n" +
+	"\x0ftrust_bundle_id\x18\x06 \x01(\tR\rtrustBundleId\"\x82\x02\n" +
 	"\tHeartbeat\x12\x1a\n" +
 	"\bsequence\x18\x01 \x01(\x04R\bsequence\x12 \n" +
 	"\fsent_at_unix\x18\x02 \x01(\x03R\n" +
 	"sentAtUnix\x12T\n" +
 	"\fobservations\x18\x03 \x03(\v20.molejo.clusteragent.v1alpha1.RuntimeObservationR\fobservations\x12B\n" +
-	"\x1dobservation_snapshot_complete\x18\x04 \x01(\bR\x1bobservationSnapshotComplete\"\xb2\x02\n" +
+	"\x1dobservation_snapshot_complete\x18\x04 \x01(\bR\x1bobservationSnapshotComplete\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x05 \x01(\tR\tsessionId\"\xf8\x02\n" +
 	"\x12RuntimeObservation\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x1c\n" +
 	"\tnamespace\x18\x02 \x01(\tR\tnamespace\x12\x12\n" +
@@ -995,7 +1073,10 @@ const file_molejo_clusteragent_v1alpha1_agent_proto_rawDesc = "" +
 	"generation\x12/\n" +
 	"\x13observed_generation\x18\a \x01(\x03R\x12observedGeneration\x12)\n" +
 	"\x10observed_release\x18\b \x01(\tR\x0fobservedRelease\x12*\n" +
-	"\x11observed_size_gib\x18\t \x01(\x03R\x0fobservedSizeGib\"T\n" +
+	"\x11observed_size_gib\x18\t \x01(\x03R\x0fobservedSizeGib\x12'\n" +
+	"\x0fdesired_version\x18\n" +
+	" \x01(\x03R\x0edesiredVersion\x12\x1b\n" +
+	"\tspec_hash\x18\v \x01(\tR\bspecHash\"T\n" +
 	"\fHeartbeatAck\x12\x1a\n" +
 	"\bsequence\x18\x01 \x01(\x04R\bsequence\x12(\n" +
 	"\x10received_at_unix\x18\x02 \x01(\x03R\x0ereceivedAtUnix\"\xb2\x02\n" +
@@ -1008,7 +1089,7 @@ const file_molejo_clusteragent_v1alpha1_agent_proto_rawDesc = "" +
 	"\rdeadline_unix\x18\x05 \x01(\x03R\fdeadlineUnix\x12\x12\n" +
 	"\x04kind\x18\x06 \x01(\tR\x04kind\x12!\n" +
 	"\fpayload_json\x18\a \x01(\fR\vpayloadJson\x124\n" +
-	"\x16payload_schema_version\x18\b \x01(\tR\x14payloadSchemaVersion\"\xe1\x02\n" +
+	"\x16payload_schema_version\x18\b \x01(\tR\x14payloadSchemaVersion\"\xa7\x03\n" +
 	"\rRuntimeResult\x12\x1d\n" +
 	"\n" +
 	"command_id\x18\x01 \x01(\tR\tcommandId\x12#\n" +
@@ -1022,18 +1103,21 @@ const file_molejo_clusteragent_v1alpha1_agent_proto_rawDesc = "" +
 	"\n" +
 	"error_code\x18\t \x01(\tR\terrorCode\x12\x1c\n" +
 	"\tretryable\x18\n" +
-	" \x01(\bR\tretryable\"z\n" +
+	" \x01(\bR\tretryable\x12'\n" +
+	"\x0fdesired_version\x18\v \x01(\x03R\x0edesiredVersion\x12\x1b\n" +
+	"\tspec_hash\x18\f \x01(\tR\bspecHash\"z\n" +
 	"\x17RenewCertificateRequest\x12'\n" +
 	"\x0finstallation_id\x18\x01 \x01(\tR\x0einstallationId\x12\x1d\n" +
 	"\n" +
 	"attempt_id\x18\x02 \x01(\tR\tattemptId\x12\x17\n" +
-	"\acsr_pem\x18\x03 \x01(\fR\x06csrPem\"\xfd\x01\n" +
+	"\acsr_pem\x18\x03 \x01(\fR\x06csrPem\"\xa5\x02\n" +
 	"\x18RenewCertificateResponse\x12'\n" +
 	"\x0finstallation_id\x18\x01 \x01(\tR\x0einstallationId\x12'\n" +
 	"\x0fcertificate_pem\x18\x02 \x01(\fR\x0ecertificatePem\x12,\n" +
 	"\x12ca_certificate_pem\x18\x03 \x01(\fR\x10caCertificatePem\x12&\n" +
 	"\x0fexpires_at_unix\x18\x04 \x01(\x03R\rexpiresAtUnix\x129\n" +
-	"\x19server_ca_certificate_pem\x18\x05 \x01(\fR\x16serverCaCertificatePem2\x85\x02\n" +
+	"\x19server_ca_certificate_pem\x18\x05 \x01(\fR\x16serverCaCertificatePem\x12&\n" +
+	"\x0ftrust_bundle_id\x18\x06 \x01(\tR\rtrustBundleId2\x85\x02\n" +
 	"\x13ClusterAgentService\x12j\n" +
 	"\aConnect\x12,.molejo.clusteragent.v1alpha1.ConnectRequest\x1a-.molejo.clusteragent.v1alpha1.ConnectResponse(\x010\x01\x12\x81\x01\n" +
 	"\x10RenewCertificate\x125.molejo.clusteragent.v1alpha1.RenewCertificateRequest\x1a6.molejo.clusteragent.v1alpha1.RenewCertificateResponseB_Z]github.com/molejo-platform/molejo/contracts/molejo/clusteragent/v1alpha1;clusteragentv1alpha1b\x06proto3"

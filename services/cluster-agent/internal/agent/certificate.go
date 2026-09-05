@@ -15,8 +15,7 @@ import (
 func ValidateCertificate(stored agentidentity.StoredIdentity, issued agentidentity.Certificate, now time.Time) error {
 	keyBlock, keyRest := pem.Decode(stored.PrivateKeyPEM)
 	certificateBlock, certificateRest := pem.Decode(issued.CertificatePEM)
-	caBlock, caRest := pem.Decode(issued.CACertificatePEM)
-	if keyBlock == nil || certificateBlock == nil || caBlock == nil || len(keyRest) != 0 || len(certificateRest) != 0 || len(caRest) != 0 {
+	if keyBlock == nil || certificateBlock == nil || len(keyRest) != 0 || len(certificateRest) != 0 {
 		return errors.New("Agent identity PEM is invalid")
 	}
 	parsedKey, err := x509.ParsePKCS8PrivateKey(keyBlock.Bytes)
@@ -35,12 +34,25 @@ func ValidateCertificate(stored agentidentity.StoredIdentity, issued agentidenti
 	if !ok || !publicKey.Equal(&privateKey.PublicKey) {
 		return errors.New("Agent certificate does not match the private key")
 	}
-	caCertificate, err := x509.ParseCertificate(caBlock.Bytes)
-	if err != nil || !caCertificate.IsCA {
+	roots := x509.NewCertPool()
+	remaining := issued.CACertificatePEM
+	rootCount := 0
+	for len(remaining) > 0 {
+		var block *pem.Block
+		block, remaining = pem.Decode(remaining)
+		if block == nil || block.Type != "CERTIFICATE" {
+			return errors.New("Agent CA certificate is invalid")
+		}
+		caCertificate, parseErr := x509.ParseCertificate(block.Bytes)
+		if parseErr != nil || !caCertificate.IsCA {
+			return errors.New("Agent CA certificate is invalid")
+		}
+		roots.AddCert(caCertificate)
+		rootCount++
+	}
+	if rootCount == 0 {
 		return errors.New("Agent CA certificate is invalid")
 	}
-	roots := x509.NewCertPool()
-	roots.AddCert(caCertificate)
 	if _, err = certificate.Verify(x509.VerifyOptions{Roots: roots, CurrentTime: now, KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}}); err != nil {
 		return fmt.Errorf("verify Agent certificate: %w", err)
 	}
@@ -50,6 +62,9 @@ func ValidateCertificate(stored agentidentity.StoredIdentity, issued agentidenti
 	}
 	if issued.ExpiresAt.IsZero() || !certificate.NotAfter.Equal(issued.ExpiresAt) {
 		return errors.New("Agent certificate expiry is inconsistent")
+	}
+	if issued.TrustBundleID == "" {
+		return errors.New("Agent trust bundle identity is missing")
 	}
 	return nil
 }

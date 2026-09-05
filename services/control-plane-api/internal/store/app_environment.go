@@ -746,13 +746,13 @@ func (s *Store) claimNext(ctx context.Context, worker, installationID string, le
 	return operation, appEnvironment, deployment, true, tx.Commit(ctx)
 }
 
-func (s *Store) CompleteDeployment(ctx context.Context, operation domain.Operation, message, observedRelease string) error {
-	return s.completeDeployment(ctx, operation, message, observedRelease, nil)
+func (s *Store) CompleteDeployment(ctx context.Context, operation domain.Operation, message, observedRelease, specHash string) error {
+	return s.completeDeployment(ctx, operation, message, observedRelease, specHash, nil)
 }
 
-func (s *Store) CompleteStatefulDeployment(ctx context.Context, operation domain.Operation, message, observedRelease, volumeMessage string, observedSizeGiB int64) error {
+func (s *Store) CompleteStatefulDeployment(ctx context.Context, operation domain.Operation, message, observedRelease, volumeMessage string, observedSizeGiB int64, specHash string) error {
 	volume := &deploymentVolumeCompletion{message: volumeMessage, observedSizeGiB: observedSizeGiB}
-	return s.completeDeployment(ctx, operation, message, observedRelease, volume)
+	return s.completeDeployment(ctx, operation, message, observedRelease, specHash, volume)
 }
 
 type deploymentVolumeCompletion struct {
@@ -760,7 +760,7 @@ type deploymentVolumeCompletion struct {
 	observedSizeGiB int64
 }
 
-func (s *Store) completeDeployment(ctx context.Context, operation domain.Operation, message, observedRelease string, volume *deploymentVolumeCompletion) error {
+func (s *Store) completeDeployment(ctx context.Context, operation domain.Operation, message, observedRelease, specHash string, volume *deploymentVolumeCompletion) error {
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -777,8 +777,9 @@ func (s *Store) completeDeployment(ctx context.Context, operation domain.Operati
 	if err != nil || tag.RowsAffected() != 1 {
 		return ErrLeaseLost
 	}
-	_, err = tx.Exec(ctx, `UPDATE app_environments ae SET current_deployment_id=d.id,current_release_id=d.release_id,last_state='Ready',last_message=$1,updated_at=now()
-		FROM deployments d WHERE ae.id=$2 AND d.id=$3 AND ae.desired_deployment_id=d.id`, message, operation.AppEnvironmentID, operation.DeploymentID)
+	_, err = tx.Exec(ctx, `UPDATE app_environments ae SET current_deployment_id=d.id,current_release_id=d.release_id,last_state='Ready',last_message=$1,
+		runtime_desired_version=$4,runtime_spec_hash=$5,updated_at=now()
+		FROM deployments d WHERE ae.id=$2 AND d.id=$3 AND ae.desired_deployment_id=d.id`, message, operation.AppEnvironmentID, operation.DeploymentID, operation.DesiredVersion, specHash)
 	if err != nil {
 		return err
 	}

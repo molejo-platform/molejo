@@ -49,7 +49,7 @@ func (e *Executor) Execute(parent context.Context, command *clusteragentv1alpha1
 	}
 	ctx, cancel := context.WithDeadline(parent, timeoutDeadline)
 	defer cancel()
-	if err := e.execute(ctx, command.GetKind(), payload, result); err != nil {
+	if err := e.execute(ctx, command.GetKind(), command.GetDesiredVersion(), payload, result); err != nil {
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			return failResult(result, "runtime_timeout", "runtime command did not complete before its deadline", true)
 		}
@@ -61,7 +61,7 @@ func (e *Executor) Execute(parent context.Context, command *clusteragentv1alpha1
 	return result
 }
 
-func (e *Executor) execute(ctx context.Context, kind string, payload runtimecontract.Payload, result *clusteragentv1alpha1.RuntimeResult) error {
+func (e *Executor) execute(ctx context.Context, kind string, desiredVersion int64, payload runtimecontract.Payload, result *clusteragentv1alpha1.RuntimeResult) error {
 	switch kind {
 	case runtimecontract.OperationEnsureWorkspace:
 		if err := e.client.EnsureWorkspace(ctx, payload.Namespace); err != nil {
@@ -75,7 +75,7 @@ func (e *Executor) execute(ctx context.Context, kind string, payload runtimecont
 		if payload.Volume == nil {
 			return fmt.Errorf("volume intent is missing")
 		}
-		if err := e.client.ApplyVolume(ctx, payload.Namespace, payload.Name, *payload.Volume); err != nil {
+		if err := e.client.ApplyVolume(ctx, payload.Namespace, payload.Name, desiredVersion, *payload.Volume); err != nil {
 			return err
 		}
 		observed, err := e.client.ObserveVolume(ctx, payload.Namespace, payload.Name)
@@ -85,6 +85,7 @@ func (e *Executor) execute(ctx context.Context, kind string, payload runtimecont
 		result.VolumeState = observed.State
 		result.VolumeMessage = observed.Message
 		result.ObservedSizeGib = observed.ObservedSizeGiB
+		result.DesiredVersion, result.SpecHash = observed.DesiredVersion, observed.SpecHash
 		expected := runtimecontract.VolumeStateReady
 		if kind == runtimecontract.OperationDeleteVolume {
 			expected = runtimecontract.VolumeStateRetained
@@ -119,7 +120,7 @@ func (e *Executor) execute(ctx context.Context, kind string, payload runtimecont
 		if payload.Deployment == nil {
 			return fmt.Errorf("deployment intent is missing")
 		}
-		if err := e.client.ApplyDeployment(ctx, payload.Namespace, payload.Name, *payload.Deployment); err != nil {
+		if err := e.client.ApplyDeployment(ctx, payload.Namespace, payload.Name, desiredVersion, *payload.Deployment); err != nil {
 			return err
 		}
 		observed, err := e.client.ObserveDeployment(ctx, payload.Namespace, payload.Name)
@@ -127,6 +128,7 @@ func (e *Executor) execute(ctx context.Context, kind string, payload runtimecont
 			return err
 		}
 		result.State, result.Message, result.ObservedRelease = observed.State, observed.Message, observed.ObservedRelease
+		result.DesiredVersion, result.SpecHash = observed.DesiredVersion, observed.SpecHash
 		if !observed.Exists || observed.State != runtimecontract.StateReady || observed.ObservedRelease != payload.Deployment.Image {
 			return fmt.Errorf("runtime has not observed the requested release")
 		}

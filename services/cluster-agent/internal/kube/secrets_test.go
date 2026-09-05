@@ -28,7 +28,10 @@ func TestSecretStorePersistsIdentityAndClearsEnrollmentToken(t *testing.T) {
 		t.Fatalf("token=%q err=%v", token, err)
 	}
 	expiresAt := time.Now().UTC().Add(time.Hour).Truncate(time.Second)
-	if err = store.SaveCertificate(t.Context(), Certificate{InstallationID: "agi-test", PrivateKeyPEM: []byte("rotated-private"), CertificatePEM: []byte("certificate"), CACertificatePEM: []byte("ca"), ServerCAPEM: []byte("server-ca"), ExpiresAt: expiresAt}); err != nil {
+	if err = store.SaveRenewalIdentity(t.Context(), Identity{RenewalAttemptID: "renewal", RenewalKeyPEM: []byte("renewal-private"), RenewalCSRPEM: []byte("renewal-csr")}); err != nil {
+		t.Fatal(err)
+	}
+	if err = store.SaveCertificate(t.Context(), Certificate{InstallationID: "agi-test", PrivateKeyPEM: []byte("rotated-private"), CertificatePEM: []byte("certificate"), CACertificatePEM: []byte("ca"), ServerCAPEM: []byte("server-ca"), TrustBundleID: "trust-v1", ExpiresAt: expiresAt}); err != nil {
 		t.Fatal(err)
 	}
 	if err = store.ClearEnrollmentToken(t.Context()); err != nil {
@@ -39,7 +42,7 @@ func TestSecretStorePersistsIdentityAndClearsEnrollmentToken(t *testing.T) {
 		t.Fatalf("cleared token=%q err=%v", token, err)
 	}
 	loaded, err = store.LoadIdentity(t.Context())
-	if err != nil || loaded.InstallationID != "agi-test" || !loaded.ExpiresAt.Equal(expiresAt) || string(loaded.PrivateKeyPEM) != "rotated-private" || string(loaded.ServerCAPEM) != "server-ca" {
+	if err != nil || loaded.InstallationID != "agi-test" || !loaded.ExpiresAt.Equal(expiresAt) || string(loaded.PrivateKeyPEM) != "rotated-private" || string(loaded.ServerCAPEM) != "server-ca" || loaded.TrustBundleID != "trust-v1" || loaded.RenewalAttemptID != "" || len(loaded.RenewalKeyPEM) != 0 || len(loaded.RenewalCSRPEM) != 0 {
 		t.Fatalf("certificate identity=%+v err=%v", loaded, err)
 	}
 }

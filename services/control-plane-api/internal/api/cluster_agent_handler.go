@@ -138,7 +138,7 @@ func (h *generatedHandler) RevokeCluster(w http.ResponseWriter, r *http.Request,
 	event.ActorUserID = &administrator.ID
 	err := h.server.store.RevokeCluster(r.Context(), string(clusterID), input.Reason, time.Now().UTC(), event)
 	if errors.Is(err, store.ErrClusterNotFound) {
-		writeError(w, http.StatusNotFound, "cluster_not_found", "cluster was not found or already revoked", r)
+		writeError(w, http.StatusNotFound, "cluster_not_found", "cluster was not found", r)
 		return
 	}
 	if err != nil {
@@ -171,7 +171,7 @@ func (h *generatedHandler) EnrollAgent(w http.ResponseWriter, r *http.Request) {
 		if len(serverCA) == 0 {
 			serverCA = issued.CACertificatePEM
 		}
-		return store.AgentCertificate{CertificatePEM: issued.CertificatePEM, CACertificatePEM: issued.CACertificatePEM, ServerCAPEM: serverCA, Serial: issued.Serial, Fingerprint: issued.Fingerprint, NotAfter: issued.NotAfter}, issueErr
+		return store.AgentCertificate{CertificatePEM: issued.CertificatePEM, CACertificatePEM: issued.CACertificatePEM, ServerCAPEM: serverCA, Serial: issued.Serial, Fingerprint: issued.Fingerprint, NotAfter: issued.NotAfter, TrustBundleID: h.server.agentTrustBundleID}, issueErr
 	}, event)
 	if err != nil {
 		h.auditEnrollmentRejection(r, err)
@@ -188,7 +188,7 @@ func (h *generatedHandler) EnrollAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	certificatePEM := string(certificate.CertificatePEM)
-	writeJSON(w, http.StatusOK, generated.AgentEnrollmentResult{InstallationId: certificate.InstallationID, CertificatePem: &certificatePEM, CaCertificatePem: string(certificate.CACertificatePEM), ServerCaCertificatePem: string(certificate.ServerCAPEM), ExpiresAt: certificate.NotAfter})
+	writeJSON(w, http.StatusOK, generated.AgentEnrollmentResult{InstallationId: certificate.InstallationID, CertificatePem: &certificatePEM, CaCertificatePem: string(certificate.CACertificatePEM), ServerCaCertificatePem: string(certificate.ServerCAPEM), TrustBundleId: certificate.TrustBundleID, ExpiresAt: certificate.NotAfter})
 }
 
 func (h *generatedHandler) auditEnrollmentRejection(r *http.Request, cause error) {

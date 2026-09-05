@@ -75,12 +75,24 @@ func TestDedicatedServerCATrustMigration(t *testing.T) {
 	}{
 		{name: "fresh installation", want: true},
 		{name: "legacy installed chart", installed: true, want: false},
-		{name: "current chart with secret", installed: true, observed: controlPlaneObservedState{serverCA: true}, want: true},
+		{name: "current chart", installed: true, observed: controlPlaneObservedState{serverCA: true, serverCATrustUsed: true}, want: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			if got := useDedicatedServerCA(test.installed, test.observed); got != test.want {
+			got, err := useDedicatedServerCA(test.installed, test.observed)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != test.want {
 				t.Fatalf("use dedicated server CA=%v, want %v", got, test.want)
 			}
 		})
+	}
+	for _, observed := range []controlPlaneObservedState{
+		{serverCA: true},
+		{serverCATrustUsed: true},
+	} {
+		if _, err := useDedicatedServerCA(true, observed); err == nil {
+			t.Fatalf("partial dedicated server CA state %+v was accepted", observed)
+		}
 	}
 }

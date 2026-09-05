@@ -307,7 +307,7 @@ func TestDeploymentsAreImmutableConfigurationSnapshots(t *testing.T) {
 	if err != nil || !ok || claimedTarget.PublicID != appEnvironment.PublicID || claimedDeployment.PublicID != first.PublicID {
 		t.Fatalf("claim = target=%+v deployment=%+v ok=%v err=%v", claimedTarget, claimedDeployment, ok, err)
 	}
-	if err = storage.CompleteDeployment(ctx, operation, "ready", image); err != nil {
+	if err = storage.CompleteDeployment(ctx, operation, "ready", image, strings.Repeat("a", 64)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -389,7 +389,7 @@ func TestDeploymentUsesTheReviewedConfigurationRevisionAndCurrentState(t *testin
 	if err != nil || !ok {
 		t.Fatalf("claim: ok=%v err=%v", ok, err)
 	}
-	if err = storage.CompleteDeployment(ctx, operation, "ready", image); err != nil {
+	if err = storage.CompleteDeployment(ctx, operation, "ready", image, strings.Repeat("a", 64)); err != nil {
 		t.Fatal(err)
 	}
 	target, err = storage.FindAppEnvironment(ctx, workspaceID, target.PublicID)

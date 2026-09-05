@@ -1282,6 +1282,7 @@ type AgentEnrollmentResult struct {
 	ExpiresAt              time.Time `json:"expiresAt"`
 	InstallationId         string    `json:"installationId"`
 	ServerCaCertificatePem string    `json:"serverCaCertificatePem"`
+	TrustBundleId          string    `json:"trustBundleId"`
 }
 
 // AgentInstallationCreateInput defines model for AgentInstallationCreateInput.
@@ -1480,6 +1481,7 @@ type Cluster struct {
 	RevocationReason     *string       `json:"revocationReason,omitempty"`
 	RevokedAt            *time.Time    `json:"revokedAt,omitempty"`
 	Status               ClusterStatus `json:"status"`
+	TrustBundleId        *string       `json:"trustBundleId,omitempty"`
 	UpdatedAt            time.Time     `json:"updatedAt"`
 }
 

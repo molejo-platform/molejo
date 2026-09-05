@@ -79,6 +79,26 @@ func TestSignerAcceptsStandardSEC1ECPrivateKey(t *testing.T) {
 	}
 }
 
+func TestTrustBundleIdentitySurvivesRemovalOfTrailingRoots(t *testing.T) {
+	activeCertificate, activeKey := testCA(t)
+	oldCertificate, _ := testCA(t)
+	signer, err := NewSigner(append(append([]byte(nil), activeCertificate...), oldCertificate...), activeKey, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	transitionID, err := TrustBundleID(signer.AuthorityID(), append(append([]byte(nil), activeCertificate...), oldCertificate...))
+	if err != nil {
+		t.Fatal(err)
+	}
+	finalID, err := TrustBundleID(signer.AuthorityID(), activeCertificate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if transitionID != finalID {
+		t.Fatalf("transition trust ID=%q final=%q", transitionID, finalID)
+	}
+}
+
 func testCA(t *testing.T) ([]byte, []byte) {
 	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)

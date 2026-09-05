@@ -65,7 +65,7 @@ func (c *GRPCConnector) Connect(ctx context.Context, identity agentidentity.Stor
 	if err != nil {
 		return fmt.Errorf("open Agent gRPC stream: %w", err)
 	}
-	return runControlChannel(streamContext, stream, identity.InstallationID, c.version, c.metadata, c.executor, c.observer, paired, c.responseTimeout)
+	return runControlChannel(streamContext, stream, identity.InstallationID, identity.TrustBundleID, c.version, c.metadata, c.executor, c.observer, paired, c.responseTimeout)
 }
 
 func (c *GRPCConnector) Renew(ctx context.Context, identity agentidentity.StoredIdentity, request agent.RenewalRequest) (agentidentity.Certificate, error) {
@@ -87,7 +87,10 @@ func (c *GRPCConnector) Renew(ctx context.Context, identity agentidentity.Stored
 	if len(serverCA) == 0 {
 		serverCA = identity.ServerCAPEM
 	}
-	return agentidentity.Certificate{InstallationID: response.GetInstallationId(), CertificatePEM: response.GetCertificatePem(), CACertificatePEM: response.GetCaCertificatePem(), ServerCAPEM: serverCA, ExpiresAt: time.Unix(response.GetExpiresAtUnix(), 0).UTC()}, nil
+	if response.GetTrustBundleId() == "" {
+		return agentidentity.Certificate{}, errors.New("Agent renewal response has no trust bundle identity")
+	}
+	return agentidentity.Certificate{InstallationID: response.GetInstallationId(), CertificatePEM: response.GetCertificatePem(), CACertificatePEM: response.GetCaCertificatePem(), ServerCAPEM: serverCA, TrustBundleID: response.GetTrustBundleId(), ExpiresAt: time.Unix(response.GetExpiresAtUnix(), 0).UTC()}, nil
 }
 
 func (c *GRPCConnector) connection(identity agentidentity.StoredIdentity) (*grpc.ClientConn, error) {
@@ -115,8 +118,8 @@ type agentControlStream interface {
 	Recv() (*clusteragentv1alpha1.ConnectResponse, error)
 }
 
-func runControlChannel(ctx context.Context, stream agentControlStream, installationID string, version string, metadata AgentMetadata, executor RuntimeExecutor, observer RuntimeObserver, paired func(), responseTimeout time.Duration) error {
-	hello := &clusteragentv1alpha1.AgentHello{InstallationId: installationID, AgentVersion: version, ClusterUid: metadata.ClusterUID, KubernetesVersion: metadata.KubernetesVersion, Capabilities: metadata.Capabilities, SupportedProtocolVersions: []string{"v1alpha1"}}
+func runControlChannel(ctx context.Context, stream agentControlStream, installationID, trustBundleID string, version string, metadata AgentMetadata, executor RuntimeExecutor, observer RuntimeObserver, paired func(), responseTimeout time.Duration) error {
+	hello := &clusteragentv1alpha1.AgentHello{InstallationId: installationID, AgentVersion: version, ClusterUid: metadata.ClusterUID, KubernetesVersion: metadata.KubernetesVersion, Capabilities: metadata.Capabilities, SupportedProtocolVersions: []string{"v1alpha1"}, TrustBundleId: trustBundleID}
 	if err := stream.Send(&clusteragentv1alpha1.ConnectRequest{Payload: &clusteragentv1alpha1.ConnectRequest_Hello{Hello: hello}}); err != nil {
 		return fmt.Errorf("send Agent hello: %w", err)
 	}
@@ -125,9 +128,13 @@ func runControlChannel(ctx context.Context, stream agentControlStream, installat
 		return fmt.Errorf("receive control plane hello: %w", err)
 	}
 	controlPlaneHello := response.GetHello()
-	if controlPlaneHello == nil || controlPlaneHello.GetProtocolVersion() != "v1alpha1" || controlPlaneHello.GetHeartbeatIntervalSeconds() < 1 || controlPlaneHello.GetHeartbeatIntervalSeconds() > 300 || (len(controlPlaneHello.GetCapabilities()) > 0 && !hasCapability(controlPlaneHello.GetCapabilities(), "runtime.v1alpha1")) {
+	if controlPlaneHello == nil || controlPlaneHello.GetProtocolVersion() != "v1alpha1" || controlPlaneHello.GetSessionId() == "" || controlPlaneHello.GetHeartbeatIntervalSeconds() < 1 || controlPlaneHello.GetHeartbeatIntervalSeconds() > 300 || (len(controlPlaneHello.GetCapabilities()) > 0 && !hasCapability(controlPlaneHello.GetCapabilities(), "runtime.v1alpha1")) {
 		return errors.New("control plane hello is incompatible")
 	}
+	if controlPlaneHello.GetTrustBundleId() == "" || controlPlaneHello.GetTrustBundleId() != trustBundleID {
+		return agentidentity.ErrTrustBundleUpdateRequired
+	}
+	localHelloTimeUnix := time.Now().Unix()
 	if paired != nil {
 		paired()
 	}
@@ -140,7 +147,7 @@ func runControlChannel(ctx context.Context, stream agentControlStream, installat
 			return ctx.Err()
 		case now := <-ticker.C:
 			sequence++
-			heartbeat := &clusteragentv1alpha1.Heartbeat{Sequence: sequence, SentAtUnix: now.Unix()}
+			heartbeat := &clusteragentv1alpha1.Heartbeat{Sequence: sequence, SentAtUnix: now.Unix(), SessionId: controlPlaneHello.GetSessionId()}
 			if observer != nil {
 				observationContext, observationCancel := context.WithTimeout(ctx, responseTimeout)
 				heartbeat.Observations, err = observer.RuntimeObservations(observationContext)
@@ -161,6 +168,7 @@ func runControlChannel(ctx context.Context, stream agentControlStream, installat
 				if executor == nil {
 					return errors.New("runtime command received without an executor")
 				}
+				command.DeadlineUnix = localCommandDeadline(command.GetDeadlineUnix(), controlPlaneHello.GetServerTimeUnix(), localHelloTimeUnix)
 				result := executor.Execute(ctx, command)
 				if result == nil || result.GetCommandId() != command.GetCommandId() || result.GetFencingToken() != command.GetFencingToken() {
 					return errors.New("runtime executor returned an invalid result")
@@ -178,6 +186,13 @@ func runControlChannel(ctx context.Context, stream agentControlStream, installat
 			}
 		}
 	}
+}
+
+func localCommandDeadline(serverDeadline, serverHelloTime, localHelloTime int64) int64 {
+	if serverDeadline <= 0 || serverHelloTime <= 0 || localHelloTime <= 0 {
+		return serverDeadline
+	}
+	return serverDeadline + localHelloTime - serverHelloTime
 }
 
 func hasCapability(values []string, expected string) bool {

@@ -40,7 +40,7 @@ func (s *SecretStore) LoadIdentity(ctx context.Context) (Identity, error) {
 	value := Identity{
 		AttemptID: string(secret.Data["enrollment-attempt-id"]), PrivateKeyPEM: append([]byte(nil), secret.Data["private-key.pem"]...), CSRPEM: append([]byte(nil), secret.Data["csr.pem"]...),
 		InstallationID: string(secret.Data["installation-id"]), CertificatePEM: append([]byte(nil), secret.Data["tls.crt"]...), CACertificatePEM: append([]byte(nil), secret.Data["ca.crt"]...),
-		ServerCAPEM: append([]byte(nil), secret.Data["server-ca.crt"]...), RenewalAttemptID: string(secret.Data["renewal-attempt-id"]),
+		ServerCAPEM: append([]byte(nil), secret.Data["server-ca.crt"]...), TrustBundleID: string(secret.Data["trust-bundle-id"]), RenewalAttemptID: string(secret.Data["renewal-attempt-id"]),
 		RenewalKeyPEM: append([]byte(nil), secret.Data["renewal-private-key.pem"]...), RenewalCSRPEM: append([]byte(nil), secret.Data["renewal-csr.pem"]...),
 	}
 	if len(value.ServerCAPEM) == 0 {
@@ -67,7 +67,7 @@ func (s *SecretStore) SaveEnrollmentIdentity(ctx context.Context, value Identity
 }
 
 func (s *SecretStore) SaveCertificate(ctx context.Context, value Certificate) error {
-	if value.InstallationID == "" || len(value.CertificatePEM) == 0 || len(value.CACertificatePEM) == 0 || value.ExpiresAt.IsZero() {
+	if value.InstallationID == "" || len(value.CertificatePEM) == 0 || len(value.CACertificatePEM) == 0 || value.TrustBundleID == "" || value.ExpiresAt.IsZero() {
 		return errors.New("Agent certificate is incomplete")
 	}
 	return s.update(ctx, s.identityName, func(secret *corev1.Secret) {
@@ -82,7 +82,11 @@ func (s *SecretStore) SaveCertificate(ctx context.Context, value Certificate) er
 			serverCA = value.CACertificatePEM
 		}
 		secret.Data["server-ca.crt"] = append([]byte(nil), serverCA...)
+		secret.Data["trust-bundle-id"] = []byte(value.TrustBundleID)
 		secret.Data["certificate-not-after"] = []byte(value.ExpiresAt.UTC().Format(time.RFC3339Nano))
+		delete(secret.Data, "renewal-attempt-id")
+		delete(secret.Data, "renewal-private-key.pem")
+		delete(secret.Data, "renewal-csr.pem")
 	})
 }
 
@@ -94,14 +98,6 @@ func (s *SecretStore) SaveRenewalIdentity(ctx context.Context, value Identity) e
 		secret.Data["renewal-attempt-id"] = []byte(value.RenewalAttemptID)
 		secret.Data["renewal-private-key.pem"] = append([]byte(nil), value.RenewalKeyPEM...)
 		secret.Data["renewal-csr.pem"] = append([]byte(nil), value.RenewalCSRPEM...)
-	})
-}
-
-func (s *SecretStore) ClearRenewalIdentity(ctx context.Context) error {
-	return s.update(ctx, s.identityName, func(secret *corev1.Secret) {
-		delete(secret.Data, "renewal-attempt-id")
-		delete(secret.Data, "renewal-private-key.pem")
-		delete(secret.Data, "renewal-csr.pem")
 	})
 }
 

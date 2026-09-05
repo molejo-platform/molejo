@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -39,6 +40,7 @@ type AgentInstallation struct {
 	LastSeenAt        *time.Time `json:"lastSeenAt,omitempty"`
 	RevokedAt         *time.Time `json:"revokedAt,omitempty"`
 	RevocationReason  string     `json:"revocationReason,omitempty"`
+	TrustBundleID     string     `json:"trustBundleId,omitempty"`
 	CreatedAt         time.Time  `json:"createdAt"`
 	UpdatedAt         time.Time  `json:"updatedAt"`
 }
@@ -51,6 +53,7 @@ type AgentCertificate struct {
 	Serial           string
 	Fingerprint      []byte
 	NotAfter         time.Time
+	TrustBundleID    string
 }
 
 func (s *Store) CreateAgentInstallation(ctx context.Context, publicID, name string, tokenHash []byte, expiresAt time.Time, event audit.Event) (AgentInstallation, error) {
@@ -166,11 +169,14 @@ func (s *Store) EnrollAgent(ctx context.Context, tokenHash []byte, attemptID str
 	err = tx.QueryRow(ctx, `SELECT i.id,i.public_id,i.name,i.status,t.expires_at,t.consumed_at
 		FROM agent_enrollment_tokens t JOIN agent_installations i ON i.id=t.installation_id
 		WHERE t.token_hash=$1 FOR UPDATE OF t,i`, tokenHash).Scan(&installation.ID, &installation.PublicID, &installation.Name, &installation.Status, &expiresAt, &consumedAt)
-	if errors.Is(err, pgx.ErrNoRows) || (!expiresAt.After(now) && consumedAt == nil) || installation.Status == "Revoked" {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return AgentCertificate{}, ErrAgentEnrollmentInvalid
 	}
 	if err != nil {
 		return AgentCertificate{}, err
+	}
+	if (!expiresAt.After(now) && consumedAt == nil) || installation.Status == "Revoked" {
+		return AgentCertificate{}, ErrAgentEnrollmentInvalid
 	}
 	if consumedAt != nil {
 		certificate, found, findErr := credentialForAttempt(ctx, tx, installation.ID, attemptID, csrFingerprint)
@@ -226,13 +232,17 @@ func (s *Store) RenewAgent(ctx context.Context, publicID string, currentFingerpr
 	var installationID int64
 	var installationStatus string
 	err = tx.QueryRow(ctx, `SELECT id,status FROM agent_installations WHERE public_id=$1 FOR UPDATE`, publicID).Scan(&installationID, &installationStatus)
-	if errors.Is(err, pgx.ErrNoRows) || installationStatus != "Active" {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return AgentCertificate{}, ErrAgentIdentityMismatch
 	}
 	if err != nil {
 		return AgentCertificate{}, err
 	}
-	if _, err = validCredential(ctx, tx, installationID, currentFingerprint, now); err != nil {
+	if installationStatus != "Active" {
+		return AgentCertificate{}, ErrAgentIdentityMismatch
+	}
+	credentialStatus, err := validCredential(ctx, tx, installationID, currentFingerprint, now)
+	if err != nil {
 		return AgentCertificate{}, err
 	}
 	if existing, found, findErr := credentialForAttempt(ctx, tx, installationID, attemptID, csrFingerprint); findErr != nil {
@@ -240,6 +250,9 @@ func (s *Store) RenewAgent(ctx context.Context, publicID string, currentFingerpr
 	} else if found {
 		existing.InstallationID = publicID
 		return existing, tx.Commit(ctx)
+	}
+	if credentialStatus != "Active" {
+		return AgentCertificate{}, ErrAgentIdentityMismatch
 	}
 	issued, err := issue(publicID)
 	if err != nil {
@@ -273,7 +286,7 @@ func validateIssuedCredential(issued AgentCertificate, now time.Time) error {
 	if len(issued.ServerCAPEM) == 0 {
 		issued.ServerCAPEM = issued.CACertificatePEM
 	}
-	if len(issued.CertificatePEM) == 0 || len(issued.CACertificatePEM) == 0 || len(issued.ServerCAPEM) == 0 || issued.Serial == "" || len(issued.Fingerprint) == 0 || !issued.NotAfter.After(now) {
+	if len(issued.CertificatePEM) == 0 || len(issued.CACertificatePEM) == 0 || len(issued.ServerCAPEM) == 0 || issued.Serial == "" || len(issued.Fingerprint) == 0 || !validTrustBundleID(issued.TrustBundleID) || !issued.NotAfter.After(now) {
 		return errors.New("issued agent certificate is incomplete")
 	}
 	return nil
@@ -285,53 +298,58 @@ func insertAgentCredential(ctx context.Context, tx pgx.Tx, installationID int64,
 		serverCAPEM = issued.CACertificatePEM
 	}
 	_, err := tx.Exec(ctx, `INSERT INTO agent_credentials(installation_id,status,enrollment_attempt_id,csr_fingerprint,certificate_pem,
-		ca_certificate_pem,server_ca_certificate_pem,certificate_serial,certificate_fingerprint,certificate_not_after,created_at,updated_at)
-		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$11)`, installationID, status, attemptID, csrFingerprint, issued.CertificatePEM,
-		issued.CACertificatePEM, serverCAPEM, issued.Serial, issued.Fingerprint, issued.NotAfter, now)
+		ca_certificate_pem,server_ca_certificate_pem,certificate_serial,certificate_fingerprint,certificate_not_after,trust_bundle_id,created_at,updated_at)
+		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$12)`, installationID, status, attemptID, csrFingerprint, issued.CertificatePEM,
+		issued.CACertificatePEM, serverCAPEM, issued.Serial, issued.Fingerprint, issued.NotAfter, issued.TrustBundleID, now)
 	return err
 }
 
 func credentialForAttempt(ctx context.Context, query rowQuerier, installationID int64, attemptID string, csrFingerprint []byte) (AgentCertificate, bool, error) {
 	var value AgentCertificate
 	var storedCSR []byte
-	err := query.QueryRow(ctx, `SELECT c.certificate_pem,c.ca_certificate_pem,c.server_ca_certificate_pem,c.certificate_serial,c.certificate_fingerprint,c.certificate_not_after,c.csr_fingerprint
+	err := query.QueryRow(ctx, `SELECT c.certificate_pem,c.ca_certificate_pem,c.server_ca_certificate_pem,c.certificate_serial,c.certificate_fingerprint,c.certificate_not_after,c.trust_bundle_id,c.csr_fingerprint
 		FROM agent_credentials c
 		WHERE c.installation_id=$1 AND c.enrollment_attempt_id=$2`, installationID, attemptID).
-		Scan(&value.CertificatePEM, &value.CACertificatePEM, &value.ServerCAPEM, &value.Serial, &value.Fingerprint, &value.NotAfter, &storedCSR)
-	if errors.Is(err, pgx.ErrNoRows) || !bytes.Equal(storedCSR, csrFingerprint) {
+		Scan(&value.CertificatePEM, &value.CACertificatePEM, &value.ServerCAPEM, &value.Serial, &value.Fingerprint, &value.NotAfter, &value.TrustBundleID, &storedCSR)
+	if errors.Is(err, pgx.ErrNoRows) {
 		return AgentCertificate{}, false, nil
 	}
-	return value, err == nil, err
+	if err != nil {
+		return AgentCertificate{}, false, err
+	}
+	if !bytes.Equal(storedCSR, csrFingerprint) {
+		return AgentCertificate{}, false, nil
+	}
+	return value, true, nil
 }
 
-func validCredential(ctx context.Context, query rowQuerier, installationID int64, fingerprint []byte, now time.Time) (int64, error) {
-	var credentialID int64
+func validCredential(ctx context.Context, query rowQuerier, installationID int64, fingerprint []byte, now time.Time) (string, error) {
 	var status string
 	var notAfter time.Time
 	var overlapNotAfter *time.Time
-	err := query.QueryRow(ctx, `SELECT id,status,certificate_not_after,overlap_not_after FROM agent_credentials
+	err := query.QueryRow(ctx, `SELECT status,certificate_not_after,overlap_not_after FROM agent_credentials
 		WHERE installation_id=$1 AND certificate_fingerprint=$2`, installationID, fingerprint).
-		Scan(&credentialID, &status, &notAfter, &overlapNotAfter)
+		Scan(&status, &notAfter, &overlapNotAfter)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return 0, ErrAgentIdentityMismatch
+		return "", ErrAgentIdentityMismatch
 	}
 	if err != nil {
-		return 0, err
+		return "", err
 	}
 	if !notAfter.After(now) || status == "Revoked" {
-		return 0, ErrAgentIdentityMismatch
+		return "", ErrAgentIdentityMismatch
 	}
 	if status == "Superseded" && (overlapNotAfter == nil || !overlapNotAfter.After(now)) {
-		return 0, ErrAgentIdentityMismatch
+		return "", ErrAgentIdentityMismatch
 	}
 	if status != "Active" && status != "Superseded" {
-		return 0, ErrAgentIdentityMismatch
+		return "", ErrAgentIdentityMismatch
 	}
-	return credentialID, nil
+	return status, nil
 }
 
-func (s *Store) ActivateAgent(ctx context.Context, publicID string, fingerprint []byte, clusterUID, agentVersion, kubernetesVersion string, capabilities []string, now time.Time, event audit.Event) (bool, error) {
-	if strings.TrimSpace(clusterUID) == "" || strings.TrimSpace(agentVersion) == "" || strings.TrimSpace(kubernetesVersion) == "" || len(capabilities) == 0 {
+func (s *Store) ActivateAgent(ctx context.Context, publicID string, fingerprint []byte, clusterUID, agentVersion, kubernetesVersion string, capabilities []string, trustBundleID, sessionID string, now time.Time, event audit.Event) (bool, error) {
+	if strings.TrimSpace(clusterUID) == "" || strings.TrimSpace(agentVersion) == "" || strings.TrimSpace(kubernetesVersion) == "" || len(capabilities) == 0 || (trustBundleID != "" && !validTrustBundleID(trustBundleID)) || strings.TrimSpace(sessionID) == "" || len(sessionID) > 80 {
 		return false, ErrAgentIdentityMismatch
 	}
 	capabilitiesJSON, err := json.Marshal(capabilities)
@@ -355,12 +373,16 @@ func (s *Store) ActivateAgent(ctx context.Context, publicID string, fingerprint 
 	if status == "Revoked" || (storedClusterUID != nil && *storedClusterUID != clusterUID) {
 		return false, ErrAgentIdentityMismatch
 	}
-	if _, err = validCredential(ctx, tx, installationID, fingerprint, now); err != nil {
+	credentialStatus, err := validCredential(ctx, tx, installationID, fingerprint, now)
+	if err != nil {
 		return false, err
+	}
+	if credentialStatus != "Active" {
+		return false, ErrAgentIdentityMismatch
 	}
 	first := status == "Pending"
 	if _, err = tx.Exec(ctx, `UPDATE agent_installations SET status='Active',cluster_uid=$2,agent_version=$3,kubernetes_version=$4,
-		capabilities_json=$5,last_seen_at=$6,updated_at=$6 WHERE id=$1`, installationID, clusterUID, agentVersion, kubernetesVersion, capabilitiesJSON, now); err != nil {
+		capabilities_json=$5,trust_bundle_id=$6,control_session_id=$7,control_session_sequence=0,last_seen_at=$8,updated_at=$8 WHERE id=$1`, installationID, clusterUID, agentVersion, kubernetesVersion, capabilitiesJSON, trustBundleID, sessionID, now); err != nil {
 		return false, err
 	}
 	if first {
@@ -372,7 +394,10 @@ func (s *Store) ActivateAgent(ctx context.Context, publicID string, fingerprint 
 	return first, tx.Commit(ctx)
 }
 
-func (s *Store) TouchAgent(ctx context.Context, publicID string, fingerprint []byte, now time.Time) error {
+func (s *Store) TouchAgent(ctx context.Context, publicID string, fingerprint []byte, sessionID string, sequence uint64, now time.Time) error {
+	if strings.TrimSpace(sessionID) == "" || sequence == 0 || sequence > math.MaxInt64 {
+		return ErrAgentIdentityMismatch
+	}
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -380,16 +405,25 @@ func (s *Store) TouchAgent(ctx context.Context, publicID string, fingerprint []b
 	defer tx.Rollback(ctx)
 	var installationID int64
 	var status string
-	if err = tx.QueryRow(ctx, `SELECT id,status FROM agent_installations WHERE public_id=$1 FOR UPDATE`, publicID).Scan(&installationID, &status); errors.Is(err, pgx.ErrNoRows) || status != "Active" {
+	var activeSessionID *string
+	var activeSequence int64
+	err = tx.QueryRow(ctx, `SELECT id,status,control_session_id,control_session_sequence FROM agent_installations WHERE public_id=$1 FOR UPDATE`, publicID).Scan(&installationID, &status, &activeSessionID, &activeSequence)
+	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrAgentIdentityMismatch
 	}
 	if err != nil {
 		return err
 	}
+	if status != "Active" {
+		return ErrAgentIdentityMismatch
+	}
 	if _, err = validCredential(ctx, tx, installationID, fingerprint, now); err != nil {
 		return err
 	}
-	if _, err = tx.Exec(ctx, `UPDATE agent_installations SET last_seen_at=$2,updated_at=$2 WHERE id=$1`, installationID, now); err != nil {
+	if activeSessionID == nil || *activeSessionID != sessionID || int64(sequence) <= activeSequence {
+		return ErrAgentIdentityMismatch
+	}
+	if _, err = tx.Exec(ctx, `UPDATE agent_installations SET control_session_sequence=$2,last_seen_at=$3,updated_at=$3 WHERE id=$1`, installationID, int64(sequence), now); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
@@ -413,7 +447,7 @@ func (s *Store) ListClusters(ctx context.Context) ([]AgentInstallation, error) {
 }
 
 const clusterSelect = `SELECT i.id,i.public_id,i.name,i.status,COALESCE(i.cluster_uid,''),i.agent_version,i.kubernetes_version,
-	i.capabilities_json::text,c.certificate_not_after,i.last_seen_at,i.revoked_at,i.revocation_reason,i.created_at,i.updated_at
+	i.capabilities_json::text,c.certificate_not_after,i.last_seen_at,i.revoked_at,i.revocation_reason,i.trust_bundle_id,i.created_at,i.updated_at
 	FROM agent_installations i LEFT JOIN agent_credentials c ON c.installation_id=i.id AND c.status='Active'`
 
 func (s *Store) FindCluster(ctx context.Context, publicID string) (AgentInstallation, error) {
@@ -431,11 +465,23 @@ func scanCluster(row clusterScanner) (AgentInstallation, error) {
 	var capabilities []byte
 	err := row.Scan(&value.ID, &value.PublicID, &value.Name, &value.Status, &value.ClusterUID, &value.AgentVersion,
 		&value.KubernetesVersion, &capabilities, &value.CertificateExpiry, &value.LastSeenAt, &value.RevokedAt,
-		&value.RevocationReason, &value.CreatedAt, &value.UpdatedAt)
+		&value.RevocationReason, &value.TrustBundleID, &value.CreatedAt, &value.UpdatedAt)
 	if err == nil {
 		err = json.Unmarshal(capabilities, &value.Capabilities)
 	}
 	return value, err
+}
+
+func validTrustBundleID(value string) bool {
+	if len(value) != 64 {
+		return false
+	}
+	for _, character := range value {
+		if (character < '0' || character > '9') && (character < 'a' || character > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *Store) ReissueClusterEnrollment(ctx context.Context, publicID string, tokenHash []byte, expiresAt time.Time, event audit.Event) error {
@@ -481,11 +527,18 @@ func (s *Store) RevokeCluster(ctx context.Context, publicID, reason string, now 
 	}
 	defer tx.Rollback(ctx)
 	var installationID int64
-	if err = tx.QueryRow(ctx, `UPDATE agent_installations SET status='Revoked',revoked_at=$2,revocation_reason=$3,updated_at=$2
-		WHERE public_id=$1 AND status<>'Revoked' RETURNING id`, publicID, now, reason).Scan(&installationID); errors.Is(err, pgx.ErrNoRows) {
+	var status string
+	if err = tx.QueryRow(ctx, `SELECT id,status FROM agent_installations WHERE public_id=$1 FOR UPDATE`, publicID).Scan(&installationID, &status); errors.Is(err, pgx.ErrNoRows) {
 		return ErrClusterNotFound
 	}
 	if err != nil {
+		return err
+	}
+	if status == "Revoked" {
+		return tx.Commit(ctx)
+	}
+	if _, err = tx.Exec(ctx, `UPDATE agent_installations SET status='Revoked',revoked_at=$2,revocation_reason=$3,
+		control_session_id=NULL,control_session_sequence=0,updated_at=$2 WHERE id=$1`, installationID, now, reason); err != nil {
 		return err
 	}
 	if _, err = tx.Exec(ctx, `UPDATE agent_credentials SET status='Revoked',overlap_not_after=NULL,updated_at=$2 WHERE installation_id=$1`, installationID, now); err != nil {
@@ -494,6 +547,14 @@ func (s *Store) RevokeCluster(ctx context.Context, publicID, reason string, now 
 	if _, err = tx.Exec(ctx, `UPDATE operations SET status='Failed',completed_at=$2,lease_until=NULL,worker_id=NULL,
 		error_code='cluster_revoked',error_message='target cluster was revoked',updated_at=$2
 		WHERE agent_installation_id=$1 AND status IN ('Pending','Running')`, installationID, now); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, `UPDATE workspace_clusters SET state='Failed',message='target cluster was revoked',updated_at=$2
+		WHERE installation_id=$1`, installationID, now); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, `UPDATE app_environments SET last_state='Unknown',last_message='target cluster was revoked',updated_at=$2
+		WHERE cluster_id=$1 AND archived_at IS NULL`, installationID, now); err != nil {
 		return err
 	}
 	event.TargetPublicID = publicID

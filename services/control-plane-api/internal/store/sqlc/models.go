@@ -37,6 +37,7 @@ type AgentCredential struct {
 	OverlapNotAfter        pgtype.Timestamptz `json:"overlap_not_after"`
 	CreatedAt              pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+	TrustBundleID          string             `json:"trust_bundle_id"`
 }
 
 type AgentEnrollmentToken struct {
@@ -69,6 +70,9 @@ type AgentInstallation struct {
 	AgentVersion           string             `json:"agent_version"`
 	RevokedAt              pgtype.Timestamptz `json:"revoked_at"`
 	RevocationReason       string             `json:"revocation_reason"`
+	ControlSessionID       pgtype.Text        `json:"control_session_id"`
+	ControlSessionSequence int64              `json:"control_session_sequence"`
+	TrustBundleID          string             `json:"trust_bundle_id"`
 }
 
 type App struct {
@@ -109,6 +113,8 @@ type AppEnvironment struct {
 	RuntimeObservedGeneration int64              `json:"runtime_observed_generation"`
 	RuntimeObservedAt         pgtype.Timestamptz `json:"runtime_observed_at"`
 	ReconciliationGeneration  int64              `json:"reconciliation_generation"`
+	RuntimeDesiredVersion     int64              `json:"runtime_desired_version"`
+	RuntimeSpecHash           pgtype.Text        `json:"runtime_spec_hash"`
 }
 
 type AppEnvironmentConfigurationRevision struct {
@@ -151,22 +157,25 @@ type AppGithubSource struct {
 }
 
 type AppVolume struct {
-	ID                  int64              `json:"id"`
-	PublicID            string             `json:"public_id"`
-	WorkspaceID         int64              `json:"workspace_id"`
-	AppEnvironmentID    int64              `json:"app_environment_id"`
-	StorageProfileID    string             `json:"storage_profile_id"`
-	RequestedSizeGib    int64              `json:"requested_size_gib"`
-	ObservedSizeGib     int64              `json:"observed_size_gib"`
-	MountPath           string             `json:"mount_path"`
-	RetentionPolicy     string             `json:"retention_policy"`
-	DesiredState        string             `json:"desired_state"`
-	ObservedState       string             `json:"observed_state"`
-	Message             string             `json:"message"`
-	Version             int64              `json:"version"`
-	DeletionRequestedAt pgtype.Timestamptz `json:"deletion_requested_at"`
-	CreatedAt           pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+	ID                              int64              `json:"id"`
+	PublicID                        string             `json:"public_id"`
+	WorkspaceID                     int64              `json:"workspace_id"`
+	AppEnvironmentID                int64              `json:"app_environment_id"`
+	StorageProfileID                string             `json:"storage_profile_id"`
+	RequestedSizeGib                int64              `json:"requested_size_gib"`
+	ObservedSizeGib                 int64              `json:"observed_size_gib"`
+	MountPath                       string             `json:"mount_path"`
+	RetentionPolicy                 string             `json:"retention_policy"`
+	DesiredState                    string             `json:"desired_state"`
+	ObservedState                   string             `json:"observed_state"`
+	Message                         string             `json:"message"`
+	Version                         int64              `json:"version"`
+	DeletionRequestedAt             pgtype.Timestamptz `json:"deletion_requested_at"`
+	CreatedAt                       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                       pgtype.Timestamptz `json:"updated_at"`
+	RuntimeDesiredVersion           int64              `json:"runtime_desired_version"`
+	RuntimeSpecHash                 pgtype.Text        `json:"runtime_spec_hash"`
+	RuntimeReconciliationGeneration int64              `json:"runtime_reconciliation_generation"`
 }
 
 type AuditEvent struct {

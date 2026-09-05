@@ -32,6 +32,7 @@ message AgentHello {
   string kubernetes_version = 4;
   repeated string capabilities = 5;
   repeated string supported_protocol_versions = 6;
+  string trust_bundle_id = 7;
 }
 
 message ControlPlaneHello {
@@ -39,6 +40,8 @@ message ControlPlaneHello {
   int32 heartbeat_interval_seconds = 2;
   int64 server_time_unix = 3;
   repeated string capabilities = 4;
+  string session_id = 5;
+  string trust_bundle_id = 6;
 }
 
 message Heartbeat {
@@ -46,6 +49,7 @@ message Heartbeat {
   int64 sent_at_unix = 2;
   repeated RuntimeObservation observations = 3;
   bool observation_snapshot_complete = 4;
+  string session_id = 5;
 }
 
 message RuntimeObservation {
@@ -58,6 +62,8 @@ message RuntimeObservation {
   int64 observed_generation = 7;
   string observed_release = 8;
   int64 observed_size_gib = 9;
+  int64 desired_version = 10;
+  string spec_hash = 11;
 }
 
 message HeartbeatAck {
@@ -87,6 +93,8 @@ message RuntimeResult {
   int64 observed_size_gib = 8;
   string error_code = 9;
   bool retryable = 10;
+  int64 desired_version = 11;
+  string spec_hash = 12;
 }
 
 message RenewCertificateRequest {
@@ -101,4 +109,5 @@ message RenewCertificateResponse {
   bytes ca_certificate_pem = 3;
   int64 expires_at_unix = 4;
   bytes server_ca_certificate_pem = 5;
+  string trust_bundle_id = 6;
 }
