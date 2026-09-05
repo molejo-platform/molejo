@@ -1,6 +1,6 @@
 # ADR-0013: Outbound Cluster Agent Identity and Pairing
 
-Status: Draft
+Status: Accepted
 
 ## Context
 
@@ -18,11 +18,19 @@ válido por dez minutos e envia somente um CSR. Uma Agent CA fornecida pelo
 instalador assina um certificado de cliente válido por sete dias cujo URI SAN é
 `spiffe://molejo.dev/agent/{installationId}`.
 
-A conexão gRPC exige TLS 1.3 e autenticação mútua. A instalação declarada, o URI
-do certificado, o fingerprint e o registro no PostgreSQL precisam coincidir. A
-primeira versão do protocolo troca apenas hello e heartbeat. O Agent não possui
-permissão sobre AppDeployment nem acesso geral a Secrets e pode iniciar saudável
-antes de existirem o control plane ou o token.
+A conexão gRPC exige TLS 1.3 e autenticação mútua. A identidade durável do Cluster
+e suas credenciais rotativas são registros separados. Cluster declarado, URI,
+fingerprint e registro no PostgreSQL precisam coincidir. Instalações novas usam
+raízes separadas para cliente e servidor. Certificados cliente de sete dias são
+renovados automaticamente com tentativa idempotente persistida e sobreposição de
+uma hora. Administradores podem revogar o Cluster e todas as suas credenciais.
+
+O protocolo versionado negocia capacidades e transporta comandos com versão de
+schema, deadline, lease durável e fencing token. O Agent reporta somente
+observações não sensíveis dos objetos de runtime pertencentes à Molejo. Estado
+desejado, roteamento, auditoria e ciclo das operações permanecem autoritativos no
+PostgreSQL. Vínculos Workspace-to-Cluster e o posicionamento do AppEnvironment
+são explícitos.
 
 ## Consequences
 
@@ -31,10 +39,12 @@ entrada. O control plane recebe um transporte autenticado e versionado sem se
 tornar proprietário de credenciais Kubernetes. O pareamento pertence à
 instalação e não é concedido por membership em Workspace.
 
-Este corte pre-alpha possui uma réplica e não inclui comandos, fila, banco local,
-leader election, rotação automática, API de revogação, CLI ou fluxo no Console.
-Os certificados expiram em sete dias; a rotação precisa ser implementada antes
-de esta fronteira ser considerada operacionalmente durável.
+O control plane pode reiniciar ou executar múltiplas réplicas sem perder o
+fencing dos resultados, pois o comando ativo não fica em memória de processo. O
+Agent pode reconectar com a credencial anterior durante a sobreposição, mas no
+máximo uma operação viva é arrendada por Cluster. Adicionar um Cluster não move
+workloads implicitamente. A reconciliação Kubernetes continua pertencendo ao
+Platform Operator; o Agent aplica intenção contratada e reporta observação.
 
 ## Alternatives Considered
 

@@ -17,14 +17,14 @@ func TestBuildControlPlaneInstallPlan(t *testing.T) {
 			name: "fresh cluster",
 			want: controlPlaneInstallPlan{
 				createDatabaseCredentials: true, createBootstrapIdentity: true,
-				createAgentCA: true, createServerIdentity: true, configureAgent: true, installChart: true,
+				createAgentCA: true, createServerCA: true, createServerIdentity: true, configureAgent: true, installChart: true,
 			},
 		},
 		{
 			name: "installed and paired",
 			observed: controlPlaneObservedState{
 				databaseCredentials: true, bootstrapIdentity: true, agentCA: true,
-				serverIdentity: true, databasePVC: true, releaseInstalled: true, agentPaired: true,
+				serverCA: true, serverIdentity: true, databasePVC: true, releaseInstalled: true, agentPaired: true,
 			},
 			want: controlPlaneInstallPlan{},
 		},
@@ -40,6 +40,14 @@ func TestBuildControlPlaneInstallPlan(t *testing.T) {
 			},
 			wantErr: "release exists without",
 		},
+		{
+			name: "current release missing server trust root",
+			observed: controlPlaneObservedState{
+				databaseCredentials: true, bootstrapIdentity: true, agentCA: true, serverIdentity: true,
+				releaseInstalled: true, serverCATrustUsed: true,
+			},
+			wantErr: "restore its Secret",
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -53,6 +61,25 @@ func TestBuildControlPlaneInstallPlan(t *testing.T) {
 			}
 			if err != nil || got != test.want {
 				t.Fatalf("plan=%+v err=%v, want %+v", got, err, test.want)
+			}
+		})
+	}
+}
+
+func TestDedicatedServerCATrustMigration(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		installed bool
+		observed  controlPlaneObservedState
+		want      bool
+	}{
+		{name: "fresh installation", want: true},
+		{name: "legacy installed chart", installed: true, want: false},
+		{name: "current chart with secret", installed: true, observed: controlPlaneObservedState{serverCA: true}, want: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := useDedicatedServerCA(test.installed, test.observed); got != test.want {
+				t.Fatalf("use dedicated server CA=%v, want %v", got, test.want)
 			}
 		})
 	}

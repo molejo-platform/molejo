@@ -40,6 +40,7 @@ spec:
           volumeMounts:
             - { name: agent-ca, mountPath: /var/run/secrets/molejo/agent-ca, readOnly: true }
             - { name: agent-server, mountPath: /var/run/secrets/molejo/agent-server, readOnly: true }
+            - { name: server-ca, mountPath: /var/run/secrets/molejo/server-ca, readOnly: true }
           ports:
             - { name: https, containerPort: 8444, protocol: TCP }
             - { name: agent-grpc, containerPort: 8443, protocol: TCP }
@@ -72,6 +73,10 @@ spec:
         - name: agent-server
           secret:
             secretName: molejo-agent-server-tls
+            defaultMode: 0440
+        - name: server-ca
+          secret:
+            secretName: molejo-control-plane-server-ca
             defaultMode: 0440
 ---
 apiVersion: apps/v1
@@ -130,7 +135,7 @@ spec:
       volumes:
         - name: api-ca
           secret:
-            secretName: molejo-agent-ca
+            secretName: molejo-control-plane-server-ca
             defaultMode: 0440
             items:
               - { key: ca.crt, path: ca.crt }

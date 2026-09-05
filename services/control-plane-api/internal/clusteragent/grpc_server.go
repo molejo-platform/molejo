@@ -17,13 +17,20 @@ import (
 	clusteragentv1alpha1 "github.com/molejo-platform/molejo/contracts/molejo/clusteragent/v1alpha1"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/audit"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/domain"
+	"github.com/molejo-platform/molejo/services/control-plane-api/internal/store"
 )
 
 var ErrPeerIdentityMismatch = errors.New("agent peer identity does not match")
 
 type AgentRegistry interface {
-	ActivateAgent(context.Context, string, []byte, string, string, []string, time.Time, audit.Event) (bool, error)
+	ActivateAgent(context.Context, string, []byte, string, string, string, []string, time.Time, audit.Event) (bool, error)
 	TouchAgent(context.Context, string, []byte, time.Time) error
+	RenewAgent(context.Context, string, []byte, string, []byte, time.Time, func(string) (store.AgentCertificate, error), audit.Event) (store.AgentCertificate, error)
+	ReconcileAgentObservations(context.Context, string, []store.RuntimeObservation, bool) error
+}
+
+type CertificateSigner interface {
+	Sign(string, []byte, time.Time) (IssuedCertificate, error)
 }
 
 type RuntimeDispatcher interface {
@@ -39,6 +46,16 @@ type GRPCService struct {
 	heartbeatInterval time.Duration
 	now               func() time.Time
 	eventID           func() (string, error)
+	signer            CertificateSigner
+	serverCAPEM       []byte
+}
+
+// ConfigureCertificateRenewal enables authenticated key rotation. The server
+// trust root returned to the Agent is deliberately distinct from the CA that
+// signs Agent client identities.
+func (s *GRPCService) ConfigureCertificateRenewal(signer CertificateSigner, serverCAPEM []byte) {
+	s.signer = signer
+	s.serverCAPEM = append([]byte(nil), serverCAPEM...)
 }
 
 func NewGRPCService(registry AgentRegistry, dispatcher RuntimeDispatcher, heartbeatInterval time.Duration) *GRPCService {
@@ -62,7 +79,7 @@ func (s *GRPCService) Connect(stream grpc.BidiStreamingServer[clusteragentv1alph
 	}
 	hello := first.GetHello()
 	if hello == nil || hello.GetInstallationId() != installationID || strings.TrimSpace(hello.GetAgentVersion()) == "" || len(hello.GetAgentVersion()) > 64 ||
-		strings.TrimSpace(hello.GetClusterUid()) == "" || strings.TrimSpace(hello.GetKubernetesVersion()) == "" || !hasRuntimeCapability(hello.GetCapabilities()) {
+		strings.TrimSpace(hello.GetClusterUid()) == "" || strings.TrimSpace(hello.GetKubernetesVersion()) == "" || !hasRuntimeCapability(hello.GetCapabilities()) || !supportsProtocol(hello.GetSupportedProtocolVersions()) {
 		return status.Error(codes.PermissionDenied, "Agent identity does not match")
 	}
 	now := s.now()
@@ -70,11 +87,11 @@ func (s *GRPCService) Connect(stream grpc.BidiStreamingServer[clusteragentv1alph
 	if err != nil {
 		return status.Error(codes.Internal, "Pairing audit could not be created")
 	}
-	_, err = s.registry.ActivateAgent(stream.Context(), installationID, fingerprint, hello.GetClusterUid(), hello.GetKubernetesVersion(), hello.GetCapabilities(), now, audit.Event{PublicID: auditID, Action: "installation.agent.pair", TargetType: "AgentInstallation", TargetPublicID: installationID, Outcome: audit.Succeeded})
+	_, err = s.registry.ActivateAgent(stream.Context(), installationID, fingerprint, hello.GetClusterUid(), hello.GetAgentVersion(), hello.GetKubernetesVersion(), hello.GetCapabilities(), now, audit.Event{PublicID: auditID, Action: "installation.agent.pair", TargetType: "Cluster", TargetPublicID: installationID, Outcome: audit.Succeeded})
 	if err != nil {
 		return status.Error(codes.PermissionDenied, "Agent identity was rejected")
 	}
-	if err = stream.Send(&clusteragentv1alpha1.ConnectResponse{Payload: &clusteragentv1alpha1.ConnectResponse_Hello{Hello: &clusteragentv1alpha1.ControlPlaneHello{ProtocolVersion: "v1alpha1", HeartbeatIntervalSeconds: int32(s.heartbeatInterval / time.Second), ServerTimeUnix: now.Unix()}}}); err != nil {
+	if err = stream.Send(&clusteragentv1alpha1.ConnectResponse{Payload: &clusteragentv1alpha1.ConnectResponse_Hello{Hello: &clusteragentv1alpha1.ControlPlaneHello{ProtocolVersion: "v1alpha1", HeartbeatIntervalSeconds: int32(s.heartbeatInterval / time.Second), ServerTimeUnix: now.Unix(), Capabilities: []string{"runtime.v1alpha1", "runtime-observation.v1alpha1", "certificate-renewal.v1alpha1"}}}}); err != nil {
 		return err
 	}
 	for {
@@ -92,6 +109,23 @@ func (s *GRPCService) Connect(stream grpc.BidiStreamingServer[clusteragentv1alph
 		now = s.now()
 		if err = s.registry.TouchAgent(stream.Context(), installationID, fingerprint, now); err != nil {
 			return status.Error(codes.PermissionDenied, "Agent identity was rejected")
+		}
+		if len(heartbeat.GetObservations()) > 0 || heartbeat.GetObservationSnapshotComplete() {
+			observations := make([]store.RuntimeObservation, 0, len(heartbeat.GetObservations()))
+			for _, observation := range heartbeat.GetObservations() {
+				observations = append(observations, store.RuntimeObservation{
+					Kind: observation.GetKind(), Namespace: observation.GetNamespace(), Name: observation.GetName(),
+					State: observation.GetState(), Message: observation.GetMessage(), Generation: observation.GetGeneration(),
+					ObservedGeneration: observation.GetObservedGeneration(), ObservedRelease: observation.GetObservedRelease(),
+					ObservedSizeGiB: observation.GetObservedSizeGib(),
+				})
+			}
+			if err = s.registry.ReconcileAgentObservations(stream.Context(), installationID, observations, heartbeat.GetObservationSnapshotComplete()); err != nil {
+				if errors.Is(err, store.ErrAgentIdentityMismatch) {
+					return status.Error(codes.PermissionDenied, "Agent identity was rejected")
+				}
+				return status.Error(codes.InvalidArgument, "runtime observations were rejected")
+			}
 		}
 		if s.dispatcher != nil {
 			command, ok, dispatchErr := s.dispatcher.NextCommand(stream.Context(), installationID)
@@ -124,9 +158,51 @@ func (s *GRPCService) Connect(stream grpc.BidiStreamingServer[clusteragentv1alph
 	}
 }
 
+func (s *GRPCService) RenewCertificate(ctx context.Context, request *clusteragentv1alpha1.RenewCertificateRequest) (*clusteragentv1alpha1.RenewCertificateResponse, error) {
+	if s.registry == nil || s.signer == nil || len(s.serverCAPEM) == 0 {
+		return nil, status.Error(codes.Unavailable, "Agent certificate renewal is unavailable")
+	}
+	installationID, fingerprint, err := peerIdentity(ctx)
+	if err != nil || request.GetInstallationId() != installationID || strings.TrimSpace(request.GetAttemptId()) == "" || len(request.GetCsrPem()) == 0 {
+		return nil, status.Error(codes.Unauthenticated, "Agent identity is invalid")
+	}
+	csrFingerprint := sha256.Sum256(request.GetCsrPem())
+	now := s.now()
+	auditID, err := s.eventID()
+	if err != nil {
+		return nil, status.Error(codes.Internal, "Renewal audit could not be created")
+	}
+	certificate, err := s.registry.RenewAgent(ctx, installationID, fingerprint, request.GetAttemptId(), csrFingerprint[:], now, func(publicID string) (store.AgentCertificate, error) {
+		issued, issueErr := s.signer.Sign(publicID, request.GetCsrPem(), now)
+		return store.AgentCertificate{CertificatePEM: issued.CertificatePEM, CACertificatePEM: issued.CACertificatePEM, ServerCAPEM: s.serverCAPEM, Serial: issued.Serial, Fingerprint: issued.Fingerprint, NotAfter: issued.NotAfter}, issueErr
+	}, audit.Event{PublicID: auditID, Action: "cluster.credential.renew", TargetType: "Cluster", TargetPublicID: installationID, Outcome: audit.Succeeded})
+	if err != nil {
+		if errors.Is(err, ErrInvalidCSR) {
+			return nil, status.Error(codes.InvalidArgument, "certificate request is invalid")
+		}
+		if errors.Is(err, store.ErrAgentIdentityMismatch) {
+			return nil, status.Error(codes.PermissionDenied, "Agent identity was rejected")
+		}
+		return nil, status.Error(codes.Internal, "Agent certificate could not be renewed")
+	}
+	return &clusteragentv1alpha1.RenewCertificateResponse{InstallationId: certificate.InstallationID, CertificatePem: certificate.CertificatePEM, CaCertificatePem: certificate.CACertificatePEM, ServerCaCertificatePem: certificate.ServerCAPEM, ExpiresAtUnix: certificate.NotAfter.Unix()}, nil
+}
+
 func hasRuntimeCapability(capabilities []string) bool {
 	for _, capability := range capabilities {
 		if capability == "runtime.v1alpha1" {
+			return true
+		}
+	}
+	return false
+}
+
+func supportsProtocol(versions []string) bool {
+	if len(versions) == 0 { // Compatibility with the first alpha Agent.
+		return true
+	}
+	for _, version := range versions {
+		if version == "v1alpha1" {
 			return true
 		}
 	}

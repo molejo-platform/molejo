@@ -23,7 +23,21 @@ type serverIdentity struct {
 	privateKeyPEM  []byte
 }
 
+var controlPlaneServerDNSNames = []string{
+	"control-plane-api",
+	"control-plane-api.molejo-control-plane.svc",
+	"control-plane-api.molejo-control-plane.svc.cluster.local",
+}
+
 func newCertificateAuthority(now time.Time) (certificateAuthority, error) {
+	return newNamedCertificateAuthority("Molejo Agent Identity CA", now)
+}
+
+func newServerCertificateAuthority(now time.Time) (certificateAuthority, error) {
+	return newNamedCertificateAuthority("Molejo Control Plane Server CA", now)
+}
+
+func newNamedCertificateAuthority(commonName string, now time.Time) (certificateAuthority, error) {
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return certificateAuthority{}, fmt.Errorf("generate Agent CA key: %w", err)
@@ -34,7 +48,7 @@ func newCertificateAuthority(now time.Time) (certificateAuthority, error) {
 	}
 	template := &x509.Certificate{
 		SerialNumber:          serial,
-		Subject:               pkix.Name{CommonName: "Molejo Agent CA"},
+		Subject:               pkix.Name{CommonName: commonName},
 		NotBefore:             now.Add(-time.Minute),
 		NotAfter:              now.AddDate(10, 0, 0),
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
@@ -53,6 +67,30 @@ func newCertificateAuthority(now time.Time) (certificateAuthority, error) {
 		certificatePEM: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}),
 		privateKeyPEM:  pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER}),
 	}, nil
+}
+
+func serverIdentitySignedBy(identity serverIdentity, ca certificateAuthority, now time.Time) bool {
+	caBlock, _ := pem.Decode(ca.certificatePEM)
+	identityBlock, _ := pem.Decode(identity.certificatePEM)
+	if caBlock == nil || identityBlock == nil {
+		return false
+	}
+	caCertificate, caErr := x509.ParseCertificate(caBlock.Bytes)
+	certificate, certificateErr := x509.ParseCertificate(identityBlock.Bytes)
+	if caErr != nil || certificateErr != nil {
+		return false
+	}
+	roots := x509.NewCertPool()
+	roots.AddCert(caCertificate)
+	if _, err := certificate.Verify(x509.VerifyOptions{Roots: roots, CurrentTime: now, KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}); err != nil {
+		return false
+	}
+	for _, name := range controlPlaneServerDNSNames {
+		if certificate.VerifyHostname(name) != nil {
+			return false
+		}
+	}
+	return true
 }
 
 func newServerIdentity(ca certificateAuthority, dnsNames []string, now time.Time) (serverIdentity, error) {

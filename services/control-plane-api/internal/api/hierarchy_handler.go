@@ -49,8 +49,14 @@ func (h *generatedHandler) CreateWorkspace(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusBadRequest, "idempotency_required", "Idempotency-Key is required", r)
 		return
 	}
-	name, _, ok := hierarchyName(w, r)
-	if !ok {
+	var input generated.WorkspaceCreateInput
+	if decodeJSON(r, &input) != nil {
+		writeError(w, http.StatusBadRequest, "invalid_json", "request body is invalid", r)
+		return
+	}
+	name, _, err := domain.NormalizeHierarchyName(input.Name)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_name", err.Error(), r)
 		return
 	}
 	for range 3 {
@@ -62,7 +68,13 @@ func (h *generatedHandler) CreateWorkspace(w http.ResponseWriter, r *http.Reques
 		if err != nil {
 			break
 		}
-		workspace, operation, _, err := h.server.store.CreateWorkspace(r.Context(), user.ID, workspaceID, operationID, name, domain.SHA256([]byte(idem)), payload)
+		var workspace domain.Workspace
+		var operation domain.Operation
+		if input.ClusterId == "" {
+			workspace, operation, _, err = h.server.store.CreateWorkspace(r.Context(), user.ID, workspaceID, operationID, name, domain.SHA256([]byte(idem)), payload)
+		} else {
+			workspace, operation, _, err = h.server.store.CreateWorkspaceOnCluster(r.Context(), user.ID, input.ClusterId, workspaceID, operationID, name, domain.SHA256([]byte(idem)), payload)
+		}
 		if errors.Is(err, store.ErrPublicIDCollision) {
 			continue
 		}
@@ -75,6 +87,53 @@ func (h *generatedHandler) CreateWorkspace(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	writeError(w, http.StatusServiceUnavailable, "id_generation_failed", "could not allocate resource identifiers", r)
+}
+
+func (h *generatedHandler) ListWorkspaceClusters(w http.ResponseWriter, r *http.Request, workspaceID generated.WorkspaceId) {
+	_, workspace, ok := h.authorizeWorkspace(w, r, string(workspaceID), false)
+	if !ok {
+		return
+	}
+	items, err := h.server.store.ListWorkspaceClusters(r.Context(), workspace.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "storage_failed", "workspace clusters could not be listed", r)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+func (h *generatedHandler) AttachWorkspaceCluster(w http.ResponseWriter, r *http.Request, workspaceID generated.WorkspaceId, _ generated.AttachWorkspaceClusterParams) {
+	actor, workspace, ok := h.authorizeWorkspace(w, r, string(workspaceID), true)
+	if !ok {
+		return
+	}
+	context, err := h.server.store.AuthorizationContext(r.Context(), actor.ID, workspace.ID, "Workspace", workspace.PublicID)
+	if err != nil || !authorization.Allowed(context, authorization.ManageWorkspace) {
+		writeError(w, http.StatusForbidden, "permission_denied", "workspace management permission is required", r)
+		return
+	}
+	idem, payload, ok := idempotency(r)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "idempotency_required", "Idempotency-Key is required", r)
+		return
+	}
+	var input generated.WorkspaceClusterInput
+	if decodeJSON(r, &input) != nil {
+		writeError(w, http.StatusBadRequest, "invalid_json", "request body is invalid", r)
+		return
+	}
+	operationID, err := domain.NewPublicID("op")
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "id_generation_failed", "could not allocate an operation identifier", r)
+		return
+	}
+	binding, operation, _, err := h.server.store.AttachWorkspaceCluster(r.Context(), workspace.ID, actor.ID, input.ClusterId, operationID, domain.SHA256([]byte(idem)), payload)
+	if err != nil {
+		writeHierarchyError(w, r, err)
+		return
+	}
+	h.server.logAcceptedOperation(r, operation)
+	writeJSON(w, http.StatusAccepted, map[string]any{"workspaceCluster": binding, "operation": operation})
 }
 
 func (h *generatedHandler) GetWorkspace(w http.ResponseWriter, r *http.Request, workspaceID generated.WorkspaceId) {

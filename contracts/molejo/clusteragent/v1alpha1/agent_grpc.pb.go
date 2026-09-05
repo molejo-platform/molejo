@@ -19,7 +19,8 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	ClusterAgentService_Connect_FullMethodName = "/molejo.clusteragent.v1alpha1.ClusterAgentService/Connect"
+	ClusterAgentService_Connect_FullMethodName          = "/molejo.clusteragent.v1alpha1.ClusterAgentService/Connect"
+	ClusterAgentService_RenewCertificate_FullMethodName = "/molejo.clusteragent.v1alpha1.ClusterAgentService/RenewCertificate"
 )
 
 // ClusterAgentServiceClient is the client API for ClusterAgentService service.
@@ -27,6 +28,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ClusterAgentServiceClient interface {
 	Connect(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[ConnectRequest, ConnectResponse], error)
+	RenewCertificate(ctx context.Context, in *RenewCertificateRequest, opts ...grpc.CallOption) (*RenewCertificateResponse, error)
 }
 
 type clusterAgentServiceClient struct {
@@ -50,11 +52,22 @@ func (c *clusterAgentServiceClient) Connect(ctx context.Context, opts ...grpc.Ca
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type ClusterAgentService_ConnectClient = grpc.BidiStreamingClient[ConnectRequest, ConnectResponse]
 
+func (c *clusterAgentServiceClient) RenewCertificate(ctx context.Context, in *RenewCertificateRequest, opts ...grpc.CallOption) (*RenewCertificateResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RenewCertificateResponse)
+	err := c.cc.Invoke(ctx, ClusterAgentService_RenewCertificate_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ClusterAgentServiceServer is the server API for ClusterAgentService service.
 // All implementations must embed UnimplementedClusterAgentServiceServer
 // for forward compatibility.
 type ClusterAgentServiceServer interface {
 	Connect(grpc.BidiStreamingServer[ConnectRequest, ConnectResponse]) error
+	RenewCertificate(context.Context, *RenewCertificateRequest) (*RenewCertificateResponse, error)
 	mustEmbedUnimplementedClusterAgentServiceServer()
 }
 
@@ -67,6 +80,9 @@ type UnimplementedClusterAgentServiceServer struct{}
 
 func (UnimplementedClusterAgentServiceServer) Connect(grpc.BidiStreamingServer[ConnectRequest, ConnectResponse]) error {
 	return status.Error(codes.Unimplemented, "method Connect not implemented")
+}
+func (UnimplementedClusterAgentServiceServer) RenewCertificate(context.Context, *RenewCertificateRequest) (*RenewCertificateResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RenewCertificate not implemented")
 }
 func (UnimplementedClusterAgentServiceServer) mustEmbedUnimplementedClusterAgentServiceServer() {}
 func (UnimplementedClusterAgentServiceServer) testEmbeddedByValue()                             {}
@@ -96,13 +112,36 @@ func _ClusterAgentService_Connect_Handler(srv interface{}, stream grpc.ServerStr
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type ClusterAgentService_ConnectServer = grpc.BidiStreamingServer[ConnectRequest, ConnectResponse]
 
+func _ClusterAgentService_RenewCertificate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RenewCertificateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ClusterAgentServiceServer).RenewCertificate(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ClusterAgentService_RenewCertificate_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ClusterAgentServiceServer).RenewCertificate(ctx, req.(*RenewCertificateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ClusterAgentService_ServiceDesc is the grpc.ServiceDesc for ClusterAgentService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var ClusterAgentService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "molejo.clusteragent.v1alpha1.ClusterAgentService",
 	HandlerType: (*ClusterAgentServiceServer)(nil),
-	Methods:     []grpc.MethodDesc{},
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "RenewCertificate",
+			Handler:    _ClusterAgentService_RenewCertificate_Handler,
+		},
+	},
 	Streams: []grpc.StreamDesc{
 		{
 			StreamName:    "Connect",

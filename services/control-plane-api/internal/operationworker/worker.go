@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
-	"sync"
+	"strings"
 	"time"
 
 	clusteragentv1alpha1 "github.com/molejo-platform/molejo/contracts/molejo/clusteragent/v1alpha1"
@@ -30,15 +30,11 @@ type Store interface {
 	CompleteStatefulDeployment(context.Context, domain.Operation, string, string, string, int64) error
 	CompleteDeployment(context.Context, domain.Operation, string, string) error
 	Fail(context.Context, domain.Operation, string, string, bool) error
+	ClaimedOperationForAgent(context.Context, string, string, int64) (domain.Operation, error)
 }
 
 type PublicationResolver interface {
 	Resolve(domain.WorkloadKind, domain.PublicEndpoint) (string, error)
-}
-
-type activeCommand struct {
-	installationID string
-	operation      domain.Operation
 }
 
 type Worker struct {
@@ -48,22 +44,9 @@ type Worker struct {
 	OperationLease   time.Duration
 	CommandTimeout   time.Duration
 	Logger           *slog.Logger
-
-	mu     sync.Mutex
-	active map[string]activeCommand
 }
 
 func (w *Worker) NextCommand(ctx context.Context, installationID string) (*clusteragentv1alpha1.RuntimeCommand, bool, error) {
-	w.ensureState()
-	w.mu.Lock()
-	for _, command := range w.active {
-		if command.installationID == installationID {
-			w.mu.Unlock()
-			return nil, false, nil
-		}
-	}
-	w.mu.Unlock()
-
 	workerID := "agent:" + installationID
 	op, appEnvironment, deployment, ok, err := w.Store.ClaimNextForAgent(ctx, workerID, installationID, w.lease())
 	if err != nil || !ok {
@@ -83,21 +66,21 @@ func (w *Worker) NextCommand(ctx context.Context, installationID string) (*clust
 	command := &clusteragentv1alpha1.RuntimeCommand{
 		CommandId: commandID, OperationId: op.PublicID, DesiredVersion: op.DesiredVersion,
 		FencingToken: op.FencingToken, DeadlineUnix: time.Now().Add(w.commandTimeout()).Unix(),
-		Kind: op.Kind, PayloadJson: raw,
+		Kind: op.Kind, PayloadJson: raw, PayloadSchemaVersion: "runtime.v1alpha1",
 	}
-	w.mu.Lock()
-	w.active[commandID] = activeCommand{installationID: installationID, operation: op}
-	w.mu.Unlock()
 	w.logger().Info("runtime command dispatched", "operation_id", op.PublicID, "command_id", commandID, "installation_id", installationID, "operation_kind", op.Kind)
 	return command, true, nil
 }
 
 func (w *Worker) HandleResult(ctx context.Context, installationID string, result *clusteragentv1alpha1.RuntimeResult) error {
-	command, ok := w.take(result.GetCommandId())
-	if !ok || command.installationID != installationID || command.operation.FencingToken != result.GetFencingToken() {
+	operationID, ok := commandOperationID(result.GetCommandId(), result.GetFencingToken())
+	if !ok {
 		return store.ErrLeaseLost
 	}
-	op := command.operation
+	op, err := w.Store.ClaimedOperationForAgent(ctx, installationID, operationID, result.GetFencingToken())
+	if err != nil {
+		return err
+	}
 	if result.GetErrorCode() != "" {
 		return w.Store.Fail(ctx, op, result.GetErrorCode(), result.GetMessage(), result.GetRetryable())
 	}
@@ -125,11 +108,27 @@ func (w *Worker) HandleResult(ctx context.Context, installationID string, result
 }
 
 func (w *Worker) Abandon(ctx context.Context, installationID, commandID string) error {
-	command, ok := w.take(commandID)
-	if !ok || command.installationID != installationID {
+	separator := strings.LastIndexByte(commandID, ':')
+	if separator <= 0 || separator == len(commandID)-1 {
 		return nil
 	}
-	return w.Store.Fail(ctx, command.operation, "agent_disconnected", "cluster Agent disconnected during command execution", true)
+	fencingToken, err := strconv.ParseInt(commandID[separator+1:], 10, 64)
+	if err != nil {
+		return nil
+	}
+	operation, err := w.Store.ClaimedOperationForAgent(ctx, installationID, commandID[:separator], fencingToken)
+	if err != nil {
+		return nil
+	}
+	return w.Store.Fail(ctx, operation, "agent_disconnected", "cluster Agent disconnected during command execution", true)
+}
+
+func commandOperationID(commandID string, fencingToken int64) (string, bool) {
+	suffix := ":" + strconv.FormatInt(fencingToken, 10)
+	if !strings.HasSuffix(commandID, suffix) || len(commandID) == len(suffix) {
+		return "", false
+	}
+	return strings.TrimSuffix(commandID, suffix), true
 }
 
 func (w *Worker) commandPayload(ctx context.Context, op domain.Operation, appEnvironment domain.AppEnvironment, deployment domain.Deployment) (runtimecontract.Payload, error) {
@@ -226,25 +225,6 @@ func deploymentIntent(intent domain.Intent) runtimecontract.DeploymentIntent {
 		converted.Volume = &runtimecontract.AppVolume{PublicID: intent.Volume.PublicID, MountPath: intent.Volume.MountPath, SizeGiB: intent.Volume.SizeGiB, RetentionPolicy: intent.Volume.RetentionPolicy}
 	}
 	return converted
-}
-
-func (w *Worker) ensureState() {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	if w.active == nil {
-		w.active = map[string]activeCommand{}
-	}
-}
-
-func (w *Worker) take(commandID string) (activeCommand, bool) {
-	w.ensureState()
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	command, ok := w.active[commandID]
-	if ok {
-		delete(w.active, commandID)
-	}
-	return command, ok
 }
 
 func (w *Worker) lease() time.Duration {

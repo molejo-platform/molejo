@@ -362,6 +362,27 @@ func (e BuildTrigger) Valid() bool {
 	}
 }
 
+// Defines values for ClusterStatus.
+const (
+	ClusterStatusActive  ClusterStatus = "Active"
+	ClusterStatusPending ClusterStatus = "Pending"
+	ClusterStatusRevoked ClusterStatus = "Revoked"
+)
+
+// Valid indicates whether the value is a known member of the ClusterStatus enum.
+func (e ClusterStatus) Valid() bool {
+	switch e {
+	case ClusterStatusActive:
+		return true
+	case ClusterStatusPending:
+		return true
+	case ClusterStatusRevoked:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for DeploymentState.
 const (
 	DeploymentStateDegraded    DeploymentState = "Degraded"
@@ -1058,6 +1079,30 @@ func (e WorkspaceState) Valid() bool {
 	}
 }
 
+// Defines values for WorkspaceClusterState.
+const (
+	WorkspaceClusterStateFailed  WorkspaceClusterState = "Failed"
+	WorkspaceClusterStatePending WorkspaceClusterState = "Pending"
+	WorkspaceClusterStateReady   WorkspaceClusterState = "Ready"
+	WorkspaceClusterStateRunning WorkspaceClusterState = "Running"
+)
+
+// Valid indicates whether the value is a known member of the WorkspaceClusterState enum.
+func (e WorkspaceClusterState) Valid() bool {
+	switch e {
+	case WorkspaceClusterStateFailed:
+		return true
+	case WorkspaceClusterStatePending:
+		return true
+	case WorkspaceClusterStateReady:
+		return true
+	case WorkspaceClusterStateRunning:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for WorkspaceMemberCreateInputRole.
 const (
 	WorkspaceMemberCreateInputRoleMember WorkspaceMemberCreateInputRole = "Member"
@@ -1223,17 +1268,20 @@ type AgentEnrollmentInput struct {
 
 // AgentEnrollmentInvitation defines model for AgentEnrollmentInvitation.
 type AgentEnrollmentInvitation struct {
+	ClusterId       string    `json:"clusterId"`
 	EnrollmentToken *string   `json:"enrollmentToken,omitempty"`
 	ExpiresAt       time.Time `json:"expiresAt"`
-	InstallationId  string    `json:"installationId"`
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	InstallationId string `json:"installationId"`
 }
 
 // AgentEnrollmentResult defines model for AgentEnrollmentResult.
 type AgentEnrollmentResult struct {
-	CaCertificatePem string    `json:"caCertificatePem"`
-	CertificatePem   *string   `json:"certificatePem,omitempty"`
-	ExpiresAt        time.Time `json:"expiresAt"`
-	InstallationId   string    `json:"installationId"`
+	CaCertificatePem       string    `json:"caCertificatePem"`
+	CertificatePem         *string   `json:"certificatePem,omitempty"`
+	ExpiresAt              time.Time `json:"expiresAt"`
+	InstallationId         string    `json:"installationId"`
+	ServerCaCertificatePem string    `json:"serverCaCertificatePem"`
 }
 
 // AgentInstallationCreateInput defines model for AgentInstallationCreateInput.
@@ -1256,6 +1304,7 @@ type AppEnvironment struct {
 	AppId                       string                     `json:"appId"`
 	AppName                     string                     `json:"appName"`
 	Branch                      string                     `json:"branch"`
+	ClusterId                   string                     `json:"clusterId"`
 	Configuration               RuntimeConfiguration       `json:"configuration"`
 	ConfigurationVersion        int                        `json:"configurationVersion"`
 	CreatedAt                   time.Time                  `json:"createdAt"`
@@ -1269,6 +1318,8 @@ type AppEnvironment struct {
 	Id                          string                     `json:"id"`
 	Message                     *string                    `json:"message,omitempty"`
 	ProjectId                   string                     `json:"projectId"`
+	RuntimeObservedAt           *time.Time                 `json:"runtimeObservedAt,omitempty"`
+	RuntimeObservedGeneration   *int                       `json:"runtimeObservedGeneration,omitempty"`
 	State                       AppEnvironmentState        `json:"state"`
 	UpdatedAt                   time.Time                  `json:"updatedAt"`
 	Version                     int                        `json:"version"`
@@ -1284,6 +1335,7 @@ type AppEnvironmentWorkloadKind string
 // AppEnvironmentCreateInput defines model for AppEnvironmentCreateInput.
 type AppEnvironmentCreateInput struct {
 	Branch        string                                `json:"branch"`
+	ClusterId     string                                `json:"clusterId"`
 	Configuration RuntimeConfiguration                  `json:"configuration"`
 	EnvironmentId string                                `json:"environmentId"`
 	Volume        *AppVolumeRequest                     `json:"volume,omitempty"`
@@ -1412,6 +1464,36 @@ type BuildLog struct {
 	CreatedAt time.Time `json:"createdAt"`
 	Message   string    `json:"message"`
 	Sequence  int       `json:"sequence"`
+}
+
+// Cluster defines model for Cluster.
+type Cluster struct {
+	AgentVersion         *string       `json:"agentVersion,omitempty"`
+	Capabilities         []string      `json:"capabilities"`
+	CertificateExpiresAt *time.Time    `json:"certificateExpiresAt,omitempty"`
+	ClusterUid           *string       `json:"clusterUid,omitempty"`
+	CreatedAt            time.Time     `json:"createdAt"`
+	Id                   string        `json:"id"`
+	KubernetesVersion    *string       `json:"kubernetesVersion,omitempty"`
+	LastSeenAt           *time.Time    `json:"lastSeenAt,omitempty"`
+	Name                 string        `json:"name"`
+	RevocationReason     *string       `json:"revocationReason,omitempty"`
+	RevokedAt            *time.Time    `json:"revokedAt,omitempty"`
+	Status               ClusterStatus `json:"status"`
+	UpdatedAt            time.Time     `json:"updatedAt"`
+}
+
+// ClusterStatus defines model for Cluster.Status.
+type ClusterStatus string
+
+// ClusterCreateInput defines model for ClusterCreateInput.
+type ClusterCreateInput struct {
+	Name string `json:"name"`
+}
+
+// ClusterRevocationInput defines model for ClusterRevocationInput.
+type ClusterRevocationInput struct {
+	Reason string `json:"reason"`
 }
 
 // ConfigurationRevision defines model for ConfigurationRevision.
@@ -2015,6 +2097,32 @@ type Workspace struct {
 // WorkspaceState defines model for Workspace.State.
 type WorkspaceState string
 
+// WorkspaceCluster defines model for WorkspaceCluster.
+type WorkspaceCluster struct {
+	ClusterId          string                `json:"clusterId"`
+	ClusterName        string                `json:"clusterName"`
+	CreatedAt          time.Time             `json:"createdAt"`
+	Message            *string               `json:"message,omitempty"`
+	Namespace          string                `json:"namespace"`
+	ObservedGeneration int                   `json:"observedGeneration"`
+	State              WorkspaceClusterState `json:"state"`
+	UpdatedAt          time.Time             `json:"updatedAt"`
+}
+
+// WorkspaceClusterState defines model for WorkspaceCluster.State.
+type WorkspaceClusterState string
+
+// WorkspaceClusterInput defines model for WorkspaceClusterInput.
+type WorkspaceClusterInput struct {
+	ClusterId string `json:"clusterId"`
+}
+
+// WorkspaceCreateInput defines model for WorkspaceCreateInput.
+type WorkspaceCreateInput struct {
+	ClusterId string `json:"clusterId"`
+	Name      string `json:"name"`
+}
+
 // WorkspaceGroup defines model for WorkspaceGroup.
 type WorkspaceGroup struct {
 	CreatedAt   time.Time `json:"createdAt"`
@@ -2085,6 +2193,9 @@ type AppId = string
 
 // BuildId defines model for BuildId.
 type BuildId = string
+
+// ClusterId defines model for ClusterId.
+type ClusterId = string
 
 // Cursor defines model for Cursor.
 type Cursor = string
@@ -2216,6 +2327,11 @@ type UpdateWorkspaceParams struct {
 type ListAuditEventsParams struct {
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// AttachWorkspaceClusterParams defines parameters for AttachWorkspaceCluster.
+type AttachWorkspaceClusterParams struct {
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
 // PutWorkspaceMemberParams defines parameters for PutWorkspaceMember.
@@ -2408,7 +2524,15 @@ type ListEnvironmentAppsParams struct {
 type EnrollAgentJSONRequestBody = AgentEnrollmentInput
 
 // CreateAgentInstallationJSONRequestBody defines body for CreateAgentInstallation for application/json ContentType.
+//
+// Deprecated: this type has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 type CreateAgentInstallationJSONRequestBody = AgentInstallationCreateInput
+
+// CreateClusterJSONRequestBody defines body for CreateCluster for application/json ContentType.
+type CreateClusterJSONRequestBody = ClusterCreateInput
+
+// RevokeClusterJSONRequestBody defines body for RevokeCluster for application/json ContentType.
+type RevokeClusterJSONRequestBody = ClusterRevocationInput
 
 // CreateUserJSONRequestBody defines body for CreateUser for application/json ContentType.
 type CreateUserJSONRequestBody = UserCreateInput
@@ -2447,13 +2571,16 @@ type ConfirmTOTPEnrollmentJSONRequestBody = TOTPEnrollmentConfirmation
 type ChangeOwnPasswordJSONRequestBody = PasswordChangeInput
 
 // CreateWorkspaceJSONRequestBody defines body for CreateWorkspace for application/json ContentType.
-type CreateWorkspaceJSONRequestBody = HierarchyInput
+type CreateWorkspaceJSONRequestBody = WorkspaceCreateInput
 
 // UpdateWorkspaceJSONRequestBody defines body for UpdateWorkspace for application/json ContentType.
 type UpdateWorkspaceJSONRequestBody = HierarchyInput
 
 // CreateWorkspaceAccessGrantJSONRequestBody defines body for CreateWorkspaceAccessGrant for application/json ContentType.
 type CreateWorkspaceAccessGrantJSONRequestBody = AccessGrantInput
+
+// AttachWorkspaceClusterJSONRequestBody defines body for AttachWorkspaceCluster for application/json ContentType.
+type AttachWorkspaceClusterJSONRequestBody = WorkspaceClusterInput
 
 // CreateWorkspaceGroupJSONRequestBody defines body for CreateWorkspaceGroup for application/json ContentType.
 type CreateWorkspaceGroupJSONRequestBody = WorkspaceGroupInput
@@ -2519,7 +2646,24 @@ type ServerInterface interface {
 	EnrollAgent(w http.ResponseWriter, r *http.Request)
 
 	// (POST /api/v1/admin/agent-installations)
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	CreateAgentInstallation(w http.ResponseWriter, r *http.Request)
+
+	// (GET /api/v1/admin/clusters)
+	ListClusters(w http.ResponseWriter, r *http.Request)
+
+	// (POST /api/v1/admin/clusters)
+	CreateCluster(w http.ResponseWriter, r *http.Request)
+
+	// (DELETE /api/v1/admin/clusters/{clusterId})
+	RevokeCluster(w http.ResponseWriter, r *http.Request, clusterId ClusterId)
+
+	// (GET /api/v1/admin/clusters/{clusterId})
+	GetCluster(w http.ResponseWriter, r *http.Request, clusterId ClusterId)
+
+	// (POST /api/v1/admin/clusters/{clusterId}/enrollment-invitations)
+	CreateClusterEnrollmentInvitation(w http.ResponseWriter, r *http.Request, clusterId ClusterId)
 
 	// (GET /api/v1/admin/users)
 	ListUsers(w http.ResponseWriter, r *http.Request, params ListUsersParams)
@@ -2622,6 +2766,12 @@ type ServerInterface interface {
 
 	// (GET /api/v1/workspaces/{workspaceId}/audit-events)
 	ListAuditEvents(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, params ListAuditEventsParams)
+
+	// (GET /api/v1/workspaces/{workspaceId}/clusters)
+	ListWorkspaceClusters(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId)
+
+	// (POST /api/v1/workspaces/{workspaceId}/clusters)
+	AttachWorkspaceCluster(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, params AttachWorkspaceClusterParams)
 
 	// (GET /api/v1/workspaces/{workspaceId}/github/installations)
 	ListGitHubInstallations(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId)
@@ -2823,7 +2973,34 @@ func (_ Unimplemented) EnrollAgent(w http.ResponseWriter, r *http.Request) {
 }
 
 // (POST /api/v1/admin/agent-installations)
+//
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 func (_ Unimplemented) CreateAgentInstallation(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /api/v1/admin/clusters)
+func (_ Unimplemented) ListClusters(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /api/v1/admin/clusters)
+func (_ Unimplemented) CreateCluster(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (DELETE /api/v1/admin/clusters/{clusterId})
+func (_ Unimplemented) RevokeCluster(w http.ResponseWriter, r *http.Request, clusterId ClusterId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /api/v1/admin/clusters/{clusterId})
+func (_ Unimplemented) GetCluster(w http.ResponseWriter, r *http.Request, clusterId ClusterId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /api/v1/admin/clusters/{clusterId}/enrollment-invitations)
+func (_ Unimplemented) CreateClusterEnrollmentInvitation(w http.ResponseWriter, r *http.Request, clusterId ClusterId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -2994,6 +3171,16 @@ func (_ Unimplemented) DeleteWorkspaceAccessGrant(w http.ResponseWriter, r *http
 
 // (GET /api/v1/workspaces/{workspaceId}/audit-events)
 func (_ Unimplemented) ListAuditEvents(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, params ListAuditEventsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /api/v1/workspaces/{workspaceId}/clusters)
+func (_ Unimplemented) ListWorkspaceClusters(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /api/v1/workspaces/{workspaceId}/clusters)
+func (_ Unimplemented) AttachWorkspaceCluster(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, params AttachWorkspaceClusterParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -3340,6 +3527,112 @@ func (siw *ServerInterfaceWrapper) CreateAgentInstallation(w http.ResponseWriter
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CreateAgentInstallation(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListClusters operation middleware
+func (siw *ServerInterfaceWrapper) ListClusters(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListClusters(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateCluster operation middleware
+func (siw *ServerInterfaceWrapper) CreateCluster(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateCluster(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RevokeCluster operation middleware
+func (siw *ServerInterfaceWrapper) RevokeCluster(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "clusterId" -------------
+	var clusterId ClusterId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "clusterId", chi.URLParam(r, "clusterId"), &clusterId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "clusterId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RevokeCluster(w, r, clusterId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetCluster operation middleware
+func (siw *ServerInterfaceWrapper) GetCluster(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "clusterId" -------------
+	var clusterId ClusterId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "clusterId", chi.URLParam(r, "clusterId"), &clusterId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "clusterId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCluster(w, r, clusterId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateClusterEnrollmentInvitation operation middleware
+func (siw *ServerInterfaceWrapper) CreateClusterEnrollmentInvitation(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "clusterId" -------------
+	var clusterId ClusterId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "clusterId", chi.URLParam(r, "clusterId"), &clusterId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "clusterId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateClusterEnrollmentInvitation(w, r, clusterId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -4216,6 +4509,86 @@ func (siw *ServerInterfaceWrapper) ListAuditEvents(w http.ResponseWriter, r *htt
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListAuditEvents(w, r, workspaceId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListWorkspaceClusters operation middleware
+func (siw *ServerInterfaceWrapper) ListWorkspaceClusters(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListWorkspaceClusters(w, r, workspaceId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AttachWorkspaceCluster operation middleware
+func (siw *ServerInterfaceWrapper) AttachWorkspaceCluster(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params AttachWorkspaceClusterParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AttachWorkspaceCluster(w, r, workspaceId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -8110,6 +8483,21 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/api/v1/admin/users/{userId}/password-reset", wrapper.CreatePasswordResetGrant)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/admin/clusters", wrapper.ListClusters)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/admin/clusters", wrapper.CreateCluster)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/api/v1/admin/clusters/{clusterId}", wrapper.RevokeCluster)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/admin/clusters/{clusterId}", wrapper.GetCluster)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/admin/clusters/{clusterId}/enrollment-invitations", wrapper.CreateClusterEnrollmentInvitation)
+	})
+	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/admin/agent-installations", wrapper.CreateAgentInstallation)
 	})
 	r.Group(func(r chi.Router) {
@@ -8168,6 +8556,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Put(options.BaseURL+"/api/v1/workspaces/{workspaceId}", wrapper.UpdateWorkspace)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/clusters", wrapper.ListWorkspaceClusters)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/workspaces/{workspaceId}/clusters", wrapper.AttachWorkspaceCluster)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/parameters", wrapper.ListParameters)
@@ -8469,6 +8863,266 @@ func (response CreateAgentInstallation403JSONResponse) VisitCreateAgentInstallat
 type CreateAgentInstallation409JSONResponse struct{ ConflictJSONResponse }
 
 func (response CreateAgentInstallation409JSONResponse) VisitCreateAgentInstallationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListClustersRequestObject struct {
+}
+
+type ListClustersResponseObject interface {
+	VisitListClustersResponse(w http.ResponseWriter) error
+}
+
+type ListClusters200JSONResponse struct {
+	Items []Cluster `json:"items"`
+}
+
+func (response ListClusters200JSONResponse) VisitListClustersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListClusters403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response ListClusters403JSONResponse) VisitListClustersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateClusterRequestObject struct {
+	Body *CreateClusterJSONRequestBody
+}
+
+type CreateClusterResponseObject interface {
+	VisitCreateClusterResponse(w http.ResponseWriter) error
+}
+
+type CreateCluster201JSONResponse AgentEnrollmentInvitation
+
+func (response CreateCluster201JSONResponse) VisitCreateClusterResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateCluster403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response CreateCluster403JSONResponse) VisitCreateClusterResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateCluster409JSONResponse struct{ ConflictJSONResponse }
+
+func (response CreateCluster409JSONResponse) VisitCreateClusterResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeClusterRequestObject struct {
+	ClusterId ClusterId `json:"clusterId"`
+	Body      *RevokeClusterJSONRequestBody
+}
+
+type RevokeClusterResponseObject interface {
+	VisitRevokeClusterResponse(w http.ResponseWriter) error
+}
+
+type RevokeCluster204Response struct {
+}
+
+func (response RevokeCluster204Response) VisitRevokeClusterResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type RevokeCluster400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response RevokeCluster400JSONResponse) VisitRevokeClusterResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeCluster403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response RevokeCluster403JSONResponse) VisitRevokeClusterResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeCluster404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response RevokeCluster404JSONResponse) VisitRevokeClusterResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetClusterRequestObject struct {
+	ClusterId ClusterId `json:"clusterId"`
+}
+
+type GetClusterResponseObject interface {
+	VisitGetClusterResponse(w http.ResponseWriter) error
+}
+
+type GetCluster200JSONResponse Cluster
+
+func (response GetCluster200JSONResponse) VisitGetClusterResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCluster403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response GetCluster403JSONResponse) VisitGetClusterResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCluster404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response GetCluster404JSONResponse) VisitGetClusterResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateClusterEnrollmentInvitationRequestObject struct {
+	ClusterId ClusterId `json:"clusterId"`
+}
+
+type CreateClusterEnrollmentInvitationResponseObject interface {
+	VisitCreateClusterEnrollmentInvitationResponse(w http.ResponseWriter) error
+}
+
+type CreateClusterEnrollmentInvitation201JSONResponse AgentEnrollmentInvitation
+
+func (response CreateClusterEnrollmentInvitation201JSONResponse) VisitCreateClusterEnrollmentInvitationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateClusterEnrollmentInvitation403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response CreateClusterEnrollmentInvitation403JSONResponse) VisitCreateClusterEnrollmentInvitationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateClusterEnrollmentInvitation404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response CreateClusterEnrollmentInvitation404JSONResponse) VisitCreateClusterEnrollmentInvitationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateClusterEnrollmentInvitation409JSONResponse struct{ ConflictJSONResponse }
+
+func (response CreateClusterEnrollmentInvitation409JSONResponse) VisitCreateClusterEnrollmentInvitationResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -9869,6 +10523,141 @@ func (response ListAuditEvents403JSONResponse) VisitListAuditEventsResponse(w ht
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListWorkspaceClustersRequestObject struct {
+	WorkspaceId WorkspaceId `json:"workspaceId"`
+}
+
+type ListWorkspaceClustersResponseObject interface {
+	VisitListWorkspaceClustersResponse(w http.ResponseWriter) error
+}
+
+type ListWorkspaceClusters200JSONResponse struct {
+	Items []WorkspaceCluster `json:"items"`
+}
+
+func (response ListWorkspaceClusters200JSONResponse) VisitListWorkspaceClustersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListWorkspaceClusters403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response ListWorkspaceClusters403JSONResponse) VisitListWorkspaceClustersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListWorkspaceClusters404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ListWorkspaceClusters404JSONResponse) VisitListWorkspaceClustersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AttachWorkspaceClusterRequestObject struct {
+	WorkspaceId WorkspaceId `json:"workspaceId"`
+	Params      AttachWorkspaceClusterParams
+	Body        *AttachWorkspaceClusterJSONRequestBody
+}
+
+type AttachWorkspaceClusterResponseObject interface {
+	VisitAttachWorkspaceClusterResponse(w http.ResponseWriter) error
+}
+
+type AttachWorkspaceCluster202JSONResponse struct {
+	Operation        Operation        `json:"operation"`
+	WorkspaceCluster WorkspaceCluster `json:"workspaceCluster"`
+}
+
+func (response AttachWorkspaceCluster202JSONResponse) VisitAttachWorkspaceClusterResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(202)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AttachWorkspaceCluster400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response AttachWorkspaceCluster400JSONResponse) VisitAttachWorkspaceClusterResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AttachWorkspaceCluster403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response AttachWorkspaceCluster403JSONResponse) VisitAttachWorkspaceClusterResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AttachWorkspaceCluster404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response AttachWorkspaceCluster404JSONResponse) VisitAttachWorkspaceClusterResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AttachWorkspaceCluster409JSONResponse struct{ ConflictJSONResponse }
+
+func (response AttachWorkspaceCluster409JSONResponse) VisitAttachWorkspaceClusterResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -13620,7 +14409,24 @@ type StrictServerInterface interface {
 	EnrollAgent(ctx context.Context, request EnrollAgentRequestObject) (EnrollAgentResponseObject, error)
 
 	// (POST /api/v1/admin/agent-installations)
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	CreateAgentInstallation(ctx context.Context, request CreateAgentInstallationRequestObject) (CreateAgentInstallationResponseObject, error)
+
+	// (GET /api/v1/admin/clusters)
+	ListClusters(ctx context.Context, request ListClustersRequestObject) (ListClustersResponseObject, error)
+
+	// (POST /api/v1/admin/clusters)
+	CreateCluster(ctx context.Context, request CreateClusterRequestObject) (CreateClusterResponseObject, error)
+
+	// (DELETE /api/v1/admin/clusters/{clusterId})
+	RevokeCluster(ctx context.Context, request RevokeClusterRequestObject) (RevokeClusterResponseObject, error)
+
+	// (GET /api/v1/admin/clusters/{clusterId})
+	GetCluster(ctx context.Context, request GetClusterRequestObject) (GetClusterResponseObject, error)
+
+	// (POST /api/v1/admin/clusters/{clusterId}/enrollment-invitations)
+	CreateClusterEnrollmentInvitation(ctx context.Context, request CreateClusterEnrollmentInvitationRequestObject) (CreateClusterEnrollmentInvitationResponseObject, error)
 
 	// (GET /api/v1/admin/users)
 	ListUsers(ctx context.Context, request ListUsersRequestObject) (ListUsersResponseObject, error)
@@ -13723,6 +14529,12 @@ type StrictServerInterface interface {
 
 	// (GET /api/v1/workspaces/{workspaceId}/audit-events)
 	ListAuditEvents(ctx context.Context, request ListAuditEventsRequestObject) (ListAuditEventsResponseObject, error)
+
+	// (GET /api/v1/workspaces/{workspaceId}/clusters)
+	ListWorkspaceClusters(ctx context.Context, request ListWorkspaceClustersRequestObject) (ListWorkspaceClustersResponseObject, error)
+
+	// (POST /api/v1/workspaces/{workspaceId}/clusters)
+	AttachWorkspaceCluster(ctx context.Context, request AttachWorkspaceClusterRequestObject) (AttachWorkspaceClusterResponseObject, error)
 
 	// (GET /api/v1/workspaces/{workspaceId}/github/installations)
 	ListGitHubInstallations(ctx context.Context, request ListGitHubInstallationsRequestObject) (ListGitHubInstallationsResponseObject, error)
@@ -14008,6 +14820,146 @@ func (sh *strictHandler) CreateAgentInstallation(w http.ResponseWriter, r *http.
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(CreateAgentInstallationResponseObject); ok {
 		if err := validResponse.VisitCreateAgentInstallationResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListClusters operation middleware
+func (sh *strictHandler) ListClusters(w http.ResponseWriter, r *http.Request) {
+	var request ListClustersRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListClusters(ctx, request.(ListClustersRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListClusters")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListClustersResponseObject); ok {
+		if err := validResponse.VisitListClustersResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateCluster operation middleware
+func (sh *strictHandler) CreateCluster(w http.ResponseWriter, r *http.Request) {
+	var request CreateClusterRequestObject
+
+	var body CreateClusterJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateCluster(ctx, request.(CreateClusterRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateCluster")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateClusterResponseObject); ok {
+		if err := validResponse.VisitCreateClusterResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RevokeCluster operation middleware
+func (sh *strictHandler) RevokeCluster(w http.ResponseWriter, r *http.Request, clusterId ClusterId) {
+	var request RevokeClusterRequestObject
+
+	request.ClusterId = clusterId
+
+	var body RevokeClusterJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RevokeCluster(ctx, request.(RevokeClusterRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RevokeCluster")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RevokeClusterResponseObject); ok {
+		if err := validResponse.VisitRevokeClusterResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetCluster operation middleware
+func (sh *strictHandler) GetCluster(w http.ResponseWriter, r *http.Request, clusterId ClusterId) {
+	var request GetClusterRequestObject
+
+	request.ClusterId = clusterId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetCluster(ctx, request.(GetClusterRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetCluster")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetClusterResponseObject); ok {
+		if err := validResponse.VisitGetClusterResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateClusterEnrollmentInvitation operation middleware
+func (sh *strictHandler) CreateClusterEnrollmentInvitation(w http.ResponseWriter, r *http.Request, clusterId ClusterId) {
+	var request CreateClusterEnrollmentInvitationRequestObject
+
+	request.ClusterId = clusterId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateClusterEnrollmentInvitation(ctx, request.(CreateClusterEnrollmentInvitationRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateClusterEnrollmentInvitation")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateClusterEnrollmentInvitationResponseObject); ok {
+		if err := validResponse.VisitCreateClusterEnrollmentInvitationResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -14965,6 +15917,66 @@ func (sh *strictHandler) ListAuditEvents(w http.ResponseWriter, r *http.Request,
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ListAuditEventsResponseObject); ok {
 		if err := validResponse.VisitListAuditEventsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListWorkspaceClusters operation middleware
+func (sh *strictHandler) ListWorkspaceClusters(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId) {
+	var request ListWorkspaceClustersRequestObject
+
+	request.WorkspaceId = workspaceId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListWorkspaceClusters(ctx, request.(ListWorkspaceClustersRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListWorkspaceClusters")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListWorkspaceClustersResponseObject); ok {
+		if err := validResponse.VisitListWorkspaceClustersResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AttachWorkspaceCluster operation middleware
+func (sh *strictHandler) AttachWorkspaceCluster(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, params AttachWorkspaceClusterParams) {
+	var request AttachWorkspaceClusterRequestObject
+
+	request.WorkspaceId = workspaceId
+	request.Params = params
+
+	var body AttachWorkspaceClusterJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AttachWorkspaceCluster(ctx, request.(AttachWorkspaceClusterRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AttachWorkspaceCluster")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AttachWorkspaceClusterResponseObject); ok {
+		if err := validResponse.VisitAttachWorkspaceClusterResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

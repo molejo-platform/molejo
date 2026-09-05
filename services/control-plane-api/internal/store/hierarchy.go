@@ -43,6 +43,25 @@ func (s *Store) FindWorkspaceForUser(ctx context.Context, userID int64, publicID
 }
 
 func (s *Store) CreateWorkspace(ctx context.Context, userID int64, publicID, operationID, name string, idempotencyHash, payloadHash []byte) (domain.Workspace, domain.Operation, bool, error) {
+	clusterID, err := activeAgentInstallationID(ctx, s.Pool)
+	if err != nil {
+		return domain.Workspace{}, domain.Operation{}, false, err
+	}
+	return s.createWorkspaceForCluster(ctx, userID, clusterID, publicID, operationID, name, idempotencyHash, payloadHash)
+}
+
+func (s *Store) CreateWorkspaceOnCluster(ctx context.Context, userID int64, clusterPublicID, publicID, operationID, name string, idempotencyHash, payloadHash []byte) (domain.Workspace, domain.Operation, bool, error) {
+	var clusterID int64
+	if err := s.Pool.QueryRow(ctx, `SELECT id FROM agent_installations WHERE public_id=$1 AND status='Active'`, clusterPublicID).Scan(&clusterID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Workspace{}, domain.Operation{}, false, ErrAgentUnavailable
+		}
+		return domain.Workspace{}, domain.Operation{}, false, err
+	}
+	return s.createWorkspaceForCluster(ctx, userID, clusterID, publicID, operationID, name, idempotencyHash, payloadHash)
+}
+
+func (s *Store) createWorkspaceForCluster(ctx context.Context, userID, clusterID int64, publicID, operationID, name string, idempotencyHash, payloadHash []byte) (domain.Workspace, domain.Operation, bool, error) {
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return domain.Workspace{}, domain.Operation{}, false, err
@@ -73,13 +92,12 @@ func (s *Store) CreateWorkspace(ctx context.Context, userID int64, publicID, ope
 	if _, err = tx.Exec(ctx, `INSERT INTO workspace_memberships(workspace_id,user_id,role,status) VALUES($1,$2,'Owner','Active')`, workspace.ID, userID); err != nil {
 		return domain.Workspace{}, domain.Operation{}, false, err
 	}
-	agentInstallationID, err := activeAgentInstallationID(ctx, tx)
-	if err != nil {
+	if _, err = tx.Exec(ctx, `INSERT INTO workspace_clusters(workspace_id,installation_id,namespace_name) VALUES($1,$2,$3)`, workspace.ID, clusterID, workspace.NamespaceName); err != nil {
 		return domain.Workspace{}, domain.Operation{}, false, err
 	}
 	operation, err := queries.InsertWorkspaceOperation(ctx, storesqlc.InsertWorkspaceOperationParams{
 		PublicID: operationID, WorkspaceID: workspace.ID, RequestedByUserID: userID,
-		IdempotencyHash: idempotencyHash, PayloadHash: payloadHash, AgentInstallationID: pgtype.Int8{Int64: agentInstallationID, Valid: true},
+		IdempotencyHash: idempotencyHash, PayloadHash: payloadHash, AgentInstallationID: pgtype.Int8{Int64: clusterID, Valid: true},
 	})
 	if err != nil {
 		return domain.Workspace{}, domain.Operation{}, false, hierarchyWriteError(err)

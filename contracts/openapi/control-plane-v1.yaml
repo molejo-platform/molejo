@@ -220,9 +220,61 @@ paths:
           content: { application/json: { schema: { $ref: '#/components/schemas/PasswordResetGrant' } } }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/admin/clusters:
+    get:
+      operationId: listClusters
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Registered runtime clusters
+          content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/Cluster' } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      operationId: createCluster
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ClusterCreateInput' } } }
+      responses:
+        '201':
+          description: One-time cluster enrollment invitation
+          content: { application/json: { schema: { $ref: '#/components/schemas/AgentEnrollmentInvitation' } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/admin/clusters/{clusterId}:
+    parameters: [{ $ref: '#/components/parameters/ClusterId' }]
+    get:
+      operationId: getCluster
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { description: Runtime cluster, content: { application/json: { schema: { $ref: '#/components/schemas/Cluster' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      operationId: revokeCluster
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ClusterRevocationInput' } } }
+      responses:
+        '204': { description: Cluster access revoked }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/admin/clusters/{clusterId}/enrollment-invitations:
+    parameters: [{ $ref: '#/components/parameters/ClusterId' }]
+    post:
+      operationId: createClusterEnrollmentInvitation
+      security: [{ sessionCookie: [] }]
+      responses:
+        '201': { description: Replacement one-time enrollment invitation, content: { application/json: { schema: { $ref: '#/components/schemas/AgentEnrollmentInvitation' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
   /api/v1/admin/agent-installations:
     post:
       operationId: createAgentInstallation
+      deprecated: true
       security: [{ sessionCookie: [] }]
       requestBody:
         required: true
@@ -429,7 +481,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/HierarchyInput' }
+            schema: { $ref: '#/components/schemas/WorkspaceCreateInput' }
       responses:
         '202':
           description: Workspace creation accepted
@@ -465,6 +517,37 @@ paths:
         '200':
           description: Updated workspace
           content: { application/json: { schema: { $ref: '#/components/schemas/Workspace' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/workspaces/{workspaceId}/clusters:
+    parameters: [{ $ref: '#/components/parameters/WorkspaceId' }]
+    get:
+      operationId: listWorkspaceClusters
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { description: Workspace runtime placements, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/WorkspaceCluster' } } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      operationId: attachWorkspaceCluster
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/WorkspaceClusterInput' } } }
+      responses:
+        '202':
+          description: Workspace placement accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [workspaceCluster, operation]
+                properties:
+                  workspaceCluster: { $ref: '#/components/schemas/WorkspaceCluster' }
+                  operation: { $ref: '#/components/schemas/Operation' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -1513,6 +1596,11 @@ components:
       in: path
       required: true
       schema: { type: string, pattern: '^agr-[a-z2-7]{20}$' }
+    ClusterId:
+      name: clusterId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^(cls|agi)-[a-z2-7]{20}$' }
     IdempotencyKey:
       name: Idempotency-Key
       in: header
@@ -1758,12 +1846,43 @@ components:
       additionalProperties: false
       properties:
         name: { type: string, minLength: 1, maxLength: 80 }
-    AgentEnrollmentInvitation:
+    ClusterCreateInput:
       type: object
-      required: [installationId, enrollmentToken, expiresAt]
+      required: [name]
       additionalProperties: false
       properties:
-        installationId: { type: string, pattern: '^agi-[a-z2-7]{20}$' }
+        name: { type: string, minLength: 1, maxLength: 80 }
+    ClusterRevocationInput:
+      type: object
+      required: [reason]
+      additionalProperties: false
+      properties:
+        reason: { type: string, minLength: 1, maxLength: 500 }
+    Cluster:
+      type: object
+      required: [id, name, status, capabilities, createdAt, updatedAt]
+      additionalProperties: false
+      properties:
+        id: { type: string, pattern: '^(cls|agi)-[a-z2-7]{20}$' }
+        name: { type: string, minLength: 1, maxLength: 80 }
+        status: { type: string, enum: [Pending, Active, Revoked] }
+        clusterUid: { type: string }
+        agentVersion: { type: string }
+        kubernetesVersion: { type: string }
+        capabilities: { type: array, items: { type: string } }
+        certificateExpiresAt: { type: string, format: date-time }
+        lastSeenAt: { type: string, format: date-time }
+        revokedAt: { type: string, format: date-time }
+        revocationReason: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    AgentEnrollmentInvitation:
+      type: object
+      required: [clusterId, installationId, enrollmentToken, expiresAt]
+      additionalProperties: false
+      properties:
+        clusterId: { type: string, pattern: '^(cls|agi)-[a-z2-7]{20}$' }
+        installationId: { type: string, pattern: '^(cls|agi)-[a-z2-7]{20}$', deprecated: true }
         enrollmentToken: { type: string, minLength: 64, maxLength: 64, writeOnly: true }
         expiresAt: { type: string, format: date-time }
     AgentEnrollmentInput:
@@ -1776,12 +1895,13 @@ components:
         csrPem: { type: string, minLength: 1, maxLength: 4096, writeOnly: true }
     AgentEnrollmentResult:
       type: object
-      required: [installationId, certificatePem, caCertificatePem, expiresAt]
+      required: [installationId, certificatePem, caCertificatePem, serverCaCertificatePem, expiresAt]
       additionalProperties: false
       properties:
-        installationId: { type: string, pattern: '^agi-[a-z2-7]{20}$' }
+        installationId: { type: string, pattern: '^(cls|agi)-[a-z2-7]{20}$' }
         certificatePem: { type: string, writeOnly: true }
         caCertificatePem: { type: string }
+        serverCaCertificatePem: { type: string }
         expiresAt: { type: string, format: date-time }
     UserStatusInput:
       type: object
@@ -1900,6 +2020,32 @@ components:
       additionalProperties: false
       properties:
         name: { type: string, minLength: 1, maxLength: 80 }
+    WorkspaceCreateInput:
+      type: object
+      required: [name, clusterId]
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        clusterId: { type: string, pattern: '^(cls|agi)-[a-z2-7]{20}$' }
+    WorkspaceClusterInput:
+      type: object
+      required: [clusterId]
+      additionalProperties: false
+      properties:
+        clusterId: { type: string, pattern: '^(cls|agi)-[a-z2-7]{20}$' }
+    WorkspaceCluster:
+      type: object
+      required: [clusterId, clusterName, namespace, state, observedGeneration, createdAt, updatedAt]
+      additionalProperties: false
+      properties:
+        clusterId: { type: string, pattern: '^(cls|agi)-[a-z2-7]{20}$' }
+        clusterName: { type: string }
+        namespace: { type: string }
+        state: { type: string, enum: [Pending, Running, Ready, Failed] }
+        message: { type: string }
+        observedGeneration: { type: integer, minimum: 0 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
     Project:
       type: object
       required: [id, name, version, createdAt, updatedAt]
@@ -2132,20 +2278,22 @@ components:
         configuration: { $ref: '#/components/schemas/RuntimeConfiguration' }
     AppEnvironmentCreateInput:
       type: object
-      required: [environmentId, branch, workloadKind, configuration]
+      required: [environmentId, clusterId, branch, workloadKind, configuration]
       additionalProperties: false
       properties:
         environmentId: { type: string, pattern: '^env-[a-z2-7]{20}$' }
+        clusterId: { type: string, pattern: '^(cls|agi)-[a-z2-7]{20}$' }
         branch: { type: string, minLength: 1, maxLength: 255 }
         workloadKind: { type: string, enum: [Stateless, Stateful] }
         volume: { $ref: '#/components/schemas/AppVolumeRequest' }
         configuration: { $ref: '#/components/schemas/RuntimeConfiguration' }
     AppEnvironment:
       type: object
-      required: [id, projectId, appId, appName, environmentId, environmentName, branch, workloadKind, configuration, configurationVersion, version, state, createdAt, updatedAt]
+      required: [id, clusterId, projectId, appId, appName, environmentId, environmentName, branch, workloadKind, configuration, configurationVersion, version, state, createdAt, updatedAt]
       additionalProperties: false
       properties:
         id: { type: string, pattern: '^aev-[a-z2-7]{20}$' }
+        clusterId: { type: string, pattern: '^(cls|agi)-[a-z2-7]{20}$' }
         projectId: { type: string, pattern: '^prj-[a-z2-7]{20}$' }
         appId: { type: string, pattern: '^app-[a-z2-7]{20}$' }
         appName: { type: string, minLength: 1, maxLength: 80 }
@@ -2161,6 +2309,8 @@ components:
         currentReleaseId: { type: string, pattern: '^rel-[a-z2-7]{20}$' }
         desiredConfigurationVersion: { type: integer, minimum: 1 }
         currentConfigurationVersion: { type: integer, minimum: 1 }
+        runtimeObservedGeneration: { type: integer, minimum: 0 }
+        runtimeObservedAt: { type: string, format: date-time }
         state: { type: string, enum: [Pending, Progressing, Ready, Degraded, Unknown] }
         message: { type: string }
         createdAt: { type: string, format: date-time }

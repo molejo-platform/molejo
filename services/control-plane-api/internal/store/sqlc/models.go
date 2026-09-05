@@ -22,6 +22,23 @@ type AccessGrant struct {
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 }
 
+type AgentCredential struct {
+	ID                     int64              `json:"id"`
+	InstallationID         int64              `json:"installation_id"`
+	Status                 string             `json:"status"`
+	EnrollmentAttemptID    pgtype.Text        `json:"enrollment_attempt_id"`
+	CsrFingerprint         []byte             `json:"csr_fingerprint"`
+	CertificatePem         []byte             `json:"certificate_pem"`
+	CaCertificatePem       []byte             `json:"ca_certificate_pem"`
+	ServerCaCertificatePem []byte             `json:"server_ca_certificate_pem"`
+	CertificateSerial      string             `json:"certificate_serial"`
+	CertificateFingerprint []byte             `json:"certificate_fingerprint"`
+	CertificateNotAfter    pgtype.Timestamptz `json:"certificate_not_after"`
+	OverlapNotAfter        pgtype.Timestamptz `json:"overlap_not_after"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+}
+
 type AgentEnrollmentToken struct {
 	InstallationID int64              `json:"installation_id"`
 	TokenHash      []byte             `json:"token_hash"`
@@ -49,6 +66,9 @@ type AgentInstallation struct {
 	ClusterUid             pgtype.Text        `json:"cluster_uid"`
 	KubernetesVersion      string             `json:"kubernetes_version"`
 	CapabilitiesJson       []byte             `json:"capabilities_json"`
+	AgentVersion           string             `json:"agent_version"`
+	RevokedAt              pgtype.Timestamptz `json:"revoked_at"`
+	RevocationReason       string             `json:"revocation_reason"`
 }
 
 type App struct {
@@ -64,27 +84,31 @@ type App struct {
 }
 
 type AppEnvironment struct {
-	ID                   int64              `json:"id"`
-	PublicID             string             `json:"public_id"`
-	WorkspaceID          int64              `json:"workspace_id"`
-	ProjectID            int64              `json:"project_id"`
-	AppID                int64              `json:"app_id"`
-	EnvironmentID        int64              `json:"environment_id"`
-	SourceBranch         string             `json:"source_branch"`
-	RuntimeName          string             `json:"runtime_name"`
-	ConfigurationJson    []byte             `json:"configuration_json"`
-	ConfigurationVersion int64              `json:"configuration_version"`
-	Version              int64              `json:"version"`
-	DesiredDeploymentID  pgtype.Int8        `json:"desired_deployment_id"`
-	CurrentDeploymentID  pgtype.Int8        `json:"current_deployment_id"`
-	CurrentReleaseID     pgtype.Int8        `json:"current_release_id"`
-	LastState            string             `json:"last_state"`
-	LastMessage          string             `json:"last_message"`
-	DeletionRequestedAt  pgtype.Timestamptz `json:"deletion_requested_at"`
-	ArchivedAt           pgtype.Timestamptz `json:"archived_at"`
-	CreatedAt            pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
-	WorkloadKind         string             `json:"workload_kind"`
+	ID                        int64              `json:"id"`
+	PublicID                  string             `json:"public_id"`
+	WorkspaceID               int64              `json:"workspace_id"`
+	ProjectID                 int64              `json:"project_id"`
+	AppID                     int64              `json:"app_id"`
+	EnvironmentID             int64              `json:"environment_id"`
+	SourceBranch              string             `json:"source_branch"`
+	RuntimeName               string             `json:"runtime_name"`
+	ConfigurationJson         []byte             `json:"configuration_json"`
+	ConfigurationVersion      int64              `json:"configuration_version"`
+	Version                   int64              `json:"version"`
+	DesiredDeploymentID       pgtype.Int8        `json:"desired_deployment_id"`
+	CurrentDeploymentID       pgtype.Int8        `json:"current_deployment_id"`
+	CurrentReleaseID          pgtype.Int8        `json:"current_release_id"`
+	LastState                 string             `json:"last_state"`
+	LastMessage               string             `json:"last_message"`
+	DeletionRequestedAt       pgtype.Timestamptz `json:"deletion_requested_at"`
+	ArchivedAt                pgtype.Timestamptz `json:"archived_at"`
+	CreatedAt                 pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                 pgtype.Timestamptz `json:"updated_at"`
+	WorkloadKind              string             `json:"workload_kind"`
+	ClusterID                 pgtype.Int8        `json:"cluster_id"`
+	RuntimeObservedGeneration int64              `json:"runtime_observed_generation"`
+	RuntimeObservedAt         pgtype.Timestamptz `json:"runtime_observed_at"`
+	ReconciliationGeneration  int64              `json:"reconciliation_generation"`
 }
 
 type AppEnvironmentConfigurationRevision struct {
@@ -564,6 +588,17 @@ type Workspace struct {
 	BootstrapState string             `json:"bootstrap_state"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 	Version        int64              `json:"version"`
+}
+
+type WorkspaceCluster struct {
+	WorkspaceID        int64              `json:"workspace_id"`
+	InstallationID     int64              `json:"installation_id"`
+	NamespaceName      string             `json:"namespace_name"`
+	State              string             `json:"state"`
+	Message            string             `json:"message"`
+	ObservedGeneration int64              `json:"observed_generation"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 }
 
 type WorkspaceGroup struct {

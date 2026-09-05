@@ -3,4 +3,4 @@
 [Inicio de la documentación](../README.md) | [Template compartido](../../ADR_TEMPLATE.md) |
 [English](../../en/adr/README.md) | [Português (Brasil)](../../pt-BR/adr/README.md)
 
-Todavía no se publicó ningún Architecture Decision Record.
+- [ADR-0013: identidad y pairing saliente del Cluster Agent](0013-outbound-cluster-agent-identity-and-pairing.md)

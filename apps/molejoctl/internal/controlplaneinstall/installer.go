@@ -126,18 +126,26 @@ func (*Installer) Install(ctx context.Context, options Options) (Report, error) 
 	if err != nil {
 		return Report{}, err
 	}
-	ca, err := ensureAgentCASecret(ctx, client, plan.createAgentCA)
+	agentCA, err := ensureAgentCASecret(ctx, client, plan.createAgentCA)
 	if err != nil {
 		return Report{}, err
 	}
-	if _, err = ensureServerIdentitySecret(ctx, client, ca, plan.createServerIdentity); err != nil {
+	serverCA := agentCA
+	if useDedicatedServerCA(helmState.installed, observed) {
+		serverCA, err = ensureServerCASecret(ctx, client, plan.createServerCA)
+		if err != nil {
+			return Report{}, err
+		}
+	}
+	_, serverIdentityChanged, err := ensureServerIdentitySecret(ctx, client, serverCA, plan.createServerIdentity)
+	if err != nil {
 		return Report{}, err
 	}
 	bootstrap, enrollmentToken, err := ensureBootstrapSecrets(ctx, client, plan.createBootstrapIdentity, observed.agentPaired)
 	if err != nil {
 		return Report{}, err
 	}
-	agentChanged, err := ensureAgentConnection(ctx, client, ca.certificatePEM, enrollmentToken, !plan.configureAgent)
+	agentChanged, err := ensureAgentConnection(ctx, client, serverCA.certificatePEM, enrollmentToken, !plan.configureAgent)
 	if err != nil {
 		return Report{}, err
 	}
@@ -148,6 +156,14 @@ func (*Installer) Install(ctx context.Context, options Options) (Report, error) 
 	}
 	if plan.installChart {
 		if err = installControlPlaneChart(ctx, options, storageClass); err != nil {
+			return Report{}, err
+		}
+	}
+	if serverIdentityChanged && helmState.installed {
+		if err = restartDeployment(ctx, client, controlPlaneNamespace, "control-plane-api"); err != nil {
+			return Report{}, err
+		}
+		if err = restartDeployment(ctx, client, controlPlaneNamespace, "console-web"); err != nil {
 			return Report{}, err
 		}
 	}
@@ -172,6 +188,10 @@ func (*Installer) Install(ctx context.Context, options Options) (Report, error) 
 		DatabasePassword: database.password,
 		Checks:           checks,
 	}, nil
+}
+
+func useDedicatedServerCA(releaseInstalled bool, observed controlPlaneObservedState) bool {
+	return !releaseInstalled || observed.serverCA || observed.serverCATrustUsed
 }
 
 type controlPlaneReleaseState struct {
@@ -327,6 +347,10 @@ func observeControlPlane(ctx context.Context, client kubernetes.Interface, relea
 	if err != nil {
 		return controlPlaneObservedState{}, err
 	}
+	serverCASecret, serverCAExists, err := optionalSecret(ctx, client, controlPlaneNamespace, "molejo-control-plane-server-ca")
+	if err != nil {
+		return controlPlaneObservedState{}, err
+	}
 	if databaseExists {
 		if err = validateSecret(databaseSecret, "database-url", "database", "username", "password"); err != nil {
 			return controlPlaneObservedState{}, err
@@ -347,6 +371,24 @@ func observeControlPlane(ctx context.Context, client kubernetes.Interface, relea
 			return controlPlaneObservedState{}, err
 		}
 	}
+	if serverCAExists {
+		if err = validateSecret(serverCASecret, "ca.crt", "ca.key"); err != nil {
+			return controlPlaneObservedState{}, err
+		}
+	}
+	serverCATrustUsed := false
+	if releaseInstalled {
+		deployment, deploymentErr := client.AppsV1().Deployments(controlPlaneNamespace).Get(ctx, "control-plane-api", metav1.GetOptions{})
+		if deploymentErr != nil {
+			return controlPlaneObservedState{}, fmt.Errorf("read control plane API deployment: %w", deploymentErr)
+		}
+		for _, volume := range deployment.Spec.Template.Spec.Volumes {
+			if volume.Secret != nil && volume.Secret.SecretName == "molejo-control-plane-server-ca" {
+				serverCATrustUsed = true
+				break
+			}
+		}
+	}
 	_, pvcExists, err := optionalPVC(ctx, client, "data-postgres-0")
 	if err != nil {
 		return controlPlaneObservedState{}, err
@@ -363,6 +405,8 @@ func observeControlPlane(ctx context.Context, client kubernetes.Interface, relea
 		databaseCredentials: databaseExists,
 		bootstrapIdentity:   bootstrapExists,
 		agentCA:             caExists,
+		serverCA:            serverCAExists,
+		serverCATrustUsed:   serverCATrustUsed,
 		serverIdentity:      serverExists,
 		databasePVC:         pvcExists,
 		releaseInstalled:    releaseInstalled,
@@ -505,29 +549,66 @@ func ensureAgentCASecret(ctx context.Context, client kubernetes.Interface, creat
 	return ca, nil
 }
 
-func ensureServerIdentitySecret(ctx context.Context, client kubernetes.Interface, ca certificateAuthority, create bool) (serverIdentity, error) {
+func ensureServerCASecret(ctx context.Context, client kubernetes.Interface, create bool) (certificateAuthority, error) {
+	secret, exists, err := optionalSecret(ctx, client, controlPlaneNamespace, "molejo-control-plane-server-ca")
+	if err != nil {
+		return certificateAuthority{}, err
+	}
+	if exists {
+		if err = validateManagedSecret(secret, "ca.crt", "ca.key"); err != nil {
+			return certificateAuthority{}, err
+		}
+		return certificateAuthority{certificatePEM: secret.Data["ca.crt"], privateKeyPEM: secret.Data["ca.key"]}, nil
+	}
+	if !create {
+		return certificateAuthority{}, errors.New("control plane server CA Secret is missing")
+	}
+	ca, err := newServerCertificateAuthority(time.Now().UTC())
+	if err != nil {
+		return certificateAuthority{}, err
+	}
+	secret = &corev1.Secret{ObjectMeta: managedObjectMeta("molejo-control-plane-server-ca", controlPlaneNamespace), Type: corev1.SecretTypeOpaque, Data: map[string][]byte{"ca.crt": ca.certificatePEM, "ca.key": ca.privateKeyPEM}}
+	if _, err = client.CoreV1().Secrets(controlPlaneNamespace).Create(ctx, secret, metav1.CreateOptions{}); err != nil {
+		return certificateAuthority{}, fmt.Errorf("create control plane server CA Secret: %w", err)
+	}
+	return ca, nil
+}
+
+func ensureServerIdentitySecret(ctx context.Context, client kubernetes.Interface, ca certificateAuthority, create bool) (serverIdentity, bool, error) {
 	secret, exists, err := optionalSecret(ctx, client, controlPlaneNamespace, "molejo-agent-server-tls")
 	if err != nil {
-		return serverIdentity{}, err
+		return serverIdentity{}, false, err
 	}
 	if exists {
 		if err = validateManagedSecret(secret, "tls.crt", "tls.key"); err != nil {
-			return serverIdentity{}, err
+			return serverIdentity{}, false, err
 		}
-		return serverIdentity{certificatePEM: secret.Data["tls.crt"], privateKeyPEM: secret.Data["tls.key"]}, nil
+		identity := serverIdentity{certificatePEM: secret.Data["tls.crt"], privateKeyPEM: secret.Data["tls.key"]}
+		if serverIdentitySignedBy(identity, ca, time.Now().UTC().Add(30*24*time.Hour)) {
+			return identity, false, nil
+		}
+		identity, err = newServerIdentity(ca, controlPlaneServerDNSNames, time.Now().UTC())
+		if err != nil {
+			return serverIdentity{}, false, err
+		}
+		secret.Data["tls.crt"], secret.Data["tls.key"] = identity.certificatePEM, identity.privateKeyPEM
+		if _, err = client.CoreV1().Secrets(controlPlaneNamespace).Update(ctx, secret, metav1.UpdateOptions{}); err != nil {
+			return serverIdentity{}, false, fmt.Errorf("rotate control plane server identity: %w", err)
+		}
+		return identity, true, nil
 	}
 	if !create {
-		return serverIdentity{}, errors.New("control plane server identity Secret is missing")
+		return serverIdentity{}, false, errors.New("control plane server identity Secret is missing")
 	}
-	identity, err := newServerIdentity(ca, []string{"control-plane-api", "control-plane-api.molejo-control-plane.svc", "control-plane-api.molejo-control-plane.svc.cluster.local"}, time.Now().UTC())
+	identity, err := newServerIdentity(ca, controlPlaneServerDNSNames, time.Now().UTC())
 	if err != nil {
-		return serverIdentity{}, err
+		return serverIdentity{}, false, err
 	}
 	secret = &corev1.Secret{ObjectMeta: managedObjectMeta("molejo-agent-server-tls", controlPlaneNamespace), Type: corev1.SecretTypeTLS, Data: map[string][]byte{"tls.crt": identity.certificatePEM, "tls.key": identity.privateKeyPEM}}
 	if _, err = client.CoreV1().Secrets(controlPlaneNamespace).Create(ctx, secret, metav1.CreateOptions{}); err != nil {
-		return serverIdentity{}, fmt.Errorf("create control plane server identity Secret: %w", err)
+		return serverIdentity{}, false, fmt.Errorf("create control plane server identity Secret: %w", err)
 	}
-	return identity, nil
+	return identity, true, nil
 }
 
 type bootstrapIdentity struct{ ownerPassword, installationID string }
@@ -573,7 +654,7 @@ func ensureBootstrapSecrets(ctx context.Context, client kubernetes.Interface, cr
 	if err != nil {
 		return bootstrapIdentity{}, "", err
 	}
-	installationID, err := newPublicID("agi")
+	installationID, err := newPublicID("cls")
 	if err != nil {
 		return bootstrapIdentity{}, "", err
 	}
@@ -649,9 +730,13 @@ func ensureConfigMap(ctx context.Context, client kubernetes.Interface, desired *
 }
 
 func restartClusterAgent(ctx context.Context, client kubernetes.Interface) error {
+	return restartDeployment(ctx, client, systemNamespace, "cluster-agent")
+}
+
+func restartDeployment(ctx context.Context, client kubernetes.Interface, namespace, name string) error {
 	patch := []byte(fmt.Sprintf(`{"spec":{"template":{"metadata":{"annotations":{"molejo.dev/restarted-at":%q}}}}}`, time.Now().UTC().Format(time.RFC3339Nano)))
-	if _, err := client.AppsV1().Deployments(systemNamespace).Patch(ctx, "cluster-agent", types.StrategicMergePatchType, patch, metav1.PatchOptions{}); err != nil {
-		return fmt.Errorf("restart cluster Agent: %w", err)
+	if _, err := client.AppsV1().Deployments(namespace).Patch(ctx, name, types.StrategicMergePatchType, patch, metav1.PatchOptions{}); err != nil {
+		return fmt.Errorf("restart deployment %s/%s: %w", namespace, name, err)
 	}
 	return nil
 }

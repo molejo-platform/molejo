@@ -73,18 +73,23 @@ func run() error {
 		}
 	}
 	var connector agent.Connector
+	var renewer agent.Renewer
 	if configuration.GRPCAddress != "" {
 		metadata := controlplane.AgentMetadata{
 			ClusterUID:        string(systemNamespace.UID),
 			KubernetesVersion: serverVersion.GitVersion,
-			Capabilities:      []string{"runtime.v1alpha1"},
+			Capabilities:      []string{"runtime.v1alpha1", "runtime-observation.v1alpha1", "certificate-renewal.v1alpha1"},
 		}
-		connector, err = controlplane.NewGRPCConnector(configuration.GRPCAddress, configuration.GRPCServerName, version, metadata, executor)
+		grpcConnector, connectorErr := controlplane.NewGRPCConnector(configuration.GRPCAddress, configuration.GRPCServerName, version, metadata, executor)
+		err = connectorErr
 		if err != nil {
 			return err
 		}
+		grpcConnector.ConfigureObservations(runtimeClient)
+		connector, renewer = grpcConnector, grpcConnector
 	}
 	runner := agent.NewRunner(store, enroller, connector, status)
+	runner.ConfigureRenewal(renewer, 24*time.Hour)
 	healthServer := &http.Server{Addr: configuration.HealthAddress, Handler: agent.HealthHandler(status), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 10 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 8 << 10}
 	slog.Info("cluster Agent started", "version", version, "health_address", healthServer.Addr)
 	return superviseLifecycle(ctx, runner, healthServer, status)

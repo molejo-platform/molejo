@@ -178,7 +178,13 @@ func newExecutorIntegrationFixture(t *testing.T) (*store.Store, int64, int64, st
 	if err = s.Pool.QueryRow(ctx, `SELECT id FROM users WHERE username=$1`, actorKey).Scan(&actorID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.Pool.Exec(ctx, `INSERT INTO agent_installations(public_id,name,status,cluster_uid,kubernetes_version,capabilities_json,created_by) VALUES($1,'test-agent','Active','cluster-test-uid','v1.36.3','["runtime.v1alpha1"]',$2)`, testAgentInstallationID, actorID); err != nil {
+	var clusterID int64
+	if err = s.Pool.QueryRow(ctx, `INSERT INTO agent_installations(public_id,name,status,cluster_uid,agent_version,kubernetes_version,capabilities_json,created_by)
+		VALUES($1,'test-agent','Active','cluster-test-uid','test','v1.36.3','["runtime.v1alpha1"]',$2) RETURNING id`, testAgentInstallationID, actorID).Scan(&clusterID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.Pool.Exec(ctx, `INSERT INTO workspace_clusters(workspace_id,installation_id,namespace_name,state,observed_generation)
+		VALUES($1,$2,$3,'Ready',1)`, workspaceID, clusterID, workspace.Namespace); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = s.Pool.Exec(ctx, `UPDATE workspaces SET bootstrap_state='Ready',updated_at=now() WHERE id=$1`, workspaceID); err != nil {

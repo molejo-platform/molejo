@@ -19,17 +19,19 @@ type rowQuerier interface {
 }
 
 const appEnvironmentColumns = `
-	ae.id,ae.public_id,ae.workspace_id,ae.project_id,p.public_id,ae.app_id,a.public_id,a.name,
+	ae.id,ae.public_id,ae.workspace_id,COALESCE(ae.cluster_id,0),COALESCE(ai.public_id,''),ae.project_id,p.public_id,ae.app_id,a.public_id,a.name,
 	ae.environment_id,e.public_id,e.name,ae.source_branch,ae.runtime_name,
 	ae.workload_kind,ae.configuration_json::text,ae.configuration_version,ae.version,
 	COALESCE(dd.public_id,''),COALESCE(cd.public_id,''),COALESCE(cr.public_id,''),
 	COALESCE(dd.configuration_version,0),COALESCE(cd.configuration_version,0),
+	ae.runtime_observed_generation,ae.runtime_observed_at,
 	ae.last_state,ae.last_message,ae.deletion_requested_at,ae.archived_at,ae.created_at,ae.updated_at`
 
 const appEnvironmentJoins = `
 	JOIN projects p ON p.id=ae.project_id
 	JOIN apps a ON a.id=ae.app_id
 	JOIN environments e ON e.id=ae.environment_id
+	LEFT JOIN agent_installations ai ON ai.id=ae.cluster_id
 	LEFT JOIN deployments dd ON dd.id=ae.desired_deployment_id
 	LEFT JOIN deployments cd ON cd.id=ae.current_deployment_id
 	LEFT JOIN releases cr ON cr.id=ae.current_release_id`
@@ -38,12 +40,12 @@ func scanAppEnvironment(row pgx.Row) (domain.AppEnvironment, error) {
 	var item domain.AppEnvironment
 	var configuration []byte
 	err := row.Scan(
-		&item.ID, &item.PublicID, &item.WorkspaceID, &item.ProjectID, &item.ProjectPublicID,
+		&item.ID, &item.PublicID, &item.WorkspaceID, &item.ClusterID, &item.ClusterPublicID, &item.ProjectID, &item.ProjectPublicID,
 		&item.AppID, &item.AppPublicID, &item.AppName, &item.EnvironmentID, &item.EnvironmentPublicID,
 		&item.EnvironmentName, &item.SourceBranch, &item.RuntimeName, &item.WorkloadKind, &configuration,
 		&item.ConfigurationVersion, &item.Version, &item.DesiredDeploymentPublicID,
 		&item.CurrentDeploymentPublicID, &item.CurrentReleasePublicID, &item.DesiredConfigurationVersion,
-		&item.CurrentConfigurationVersion, &item.State, &item.Message,
+		&item.CurrentConfigurationVersion, &item.RuntimeObservedGeneration, &item.RuntimeObservedAt, &item.State, &item.Message,
 		&item.DeletionRequestedAt, &item.ArchivedAt, &item.CreatedAt, &item.UpdatedAt,
 	)
 	if err != nil {
@@ -62,6 +64,20 @@ func (s *Store) CreateAppEnvironment(ctx context.Context, workspaceID, actorID i
 }
 
 func (s *Store) CreateAppEnvironmentWithWorkload(ctx context.Context, workspaceID, actorID int64, publicID, projectPublicID, appPublicID, environmentPublicID, branch string, workloadKind domain.WorkloadKind, configuration domain.RuntimeConfig, volumeRequest *domain.VolumeRequest) (domain.AppEnvironment, *domain.AppVolume, error) {
+	clusterID, err := activeAgentInstallationID(ctx, s.Pool)
+	if err != nil {
+		return domain.AppEnvironment{}, nil, err
+	}
+	var clusterPublicID string
+	if err = s.Pool.QueryRow(ctx, `SELECT public_id FROM agent_installations WHERE id=$1`, clusterID).Scan(&clusterPublicID); err != nil {
+		return domain.AppEnvironment{}, nil, err
+	}
+	return s.CreateAppEnvironmentOnCluster(ctx, workspaceID, actorID, publicID, projectPublicID, appPublicID, environmentPublicID, clusterPublicID, branch, workloadKind, configuration, volumeRequest)
+}
+
+// CreateAppEnvironmentOnCluster is the product path: the caller selects the
+// durable cluster explicitly instead of relying on a process-wide default.
+func (s *Store) CreateAppEnvironmentOnCluster(ctx context.Context, workspaceID, actorID int64, publicID, projectPublicID, appPublicID, environmentPublicID, clusterPublicID, branch string, workloadKind domain.WorkloadKind, configuration domain.RuntimeConfig, volumeRequest *domain.VolumeRequest) (domain.AppEnvironment, *domain.AppVolume, error) {
 	configuration = domain.NormalizeRuntimeConfig(configuration)
 	if err := domain.ValidateWorkloadConfiguration(workloadKind, configuration, volumeRequest); err != nil {
 		return domain.AppEnvironment{}, nil, err
@@ -76,16 +92,18 @@ func (s *Store) CreateAppEnvironmentWithWorkload(ctx context.Context, workspaceI
 	}
 	defer tx.Rollback(ctx)
 	query := `WITH inserted AS (
-		INSERT INTO app_environments(public_id,workspace_id,project_id,app_id,environment_id,source_branch,runtime_name,workload_kind,configuration_json)
-		SELECT $1,p.workspace_id,p.id,a.id,e.id,$6,$7,$8,$9
+		INSERT INTO app_environments(public_id,workspace_id,project_id,app_id,environment_id,cluster_id,source_branch,runtime_name,workload_kind,configuration_json)
+		SELECT $1,p.workspace_id,p.id,a.id,e.id,i.id,$6,$7,$8,$9
 		FROM projects p
 		JOIN apps a ON a.project_id=p.id
 		JOIN environments e ON e.project_id=p.id
+		JOIN agent_installations i ON i.public_id=$10 AND i.status='Active'
+		JOIN workspace_clusters wc ON wc.workspace_id=p.workspace_id AND wc.installation_id=i.id AND wc.state='Ready'
 		WHERE p.workspace_id=$2 AND p.public_id=$3 AND a.public_id=$4 AND e.public_id=$5
 		  AND p.archived_at IS NULL AND a.archived_at IS NULL AND e.archived_at IS NULL
 		RETURNING *
 	) SELECT ` + appEnvironmentColumns + ` FROM inserted ae ` + appEnvironmentJoins
-	item, err := scanAppEnvironment(tx.QueryRow(ctx, query, publicID, workspaceID, projectPublicID, appPublicID, environmentPublicID, branch, domain.RuntimeName(publicID), workloadKind, configurationJSON))
+	item, err := scanAppEnvironment(tx.QueryRow(ctx, query, publicID, workspaceID, projectPublicID, appPublicID, environmentPublicID, branch, domain.RuntimeName(publicID), workloadKind, configurationJSON, clusterPublicID))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.AppEnvironment{}, nil, ErrNotFound
 	}
@@ -658,17 +676,27 @@ func (s *Store) claimNext(ctx context.Context, worker, installationID string, le
 		return domain.Operation{}, domain.AppEnvironment{}, domain.Deployment{}, false, err
 	}
 	defer tx.Rollback(ctx)
+	if installationID != "" {
+		if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, "agent-dispatch:"+installationID); err != nil {
+			return domain.Operation{}, domain.AppEnvironment{}, domain.Deployment{}, false, err
+		}
+	}
 	var operation domain.Operation
 	err = tx.QueryRow(ctx, `WITH candidate AS (
 		SELECT o.id FROM operations o LEFT JOIN agent_installations ai ON ai.id=o.agent_installation_id
 		WHERE (o.status='Pending' OR (o.status='Running' AND o.lease_until < now())) AND o.next_attempt_at <= now()
 		AND ($3='' OR ai.public_id=$3)
+		AND NOT EXISTS (
+			SELECT 1 FROM operations active
+			WHERE active.agent_installation_id=o.agent_installation_id AND active.status='Running'
+			  AND active.lease_until >= now() AND active.id<>o.id
+		)
 		ORDER BY o.id FOR UPDATE OF o SKIP LOCKED LIMIT 1
 	) UPDATE operations o SET status='Running',attempts=attempts+1,started_at=COALESCE(started_at,now()),
 		lease_until=now()+$1::interval,worker_id=$2,fencing_token=fencing_token+1,updated_at=now()
 	FROM candidate c WHERE o.id=c.id
 	RETURNING o.id,o.public_id,o.workspace_id,COALESCE(o.agent_installation_id,0),COALESCE(o.app_environment_id,0),COALESCE(o.deployment_id,0),COALESCE(o.app_volume_id,0),o.requested_by_user_id,o.kind,o.status,o.desired_version,o.attempts,o.worker_id,o.fencing_token,o.lease_until,o.created_at,o.updated_at`, fmt.Sprintf("%f seconds", lease.Seconds()), worker, installationID).
-		Scan(&operation.ID, &operation.PublicID, &operation.WorkspaceID, &operation.AgentInstallationID, &operation.AppEnvironmentID, &operation.DeploymentID, &operation.AppVolumeID,
+		Scan(&operation.ID, &operation.PublicID, &operation.WorkspaceID, &operation.ClusterID, &operation.AppEnvironmentID, &operation.DeploymentID, &operation.AppVolumeID,
 			&operation.ActorID, &operation.Kind, &operation.Status, &operation.DesiredVersion, &operation.Attempts,
 			&operation.WorkerID, &operation.FencingToken, &operation.LeaseUntil, &operation.CreatedAt, &operation.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -678,9 +706,11 @@ func (s *Store) claimNext(ctx context.Context, worker, installationID string, le
 		return domain.Operation{}, domain.AppEnvironment{}, domain.Deployment{}, false, err
 	}
 	if operation.Kind == domain.OperationEnsureWorkspace {
-		if _, err = tx.Exec(ctx, `UPDATE workspaces SET bootstrap_state='Running',updated_at=now() WHERE id=$1`, operation.WorkspaceID); err != nil {
+		if _, err = tx.Exec(ctx, `UPDATE workspace_clusters SET state='Running',message='',updated_at=now()
+			WHERE workspace_id=$1 AND installation_id=$2`, operation.WorkspaceID, operation.ClusterID); err != nil {
 			return domain.Operation{}, domain.AppEnvironment{}, domain.Deployment{}, false, err
 		}
+		_, _ = tx.Exec(ctx, `UPDATE workspaces SET bootstrap_state='Running',updated_at=now() WHERE id=$1 AND bootstrap_state='Pending'`, operation.WorkspaceID)
 		return operation, domain.AppEnvironment{WorkspaceID: operation.WorkspaceID}, domain.Deployment{}, true, tx.Commit(ctx)
 	}
 	appEnvironment, err := appEnvironmentByID(ctx, tx, operation.AppEnvironmentID)
@@ -793,6 +823,10 @@ func (s *Store) CompleteWorkspace(ctx context.Context, operation domain.Operatio
 	if err = completeOperationLease(ctx, tx, operation); err != nil {
 		return err
 	}
+	if _, err = tx.Exec(ctx, `UPDATE workspace_clusters SET state='Ready',message='',observed_generation=GREATEST(observed_generation,1),updated_at=now()
+		WHERE workspace_id=$1 AND installation_id=$2`, operation.WorkspaceID, operation.ClusterID); err != nil {
+		return err
+	}
 	if _, err = tx.Exec(ctx, `UPDATE workspaces SET bootstrap_state='Ready',updated_at=now() WHERE id=$1`, operation.WorkspaceID); err != nil {
 		return err
 	}
@@ -830,7 +864,12 @@ func (s *Store) Fail(ctx context.Context, operation domain.Operation, code, mess
 	if status == domain.OperationFailed {
 		switch operation.Kind {
 		case domain.OperationEnsureWorkspace:
-			_, err = tx.Exec(ctx, `UPDATE workspaces SET bootstrap_state='Failed',updated_at=now() WHERE id=$1`, operation.WorkspaceID)
+			_, err = tx.Exec(ctx, `UPDATE workspace_clusters SET state='Failed',message=$1,updated_at=now()
+				WHERE workspace_id=$2 AND installation_id=$3`, message, operation.WorkspaceID, operation.ClusterID)
+			if err == nil {
+				_, err = tx.Exec(ctx, `UPDATE workspaces SET bootstrap_state=CASE WHEN EXISTS(
+					SELECT 1 FROM workspace_clusters WHERE workspace_id=$1 AND state='Ready') THEN 'Ready' ELSE 'Failed' END,updated_at=now() WHERE id=$1`, operation.WorkspaceID)
+			}
 		case domain.OperationApplyDeployment:
 			_, err = tx.Exec(ctx, `UPDATE deployments SET status='Degraded',message=$1,completed_at=now(),updated_at=now() WHERE id=$2`, message, operation.DeploymentID)
 			if err == nil {
@@ -857,8 +896,11 @@ func (s *Store) ReleaseClaims(ctx context.Context, workerID string) error {
 }
 
 func insertOperation(ctx context.Context, tx pgx.Tx, workspaceID, appEnvironmentID, deploymentID, actorID int64, kind string, idempotencyHash, payloadHash []byte, desiredVersion int64) (domain.Operation, error) {
-	agentInstallationID, err := activeAgentInstallationID(ctx, tx)
-	if err != nil {
+	var clusterID int64
+	if err := tx.QueryRow(ctx, `SELECT cluster_id FROM app_environments WHERE id=$1 AND cluster_id IS NOT NULL`, appEnvironmentID).Scan(&clusterID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Operation{}, ErrAgentUnavailable
+		}
 		return domain.Operation{}, err
 	}
 	for range 3 {
@@ -873,7 +915,7 @@ func insertOperation(ctx context.Context, tx pgx.Tx, workspaceID, appEnvironment
 		err = tx.QueryRow(ctx, `INSERT INTO operations(public_id,workspace_id,app_environment_id,deployment_id,requested_by_user_id,kind,status,idempotency_hash,payload_hash,desired_version,agent_installation_id)
 			VALUES($1,$2,NULLIF($3,0),NULLIF($4,0),$5,$6,'Pending',$7,$8,$9,$10)
 			RETURNING id,public_id,workspace_id,COALESCE(app_environment_id,0),COALESCE(deployment_id,0),requested_by_user_id,kind,status,desired_version,attempts,created_at,updated_at`,
-			publicID, workspaceID, appEnvironmentID, deploymentID, actorID, kind, idempotencyHash, payloadHash, desiredVersion, agentInstallationID).
+			publicID, workspaceID, appEnvironmentID, deploymentID, actorID, kind, idempotencyHash, payloadHash, desiredVersion, clusterID).
 			Scan(&item.ID, &item.PublicID, &item.WorkspaceID, &item.AppEnvironmentID, &item.DeploymentID,
 				&item.ActorID, &item.Kind, &item.Status, &item.DesiredVersion, &item.Attempts, &item.CreatedAt, &item.UpdatedAt)
 		if uniqueConstraint(err) == "operations_public_id_key" {

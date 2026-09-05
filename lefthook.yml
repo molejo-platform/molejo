@@ -9,7 +9,14 @@ pre-commit:
 
     - name: go-format
       glob: "*.go"
-      run: test -z "$(go tool -modfile=tools/go.mod gofumpt -l {staged_files})"
+      run: |
+        unformatted="$(
+          go tool -modfile=tools/go.mod gofumpt -l {staged_files} |
+            while IFS= read -r file; do
+              grep -q '^// Code generated .* DO NOT EDIT\.$' "$file" || printf '%s\n' "$file"
+            done
+        )"
+        test -z "$unformatted"
       fail_text: Go files are not formatted. Run `just fmt` and stage them again.
 
     - name: go-imports

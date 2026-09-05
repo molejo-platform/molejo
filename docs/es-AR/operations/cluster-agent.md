@@ -1,50 +1,63 @@
 # Operación del Cluster Agent
 
-El Cluster Agent es un conector saliente pre-alfa. Todavía no reconcilia
-workloads. El Operator puede instalarse primero; el Agent inicia como `Unpaired`,
-permanece ready y espera configuración sin abrir un puerto de administración
-entrante.
+El Cluster Agent es el único componente de Molejo que ejecuta la intención de
+runtime del control plane en Kubernetes. Inicia un stream saliente con mTLS y
+TLS 1.3; la API pública no recibe un kubeconfig y el cluster no expone un puerto
+de administración entrante.
 
-## Identidad de la instalación
+## Instalación y confianza
 
-`molejoctl control-plane install` crea `molejo-agent-ca`, con `ca.crt` y
-`ca.key`, y `molejo-agent-server-tls`, con `tls.crt` y `tls.key`, en
-`molejo-control-plane`. El certificado de servidor cubre
-`control-plane-api.molejo-control-plane.svc.cluster.local`. La clave de la CA se
-mantiene fuera de Git y se monta solamente en el pod de la API.
+Instalá Operator y Agent con `molejoctl cluster install` y ejecutá
+`molejoctl control-plane install`. Una instalación nueva crea raíces ECDSA P-256
+separadas: `molejo-agent-ca` firma identidades cliente de Agents y
+`molejo-control-plane-server-ca` firma la identidad interna de API/gRPC. Las
+instalaciones alpha anteriores conservan su CA única hasta actualizar el chart,
+por lo que otra ejecución idempotente no interrumpe el Console ni el Agent.
 
-El ServiceAccount del Agent solamente puede leer y actualizar
-`molejo-agent-identity` y `molejo-agent-enrollment` en `molejo-system`. No puede
-listar Secrets ni acceder a los CRDs de Molejo. La clave privada es generada por
-el Agent y nunca sale de `molejo-agent-identity`.
+El ServiceAccount del Agent tiene acceso limitado a sus dos Secrets de identidad
+y a los recursos Kubernetes requeridos por el contrato de runtime. No puede
+listar Secrets arbitrarios.
 
-## Instalación en k3s
+## Identidad, enrollment y rotación
 
-Instalá Operator y Agent con `molejoctl cluster install` y después ejecutá
-`molejoctl control-plane install`. El segundo comando crea o reutiliza la CA
-ECDSA P-256, el certificado interno, las credenciales de la base y la invitación
-inicial de enrollment. Instala PostgreSQL y la API, configura los endpoints
-internos HTTPS y gRPC y espera a que el Agent quede `Paired`. Las credenciales se
-guardan en Secrets y solamente se imprimen con
-`--show-generated-credentials`.
+Cluster es un registro durable; sus credenciales son registros hijos rotativos.
+Un administrador crea el Cluster con `POST /api/v1/admin/clusters` y transfiere
+el token de un solo uso, válido por diez minutos, a
+`molejo-agent-enrollment`. La clave privada nunca sale del cluster y repetir el
+mismo intento y CSR es idempotente.
 
-## Pairing
+Los certificados cliente duran siete días y se renuevan automáticamente en las
+últimas 24 horas. La renovación persiste una clave, un CSR y un ID de intento
+nuevos antes de la solicitud autenticada. La credencial anterior permanece
+válida durante una hora para tolerar interrupciones. Revocar el Cluster invalida
+todas sus credenciales y falla sus operaciones pendientes o arrendadas.
 
-El Agent inicial en el mismo cluster se vincula automáticamente. Para Agents
-adicionales, un administrador llama a `POST /api/v1/admin/agent-installations` y
-transfiere el token de un solo uso a `molejo-agent-enrollment` sin colocarlo en
-Git, historial del shell, logs o chat.
+Reemplazar la raíz de confianza no es una reparación automática. Conservá un
+backup de ambos Secrets de CA. Si se pierde la CA del servidor, el instalador se
+detiene y exige restaurarla en vez de desconectar silenciosamente a los Agents.
+Una ejecución idempotente de `molejoctl control-plane install` renueva el
+certificado del servidor cuando quedan menos de 30 días, conservando la misma CA.
 
-El Agent persiste clave, CSR e ID del intento antes del enrollment; un timeout o
-crash repite la misma operación. La respuesta se valida contra la clave local,
-Agent CA, vencimiento y URI de la instalación antes de persistirse. Después se
-elimina el token y el Agent abre el stream mTLS con TLS 1.3.
+## Protocolo y reconciliación
 
-`/healthz` representa la salud del proceso. `/readyz` permanece disponible en
-`Unconfigured`, `Unpaired`, `Enrolling`, `Connecting` y `Paired`; `/status`
-expone el estado sin material de identidad. `Failed` indica un Secret de
-identidad ilegible, no modificable, parcial, inválido o un certificado vencido.
+El hello negocia versión y capacidades. Cada comando contiene versión de schema,
+versión deseada, fencing token persistido y deadline. El Agent rechaza comandos
+incompatibles, inválidos o vencidos; el control plane acepta el resultado sólo
+mientras el lease y el fencing token en PostgreSQL sean válidos.
 
-Este corte no tiene rotación automática. Un certificado de siete días no debe
-tratarse como ciclo de vida de producción; repetir el pairing es la recuperación
-temporal pre-alfa.
+Los heartbeats pueden incluir un snapshot completo de observaciones de
+`AppDeployment` y `AppVolume` pertenecientes a Molejo, sin configuración ni
+valores de Secrets. El control plane persiste el estado observado y reutiliza
+`ApplyDeployment` cuando falta un objeto o su imagen difiere del estado deseado.
+El Platform Operator continúa siendo responsable de la convergencia Kubernetes.
+
+El destino es explícito mediante un vínculo Workspace-to-Cluster. Cada
+AppEnvironment conserva su Cluster, por lo que agregar otro no mueve workloads
+existentes ni depende de un Agent global predeterminado.
+
+## Salud y recuperación
+
+`/healthz`, `/readyz` y `/status` exponen salud y estado sin material de
+identidad. Interrupciones de red vuelven a un backoff limitado. Una renovación
+interrumpida reutiliza el intento persistido; un nuevo enrollment se reserva
+para identidades ausentes, vencidas o revocadas.

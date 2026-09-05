@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -28,13 +29,33 @@ func (e *Executor) Execute(parent context.Context, command *clusteragentv1alpha1
 	if e == nil || e.client == nil {
 		return failResult(result, "runtime_unconfigured", "Agent runtime is not configured", false)
 	}
+	if command.GetCommandId() == "" || command.GetOperationId() == "" || command.GetFencingToken() < 1 || command.GetDesiredVersion() < 1 {
+		return failResult(result, "command_invalid", "runtime command metadata is invalid", false)
+	}
+	if schema := command.GetPayloadSchemaVersion(); schema != "" && schema != "runtime.v1alpha1" {
+		return failResult(result, "command_incompatible", "runtime command schema is not supported", false)
+	}
+	deadline := time.Unix(command.GetDeadlineUnix(), 0)
+	if command.GetDeadlineUnix() <= 0 || !deadline.After(time.Now()) {
+		return failResult(result, "command_expired", "runtime command deadline has elapsed", true)
+	}
 	var payload runtimecontract.Payload
 	if err := json.Unmarshal(command.GetPayloadJson(), &payload); err != nil {
 		return failResult(result, "command_invalid", "runtime command payload is invalid", false)
 	}
-	ctx, cancel := context.WithTimeout(parent, e.timeout)
+	timeoutDeadline := time.Now().Add(e.timeout)
+	if deadline.Before(timeoutDeadline) {
+		timeoutDeadline = deadline
+	}
+	ctx, cancel := context.WithDeadline(parent, timeoutDeadline)
 	defer cancel()
 	if err := e.execute(ctx, command.GetKind(), payload, result); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return failResult(result, "runtime_timeout", "runtime command did not complete before its deadline", true)
+		}
+		if errors.Is(err, errUnsupportedOperation) {
+			return failResult(result, "command_unsupported", err.Error(), false)
+		}
 		return failResult(result, "runtime_error", err.Error(), true)
 	}
 	return result
@@ -124,9 +145,11 @@ func (e *Executor) execute(ctx context.Context, kind string, payload runtimecont
 		}
 		return nil
 	default:
-		return fmt.Errorf("unsupported runtime operation %q", kind)
+		return fmt.Errorf("%w: %q", errUnsupportedOperation, kind)
 	}
 }
+
+var errUnsupportedOperation = errors.New("unsupported runtime operation")
 
 func failResult(result *clusteragentv1alpha1.RuntimeResult, code, message string, retryable bool) *clusteragentv1alpha1.RuntimeResult {
 	result.State = runtimecontract.StateDegraded

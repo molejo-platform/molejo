@@ -57,6 +57,34 @@ func TestObservationDoesNotReportReadyForAStaleRelease(t *testing.T) {
 	}
 }
 
+func TestRuntimeObservationsIncludeOnlyControlPlaneOwnedObjects(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := platformv1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	owned := &platformv1alpha1.AppDeployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "ap-owned", Namespace: "workspace-one", Generation: 2, Annotations: map[string]string{controlPlaneOwnerAnnotation: "ap-owned"}},
+		Spec:       platformv1alpha1.AppDeploymentSpec{Image: "registry.example/app@sha256:" + strings.Repeat("a", 64)},
+		Status:     platformv1alpha1.AppDeploymentStatus{ObservedGeneration: 2, ObservedRelease: "registry.example/app@sha256:" + strings.Repeat("a", 64)},
+	}
+	unowned := owned.DeepCopy()
+	unowned.Name = "ap-unowned"
+	unowned.Annotations = nil
+	volume := &platformv1alpha1.AppVolume{
+		ObjectMeta: metav1.ObjectMeta{Name: "vol-owned", Namespace: "workspace-one", Annotations: map[string]string{controlPlaneOwnerAnnotation: "vol-owned"}},
+		Status:     platformv1alpha1.AppVolumeStatus{State: platformv1alpha1.VolumeStateReady, ObservedGeneration: 1, ObservedSizeGiB: 2},
+	}
+	kubernetesClient := &KubernetesClient{client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(owned, unowned, volume).Build(), applyTimeout: time.Second}
+
+	observations, err := kubernetesClient.RuntimeObservations(t.Context())
+	if err != nil || len(observations) != 2 {
+		t.Fatalf("observations=%+v err=%v", observations, err)
+	}
+	if observations[0].GetName() != "ap-owned" || observations[1].GetName() != "vol-owned" {
+		t.Fatalf("unexpected observations: %+v", observations)
+	}
+}
+
 func TestApplyDeploymentKeepsTheRuntimeNameStableAcrossIntentUpdates(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := corev1.AddToScheme(scheme); err != nil {

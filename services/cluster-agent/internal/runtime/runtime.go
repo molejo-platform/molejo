@@ -16,6 +16,7 @@ import (
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	clusteragentv1alpha1 "github.com/molejo-platform/molejo/contracts/molejo/clusteragent/v1alpha1"
 	platformv1alpha1 "github.com/molejo-platform/molejo/packages/kubernetes-api/apis/platform/v1alpha1"
 	"github.com/molejo-platform/molejo/packages/runtimecontract"
 )
@@ -374,6 +375,62 @@ func (k *KubernetesClient) ObserveDeployment(ctx context.Context, namespace, nam
 		return Observation{}, err
 	}
 	return observation(obj, obj.Spec.Image), nil
+}
+
+// RuntimeObservations returns a complete snapshot of Molejo-owned runtime
+// objects. It deliberately ignores resources that were not created through the
+// control plane, even when they use the same CRDs.
+func (k *KubernetesClient) RuntimeObservations(ctx context.Context) ([]*clusteragentv1alpha1.RuntimeObservation, error) {
+	observeCtx, cancel := context.WithTimeout(ctx, k.applyTimeout)
+	defer cancel()
+
+	var deployments platformv1alpha1.AppDeploymentList
+	if err := k.client.List(observeCtx, &deployments); err != nil {
+		return nil, fmt.Errorf("list AppDeployment observations: %w", err)
+	}
+	var volumes platformv1alpha1.AppVolumeList
+	if err := k.client.List(observeCtx, &volumes); err != nil {
+		return nil, fmt.Errorf("list AppVolume observations: %w", err)
+	}
+	if len(deployments.Items)+len(volumes.Items) > 1000 {
+		return nil, errors.New("runtime observation snapshot exceeds 1000 objects")
+	}
+
+	items := make([]*clusteragentv1alpha1.RuntimeObservation, 0, len(deployments.Items)+len(volumes.Items))
+	for index := range deployments.Items {
+		item := &deployments.Items[index]
+		if item.Annotations[controlPlaneOwnerAnnotation] != item.Name {
+			continue
+		}
+		observed := observation(item, item.Spec.Image)
+		items = append(items, &clusteragentv1alpha1.RuntimeObservation{
+			Kind: "AppDeployment", Namespace: item.Namespace, Name: item.Name,
+			State: observed.State, Message: observed.Message, Generation: observed.Generation,
+			ObservedGeneration: observed.ObservedGeneration, ObservedRelease: observed.ObservedRelease,
+		})
+	}
+	for index := range volumes.Items {
+		item := &volumes.Items[index]
+		if item.Annotations[controlPlaneOwnerAnnotation] != item.Name {
+			continue
+		}
+		state := string(item.Status.State)
+		if state == "" {
+			state = runtimecontract.VolumeStatePending
+		}
+		message := "persistent storage reconciliation pending"
+		for _, condition := range item.Status.Conditions {
+			if condition.Message != "" {
+				message = condition.Message
+			}
+		}
+		items = append(items, &clusteragentv1alpha1.RuntimeObservation{
+			Kind: "AppVolume", Namespace: item.Namespace, Name: item.Name, State: state,
+			Message: message, Generation: item.Generation, ObservedGeneration: item.Status.ObservedGeneration,
+			ObservedSizeGib: item.Status.ObservedSizeGiB,
+		})
+	}
+	return items, nil
 }
 
 func (k *KubernetesClient) DeleteDeployment(ctx context.Context, namespace, name string) error {

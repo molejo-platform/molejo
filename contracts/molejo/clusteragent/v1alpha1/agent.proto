@@ -6,6 +6,7 @@ option go_package = "github.com/molejo-platform/molejo/contracts/molejo/clustera
 
 service ClusterAgentService {
   rpc Connect(stream ConnectRequest) returns (stream ConnectResponse);
+  rpc RenewCertificate(RenewCertificateRequest) returns (RenewCertificateResponse);
 }
 
 message ConnectRequest {
@@ -30,17 +31,33 @@ message AgentHello {
   string cluster_uid = 3;
   string kubernetes_version = 4;
   repeated string capabilities = 5;
+  repeated string supported_protocol_versions = 6;
 }
 
 message ControlPlaneHello {
   string protocol_version = 1;
   int32 heartbeat_interval_seconds = 2;
   int64 server_time_unix = 3;
+  repeated string capabilities = 4;
 }
 
 message Heartbeat {
   uint64 sequence = 1;
   int64 sent_at_unix = 2;
+  repeated RuntimeObservation observations = 3;
+  bool observation_snapshot_complete = 4;
+}
+
+message RuntimeObservation {
+  string kind = 1;
+  string namespace = 2;
+  string name = 3;
+  string state = 4;
+  string message = 5;
+  int64 generation = 6;
+  int64 observed_generation = 7;
+  string observed_release = 8;
+  int64 observed_size_gib = 9;
 }
 
 message HeartbeatAck {
@@ -56,6 +73,7 @@ message RuntimeCommand {
   int64 deadline_unix = 5;
   string kind = 6;
   bytes payload_json = 7;
+  string payload_schema_version = 8;
 }
 
 message RuntimeResult {
@@ -69,4 +87,18 @@ message RuntimeResult {
   int64 observed_size_gib = 8;
   string error_code = 9;
   bool retryable = 10;
+}
+
+message RenewCertificateRequest {
+  string installation_id = 1;
+  string attempt_id = 2;
+  bytes csr_pem = 3;
+}
+
+message RenewCertificateResponse {
+  string installation_id = 1;
+  bytes certificate_pem = 2;
+  bytes ca_certificate_pem = 3;
+  int64 expires_at_unix = 4;
+  bytes server_ca_certificate_pem = 5;
 }

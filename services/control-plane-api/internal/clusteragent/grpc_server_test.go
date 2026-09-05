@@ -22,6 +22,7 @@ import (
 
 	clusteragentv1alpha1 "github.com/molejo-platform/molejo/contracts/molejo/clusteragent/v1alpha1"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/audit"
+	"github.com/molejo-platform/molejo/services/control-plane-api/internal/store"
 )
 
 type recordingAgentRegistry struct {
@@ -29,11 +30,27 @@ type recordingAgentRegistry struct {
 	touchedID   string
 	fingerprint []byte
 	activateErr error
+	observed    []store.RuntimeObservation
+	complete    bool
 }
 
-func (r *recordingAgentRegistry) ActivateAgent(_ context.Context, publicID string, fingerprint []byte, _, _ string, _ []string, _ time.Time, _ audit.Event) (bool, error) {
+func (r *recordingAgentRegistry) ActivateAgent(_ context.Context, publicID string, fingerprint []byte, _, _, _ string, _ []string, _ time.Time, _ audit.Event) (bool, error) {
 	r.activatedID, r.fingerprint = publicID, append([]byte(nil), fingerprint...)
 	return true, r.activateErr
+}
+
+func (r *recordingAgentRegistry) RenewAgent(_ context.Context, publicID string, _ []byte, _ string, _ []byte, _ time.Time, issue func(string) (store.AgentCertificate, error), _ audit.Event) (store.AgentCertificate, error) {
+	if r.activateErr != nil {
+		return store.AgentCertificate{}, r.activateErr
+	}
+	certificate, err := issue(publicID)
+	certificate.InstallationID = publicID
+	return certificate, err
+}
+
+func (r *recordingAgentRegistry) ReconcileAgentObservations(_ context.Context, _ string, observations []store.RuntimeObservation, complete bool) error {
+	r.observed, r.complete = observations, complete
+	return nil
 }
 
 func TestGRPCServiceRejectsMismatchedOrInactiveInstallation(t *testing.T) {
@@ -146,12 +163,50 @@ func TestGRPCServiceAuthenticatesHelloAndAcknowledgesHeartbeat(t *testing.T) {
 	if err != nil || hello.GetHello().GetHeartbeatIntervalSeconds() != 30 {
 		t.Fatalf("hello=%+v err=%v", hello, err)
 	}
-	if err = stream.Send(&clusteragentv1alpha1.ConnectRequest{Payload: &clusteragentv1alpha1.ConnectRequest_Heartbeat{Heartbeat: &clusteragentv1alpha1.Heartbeat{Sequence: 7, SentAtUnix: time.Now().Unix()}}}); err != nil {
+	if err = stream.Send(&clusteragentv1alpha1.ConnectRequest{Payload: &clusteragentv1alpha1.ConnectRequest_Heartbeat{Heartbeat: &clusteragentv1alpha1.Heartbeat{Sequence: 7, SentAtUnix: time.Now().Unix(), ObservationSnapshotComplete: true, Observations: []*clusteragentv1alpha1.RuntimeObservation{{Kind: "AppDeployment", Namespace: "workspace-one", Name: "ap-test", State: "Ready"}}}}}); err != nil {
 		t.Fatal(err)
 	}
 	ack, err := stream.Recv()
-	if err != nil || ack.GetHeartbeatAck().GetSequence() != 7 || registry.activatedID != installationID || registry.touchedID != installationID {
+	if err != nil || ack.GetHeartbeatAck().GetSequence() != 7 || registry.activatedID != installationID || registry.touchedID != installationID || !registry.complete || len(registry.observed) != 1 {
 		t.Fatalf("ack=%+v activated=%q touched=%q err=%v", ack, registry.activatedID, registry.touchedID, err)
+	}
+}
+
+func TestGRPCServiceRenewsAnAuthenticatedAgentCertificate(t *testing.T) {
+	const installationID = "cls-abcdefghijklmnopqrst"
+	caCertificate, caKey := testCA(t)
+	clientKey, clientCSR := testCSRAndKey(t)
+	signer, err := NewSigner(caCertificate, caKey, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	issued, err := signer.Sign(installationID, clientCSR, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	clientCertificate, err := tls.X509KeyPair(issued.CertificatePEM, clientKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	serverCertificate := testServerCertificate(t, caCertificate, caKey)
+	roots := x509.NewCertPool()
+	roots.AppendCertsFromPEM(caCertificate)
+	listener := bufconn.Listen(1 << 20)
+	grpcServer := grpc.NewServer(grpc.Creds(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS13, Certificates: []tls.Certificate{serverCertificate}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: roots})))
+	service := NewGRPCService(&recordingAgentRegistry{}, nil, time.Second)
+	service.ConfigureCertificateRenewal(signer, caCertificate)
+	clusteragentv1alpha1.RegisterClusterAgentServiceServer(grpcServer, service)
+	go func() { _ = grpcServer.Serve(listener) }()
+	t.Cleanup(grpcServer.Stop)
+	connection, err := grpc.NewClient("passthrough:///control-plane.test", grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) { return listener.Dial() }), grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS13, ServerName: "control-plane.test", RootCAs: roots, Certificates: []tls.Certificate{clientCertificate}})))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = connection.Close() })
+	_, renewalCSR := testCSRAndKey(t)
+	response, err := clusteragentv1alpha1.NewClusterAgentServiceClient(connection).RenewCertificate(t.Context(), &clusteragentv1alpha1.RenewCertificateRequest{InstallationId: installationID, AttemptId: "renewal-attempt", CsrPem: renewalCSR})
+	if err != nil || response.GetInstallationId() != installationID || len(response.GetCertificatePem()) == 0 || len(response.GetCaCertificatePem()) == 0 || len(response.GetServerCaCertificatePem()) == 0 {
+		t.Fatalf("renewal response=%+v err=%v", response, err)
 	}
 }
 

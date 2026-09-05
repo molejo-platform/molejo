@@ -60,10 +60,15 @@ func (e *HTTPEnroller) Enroll(ctx context.Context, enrollment agent.EnrollmentRe
 		InstallationID   string    `json:"installationId"`
 		CertificatePEM   string    `json:"certificatePem"`
 		CACertificatePEM string    `json:"caCertificatePem"`
+		ServerCAPEM      string    `json:"serverCaCertificatePem"`
 		ExpiresAt        time.Time `json:"expiresAt"`
 	}
 	if err = json.Unmarshal(responseBody, &output); err != nil || output.InstallationID == "" || output.CertificatePEM == "" || output.CACertificatePEM == "" || output.ExpiresAt.IsZero() {
 		return agentidentity.Certificate{}, errors.New("Agent enrollment response is invalid")
 	}
-	return agentidentity.Certificate{InstallationID: output.InstallationID, CertificatePEM: []byte(output.CertificatePEM), CACertificatePEM: []byte(output.CACertificatePEM), ExpiresAt: output.ExpiresAt}, nil
+	serverCA := output.ServerCAPEM
+	if serverCA == "" {
+		serverCA = output.CACertificatePEM
+	}
+	return agentidentity.Certificate{InstallationID: output.InstallationID, CertificatePEM: []byte(output.CertificatePEM), CACertificatePEM: []byte(output.CACertificatePEM), ServerCAPEM: []byte(serverCA), ExpiresAt: output.ExpiresAt}, nil
 }

@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc/credentials"
 
 	clusteragentv1alpha1 "github.com/molejo-platform/molejo/contracts/molejo/clusteragent/v1alpha1"
+	"github.com/molejo-platform/molejo/services/cluster-agent/internal/agent"
 	agentidentity "github.com/molejo-platform/molejo/services/cluster-agent/internal/identity"
 )
 
@@ -21,6 +22,7 @@ type GRPCConnector struct {
 	version         string
 	metadata        AgentMetadata
 	executor        RuntimeExecutor
+	observer        RuntimeObserver
 	responseTimeout time.Duration
 }
 
@@ -34,6 +36,10 @@ type RuntimeExecutor interface {
 	Execute(context.Context, *clusteragentv1alpha1.RuntimeCommand) *clusteragentv1alpha1.RuntimeResult
 }
 
+type RuntimeObserver interface {
+	RuntimeObservations(context.Context) ([]*clusteragentv1alpha1.RuntimeObservation, error)
+}
+
 const controlChannelResponseTimeout = 10 * time.Second
 
 func NewGRPCConnector(address, serverName, version string, metadata AgentMetadata, executor RuntimeExecutor) (*GRPCConnector, error) {
@@ -43,18 +49,14 @@ func NewGRPCConnector(address, serverName, version string, metadata AgentMetadat
 	return &GRPCConnector{address: address, serverName: serverName, version: version, metadata: metadata, executor: executor, responseTimeout: controlChannelResponseTimeout}, nil
 }
 
+func (c *GRPCConnector) ConfigureObservations(observer RuntimeObserver) {
+	c.observer = observer
+}
+
 func (c *GRPCConnector) Connect(ctx context.Context, identity agentidentity.StoredIdentity, paired func()) error {
-	clientCertificate, err := tls.X509KeyPair(identity.CertificatePEM, identity.PrivateKeyPEM)
+	connection, err := c.connection(identity)
 	if err != nil {
-		return errors.New("persisted Agent client identity is invalid")
-	}
-	roots := x509.NewCertPool()
-	if !roots.AppendCertsFromPEM(identity.CACertificatePEM) {
-		return errors.New("persisted Agent CA is invalid")
-	}
-	connection, err := grpc.NewClient(c.address, grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS13, ServerName: c.serverName, RootCAs: roots, Certificates: []tls.Certificate{clientCertificate}})))
-	if err != nil {
-		return fmt.Errorf("create Agent gRPC client: %w", err)
+		return err
 	}
 	defer connection.Close()
 	streamContext, cancel := context.WithCancel(ctx)
@@ -63,7 +65,49 @@ func (c *GRPCConnector) Connect(ctx context.Context, identity agentidentity.Stor
 	if err != nil {
 		return fmt.Errorf("open Agent gRPC stream: %w", err)
 	}
-	return runControlChannel(streamContext, stream, identity.InstallationID, c.version, c.metadata, c.executor, paired, c.responseTimeout)
+	return runControlChannel(streamContext, stream, identity.InstallationID, c.version, c.metadata, c.executor, c.observer, paired, c.responseTimeout)
+}
+
+func (c *GRPCConnector) Renew(ctx context.Context, identity agentidentity.StoredIdentity, request agent.RenewalRequest) (agentidentity.Certificate, error) {
+	connection, err := c.connection(identity)
+	if err != nil {
+		return agentidentity.Certificate{}, err
+	}
+	defer connection.Close()
+	response, err := clusteragentv1alpha1.NewClusterAgentServiceClient(connection).RenewCertificate(ctx, &clusteragentv1alpha1.RenewCertificateRequest{
+		InstallationId: identity.InstallationID, AttemptId: request.AttemptID, CsrPem: request.CSRPEM,
+	})
+	if err != nil {
+		return agentidentity.Certificate{}, fmt.Errorf("renew Agent certificate: %w", err)
+	}
+	if response.GetInstallationId() != identity.InstallationID || len(response.GetCertificatePem()) == 0 || len(response.GetCaCertificatePem()) == 0 || response.GetExpiresAtUnix() <= time.Now().Unix() {
+		return agentidentity.Certificate{}, errors.New("Agent renewal response is invalid")
+	}
+	serverCA := response.GetServerCaCertificatePem()
+	if len(serverCA) == 0 {
+		serverCA = identity.ServerCAPEM
+	}
+	return agentidentity.Certificate{InstallationID: response.GetInstallationId(), CertificatePEM: response.GetCertificatePem(), CACertificatePEM: response.GetCaCertificatePem(), ServerCAPEM: serverCA, ExpiresAt: time.Unix(response.GetExpiresAtUnix(), 0).UTC()}, nil
+}
+
+func (c *GRPCConnector) connection(identity agentidentity.StoredIdentity) (*grpc.ClientConn, error) {
+	clientCertificate, err := tls.X509KeyPair(identity.CertificatePEM, identity.PrivateKeyPEM)
+	if err != nil {
+		return nil, errors.New("persisted Agent client identity is invalid")
+	}
+	roots := x509.NewCertPool()
+	serverCA := identity.ServerCAPEM
+	if len(serverCA) == 0 {
+		serverCA = identity.CACertificatePEM
+	}
+	if !roots.AppendCertsFromPEM(serverCA) {
+		return nil, errors.New("persisted Agent CA is invalid")
+	}
+	connection, err := grpc.NewClient(c.address, grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS13, ServerName: c.serverName, RootCAs: roots, Certificates: []tls.Certificate{clientCertificate}})))
+	if err != nil {
+		return nil, fmt.Errorf("create Agent gRPC client: %w", err)
+	}
+	return connection, nil
 }
 
 type agentControlStream interface {
@@ -71,8 +115,8 @@ type agentControlStream interface {
 	Recv() (*clusteragentv1alpha1.ConnectResponse, error)
 }
 
-func runControlChannel(ctx context.Context, stream agentControlStream, installationID string, version string, metadata AgentMetadata, executor RuntimeExecutor, paired func(), responseTimeout time.Duration) error {
-	hello := &clusteragentv1alpha1.AgentHello{InstallationId: installationID, AgentVersion: version, ClusterUid: metadata.ClusterUID, KubernetesVersion: metadata.KubernetesVersion, Capabilities: metadata.Capabilities}
+func runControlChannel(ctx context.Context, stream agentControlStream, installationID string, version string, metadata AgentMetadata, executor RuntimeExecutor, observer RuntimeObserver, paired func(), responseTimeout time.Duration) error {
+	hello := &clusteragentv1alpha1.AgentHello{InstallationId: installationID, AgentVersion: version, ClusterUid: metadata.ClusterUID, KubernetesVersion: metadata.KubernetesVersion, Capabilities: metadata.Capabilities, SupportedProtocolVersions: []string{"v1alpha1"}}
 	if err := stream.Send(&clusteragentv1alpha1.ConnectRequest{Payload: &clusteragentv1alpha1.ConnectRequest_Hello{Hello: hello}}); err != nil {
 		return fmt.Errorf("send Agent hello: %w", err)
 	}
@@ -81,7 +125,7 @@ func runControlChannel(ctx context.Context, stream agentControlStream, installat
 		return fmt.Errorf("receive control plane hello: %w", err)
 	}
 	controlPlaneHello := response.GetHello()
-	if controlPlaneHello == nil || controlPlaneHello.GetProtocolVersion() != "v1alpha1" || controlPlaneHello.GetHeartbeatIntervalSeconds() < 1 || controlPlaneHello.GetHeartbeatIntervalSeconds() > 300 {
+	if controlPlaneHello == nil || controlPlaneHello.GetProtocolVersion() != "v1alpha1" || controlPlaneHello.GetHeartbeatIntervalSeconds() < 1 || controlPlaneHello.GetHeartbeatIntervalSeconds() > 300 || (len(controlPlaneHello.GetCapabilities()) > 0 && !hasCapability(controlPlaneHello.GetCapabilities(), "runtime.v1alpha1")) {
 		return errors.New("control plane hello is incompatible")
 	}
 	if paired != nil {
@@ -96,7 +140,17 @@ func runControlChannel(ctx context.Context, stream agentControlStream, installat
 			return ctx.Err()
 		case now := <-ticker.C:
 			sequence++
-			if err = stream.Send(&clusteragentv1alpha1.ConnectRequest{Payload: &clusteragentv1alpha1.ConnectRequest_Heartbeat{Heartbeat: &clusteragentv1alpha1.Heartbeat{Sequence: sequence, SentAtUnix: now.Unix()}}}); err != nil {
+			heartbeat := &clusteragentv1alpha1.Heartbeat{Sequence: sequence, SentAtUnix: now.Unix()}
+			if observer != nil {
+				observationContext, observationCancel := context.WithTimeout(ctx, responseTimeout)
+				heartbeat.Observations, err = observer.RuntimeObservations(observationContext)
+				observationCancel()
+				if err != nil {
+					return fmt.Errorf("collect runtime observations: %w", err)
+				}
+				heartbeat.ObservationSnapshotComplete = true
+			}
+			if err = stream.Send(&clusteragentv1alpha1.ConnectRequest{Payload: &clusteragentv1alpha1.ConnectRequest_Heartbeat{Heartbeat: heartbeat}}); err != nil {
 				return fmt.Errorf("send Agent heartbeat: %w", err)
 			}
 			ack, receiveErr := receiveControlResponse(ctx, responseTimeout, stream.Recv)
@@ -124,6 +178,15 @@ func runControlChannel(ctx context.Context, stream agentControlStream, installat
 			}
 		}
 	}
+}
+
+func hasCapability(values []string, expected string) bool {
+	for _, value := range values {
+		if value == expected {
+			return true
+		}
+	}
+	return false
 }
 
 type controlResponseResult struct {

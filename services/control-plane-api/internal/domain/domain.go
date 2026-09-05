@@ -326,6 +326,8 @@ type AppEnvironment struct {
 	ID                          int64         `json:"-"`
 	PublicID                    string        `json:"id"`
 	WorkspaceID                 int64         `json:"-"`
+	ClusterID                   int64         `json:"-"`
+	ClusterPublicID             string        `json:"clusterId"`
 	ProjectID                   int64         `json:"-"`
 	AppID                       int64         `json:"-"`
 	EnvironmentID               int64         `json:"-"`
@@ -345,6 +347,8 @@ type AppEnvironment struct {
 	CurrentReleasePublicID      string        `json:"currentReleaseId,omitempty"`
 	DesiredConfigurationVersion int64         `json:"desiredConfigurationVersion,omitempty"`
 	CurrentConfigurationVersion int64         `json:"currentConfigurationVersion,omitempty"`
+	RuntimeObservedGeneration   int64         `json:"runtimeObservedGeneration,omitempty"`
+	RuntimeObservedAt           *time.Time    `json:"runtimeObservedAt,omitempty"`
 	State                       string        `json:"state"`
 	Message                     string        `json:"message,omitempty"`
 	CreatedAt                   time.Time     `json:"createdAt"`
@@ -376,7 +380,7 @@ type Deployment struct {
 
 type Operation struct {
 	ID                     int64      `json:"-"`
-	AgentInstallationID    int64      `json:"-"`
+	ClusterID              int64      `json:"-"`
 	PublicID               string     `json:"id"`
 	AppEnvironmentID       int64      `json:"-"`
 	AppEnvironmentPublicID string     `json:"appEnvironmentId,omitempty"`

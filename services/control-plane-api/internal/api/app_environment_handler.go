@@ -12,6 +12,7 @@ import (
 
 type appEnvironmentInput struct {
 	EnvironmentID string                `json:"environmentId"`
+	ClusterID     string                `json:"clusterId"`
 	Branch        string                `json:"branch"`
 	WorkloadKind  domain.WorkloadKind   `json:"workloadKind"`
 	Volume        *domain.VolumeRequest `json:"volume"`
@@ -70,7 +71,12 @@ func (h *generatedHandler) CreateAppEnvironment(w http.ResponseWriter, r *http.R
 		if err != nil {
 			break
 		}
-		item, _, err := h.server.store.CreateAppEnvironmentWithWorkload(r.Context(), workspace.ID, actor.ID, publicID, string(projectID), string(appID), input.EnvironmentID, input.Branch, input.WorkloadKind, input.Configuration, input.Volume)
+		var item domain.AppEnvironment
+		if input.ClusterID == "" {
+			item, _, err = h.server.store.CreateAppEnvironmentWithWorkload(r.Context(), workspace.ID, actor.ID, publicID, string(projectID), string(appID), input.EnvironmentID, input.Branch, input.WorkloadKind, input.Configuration, input.Volume)
+		} else {
+			item, _, err = h.server.store.CreateAppEnvironmentOnCluster(r.Context(), workspace.ID, actor.ID, publicID, string(projectID), string(appID), input.EnvironmentID, input.ClusterID, input.Branch, input.WorkloadKind, input.Configuration, input.Volume)
+		}
 		if errors.Is(err, store.ErrPublicIDCollision) {
 			continue
 		}
@@ -335,6 +341,8 @@ func writeAppEnvironmentError(w http.ResponseWriter, r *http.Request, err error)
 		writeError(w, http.StatusBadRequest, "publication_domain_not_allowed", "the selected publication domain is not allowed for this workload", r)
 	case errors.Is(err, store.ErrPublicationHostnameReserved):
 		writeError(w, http.StatusBadRequest, "publication_hostname_reserved", "the requested public hostname is reserved", r)
+	case errors.Is(err, store.ErrAgentUnavailable):
+		writeError(w, http.StatusConflict, "cluster_unavailable", "the selected cluster is unavailable or the workspace is not ready on it", r)
 	default:
 		writeError(w, http.StatusInternalServerError, "storage_failed", "App Environment state could not be persisted", r)
 	}

@@ -255,8 +255,11 @@ func appVolumeByID(ctx context.Context, query rowQuerier, id int64) (domain.AppV
 }
 
 func insertVolumeOperation(ctx context.Context, tx pgx.Tx, workspaceID, appEnvironmentID, volumeID, actorID int64, kind string, idempotencyHash, payloadHash []byte, desiredVersion int64) (domain.Operation, error) {
-	agentInstallationID, err := activeAgentInstallationID(ctx, tx)
-	if err != nil {
+	var clusterID int64
+	if err := tx.QueryRow(ctx, `SELECT cluster_id FROM app_environments WHERE id=$1 AND cluster_id IS NOT NULL`, appEnvironmentID).Scan(&clusterID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Operation{}, ErrAgentUnavailable
+		}
 		return domain.Operation{}, err
 	}
 	for range 3 {
@@ -271,7 +274,7 @@ func insertVolumeOperation(ctx context.Context, tx pgx.Tx, workspaceID, appEnvir
 		err = tx.QueryRow(ctx, `INSERT INTO operations(public_id,workspace_id,app_environment_id,app_volume_id,requested_by_user_id,kind,status,idempotency_hash,payload_hash,desired_version,agent_installation_id)
 			VALUES($1,$2,$3,$4,$5,$6,'Pending',$7,$8,$9,$10)
 			RETURNING id,public_id,workspace_id,app_environment_id,app_volume_id,requested_by_user_id,kind,status,desired_version,attempts,created_at,updated_at`,
-			publicID, workspaceID, appEnvironmentID, volumeID, actorID, kind, idempotencyHash, payloadHash, desiredVersion, agentInstallationID).
+			publicID, workspaceID, appEnvironmentID, volumeID, actorID, kind, idempotencyHash, payloadHash, desiredVersion, clusterID).
 			Scan(&item.ID, &item.PublicID, &item.WorkspaceID, &item.AppEnvironmentID, &item.AppVolumeID, &item.ActorID, &item.Kind, &item.Status, &item.DesiredVersion, &item.Attempts, &item.CreatedAt, &item.UpdatedAt)
 		if uniqueConstraint(err) == "operations_public_id_key" {
 			if _, rollbackErr := tx.Exec(ctx, `ROLLBACK TO SAVEPOINT volume_operation_public_id`); rollbackErr != nil {

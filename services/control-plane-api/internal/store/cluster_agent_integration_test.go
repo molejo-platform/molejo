@@ -129,37 +129,90 @@ func TestAgentActivationRejectsUnknownRevokedAndExpiredIdentities(t *testing.T) 
 	now := time.Now().UTC().Truncate(time.Second)
 	fingerprint := []byte("fingerprint")
 
-	if _, err := storage.ActivateAgent(t.Context(), newID(t, "agi"), fingerprint, "cluster-test-uid", "v1.36.3", []string{"runtime.v1alpha1"}, now, audit.Event{}); !errors.Is(err, ErrAgentIdentityMismatch) {
+	if _, err := storage.ActivateAgent(t.Context(), newID(t, "agi"), fingerprint, "cluster-test-uid", "test", "v1.36.3", []string{"runtime.v1alpha1"}, now, audit.Event{}); !errors.Is(err, ErrAgentIdentityMismatch) {
 		t.Fatalf("unknown installation error=%v", err)
 	}
 
-	createEnrolled := func(name string, notAfter time.Time) string {
+	createEnrolled := func(name string, notAfter time.Time) (string, []byte) {
 		t.Helper()
 		tokenHash := auth.HashToken(newID(t, "tok"))
 		installation, err := storage.CreateAgentInstallation(t.Context(), newID(t, "agi"), name, tokenHash, now.Add(time.Minute), audit.Event{PublicID: newID(t, "aud"), ActorUserID: &actorID, Action: "installation.agent.create", TargetType: "AgentInstallation", Outcome: audit.Succeeded})
 		if err != nil {
 			t.Fatal(err)
 		}
-		certificate := AgentCertificate{CertificatePEM: []byte("certificate"), CACertificatePEM: []byte("ca"), Serial: newID(t, "ser"), Fingerprint: fingerprint, NotAfter: notAfter}
+		credentialFingerprint := []byte("fingerprint-" + name)
+		certificate := AgentCertificate{CertificatePEM: []byte("certificate"), CACertificatePEM: []byte("ca"), Serial: newID(t, "ser"), Fingerprint: credentialFingerprint, NotAfter: notAfter}
 		if _, err = storage.EnrollAgent(t.Context(), tokenHash, newID(t, "ena"), []byte(name), now, func(string) (AgentCertificate, error) { return certificate, nil }, audit.Event{PublicID: newID(t, "aud"), Action: "installation.agent.enroll", TargetType: "AgentInstallation", Outcome: audit.Succeeded}); err != nil {
 			t.Fatal(err)
 		}
-		return installation.PublicID
+		return installation.PublicID, credentialFingerprint
 	}
 
-	revokedID := createEnrolled("Revoked", now.Add(time.Hour))
+	revokedID, revokedFingerprint := createEnrolled("Revoked", now.Add(time.Hour))
 	if _, err := storage.Pool.Exec(t.Context(), `UPDATE agent_installations SET status='Revoked' WHERE public_id=$1`, revokedID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := storage.ActivateAgent(t.Context(), revokedID, fingerprint, "cluster-test-uid", "v1.36.3", []string{"runtime.v1alpha1"}, now, audit.Event{}); !errors.Is(err, ErrAgentIdentityMismatch) {
+	if _, err := storage.ActivateAgent(t.Context(), revokedID, revokedFingerprint, "cluster-test-uid", "test", "v1.36.3", []string{"runtime.v1alpha1"}, now, audit.Event{}); !errors.Is(err, ErrAgentIdentityMismatch) {
 		t.Fatalf("revoked installation error=%v", err)
 	}
 
-	expiredID := createEnrolled("Expired", now.Add(time.Hour))
-	if _, err := storage.Pool.Exec(t.Context(), `UPDATE agent_installations SET certificate_not_after=$2 WHERE public_id=$1`, expiredID, now.Add(-time.Second)); err != nil {
+	expiredID, expiredFingerprint := createEnrolled("Expired", now.Add(time.Hour))
+	if _, err := storage.Pool.Exec(t.Context(), `UPDATE agent_credentials SET certificate_not_after=$2
+		WHERE installation_id=(SELECT id FROM agent_installations WHERE public_id=$1)`, expiredID, now.Add(-time.Second)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := storage.ActivateAgent(t.Context(), expiredID, fingerprint, "cluster-test-uid", "v1.36.3", []string{"runtime.v1alpha1"}, now, audit.Event{}); !errors.Is(err, ErrAgentIdentityMismatch) {
+	if _, err := storage.ActivateAgent(t.Context(), expiredID, expiredFingerprint, "cluster-test-uid", "test", "v1.36.3", []string{"runtime.v1alpha1"}, now, audit.Event{}); !errors.Is(err, ErrAgentIdentityMismatch) {
 		t.Fatalf("expired certificate error=%v", err)
+	}
+}
+
+func TestAgentCredentialRenewalIsIdempotentAndRevocable(t *testing.T) {
+	storage, _, actorID := newIntegrationFixture(t)
+	now := time.Now().UTC().Truncate(time.Second)
+	tokenHash := auth.HashToken("renewal-token")
+	installation, err := storage.CreateAgentInstallation(t.Context(), newID(t, "cls"), "Renewal cluster", tokenHash, now.Add(time.Minute), audit.Event{PublicID: newID(t, "aud"), ActorUserID: &actorID, Action: "cluster.create", TargetType: "Cluster", Outcome: audit.Succeeded})
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldFingerprint := []byte("old-fingerprint")
+	oldCertificate := AgentCertificate{CertificatePEM: []byte("old-certificate"), CACertificatePEM: []byte("identity-ca"), ServerCAPEM: []byte("server-ca"), Serial: "old-serial", Fingerprint: oldFingerprint, NotAfter: now.Add(48 * time.Hour)}
+	if _, err = storage.EnrollAgent(t.Context(), tokenHash, "enrollment-attempt", []byte("enrollment-csr"), now, func(string) (AgentCertificate, error) { return oldCertificate, nil }, audit.Event{PublicID: newID(t, "aud"), Action: "cluster.enroll", TargetType: "Cluster", Outcome: audit.Succeeded}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = storage.ActivateAgent(t.Context(), installation.PublicID, oldFingerprint, "cluster-uid", "v0.1.0", "v1.36.3", []string{"runtime.v1alpha1"}, now, audit.Event{PublicID: newID(t, "aud"), Action: "cluster.pair", TargetType: "Cluster", Outcome: audit.Succeeded}); err != nil {
+		t.Fatal(err)
+	}
+
+	newFingerprint := []byte("new-fingerprint")
+	newCertificate := AgentCertificate{CertificatePEM: []byte("new-certificate"), CACertificatePEM: []byte("identity-ca"), ServerCAPEM: []byte("server-ca"), Serial: "new-serial", Fingerprint: newFingerprint, NotAfter: now.Add(7 * 24 * time.Hour)}
+	var signs atomic.Int32
+	renew := func() (AgentCertificate, error) {
+		return storage.RenewAgent(t.Context(), installation.PublicID, oldFingerprint, "renewal-attempt", []byte("renewal-csr"), now, func(string) (AgentCertificate, error) {
+			signs.Add(1)
+			return newCertificate, nil
+		}, audit.Event{PublicID: newID(t, "aud"), Action: "cluster.credential.renew", TargetType: "Cluster", Outcome: audit.Succeeded})
+	}
+	first, err := renew()
+	if err != nil {
+		t.Fatal(err)
+	}
+	replayed, err := renew()
+	if err != nil || signs.Load() != 1 || !bytes.Equal(first.CertificatePEM, replayed.CertificatePEM) {
+		t.Fatalf("renewal replay=%+v signs=%d err=%v", replayed, signs.Load(), err)
+	}
+	if err = storage.TouchAgent(t.Context(), installation.PublicID, oldFingerprint, now.Add(30*time.Minute)); err != nil {
+		t.Fatalf("old credential should remain valid during overlap: %v", err)
+	}
+	if err = storage.TouchAgent(t.Context(), installation.PublicID, oldFingerprint, now.Add(2*time.Hour)); !errors.Is(err, ErrAgentIdentityMismatch) {
+		t.Fatalf("old credential after overlap error=%v", err)
+	}
+	if err = storage.TouchAgent(t.Context(), installation.PublicID, newFingerprint, now.Add(2*time.Hour)); err != nil {
+		t.Fatalf("new credential was rejected: %v", err)
+	}
+	if err = storage.RevokeCluster(t.Context(), installation.PublicID, "operator requested revocation", now.Add(3*time.Hour), audit.Event{PublicID: newID(t, "aud"), ActorUserID: &actorID, Action: "cluster.revoke", TargetType: "Cluster", Outcome: audit.Succeeded}); err != nil {
+		t.Fatal(err)
+	}
+	if err = storage.TouchAgent(t.Context(), installation.PublicID, newFingerprint, now.Add(3*time.Hour)); !errors.Is(err, ErrAgentIdentityMismatch) {
+		t.Fatalf("revoked credential error=%v", err)
 	}
 }

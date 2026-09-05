@@ -634,6 +634,19 @@ func newIntegrationFixture(t *testing.T) (*Store, int64, int64) {
 	if err = storage.Pool.QueryRow(ctx, `SELECT id FROM users WHERE username=$1`, actorKey).Scan(&actorID); err != nil {
 		t.Fatal(err)
 	}
+	clusterPublicID := newID(t, "cls")
+	var clusterID int64
+	if err = storage.Pool.QueryRow(ctx, `INSERT INTO agent_installations(public_id,name,status,cluster_uid,agent_version,kubernetes_version,capabilities_json,created_by,last_seen_at)
+		VALUES($1,'Integration cluster','Active','integration-cluster','test','v1.36.3','["runtime.v1alpha1"]'::jsonb,$2,now()) RETURNING id`, clusterPublicID, actorID).Scan(&clusterID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = storage.Pool.Exec(ctx, `UPDATE operations SET agent_installation_id=$1 WHERE workspace_id=$2 AND agent_installation_id IS NULL`, clusterID, workspaceID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = storage.Pool.Exec(ctx, `INSERT INTO workspace_clusters(workspace_id,installation_id,namespace_name,state,observed_generation)
+		VALUES($1,$2,$3,'Ready',1)`, workspaceID, clusterID, workspace.Namespace); err != nil {
+		t.Fatal(err)
+	}
 	if _, err = storage.Pool.Exec(ctx, `UPDATE workspaces SET bootstrap_state='Ready'`); err != nil {
 		t.Fatal(err)
 	}

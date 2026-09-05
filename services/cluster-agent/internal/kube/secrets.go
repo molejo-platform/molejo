@@ -40,6 +40,11 @@ func (s *SecretStore) LoadIdentity(ctx context.Context) (Identity, error) {
 	value := Identity{
 		AttemptID: string(secret.Data["enrollment-attempt-id"]), PrivateKeyPEM: append([]byte(nil), secret.Data["private-key.pem"]...), CSRPEM: append([]byte(nil), secret.Data["csr.pem"]...),
 		InstallationID: string(secret.Data["installation-id"]), CertificatePEM: append([]byte(nil), secret.Data["tls.crt"]...), CACertificatePEM: append([]byte(nil), secret.Data["ca.crt"]...),
+		ServerCAPEM: append([]byte(nil), secret.Data["server-ca.crt"]...), RenewalAttemptID: string(secret.Data["renewal-attempt-id"]),
+		RenewalKeyPEM: append([]byte(nil), secret.Data["renewal-private-key.pem"]...), RenewalCSRPEM: append([]byte(nil), secret.Data["renewal-csr.pem"]...),
+	}
+	if len(value.ServerCAPEM) == 0 {
+		value.ServerCAPEM = append([]byte(nil), value.CACertificatePEM...)
 	}
 	if raw := strings.TrimSpace(string(secret.Data["certificate-not-after"])); raw != "" {
 		value.ExpiresAt, err = time.Parse(time.RFC3339Nano, raw)
@@ -67,9 +72,36 @@ func (s *SecretStore) SaveCertificate(ctx context.Context, value Certificate) er
 	}
 	return s.update(ctx, s.identityName, func(secret *corev1.Secret) {
 		secret.Data["installation-id"] = []byte(value.InstallationID)
+		if len(value.PrivateKeyPEM) != 0 {
+			secret.Data["private-key.pem"] = append([]byte(nil), value.PrivateKeyPEM...)
+		}
 		secret.Data["tls.crt"] = append([]byte(nil), value.CertificatePEM...)
 		secret.Data["ca.crt"] = append([]byte(nil), value.CACertificatePEM...)
+		serverCA := value.ServerCAPEM
+		if len(serverCA) == 0 {
+			serverCA = value.CACertificatePEM
+		}
+		secret.Data["server-ca.crt"] = append([]byte(nil), serverCA...)
 		secret.Data["certificate-not-after"] = []byte(value.ExpiresAt.UTC().Format(time.RFC3339Nano))
+	})
+}
+
+func (s *SecretStore) SaveRenewalIdentity(ctx context.Context, value Identity) error {
+	if value.RenewalAttemptID == "" || len(value.RenewalKeyPEM) == 0 || len(value.RenewalCSRPEM) == 0 {
+		return errors.New("Agent renewal identity is incomplete")
+	}
+	return s.update(ctx, s.identityName, func(secret *corev1.Secret) {
+		secret.Data["renewal-attempt-id"] = []byte(value.RenewalAttemptID)
+		secret.Data["renewal-private-key.pem"] = append([]byte(nil), value.RenewalKeyPEM...)
+		secret.Data["renewal-csr.pem"] = append([]byte(nil), value.RenewalCSRPEM...)
+	})
+}
+
+func (s *SecretStore) ClearRenewalIdentity(ctx context.Context) error {
+	return s.update(ctx, s.identityName, func(secret *corev1.Secret) {
+		delete(secret.Data, "renewal-attempt-id")
+		delete(secret.Data, "renewal-private-key.pem")
+		delete(secret.Data, "renewal-csr.pem")
 	})
 }
 
