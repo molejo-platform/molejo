@@ -92,8 +92,10 @@ CREATE TABLE service_account_grants (
 );
 
 ALTER TABLE audit_events ADD COLUMN actor_principal_id BIGINT REFERENCES principals(id);
+ALTER TABLE audit_events DISABLE TRIGGER audit_events_immutable;
 UPDATE audit_events ae SET actor_principal_id=u.principal_id
 FROM users u WHERE u.id=ae.actor_user_id;
+ALTER TABLE audit_events ENABLE TRIGGER audit_events_immutable;
 CREATE INDEX audit_events_principal_cursor ON audit_events(actor_principal_id,id DESC);
 
 ALTER TABLE deployments

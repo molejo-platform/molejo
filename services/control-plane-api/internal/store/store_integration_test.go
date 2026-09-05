@@ -75,6 +75,64 @@ func TestParameterHardeningMigrationBackfillsArchivedParameters(t *testing.T) {
 	}
 }
 
+func TestReleaseAutomationMigrationBackfillsImmutableAuditPrincipals(t *testing.T) {
+	dsn := strings.TrimSpace(os.Getenv("MOLEJO_TEST_DATABASE_URL"))
+	if dsn == "" {
+		t.Skip("set MOLEJO_TEST_DATABASE_URL to run PostgreSQL integration tests")
+	}
+	ctx := context.Background()
+	isolatedDSN, cleanup, err := testsupport.IsolatedPostgres(ctx, dsn, "release_automation_upgrade")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := cleanup(context.Background()); err != nil {
+			t.Errorf("drop integration schema: %v", err)
+		}
+	})
+	db, err := sql.Open("pgx", isolatedDSN)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	migrationFiles, err := fs.Sub(migrationFS, "migrations")
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider, err := goose.NewProvider(goose.DialectPostgres, db, migrationFiles)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = provider.UpTo(ctx, 25); err != nil {
+		t.Fatal(err)
+	}
+	userPublicID := newID(t, "usr")
+	var userID int64
+	if err = db.QueryRowContext(ctx, `INSERT INTO users(public_id,username,username_key,display_name,status)
+		VALUES($1,'migration-owner','migration-owner','Migration owner','Active') RETURNING id`, userPublicID).Scan(&userID); err != nil {
+		t.Fatal(err)
+	}
+	auditPublicID := newID(t, "aud")
+	if _, err = db.ExecContext(ctx, `INSERT INTO audit_events(public_id,actor_user_id,action,target_type,outcome)
+		VALUES($1,$2,'migration.test','Migration','Succeeded')`, auditPublicID, userID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = provider.UpTo(ctx, 26); err != nil {
+		t.Fatal(err)
+	}
+	var actorPublicID string
+	if err = db.QueryRowContext(ctx, `SELECT p.public_id FROM audit_events ae
+		JOIN principals p ON p.id=ae.actor_principal_id WHERE ae.public_id=$1`, auditPublicID).Scan(&actorPublicID); err != nil {
+		t.Fatal(err)
+	}
+	if actorPublicID != userPublicID {
+		t.Fatalf("audit principal = %q, want %q", actorPublicID, userPublicID)
+	}
+	if _, err = db.ExecContext(ctx, `UPDATE audit_events SET reason='tampered' WHERE public_id=$1`, auditPublicID); err == nil {
+		t.Fatal("audit immutability trigger was not restored")
+	}
+}
+
 func TestSchemaReadyAcceptsTheAppEnvironmentMigration(t *testing.T) {
 	storage, _, _ := newIntegrationFixture(t)
 	if err := storage.SchemaReady(context.Background()); err != nil {
