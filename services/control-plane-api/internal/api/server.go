@@ -539,6 +539,7 @@ func (s *Server) auditEvent(r *http.Request, action, targetType, targetPublicID,
 func (s *Server) recordAudit(r *http.Request, event audit.Event) error {
 	base := s.auditEvent(r, event.Action, event.TargetType, event.TargetPublicID, event.Outcome)
 	base.ActorUserID = event.ActorUserID
+	base.ActorPrincipalID = event.ActorPrincipalID
 	base.SessionID = event.SessionID
 	base.WorkspaceID = event.WorkspaceID
 	base.Reason = event.Reason

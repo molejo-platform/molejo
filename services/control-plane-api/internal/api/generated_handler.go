@@ -2,10 +2,12 @@ package api
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/api/generated"
+	"github.com/molejo-platform/molejo/services/control-plane-api/internal/auth"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/authorization"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/domain"
 )
@@ -73,6 +75,25 @@ func (h *generatedHandler) GetCurrentWorkspace(w http.ResponseWriter, r *http.Re
 }
 
 func (h *generatedHandler) GetOperation(w http.ResponseWriter, r *http.Request, operationID string) {
+	if strings.TrimSpace(r.Header.Get("Authorization")) != "" {
+		token, valid := automationBearerToken(r.Header.Get("Authorization"))
+		if !valid {
+			writeError(w, http.StatusUnauthorized, "automation_unauthenticated", "valid service account bearer token is required", r)
+			return
+		}
+		actor, err := h.server.store.AuthenticateServiceAccount(r.Context(), auth.HashToken(token))
+		if err != nil {
+			writeError(w, http.StatusUnauthorized, "automation_unauthenticated", "valid service account bearer token is required", r)
+			return
+		}
+		operation, err := h.server.store.GetOperationForPrincipal(r.Context(), actor.ID, operationID)
+		if err != nil {
+			writeError(w, http.StatusNotFound, "operation_not_found", "operation was not found", r)
+			return
+		}
+		writeJSON(w, http.StatusOK, operation)
+		return
+	}
 	userID, _, ok := h.server.session(r)
 	if !ok {
 		writeError(w, http.StatusUnauthorized, "unauthenticated", "authentication required", r)

@@ -77,17 +77,26 @@ type Release struct {
 	AppEnvironmentID       int64      `json:"-"`
 	ProjectPublicID        string     `json:"projectId"`
 	AppPublicID            string     `json:"appId"`
-	AppEnvironmentPublicID string     `json:"appEnvironmentId"`
-	BuildPublicID          string     `json:"buildId"`
-	SourceBranch           string     `json:"branch"`
-	CommitSHA              string     `json:"commitSha"`
+	AppEnvironmentPublicID string     `json:"appEnvironmentId,omitempty"`
+	BuildPublicID          string     `json:"buildId,omitempty"`
+	OriginKind             string     `json:"origin"`
+	SourceProvider         string     `json:"sourceProvider"`
+	SourceRepository       string     `json:"sourceRepository"`
+	SourceRevision         string     `json:"sourceRevision"`
+	SourceRef              string     `json:"sourceRef,omitempty"`
+	ProducerKind           string     `json:"producer"`
+	ProducerExternalID     string     `json:"producerExternalId,omitempty"`
+	ProducerURL            string     `json:"producerUrl,omitempty"`
+	CreatedBy              string     `json:"createdBy"`
+	SourceBranch           string     `json:"branch,omitempty"`
+	CommitSHA              string     `json:"commitSha,omitempty"`
 	CommitTitle            string     `json:"commitTitle"`
 	CommitAuthorName       string     `json:"commitAuthorName"`
 	CommitAuthorLogin      string     `json:"commitAuthorLogin"`
 	CommittedAt            *time.Time `json:"committedAt,omitempty"`
-	TriggerType            string     `json:"trigger"`
+	TriggerType            string     `json:"trigger,omitempty"`
 	Image                  string     `json:"image"`
-	Platform               string     `json:"platform"`
+	Platform               string     `json:"platform,omitempty"`
 	AvailabilityStatus     string     `json:"availabilityStatus"`
 	ExpiredAt              *time.Time `json:"expiredAt,omitempty"`
 	CreatedAt              time.Time  `json:"createdAt"`

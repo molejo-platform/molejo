@@ -232,7 +232,7 @@ func sanitizeRuntimeMessage(value string) string {
 func runtimeObservationKey(namespace, name string) string { return namespace + "/" + name }
 
 func deploymentDriftCandidates(ctx context.Context, tx pgx.Tx, clusterID int64) ([]observedRuntimeTarget, error) {
-	rows, err := tx.Query(ctx, `SELECT ae.workspace_id,ae.id,ae.public_id,d.id,d.requested_by_user_id,ae.version,
+	rows, err := tx.Query(ctx, `SELECT ae.workspace_id,ae.id,ae.public_id,d.id,d.requested_by_principal_id,ae.version,
 		ae.runtime_desired_version,COALESCE(ae.runtime_spec_hash,''),w.namespace_name,ae.runtime_name
 		FROM app_environments ae
 		JOIN workspaces w ON w.id=ae.workspace_id
@@ -300,7 +300,7 @@ func enqueueRuntimeReconciliation(ctx context.Context, tx pgx.Tx, target observe
 	}
 	key := []byte(fmt.Sprintf("runtime-reconcile:%d:%d:%d", target.environmentID, target.deploymentID, generation))
 	hash := domain.SHA256(key)
-	_, err = tx.Exec(ctx, `INSERT INTO operations(public_id,workspace_id,app_environment_id,deployment_id,requested_by_user_id,kind,status,idempotency_hash,payload_hash,desired_version,agent_installation_id)
+	_, err = tx.Exec(ctx, `INSERT INTO operations(public_id,workspace_id,app_environment_id,deployment_id,requested_by_principal_id,kind,status,idempotency_hash,payload_hash,desired_version,agent_installation_id)
 		SELECT $1,$2,$3,$4,$5,'ApplyDeployment','Pending',$6,$6,$7,cluster_id FROM app_environments WHERE id=$3`,
 		operationPublicID, target.workspaceID, target.environmentID, target.deploymentID, target.actorID, hash, target.desiredVersion)
 	if err != nil {
@@ -314,7 +314,8 @@ func enqueueRuntimeReconciliation(ctx context.Context, tx pgx.Tx, target observe
 	return insertAudit(ctx, tx, audit.Event{
 		PublicID: auditID, WorkspaceID: &workspaceID, Action: "runtime.reconcile.queue", TargetType: "AppEnvironment",
 		TargetPublicID: target.environmentPublicID, Outcome: audit.Succeeded, Reason: message,
-		Metadata: map[string]any{"operationId": operationPublicID, "reconciliationGeneration": generation},
+		ActorPrincipalID: &target.actorID,
+		Metadata:         map[string]any{"operationId": operationPublicID, "reconciliationGeneration": generation},
 	})
 }
 

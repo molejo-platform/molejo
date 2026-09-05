@@ -66,6 +66,8 @@ type AuditEventView struct {
 	PublicID       string         `json:"id"`
 	OccurredAt     time.Time      `json:"occurredAt"`
 	ActorUserID    string         `json:"actorUserId,omitempty"`
+	ActorID        string         `json:"actorId,omitempty"`
+	ActorKind      string         `json:"actorKind,omitempty"`
 	Action         string         `json:"action"`
 	TargetType     string         `json:"targetType"`
 	TargetPublicID string         `json:"targetId,omitempty"`
@@ -601,8 +603,9 @@ func (s *Store) ListAuditEvents(ctx context.Context, workspaceID, beforeID int64
 	if beforeID == 0 {
 		beforeID = math.MaxInt64
 	}
-	rows, err := s.Pool.Query(ctx, `SELECT ae.id,ae.public_id,ae.occurred_at,COALESCE(u.public_id,''),ae.action,ae.target_type,ae.target_public_id,ae.outcome,ae.reason,ae.request_id,ae.metadata_json
-		FROM audit_events ae LEFT JOIN users u ON u.id=ae.actor_user_id WHERE ae.workspace_id=$1 AND ae.id<$2 ORDER BY ae.id DESC LIMIT $3`, workspaceID, beforeID, limit+1)
+	rows, err := s.Pool.Query(ctx, `SELECT ae.id,ae.public_id,ae.occurred_at,COALESCE(u.public_id,''),COALESCE(p.public_id,''),COALESCE(p.kind,''),ae.action,ae.target_type,ae.target_public_id,ae.outcome,ae.reason,ae.request_id,ae.metadata_json
+		FROM audit_events ae LEFT JOIN users u ON u.id=ae.actor_user_id LEFT JOIN principals p ON p.id=ae.actor_principal_id
+		WHERE ae.workspace_id=$1 AND ae.id<$2 ORDER BY ae.id DESC LIMIT $3`, workspaceID, beforeID, limit+1)
 	if err != nil {
 		return nil, "", err
 	}
@@ -612,7 +615,7 @@ func (s *Store) ListAuditEvents(ctx context.Context, workspaceID, beforeID int64
 	for rows.Next() {
 		var id int64
 		var item AuditEventView
-		if err = rows.Scan(&id, &item.PublicID, &item.OccurredAt, &item.ActorUserID, &item.Action, &item.TargetType, &item.TargetPublicID, &item.Outcome, &item.Reason, &item.RequestID, &item.Metadata); err != nil {
+		if err = rows.Scan(&id, &item.PublicID, &item.OccurredAt, &item.ActorUserID, &item.ActorID, &item.ActorKind, &item.Action, &item.TargetType, &item.TargetPublicID, &item.Outcome, &item.Reason, &item.RequestID, &item.Metadata); err != nil {
 			return nil, "", err
 		}
 		if len(items) == limit {
@@ -840,8 +843,8 @@ func equalBytes(left, right []byte) bool {
 }
 
 func insertAudit(ctx context.Context, tx pgx.Tx, event audit.Event) error {
-	_, err := tx.Exec(ctx, `INSERT INTO audit_events(public_id,actor_user_id,session_id,workspace_id,action,target_type,target_public_id,outcome,reason,request_id,trace_id,source_hash,user_agent_hash,metadata_json)
-		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`, event.PublicID, event.ActorUserID, event.SessionID, event.WorkspaceID, event.Action, event.TargetType, event.TargetPublicID, event.Outcome, event.Reason, event.RequestID, event.TraceID, event.SourceHash, event.UserAgentHash, event.MetadataJSON())
+	_, err := tx.Exec(ctx, `INSERT INTO audit_events(public_id,actor_user_id,actor_principal_id,session_id,workspace_id,action,target_type,target_public_id,outcome,reason,request_id,trace_id,source_hash,user_agent_hash,metadata_json)
+		VALUES($1,$2,COALESCE($3,(SELECT principal_id FROM users WHERE id=$2)),$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`, event.PublicID, event.ActorUserID, event.ActorPrincipalID, event.SessionID, event.WorkspaceID, event.Action, event.TargetType, event.TargetPublicID, event.Outcome, event.Reason, event.RequestID, event.TraceID, event.SourceHash, event.UserAgentHash, event.MetadataJSON())
 	return err
 }
 

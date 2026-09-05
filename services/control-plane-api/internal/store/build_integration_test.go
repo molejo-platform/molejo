@@ -61,7 +61,7 @@ func TestBuildFailureNeverPromotesAReleaseAndRetryCompletesImmutably(t *testing.
 	}
 }
 
-func TestBuildRetentionKeepsOnlyThreeFreshReleasesPerAppEnvironment(t *testing.T) {
+func TestBuildCompletionKeepsImmutableReleaseHistory(t *testing.T) {
 	ctx := context.Background()
 	storage, workspaceID, actorID := newIntegrationFixture(t)
 	project, app, environment := createHierarchy(t, storage, workspaceID)
@@ -95,7 +95,7 @@ func TestBuildRetentionKeepsOnlyThreeFreshReleasesPerAppEnvironment(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	available, expired := 0, 0
+	available := 0
 	for _, release := range releases {
 		if release.AppEnvironmentPublicID != target.PublicID {
 			t.Fatalf("release crossed App Environment boundary: %+v", release)
@@ -103,15 +103,13 @@ func TestBuildRetentionKeepsOnlyThreeFreshReleasesPerAppEnvironment(t *testing.T
 		switch release.AvailabilityStatus {
 		case domain.ReleaseAvailable:
 			available++
-		case domain.ReleaseExpired:
-			expired++
 		}
 	}
-	if available != 3 || expired != 1 {
-		t.Fatalf("available=%d expired=%d, want three fresh releases and one expired", available, expired)
+	if available != 4 {
+		t.Fatalf("available=%d, want complete immutable release history", available)
 	}
 	var blocked int
-	if err = storage.Pool.QueryRow(ctx, `SELECT count(*) FROM release_gc_candidates WHERE status='Blocked'`).Scan(&blocked); err != nil || blocked != 1 {
-		t.Fatalf("blocked GC candidates=%d err=%v, want one until registry deletion is enabled", blocked, err)
+	if err = storage.Pool.QueryRow(ctx, `SELECT count(*) FROM release_gc_candidates WHERE status='Blocked'`).Scan(&blocked); err != nil || blocked != 0 {
+		t.Fatalf("blocked GC candidates=%d err=%v, want no implicit retention policy", blocked, err)
 	}
 }

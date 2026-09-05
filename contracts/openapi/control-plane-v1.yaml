@@ -1124,6 +1124,58 @@ paths:
                   items: { type: array, items: { $ref: '#/components/schemas/Release' } }
                   nextCursor: { type: [string, 'null'] }
         '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      operationId: registerAppRelease
+      security: [{ automationBearer: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ReleaseRegistrationInput' } } }
+      responses:
+        '200': { description: Existing release returned for an idempotent replay, content: { application/json: { schema: { $ref: '#/components/schemas/Release' } } } }
+        '201': { description: External release registered, content: { application/json: { schema: { $ref: '#/components/schemas/Release' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/service-accounts:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/AppId' }
+    get:
+      operationId: listAppServiceAccounts
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { description: App automation identities, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/ServiceAccount' } } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      operationId: createAppServiceAccount
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ServiceAccountCreateInput' } } }
+      responses:
+        '201': { description: Service account and one-time credential, content: { application/json: { schema: { $ref: '#/components/schemas/ServiceAccountCredential' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/service-accounts/{serviceAccountId}:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/AppId' }
+      - { $ref: '#/components/parameters/ServiceAccountId' }
+    delete:
+      operationId: revokeAppServiceAccount
+      security: [{ sessionCookie: [] }]
+      responses:
+        '204': { description: Service account revoked }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments:
     parameters:
       - { $ref: '#/components/parameters/WorkspaceId' }
@@ -1169,7 +1221,7 @@ paths:
       - { $ref: '#/components/parameters/AppEnvironmentId' }
     get:
       operationId: getAppEnvironment
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [] }, { automationBearer: [] }]
       responses:
         '200':
           description: App Environment
@@ -1323,7 +1375,7 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
     post:
       operationId: createAppEnvironmentDeployment
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [] }, { automationBearer: [] }]
       parameters:
         - { $ref: '#/components/parameters/IdempotencyKey' }
         - { $ref: '#/components/parameters/IfMatch' }
@@ -1495,7 +1547,7 @@ paths:
   /api/v1/operations/{operationId}:
     get:
       operationId: getOperation
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [] }, { automationBearer: [] }]
       parameters:
         - name: operationId
           in: path
@@ -1513,6 +1565,10 @@ components:
       type: apiKey
       in: cookie
       name: molejo_session
+    automationBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: Molejo service account token
   parameters:
     Cursor:
       name: cursor
@@ -1576,6 +1632,11 @@ components:
       in: path
       required: true
       schema: { type: string, pattern: '^rel-[a-z2-7]{20}$' }
+    ServiceAccountId:
+      name: serviceAccountId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^svc-[a-z2-7]{20}$' }
     UserId:
       name: userId
       in: path
@@ -1998,6 +2059,8 @@ components:
         id: { type: string, pattern: '^aud-[a-z2-7]{20}$' }
         occurredAt: { type: string, format: date-time }
         actorUserId: { type: string, pattern: '^usr-[a-z2-7]{20}$' }
+        actorId: { type: string, pattern: '^(usr|svc|sys)-[a-z2-7]{20}$' }
+        actorKind: { type: string, enum: [User, ServiceAccount, System] }
         action: { type: string }
         targetType: { type: string }
         targetId: { type: string }
@@ -2157,7 +2220,7 @@ components:
         createdAt: { type: string, format: date-time }
     Release:
       type: object
-      required: [id, projectId, appId, appEnvironmentId, buildId, branch, commitSha, commitTitle, commitAuthorName, commitAuthorLogin, trigger, image, platform, availabilityStatus, createdAt]
+      required: [id, projectId, appId, origin, sourceProvider, sourceRepository, sourceRevision, producer, createdBy, image, availabilityStatus, createdAt]
       additionalProperties: false
       properties:
         id: { type: string, pattern: '^rel-[a-z2-7]{20}$' }
@@ -2165,6 +2228,15 @@ components:
         appId: { type: string, pattern: '^app-[a-z2-7]{20}$' }
         appEnvironmentId: { type: string, pattern: '^aev-[a-z2-7]{20}$' }
         buildId: { type: string, pattern: '^bld-[a-z2-7]{20}$' }
+        origin: { type: string, enum: [ManagedBuild, External] }
+        sourceProvider: { type: string, minLength: 1, maxLength: 255 }
+        sourceRepository: { type: string, minLength: 1, maxLength: 255 }
+        sourceRevision: { type: string, minLength: 1, maxLength: 255 }
+        sourceRef: { type: string, minLength: 1, maxLength: 255 }
+        producer: { type: string, minLength: 1, maxLength: 255 }
+        producerExternalId: { type: string, minLength: 1, maxLength: 255 }
+        producerUrl: { type: string, format: uri }
+        createdBy: { type: string, minLength: 1, maxLength: 120 }
         branch: { type: string, minLength: 1, maxLength: 255 }
         commitSha: { type: string, pattern: '^[a-f0-9]{40}$' }
         commitTitle: { type: string, maxLength: 500 }
@@ -2177,6 +2249,70 @@ components:
         availabilityStatus: { type: string, enum: [Available, Expired] }
         expiredAt: { type: string, format: date-time }
         createdAt: { type: string, format: date-time }
+    ReleaseRegistrationInput:
+      type: object
+      required: [artifact, source, provenance]
+      additionalProperties: false
+      properties:
+        artifact:
+          type: object
+          required: [kind, reference]
+          additionalProperties: false
+          properties:
+            kind: { type: string, enum: [OCIImage] }
+            reference: { type: string, pattern: '^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$' }
+        source:
+          type: object
+          required: [provider, repository, revision]
+          additionalProperties: false
+          properties:
+            provider: { type: string, minLength: 1, maxLength: 255 }
+            repository: { type: string, minLength: 1, maxLength: 255 }
+            revision: { type: string, minLength: 1, maxLength: 255 }
+            ref: { type: string, minLength: 1, maxLength: 255 }
+        provenance:
+          type: object
+          required: [producer]
+          additionalProperties: false
+          properties:
+            producer: { type: string, minLength: 1, maxLength: 255 }
+            externalRunId: { type: string, minLength: 1, maxLength: 255 }
+            url: { type: string, format: uri, maxLength: 2048 }
+    ServiceAccountCreateInput:
+      type: object
+      required: [name, deploymentEnvironmentIds]
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        deploymentEnvironmentIds:
+          type: array
+          uniqueItems: true
+          maxItems: 20
+          items: { type: string, pattern: '^aev-[a-z2-7]{20}$' }
+        expiresAt: { type: string, format: date-time }
+    ServiceAccount:
+      type: object
+      required: [id, workspaceId, projectId, appId, name, status, deploymentEnvironmentIds, createdAt, updatedAt]
+      additionalProperties: false
+      properties:
+        id: { type: string, pattern: '^svc-[a-z2-7]{20}$' }
+        workspaceId: { type: string, pattern: '^ws-[a-z2-7]{20}$' }
+        projectId: { type: string, pattern: '^prj-[a-z2-7]{20}$' }
+        appId: { type: string, pattern: '^app-[a-z2-7]{20}$' }
+        name: { type: string, minLength: 1, maxLength: 80 }
+        status: { type: string, enum: [Active, Disabled] }
+        deploymentEnvironmentIds: { type: array, items: { type: string, pattern: '^aev-[a-z2-7]{20}$' } }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ServiceAccountCredential:
+      type: object
+      required: [serviceAccount, tokenId, token, expiresAt]
+      additionalProperties: false
+      properties:
+        serviceAccount: { $ref: '#/components/schemas/ServiceAccount' }
+        tokenId: { type: string, pattern: '^sat-[a-z2-7]{20}$' }
+        token: { type: string, minLength: 64 }
+        expiresAt: { type: string, format: date-time }
     DeliveryPolicyInput:
       type: object
       required: [pushEnabled, releaseEnabled]

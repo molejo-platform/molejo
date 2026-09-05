@@ -147,7 +147,8 @@ func createExecutorRelease(t *testing.T, s *store.Store, workspaceID, actorID in
 	}
 	releaseID := mustAPIID(t, "rel")
 	image := "registry.example/molejo/apps/api@sha256:" + strings.Repeat("b", 64)
-	if _, err = s.Pool.Exec(ctx, `INSERT INTO releases(public_id,workspace_id,project_id,app_id,app_environment_id,build_id,commit_sha,image,platform) VALUES($1,$2,$3,$4,$5,$6,$7,$8,'linux/amd64')`, releaseID, workspaceID, project.ID, app.ID, target.ID, internalBuildID, strings.Repeat("a", 40), image); err != nil {
+	if _, err = s.Pool.Exec(ctx, `INSERT INTO releases(public_id,workspace_id,project_id,app_id,app_environment_id,build_id,commit_sha,image,platform,source_provider,source_repository,source_revision,producer_kind,created_by_principal_id)
+		SELECT $1,$2,$3,$4,$5,$6,$7,$8,'linux/amd64','GitHub','molejo/platform',$7,'buildkit',u.principal_id FROM users u WHERE u.id=$9`, releaseID, workspaceID, project.ID, app.ID, target.ID, internalBuildID, strings.Repeat("a", 40), image, actorID); err != nil {
 		t.Fatal(err)
 	}
 	return releaseID, image

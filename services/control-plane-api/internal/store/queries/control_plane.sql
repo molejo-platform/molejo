@@ -44,23 +44,24 @@ WHERE id = $1 AND version = $2
 RETURNING id, public_id, name, namespace_name, version, bootstrap_state, created_at, updated_at;
 
 -- name: FindWorkspaceOperationByIdempotency :one
-SELECT o.id, o.public_id, o.workspace_id, o.requested_by_user_id AS actor_id, o.kind, o.status,
+SELECT o.id, o.public_id, o.workspace_id, COALESCE(o.requested_by_user_id,0)::bigint AS actor_id, o.kind, o.status,
        o.desired_version, o.attempts, o.created_at, o.updated_at,
        o.error_code, o.error_message, o.payload_hash
 FROM operations o
-WHERE o.requested_by_user_id = $1
+WHERE o.requested_by_user_id = CAST(sqlc.arg(requested_by_user_id) AS bigint)
   AND o.kind = 'EnsureWorkspace'
   AND o.app_environment_id IS NULL
   AND o.deployment_id IS NULL
-  AND o.idempotency_hash = $2;
+  AND o.idempotency_hash = sqlc.arg(idempotency_hash);
 
 -- name: InsertWorkspaceOperation :one
 INSERT INTO operations(
     public_id, workspace_id, app_environment_id, deployment_id, requested_by_user_id, kind, status, agent_installation_id,
     idempotency_hash, payload_hash, desired_version
 )
-VALUES ($1, $2, NULL, NULL, $3, 'EnsureWorkspace', 'Pending', $4, $5, $6, 1)
-RETURNING id, public_id, workspace_id, requested_by_user_id AS actor_id, kind, status,
+VALUES (sqlc.arg(public_id), sqlc.arg(workspace_id), NULL, NULL, CAST(sqlc.arg(requested_by_user_id) AS bigint),
+        'EnsureWorkspace', 'Pending', sqlc.arg(agent_installation_id), sqlc.arg(idempotency_hash), sqlc.arg(payload_hash), 1)
+RETURNING id, public_id, workspace_id, COALESCE(requested_by_user_id,0)::bigint AS actor_id, kind, status,
           desired_version, attempts, created_at, updated_at, error_code, error_message;
 
 -- name: CreateProject :one

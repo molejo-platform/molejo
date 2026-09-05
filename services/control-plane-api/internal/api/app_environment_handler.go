@@ -3,10 +3,13 @@ package api
 import (
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/api/generated"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/auth"
+	"github.com/molejo-platform/molejo/services/control-plane-api/internal/automation"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/domain"
+	"github.com/molejo-platform/molejo/services/control-plane-api/internal/principal"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/store"
 )
 
@@ -86,7 +89,13 @@ func (h *generatedHandler) CreateAppEnvironment(w http.ResponseWriter, r *http.R
 }
 
 func (h *generatedHandler) GetAppEnvironment(w http.ResponseWriter, r *http.Request, workspaceID generated.WorkspaceId, projectID generated.ProjectId, appID generated.AppId, appEnvironmentID generated.AppEnvironmentId) {
-	_, workspace, ok := h.authorizeWorkspace(w, r, string(workspaceID), false)
+	var workspace domain.Workspace
+	var ok bool
+	if strings.TrimSpace(r.Header.Get("Authorization")) != "" {
+		_, workspace, ok = h.authorizeAutomation(w, r, string(workspaceID), string(projectID), string(appID), string(appEnvironmentID), automation.PermissionDeploymentCreate)
+	} else {
+		_, workspace, ok = h.authorizeWorkspace(w, r, string(workspaceID), false)
+	}
 	if !ok {
 		return
 	}
@@ -161,7 +170,19 @@ func (h *generatedHandler) ListAppEnvironmentDeployments(w http.ResponseWriter, 
 }
 
 func (h *generatedHandler) CreateAppEnvironmentDeployment(w http.ResponseWriter, r *http.Request, workspaceID generated.WorkspaceId, projectID generated.ProjectId, appID generated.AppId, appEnvironmentID generated.AppEnvironmentId, params generated.CreateAppEnvironmentDeploymentParams) {
-	actor, workspace, ok := h.authorizeWorkspace(w, r, string(workspaceID), true)
+	var actorUserID int64
+	var automationActor principal.Principal
+	var workspace domain.Workspace
+	var ok bool
+	isAutomation := strings.TrimSpace(r.Header.Get("Authorization")) != ""
+	if isAutomation {
+		automationActor, workspace, ok = h.authorizeAutomation(w, r, string(workspaceID), string(projectID), string(appID), string(appEnvironmentID), automation.PermissionDeploymentCreate)
+	} else {
+		actor, authorizedWorkspace, authorized := h.authorizeWorkspace(w, r, string(workspaceID), true)
+		if authorized {
+			actorUserID, workspace, ok = actor.ID, authorizedWorkspace, true
+		}
+	}
 	if !ok {
 		return
 	}
@@ -191,12 +212,19 @@ func (h *generatedHandler) CreateAppEnvironmentDeployment(w http.ResponseWriter,
 		if err != nil {
 			break
 		}
-		deployment, operation, _, err := h.server.store.CreateDeployment(r.Context(), workspace.ID, actor.ID, string(appEnvironmentID), deploymentID, input.ReleaseID, input.ConfigurationVersion, int64(params.IfMatch), expectedCurrentDeploymentID, auth.HashToken(idempotencyKey), scopedBuildPayloadHash(r, payloadHash))
-		if errors.Is(err, store.ErrPublicIDCollision) {
+		var deployment domain.Deployment
+		var operation domain.Operation
+		var createErr error
+		if isAutomation {
+			deployment, operation, _, createErr = h.server.store.CreateDeploymentForPrincipal(r.Context(), workspace.ID, automationActor, string(appEnvironmentID), deploymentID, input.ReleaseID, input.ConfigurationVersion, int64(params.IfMatch), expectedCurrentDeploymentID, auth.HashToken(idempotencyKey), scopedBuildPayloadHash(r, payloadHash))
+		} else {
+			deployment, operation, _, createErr = h.server.store.CreateDeployment(r.Context(), workspace.ID, actorUserID, string(appEnvironmentID), deploymentID, input.ReleaseID, input.ConfigurationVersion, int64(params.IfMatch), expectedCurrentDeploymentID, auth.HashToken(idempotencyKey), scopedBuildPayloadHash(r, payloadHash))
+		}
+		if errors.Is(createErr, store.ErrPublicIDCollision) {
 			continue
 		}
-		if err != nil {
-			writeAppEnvironmentError(w, r, err)
+		if createErr != nil {
+			writeAppEnvironmentError(w, r, createErr)
 			return
 		}
 		h.server.logAcceptedOperation(r, operation)

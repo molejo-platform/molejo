@@ -6,16 +6,17 @@ type (
 )
 
 const (
-	CreateWorkspace Permission = "installation.workspace.create"
-	ManageUsers     Permission = "installation.users.manage"
-	ManageAgents    Permission = "installation.agents.manage"
-	ReadWorkspace   Permission = "workspace.read"
-	ManageWorkspace Permission = "workspace.manage"
-	ManageMembers   Permission = "workspace.members.manage"
-	ManageGroups    Permission = "workspace.groups.manage"
-	ReadAudit       Permission = "workspace.audit.read"
-	EditResources   Permission = "resource.edit"
-	Deploy          Permission = "app_environment.deploy"
+	CreateWorkspace  Permission = "installation.workspace.create"
+	ManageUsers      Permission = "installation.users.manage"
+	ManageAgents     Permission = "installation.agents.manage"
+	ReadWorkspace    Permission = "workspace.read"
+	ManageWorkspace  Permission = "workspace.manage"
+	ManageMembers    Permission = "workspace.members.manage"
+	ManageGroups     Permission = "workspace.groups.manage"
+	ReadAudit        Permission = "workspace.audit.read"
+	ManageAutomation Permission = "workspace.automation.manage"
+	EditResources    Permission = "resource.edit"
+	Deploy           Permission = "app_environment.deploy"
 )
 
 const (

@@ -275,6 +275,27 @@ func (e AppVolumeState) Valid() bool {
 	}
 }
 
+// Defines values for AuditEventActorKind.
+const (
+	AuditEventActorKindServiceAccount AuditEventActorKind = "ServiceAccount"
+	AuditEventActorKindSystem         AuditEventActorKind = "System"
+	AuditEventActorKindUser           AuditEventActorKind = "User"
+)
+
+// Valid indicates whether the value is a known member of the AuditEventActorKind enum.
+func (e AuditEventActorKind) Valid() bool {
+	switch e {
+	case AuditEventActorKindServiceAccount:
+		return true
+	case AuditEventActorKindSystem:
+		return true
+	case AuditEventActorKindUser:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AuditEventOutcome.
 const (
 	AuditEventOutcomeDenied    AuditEventOutcome = "Denied"
@@ -674,6 +695,24 @@ func (e ReleaseAvailabilityStatus) Valid() bool {
 	}
 }
 
+// Defines values for ReleaseOrigin.
+const (
+	External     ReleaseOrigin = "External"
+	ManagedBuild ReleaseOrigin = "ManagedBuild"
+)
+
+// Valid indicates whether the value is a known member of the ReleaseOrigin enum.
+func (e ReleaseOrigin) Valid() bool {
+	switch e {
+	case External:
+		return true
+	case ManagedBuild:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ReleasePlatform.
 const (
 	ReleasePlatformLinuxamd64 ReleasePlatform = "linux/amd64"
@@ -704,6 +743,21 @@ func (e ReleaseTrigger) Valid() bool {
 	case ReleaseTriggerPush:
 		return true
 	case ReleaseTriggerRelease:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ReleaseRegistrationInputArtifactKind.
+const (
+	OCIImage ReleaseRegistrationInputArtifactKind = "OCIImage"
+)
+
+// Valid indicates whether the value is a known member of the ReleaseRegistrationInputArtifactKind enum.
+func (e ReleaseRegistrationInputArtifactKind) Valid() bool {
+	switch e {
+	case OCIImage:
 		return true
 	default:
 		return false
@@ -893,6 +947,24 @@ const (
 func (e RuntimePortProtocol) Valid() bool {
 	switch e {
 	case RuntimePortProtocolTCP:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ServiceAccountStatus.
+const (
+	ServiceAccountStatusActive   ServiceAccountStatus = "Active"
+	ServiceAccountStatusDisabled ServiceAccountStatus = "Disabled"
+)
+
+// Valid indicates whether the value is a known member of the ServiceAccountStatus enum.
+func (e ServiceAccountStatus) Valid() bool {
+	switch e {
+	case ServiceAccountStatusActive:
+		return true
+	case ServiceAccountStatusDisabled:
 		return true
 	default:
 		return false
@@ -1399,6 +1471,8 @@ type AppVolumeRequest struct {
 // AuditEvent defines model for AuditEvent.
 type AuditEvent struct {
 	Action      string                 `json:"action"`
+	ActorId     *string                `json:"actorId,omitempty"`
+	ActorKind   *AuditEventActorKind   `json:"actorKind,omitempty"`
 	ActorUserId *string                `json:"actorUserId,omitempty"`
 	Id          string                 `json:"id"`
 	Metadata    map[string]interface{} `json:"metadata"`
@@ -1409,6 +1483,9 @@ type AuditEvent struct {
 	TargetId    *string                `json:"targetId,omitempty"`
 	TargetType  string                 `json:"targetType"`
 }
+
+// AuditEventActorKind defines model for AuditEvent.ActorKind.
+type AuditEventActorKind string
 
 // AuditEventOutcome defines model for AuditEvent.Outcome.
 type AuditEventOutcome string
@@ -1802,33 +1879,67 @@ type PublicEndpointType string
 
 // Release defines model for Release.
 type Release struct {
-	AppEnvironmentId   string                    `json:"appEnvironmentId"`
+	AppEnvironmentId   *string                   `json:"appEnvironmentId,omitempty"`
 	AppId              string                    `json:"appId"`
 	AvailabilityStatus ReleaseAvailabilityStatus `json:"availabilityStatus"`
-	Branch             string                    `json:"branch"`
-	BuildId            string                    `json:"buildId"`
-	CommitAuthorLogin  string                    `json:"commitAuthorLogin"`
-	CommitAuthorName   string                    `json:"commitAuthorName"`
-	CommitSha          string                    `json:"commitSha"`
-	CommitTitle        string                    `json:"commitTitle"`
+	Branch             *string                   `json:"branch,omitempty"`
+	BuildId            *string                   `json:"buildId,omitempty"`
+	CommitAuthorLogin  *string                   `json:"commitAuthorLogin,omitempty"`
+	CommitAuthorName   *string                   `json:"commitAuthorName,omitempty"`
+	CommitSha          *string                   `json:"commitSha,omitempty"`
+	CommitTitle        *string                   `json:"commitTitle,omitempty"`
 	CommittedAt        *time.Time                `json:"committedAt,omitempty"`
 	CreatedAt          time.Time                 `json:"createdAt"`
+	CreatedBy          string                    `json:"createdBy"`
 	ExpiredAt          *time.Time                `json:"expiredAt,omitempty"`
 	Id                 string                    `json:"id"`
 	Image              string                    `json:"image"`
-	Platform           ReleasePlatform           `json:"platform"`
+	Origin             ReleaseOrigin             `json:"origin"`
+	Platform           *ReleasePlatform          `json:"platform,omitempty"`
+	Producer           string                    `json:"producer"`
+	ProducerExternalId *string                   `json:"producerExternalId,omitempty"`
+	ProducerUrl        *string                   `json:"producerUrl,omitempty"`
 	ProjectId          string                    `json:"projectId"`
-	Trigger            ReleaseTrigger            `json:"trigger"`
+	SourceProvider     string                    `json:"sourceProvider"`
+	SourceRef          *string                   `json:"sourceRef,omitempty"`
+	SourceRepository   string                    `json:"sourceRepository"`
+	SourceRevision     string                    `json:"sourceRevision"`
+	Trigger            *ReleaseTrigger           `json:"trigger,omitempty"`
 }
 
 // ReleaseAvailabilityStatus defines model for Release.AvailabilityStatus.
 type ReleaseAvailabilityStatus string
+
+// ReleaseOrigin defines model for Release.Origin.
+type ReleaseOrigin string
 
 // ReleasePlatform defines model for Release.Platform.
 type ReleasePlatform string
 
 // ReleaseTrigger defines model for Release.Trigger.
 type ReleaseTrigger string
+
+// ReleaseRegistrationInput defines model for ReleaseRegistrationInput.
+type ReleaseRegistrationInput struct {
+	Artifact struct {
+		Kind      ReleaseRegistrationInputArtifactKind `json:"kind"`
+		Reference string                               `json:"reference"`
+	} `json:"artifact"`
+	Provenance struct {
+		ExternalRunId *string `json:"externalRunId,omitempty"`
+		Producer      string  `json:"producer"`
+		Url           *string `json:"url,omitempty"`
+	} `json:"provenance"`
+	Source struct {
+		Provider   string  `json:"provider"`
+		Ref        *string `json:"ref,omitempty"`
+		Repository string  `json:"repository"`
+		Revision   string  `json:"revision"`
+	} `json:"source"`
+}
+
+// ReleaseRegistrationInputArtifactKind defines model for ReleaseRegistrationInput.Artifact.Kind.
+type ReleaseRegistrationInputArtifactKind string
 
 // ResourceValues defines model for ResourceValues.
 type ResourceValues struct {
@@ -1963,6 +2074,37 @@ type RuntimePort struct {
 
 // RuntimePortProtocol defines model for RuntimePort.Protocol.
 type RuntimePortProtocol string
+
+// ServiceAccount defines model for ServiceAccount.
+type ServiceAccount struct {
+	AppId                    string               `json:"appId"`
+	CreatedAt                time.Time            `json:"createdAt"`
+	DeploymentEnvironmentIds []string             `json:"deploymentEnvironmentIds"`
+	Id                       string               `json:"id"`
+	Name                     string               `json:"name"`
+	ProjectId                string               `json:"projectId"`
+	Status                   ServiceAccountStatus `json:"status"`
+	UpdatedAt                time.Time            `json:"updatedAt"`
+	WorkspaceId              string               `json:"workspaceId"`
+}
+
+// ServiceAccountStatus defines model for ServiceAccount.Status.
+type ServiceAccountStatus string
+
+// ServiceAccountCreateInput defines model for ServiceAccountCreateInput.
+type ServiceAccountCreateInput struct {
+	DeploymentEnvironmentIds []string   `json:"deploymentEnvironmentIds"`
+	ExpiresAt                *time.Time `json:"expiresAt,omitempty"`
+	Name                     string     `json:"name"`
+}
+
+// ServiceAccountCredential defines model for ServiceAccountCredential.
+type ServiceAccountCredential struct {
+	ExpiresAt      time.Time      `json:"expiresAt"`
+	ServiceAccount ServiceAccount `json:"serviceAccount"`
+	Token          string         `json:"token"`
+	TokenId        string         `json:"tokenId"`
+}
 
 // Session defines model for Session.
 type Session struct {
@@ -2244,6 +2386,9 @@ type ProjectId = string
 // ReleaseId defines model for ReleaseId.
 type ReleaseId = string
 
+// ServiceAccountId defines model for ServiceAccountId.
+type ServiceAccountId = string
+
 // UserId defines model for UserId.
 type UserId = string
 
@@ -2499,6 +2644,11 @@ type ListAppReleasesParams struct {
 	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
+// RegisterAppReleaseParams defines parameters for RegisterAppRelease.
+type RegisterAppReleaseParams struct {
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
 // ListEnvironmentsParams defines parameters for ListEnvironments.
 type ListEnvironmentsParams struct {
 	Cursor          *Cursor          `form:"cursor,omitempty" json:"cursor,omitempty"`
@@ -2631,6 +2781,12 @@ type CreateAppEnvironmentDeploymentJSONRequestBody = DeploymentInput
 
 // ExpandAppEnvironmentVolumeJSONRequestBody defines body for ExpandAppEnvironmentVolume for application/json ContentType.
 type ExpandAppEnvironmentVolumeJSONRequestBody = AppVolumeExpansionInput
+
+// RegisterAppReleaseJSONRequestBody defines body for RegisterAppRelease for application/json ContentType.
+type RegisterAppReleaseJSONRequestBody = ReleaseRegistrationInput
+
+// CreateAppServiceAccountJSONRequestBody defines body for CreateAppServiceAccount for application/json ContentType.
+type CreateAppServiceAccountJSONRequestBody = ServiceAccountCreateInput
 
 // SetAppSourceJSONRequestBody defines body for SetAppSource for application/json ContentType.
 type SetAppSourceJSONRequestBody = GitHubSourceInput
@@ -2933,6 +3089,18 @@ type ServerInterface interface {
 
 	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/releases)
 	ListAppReleases(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, params ListAppReleasesParams)
+
+	// (POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/releases)
+	RegisterAppRelease(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, params RegisterAppReleaseParams)
+
+	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/service-accounts)
+	ListAppServiceAccounts(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId)
+
+	// (POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/service-accounts)
+	CreateAppServiceAccount(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId)
+
+	// (DELETE /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/service-accounts/{serviceAccountId})
+	RevokeAppServiceAccount(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, serviceAccountId ServiceAccountId)
 
 	// (DELETE /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/source)
 	ClearAppSource(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId)
@@ -3448,6 +3616,26 @@ func (_ Unimplemented) ExpandAppEnvironmentVolume(w http.ResponseWriter, r *http
 
 // (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/releases)
 func (_ Unimplemented) ListAppReleases(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, params ListAppReleasesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/releases)
+func (_ Unimplemented) RegisterAppRelease(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, params RegisterAppReleaseParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/service-accounts)
+func (_ Unimplemented) ListAppServiceAccounts(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/service-accounts)
+func (_ Unimplemented) CreateAppServiceAccount(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (DELETE /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/service-accounts/{serviceAccountId})
+func (_ Unimplemented) RevokeAppServiceAccount(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, serviceAccountId ServiceAccountId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -7777,6 +7965,219 @@ func (siw *ServerInterfaceWrapper) ListAppReleases(w http.ResponseWriter, r *htt
 	handler.ServeHTTP(w, r)
 }
 
+// RegisterAppRelease operation middleware
+func (siw *ServerInterfaceWrapper) RegisterAppRelease(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appId" -------------
+	var appId AppId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appId", chi.URLParam(r, "appId"), &appId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params RegisterAppReleaseParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RegisterAppRelease(w, r, workspaceId, projectId, appId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListAppServiceAccounts operation middleware
+func (siw *ServerInterfaceWrapper) ListAppServiceAccounts(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appId" -------------
+	var appId AppId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appId", chi.URLParam(r, "appId"), &appId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAppServiceAccounts(w, r, workspaceId, projectId, appId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateAppServiceAccount operation middleware
+func (siw *ServerInterfaceWrapper) CreateAppServiceAccount(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appId" -------------
+	var appId AppId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appId", chi.URLParam(r, "appId"), &appId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateAppServiceAccount(w, r, workspaceId, projectId, appId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RevokeAppServiceAccount operation middleware
+func (siw *ServerInterfaceWrapper) RevokeAppServiceAccount(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "appId" -------------
+	var appId AppId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "appId", chi.URLParam(r, "appId"), &appId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "serviceAccountId" -------------
+	var serviceAccountId ServiceAccountId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "serviceAccountId", chi.URLParam(r, "serviceAccountId"), &serviceAccountId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "serviceAccountId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RevokeAppServiceAccount(w, r, workspaceId, projectId, appId, serviceAccountId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ClearAppSource operation middleware
 func (siw *ServerInterfaceWrapper) ClearAppSource(w http.ResponseWriter, r *http.Request) {
 
@@ -8672,6 +9073,18 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/releases", wrapper.ListAppReleases)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/releases", wrapper.RegisterAppRelease)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/service-accounts", wrapper.ListAppServiceAccounts)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/service-accounts", wrapper.CreateAppServiceAccount)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/service-accounts/{serviceAccountId}", wrapper.RevokeAppServiceAccount)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments", wrapper.ListAppEnvironments)
@@ -13841,6 +14254,298 @@ func (response ListAppReleases404JSONResponse) VisitListAppReleasesResponse(w ht
 	return err
 }
 
+type RegisterAppReleaseRequestObject struct {
+	WorkspaceId WorkspaceId `json:"workspaceId"`
+	ProjectId   ProjectId   `json:"projectId"`
+	AppId       AppId       `json:"appId"`
+	Params      RegisterAppReleaseParams
+	Body        *RegisterAppReleaseJSONRequestBody
+}
+
+type RegisterAppReleaseResponseObject interface {
+	VisitRegisterAppReleaseResponse(w http.ResponseWriter) error
+}
+
+type RegisterAppRelease200JSONResponse Release
+
+func (response RegisterAppRelease200JSONResponse) VisitRegisterAppReleaseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RegisterAppRelease201JSONResponse Release
+
+func (response RegisterAppRelease201JSONResponse) VisitRegisterAppReleaseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RegisterAppRelease400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response RegisterAppRelease400JSONResponse) VisitRegisterAppReleaseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RegisterAppRelease401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response RegisterAppRelease401JSONResponse) VisitRegisterAppReleaseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RegisterAppRelease403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response RegisterAppRelease403JSONResponse) VisitRegisterAppReleaseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RegisterAppRelease404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response RegisterAppRelease404JSONResponse) VisitRegisterAppReleaseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RegisterAppRelease409JSONResponse struct{ ConflictJSONResponse }
+
+func (response RegisterAppRelease409JSONResponse) VisitRegisterAppReleaseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAppServiceAccountsRequestObject struct {
+	WorkspaceId WorkspaceId `json:"workspaceId"`
+	ProjectId   ProjectId   `json:"projectId"`
+	AppId       AppId       `json:"appId"`
+}
+
+type ListAppServiceAccountsResponseObject interface {
+	VisitListAppServiceAccountsResponse(w http.ResponseWriter) error
+}
+
+type ListAppServiceAccounts200JSONResponse struct {
+	Items []ServiceAccount `json:"items"`
+}
+
+func (response ListAppServiceAccounts200JSONResponse) VisitListAppServiceAccountsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAppServiceAccounts403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response ListAppServiceAccounts403JSONResponse) VisitListAppServiceAccountsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAppServiceAccounts404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ListAppServiceAccounts404JSONResponse) VisitListAppServiceAccountsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateAppServiceAccountRequestObject struct {
+	WorkspaceId WorkspaceId `json:"workspaceId"`
+	ProjectId   ProjectId   `json:"projectId"`
+	AppId       AppId       `json:"appId"`
+	Body        *CreateAppServiceAccountJSONRequestBody
+}
+
+type CreateAppServiceAccountResponseObject interface {
+	VisitCreateAppServiceAccountResponse(w http.ResponseWriter) error
+}
+
+type CreateAppServiceAccount201JSONResponse ServiceAccountCredential
+
+func (response CreateAppServiceAccount201JSONResponse) VisitCreateAppServiceAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateAppServiceAccount400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response CreateAppServiceAccount400JSONResponse) VisitCreateAppServiceAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateAppServiceAccount403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response CreateAppServiceAccount403JSONResponse) VisitCreateAppServiceAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateAppServiceAccount404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response CreateAppServiceAccount404JSONResponse) VisitCreateAppServiceAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateAppServiceAccount409JSONResponse struct{ ConflictJSONResponse }
+
+func (response CreateAppServiceAccount409JSONResponse) VisitCreateAppServiceAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeAppServiceAccountRequestObject struct {
+	WorkspaceId      WorkspaceId      `json:"workspaceId"`
+	ProjectId        ProjectId        `json:"projectId"`
+	AppId            AppId            `json:"appId"`
+	ServiceAccountId ServiceAccountId `json:"serviceAccountId"`
+}
+
+type RevokeAppServiceAccountResponseObject interface {
+	VisitRevokeAppServiceAccountResponse(w http.ResponseWriter) error
+}
+
+type RevokeAppServiceAccount204Response struct {
+}
+
+func (response RevokeAppServiceAccount204Response) VisitRevokeAppServiceAccountResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type RevokeAppServiceAccount403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response RevokeAppServiceAccount403JSONResponse) VisitRevokeAppServiceAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeAppServiceAccount404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response RevokeAppServiceAccount404JSONResponse) VisitRevokeAppServiceAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ClearAppSourceRequestObject struct {
 	WorkspaceId WorkspaceId `json:"workspaceId"`
 	ProjectId   ProjectId   `json:"projectId"`
@@ -14696,6 +15401,18 @@ type StrictServerInterface interface {
 
 	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/releases)
 	ListAppReleases(ctx context.Context, request ListAppReleasesRequestObject) (ListAppReleasesResponseObject, error)
+
+	// (POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/releases)
+	RegisterAppRelease(ctx context.Context, request RegisterAppReleaseRequestObject) (RegisterAppReleaseResponseObject, error)
+
+	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/service-accounts)
+	ListAppServiceAccounts(ctx context.Context, request ListAppServiceAccountsRequestObject) (ListAppServiceAccountsResponseObject, error)
+
+	// (POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/service-accounts)
+	CreateAppServiceAccount(ctx context.Context, request CreateAppServiceAccountRequestObject) (CreateAppServiceAccountResponseObject, error)
+
+	// (DELETE /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/service-accounts/{serviceAccountId})
+	RevokeAppServiceAccount(ctx context.Context, request RevokeAppServiceAccountRequestObject) (RevokeAppServiceAccountResponseObject, error)
 
 	// (DELETE /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/source)
 	ClearAppSource(ctx context.Context, request ClearAppSourceRequestObject) (ClearAppSourceResponseObject, error)
@@ -17590,6 +18307,134 @@ func (sh *strictHandler) ListAppReleases(w http.ResponseWriter, r *http.Request,
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ListAppReleasesResponseObject); ok {
 		if err := validResponse.VisitListAppReleasesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RegisterAppRelease operation middleware
+func (sh *strictHandler) RegisterAppRelease(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, params RegisterAppReleaseParams) {
+	var request RegisterAppReleaseRequestObject
+
+	request.WorkspaceId = workspaceId
+	request.ProjectId = projectId
+	request.AppId = appId
+	request.Params = params
+
+	var body RegisterAppReleaseJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RegisterAppRelease(ctx, request.(RegisterAppReleaseRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RegisterAppRelease")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RegisterAppReleaseResponseObject); ok {
+		if err := validResponse.VisitRegisterAppReleaseResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListAppServiceAccounts operation middleware
+func (sh *strictHandler) ListAppServiceAccounts(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId) {
+	var request ListAppServiceAccountsRequestObject
+
+	request.WorkspaceId = workspaceId
+	request.ProjectId = projectId
+	request.AppId = appId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListAppServiceAccounts(ctx, request.(ListAppServiceAccountsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListAppServiceAccounts")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListAppServiceAccountsResponseObject); ok {
+		if err := validResponse.VisitListAppServiceAccountsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateAppServiceAccount operation middleware
+func (sh *strictHandler) CreateAppServiceAccount(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId) {
+	var request CreateAppServiceAccountRequestObject
+
+	request.WorkspaceId = workspaceId
+	request.ProjectId = projectId
+	request.AppId = appId
+
+	var body CreateAppServiceAccountJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateAppServiceAccount(ctx, request.(CreateAppServiceAccountRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateAppServiceAccount")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateAppServiceAccountResponseObject); ok {
+		if err := validResponse.VisitCreateAppServiceAccountResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RevokeAppServiceAccount operation middleware
+func (sh *strictHandler) RevokeAppServiceAccount(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, appId AppId, serviceAccountId ServiceAccountId) {
+	var request RevokeAppServiceAccountRequestObject
+
+	request.WorkspaceId = workspaceId
+	request.ProjectId = projectId
+	request.AppId = appId
+	request.ServiceAccountId = serviceAccountId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RevokeAppServiceAccount(ctx, request.(RevokeAppServiceAccountRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RevokeAppServiceAccount")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RevokeAppServiceAccountResponseObject); ok {
+		if err := validResponse.VisitRevokeAppServiceAccountResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

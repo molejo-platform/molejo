@@ -9,20 +9,21 @@ const (
 )
 
 type Event struct {
-	PublicID       string
-	ActorUserID    *int64
-	SessionID      *int64
-	WorkspaceID    *int64
-	Action         string
-	TargetType     string
-	TargetPublicID string
-	Outcome        string
-	Reason         string
-	RequestID      string
-	TraceID        string
-	SourceHash     []byte
-	UserAgentHash  []byte
-	Metadata       map[string]any
+	PublicID         string
+	ActorUserID      *int64
+	ActorPrincipalID *int64
+	SessionID        *int64
+	WorkspaceID      *int64
+	Action           string
+	TargetType       string
+	TargetPublicID   string
+	Outcome          string
+	Reason           string
+	RequestID        string
+	TraceID          string
+	SourceHash       []byte
+	UserAgentHash    []byte
+	Metadata         map[string]any
 }
 
 func (e Event) MetadataJSON() []byte {

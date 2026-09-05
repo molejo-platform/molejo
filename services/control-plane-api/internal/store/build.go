@@ -258,8 +258,11 @@ func (s *Store) CompleteBuild(ctx context.Context, build domain.Build, releasePu
 	}
 	var release domain.Release
 	err = tx.QueryRow(ctx, `
-		INSERT INTO releases(public_id,workspace_id,project_id,app_id,app_environment_id,build_id,commit_sha,image,platform)
-		SELECT $1,workspace_id,project_id,app_id,app_environment_id,id,commit_sha,$2,platform FROM builds WHERE id=$3
+		INSERT INTO releases(public_id,workspace_id,project_id,app_id,app_environment_id,build_id,commit_sha,image,platform,
+			source_provider,source_repository,source_revision,source_ref,producer_kind,created_by_principal_id)
+		SELECT $1,b.workspace_id,b.project_id,b.app_id,b.app_environment_id,b.id,b.commit_sha,$2,b.platform,
+			'GitHub',b.repository_full_name,b.commit_sha,b.source_branch,'buildkit',u.principal_id
+		FROM builds b JOIN users u ON u.id=b.requested_by_user_id WHERE b.id=$3
 		RETURNING id,public_id,workspace_id,project_id,app_id,app_environment_id,commit_sha,image,platform,availability_status,created_at`,
 		releasePublicID, image, build.ID).
 		Scan(&release.ID, &release.PublicID, &release.WorkspaceID, &release.ProjectID, &release.AppID, &release.AppEnvironmentID, &release.CommitSHA, &release.Image, &release.Platform, &release.AvailabilityStatus, &release.CreatedAt)
@@ -279,22 +282,13 @@ func (s *Store) CompleteBuild(ctx context.Context, build domain.Build, releasePu
 	release.CommitAuthorLogin = build.CommitAuthorLogin
 	release.CommittedAt = build.CommittedAt
 	release.TriggerType = build.TriggerType
-	if _, err = tx.Exec(ctx, `
-		WITH protected AS (
-			SELECT current_release_id AS id FROM app_environments WHERE id=$1
-			UNION SELECT d.release_id FROM app_environments ae JOIN deployments d ON d.id=ae.desired_deployment_id WHERE ae.id=$1
-		), ranked AS (
-			SELECT id,row_number() OVER (ORDER BY id DESC) AS position
-			FROM releases WHERE app_environment_id=$1 AND availability_status='Available'
-		), expired AS (
-			UPDATE releases r SET availability_status='Expired',expired_at=now()
-			WHERE r.id IN (SELECT id FROM ranked WHERE position > 3)
-			RETURNING r.id,r.image
-		)
-		INSERT INTO release_gc_candidates(release_id,image,reason)
-		SELECT id,image,CASE WHEN id IN (SELECT id FROM protected WHERE id IS NOT NULL)
-		  THEN 'release_referenced' ELSE 'registry_delete_not_enabled' END
-		FROM expired ON CONFLICT (release_id) DO NOTHING`, build.AppEnvironmentID); err != nil {
+	release.OriginKind = "ManagedBuild"
+	release.SourceProvider = "GitHub"
+	release.SourceRepository = build.RepositoryFullName
+	release.SourceRevision = build.CommitSHA
+	release.SourceRef = build.SourceBranch
+	release.ProducerKind = "buildkit"
+	if err = tx.QueryRow(ctx, `SELECT p.display_name FROM builds b JOIN users u ON u.id=b.requested_by_user_id JOIN principals p ON p.id=u.principal_id WHERE b.id=$1`, build.ID).Scan(&release.CreatedBy); err != nil {
 		return domain.Release{}, err
 	}
 	if err = tx.Commit(ctx); err != nil {
@@ -376,59 +370,6 @@ func (s *Store) ListBuildLogs(ctx context.Context, workspaceID int64, buildPubli
 		items = append(items, item)
 	}
 	return items, rows.Err()
-}
-
-func (s *Store) ListReleases(ctx context.Context, workspaceID int64, projectPublicID, appPublicID string, beforeID int64, limit int) ([]domain.Release, string, error) {
-	if beforeID == 0 {
-		beforeID = math.MaxInt64
-	}
-	rows, err := s.Pool.Query(ctx, `
-		SELECT r.id,r.public_id,r.workspace_id,r.project_id,r.app_id,r.app_environment_id,b.public_id,b.source_branch,
-		       r.commit_sha,b.commit_title,b.commit_author_name,b.commit_author_login,b.committed_at,b.trigger_type,
-		       r.image,r.platform,r.availability_status,r.expired_at,r.created_at,p.public_id,a.public_id,ae.public_id
-		FROM releases r JOIN builds b ON b.id=r.build_id JOIN projects p ON p.id=r.project_id JOIN apps a ON a.id=r.app_id JOIN app_environments ae ON ae.id=r.app_environment_id
-		WHERE r.workspace_id=$1 AND p.public_id=$2 AND a.public_id=$3 AND r.id < $4
-		ORDER BY r.id DESC LIMIT $5`, workspaceID, projectPublicID, appPublicID, beforeID, limit+1)
-	if err != nil {
-		return nil, "", err
-	}
-	defer rows.Close()
-	items := []domain.Release{}
-	for rows.Next() {
-		var item domain.Release
-		if err = rows.Scan(&item.ID, &item.PublicID, &item.WorkspaceID, &item.ProjectID, &item.AppID, &item.AppEnvironmentID, &item.BuildPublicID, &item.SourceBranch,
-			&item.CommitSHA, &item.CommitTitle, &item.CommitAuthorName, &item.CommitAuthorLogin, &item.CommittedAt, &item.TriggerType,
-			&item.Image, &item.Platform, &item.AvailabilityStatus, &item.ExpiredAt, &item.CreatedAt, &item.ProjectPublicID, &item.AppPublicID, &item.AppEnvironmentPublicID); err != nil {
-			return nil, "", err
-		}
-		items = append(items, item)
-	}
-	if err = rows.Err(); err != nil {
-		return nil, "", err
-	}
-	if len(items) > limit {
-		items = items[:limit]
-		return items, domain.EncodeCursor(items[len(items)-1].ID), nil
-	}
-	return items, "", nil
-}
-
-func (s *Store) FindRelease(ctx context.Context, workspaceID int64, projectPublicID, appPublicID, releasePublicID string) (domain.Release, error) {
-	var item domain.Release
-	err := s.Pool.QueryRow(ctx, `
-		SELECT r.id,r.public_id,r.workspace_id,r.project_id,r.app_id,r.app_environment_id,b.public_id,b.source_branch,
-		       r.commit_sha,b.commit_title,b.commit_author_name,b.commit_author_login,b.committed_at,b.trigger_type,
-		       r.image,r.platform,r.availability_status,r.expired_at,r.created_at,p.public_id,a.public_id,ae.public_id
-		FROM releases r JOIN builds b ON b.id=r.build_id JOIN projects p ON p.id=r.project_id JOIN apps a ON a.id=r.app_id JOIN app_environments ae ON ae.id=r.app_environment_id
-		WHERE r.workspace_id=$1 AND p.public_id=$2 AND a.public_id=$3 AND r.public_id=$4`,
-		workspaceID, projectPublicID, appPublicID, releasePublicID).
-		Scan(&item.ID, &item.PublicID, &item.WorkspaceID, &item.ProjectID, &item.AppID, &item.AppEnvironmentID, &item.BuildPublicID, &item.SourceBranch,
-			&item.CommitSHA, &item.CommitTitle, &item.CommitAuthorName, &item.CommitAuthorLogin, &item.CommittedAt, &item.TriggerType,
-			&item.Image, &item.Platform, &item.AvailabilityStatus, &item.ExpiredAt, &item.CreatedAt, &item.ProjectPublicID, &item.AppPublicID, &item.AppEnvironmentPublicID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return domain.Release{}, ErrNotFound
-	}
-	return item, err
 }
 
 func buildScanTargets(build *domain.Build) []any {
