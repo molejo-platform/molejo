@@ -75,7 +75,9 @@ Guias atuais dos componentes:
 - [TLS do cluster](operations/tls.md)
 - [Setup day zero no K3s](operations/cluster-setup.md)
 - [Acesso ao registry de aplicações](operations/registry-access.md)
+- [Releases por CI externa](operations/external-ci.md)
 - [ADR de identidade e pairing do Cluster Agent outbound](adr/0013-outbound-cluster-agent-identity-and-pairing.md)
+- [ADR do limite de Release e deploy por CI externa](adr/0014-limite-de-release-e-deploy-por-ci-externa.md)
 
 ## Contribuição
 

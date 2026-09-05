@@ -73,7 +73,9 @@ Current component guides:
 - [Cluster TLS](operations/tls.md)
 - [K3s day-zero setup](operations/cluster-setup.md)
 - [Application registry access](operations/registry-access.md)
+- [External CI releases](operations/external-ci.md)
 - [Outbound Cluster Agent identity and pairing ADR](adr/0013-outbound-cluster-agent-identity-and-pairing.md)
+- [External CI release and deployment boundary ADR](adr/0014-external-ci-release-and-deployment-boundary.md)
 
 ## Contributing
 
