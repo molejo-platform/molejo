@@ -36,7 +36,7 @@ func TestMockConsole(t *testing.T) {
 	}
 }
 
-func TestAPIProxyRemovesPublicPrefix(t *testing.T) {
+func TestAPIProxyPreservesControlPlanePath(t *testing.T) {
 	t.Parallel()
 	var upstreamPath string
 	transport := roundTripFunc(func(request *http.Request) (*http.Response, error) {
@@ -58,7 +58,7 @@ func TestAPIProxyRemovesPublicPrefix(t *testing.T) {
 	if response.Code != http.StatusNoContent {
 		t.Fatalf("GET /api/v1/session status=%d body=%q", response.Code, response.Body.String())
 	}
-	if upstreamPath != "/v1/session" {
-		t.Fatalf("upstream path=%q, want /v1/session", upstreamPath)
+	if upstreamPath != "/api/v1/session" {
+		t.Fatalf("upstream path=%q, want /api/v1/session", upstreamPath)
 	}
 }
