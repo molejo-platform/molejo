@@ -10,17 +10,17 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/molejo-platform/molejo/apps/molejoctl/internal/registrysetup"
+	"github.com/molejo-platform/molejo/apps/molejoctl/internal/capability/registry"
 )
 
 type registryRunner interface {
-	Plan(context.Context, registrysetup.Options) (registrysetup.Report, error)
-	Apply(context.Context, registrysetup.Options) (registrysetup.Report, error)
-	Verify(context.Context, registrysetup.Options) (registrysetup.Report, error)
-	Smoke(context.Context, registrysetup.Options) (registrysetup.Report, error)
+	Plan(context.Context, registry.Options) (registry.Report, error)
+	Apply(context.Context, registry.Options) (registry.Report, error)
+	Verify(context.Context, registry.Options) (registry.Report, error)
+	Smoke(context.Context, registry.Options) (registry.Report, error)
 }
 
-func newRegistryRunner() registryRunner { return registrysetup.New() }
+func newRegistryRunner() registryRunner { return registry.New() }
 
 func newRegistryCommand(runner registryRunner) *cobra.Command {
 	command := &cobra.Command{Use: "registry", Short: "Prepare and verify application registry access", Args: cobra.NoArgs}
@@ -42,11 +42,11 @@ func newRegistryInitCommand() *cobra.Command {
 		Short: "Generate a versioned RegistrySetup file",
 		Args:  cobra.NoArgs,
 		RunE: func(command *cobra.Command, _ []string) error {
-			setup := registrysetup.Initial(registrysetup.InitialOptions{
+			setup := registry.Initial(registry.InitialOptions{
 				Name: strings.TrimSpace(name), Host: strings.TrimSpace(host), SecretName: strings.TrimSpace(secretName),
 				Namespace: strings.TrimSpace(namespace), ServiceAccount: strings.TrimSpace(serviceAccount), ProbeImage: strings.TrimSpace(probeImage),
 			})
-			contents, err := registrysetup.Encode(setup)
+			contents, err := registry.Encode(setup)
 			if err != nil {
 				return err
 			}
@@ -75,7 +75,7 @@ func newRegistryInitCommand() *cobra.Command {
 			if err = file.Close(); err != nil {
 				return fmt.Errorf("close registry setup file: %w", err)
 			}
-			_, _ = fmt.Fprintf(command.OutOrStdout(), "Created %s\nNext: molejoctl cluster registry plan --kube-context <context> --file %s --from-docker-config <path|->\n", output, output)
+			_, _ = fmt.Fprintf(command.OutOrStdout(), "Created %s\nNext: molejoctl capability registry plan --kube-context <context> --file %s --from-docker-config <path|->\n", output, output)
 			return nil
 		},
 	}
@@ -94,7 +94,7 @@ func newRegistryInitCommand() *cobra.Command {
 }
 
 func newRegistryPlanCommand(runner registryRunner) *cobra.Command {
-	options := registrysetup.Options{}
+	options := registry.Options{}
 	var source string
 	command := &cobra.Command{
 		Use:   "plan",
@@ -119,7 +119,7 @@ func newRegistryPlanCommand(runner registryRunner) *cobra.Command {
 }
 
 func newRegistryApplyCommand(runner registryRunner) *cobra.Command {
-	options := registrysetup.Options{}
+	options := registry.Options{}
 	var source string
 	var yes bool
 	command := &cobra.Command{
@@ -154,7 +154,7 @@ func newRegistryApplyCommand(runner registryRunner) *cobra.Command {
 }
 
 func newRegistryVerifyCommand(runner registryRunner) *cobra.Command {
-	options := registrysetup.Options{}
+	options := registry.Options{}
 	command := &cobra.Command{
 		Use:   "verify",
 		Short: "Verify registry access without changing the cluster",
@@ -176,7 +176,7 @@ func newRegistryVerifyCommand(runner registryRunner) *cobra.Command {
 }
 
 func newRegistrySmokeCommand(runner registryRunner) *cobra.Command {
-	options := registrysetup.Options{}
+	options := registry.Options{}
 	command := &cobra.Command{
 		Use:   "smoke",
 		Short: "Prove a private image pull with an ephemeral Pod",
@@ -197,14 +197,14 @@ func newRegistrySmokeCommand(runner registryRunner) *cobra.Command {
 	return command
 }
 
-func addRegistryCommonFlags(command *cobra.Command, options *registrysetup.Options) {
+func addRegistryCommonFlags(command *cobra.Command, options *registry.Options) {
 	command.Flags().StringVar(&options.ContextName, "kube-context", "", "kubeconfig context to use")
 	command.Flags().StringVarP(&options.SetupPath, "file", "f", "", "RegistrySetup YAML file")
 	_ = command.MarkFlagRequired("kube-context")
 	_ = command.MarkFlagRequired("file")
 }
 
-func prepareRegistryOptions(command *cobra.Command, options *registrysetup.Options, source string, credentialRequired bool) error {
+func prepareRegistryOptions(command *cobra.Command, options *registry.Options, source string, credentialRequired bool) error {
 	options.ContextName = strings.TrimSpace(options.ContextName)
 	options.SetupPath = strings.TrimSpace(options.SetupPath)
 	if !credentialRequired {
@@ -215,7 +215,7 @@ func prepareRegistryOptions(command *cobra.Command, options *registrysetup.Optio
 	if source == "" {
 		return errors.New("Docker config source is required")
 	}
-	contents, err := registrysetup.ReadDockerConfigSource(source, command.InOrStdin())
+	contents, err := registry.ReadDockerConfigSource(source, command.InOrStdin())
 	if err != nil {
 		return err
 	}
@@ -223,7 +223,7 @@ func prepareRegistryOptions(command *cobra.Command, options *registrysetup.Optio
 	return nil
 }
 
-func writeRegistryPlan(writer io.Writer, report registrysetup.Report, contextName string) {
+func writeRegistryPlan(writer io.Writer, report registry.Report, contextName string) {
 	_, _ = fmt.Fprintln(writer, "Application registry access plan")
 	_, _ = fmt.Fprintf(writer, "Context: %s\nNamespace: %s\nServiceAccount: %s\nRegistry: %s\n\n", contextName, report.Setup.Spec.Target.Namespace, report.Setup.Spec.Target.ServiceAccount, report.Setup.Spec.Registry.Host)
 	if report.Plan.Ready {
@@ -235,7 +235,7 @@ func writeRegistryPlan(writer io.Writer, report registrysetup.Report, contextNam
 	}
 }
 
-func writeRegistryResult(writer io.Writer, report registrysetup.Report, contextName, verb string) {
+func writeRegistryResult(writer io.Writer, report registry.Report, contextName, verb string) {
 	_, _ = fmt.Fprintf(writer, "%s registry setup %s in context %s\n", verb, report.Setup.Metadata.Name, contextName)
 	_, _ = fmt.Fprintf(writer, "Registry: %s\nTarget: %s/%s\nSecret: %s\n\nResult: ready\n", report.Setup.Spec.Registry.Host, report.Setup.Spec.Target.Namespace, report.Setup.Spec.Target.ServiceAccount, report.Setup.Spec.Authentication.SecretName)
 }

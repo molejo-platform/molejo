@@ -58,5 +58,5 @@ owns image-pull authentication.
 
 ## References
 
-- [External CI operations](../operations/external-ci.md)
+- [External CI operations](../application-loop/external-ci.md)
 - [ADR-0013: Outbound Cluster Agent Identity and Pairing](0013-outbound-cluster-agent-identity-and-pairing.md)

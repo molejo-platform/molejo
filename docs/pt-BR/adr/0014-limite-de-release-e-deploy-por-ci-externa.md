@@ -55,5 +55,5 @@ rejeitado porque o Kubernetes já possui esse contrato.
 
 ## Referências
 
-- [Operação com CI externa](../operations/external-ci.md)
+- [Operação com CI externa](../application-loop/external-ci.md)
 - [ADR-0013: identidade e pareamento outbound do Cluster Agent](0013-outbound-cluster-agent-identity-and-pairing.md)

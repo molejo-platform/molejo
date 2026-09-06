@@ -9,23 +9,22 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molejo-platform/molejo/apps/molejoctl/internal/clustertls"
-	"github.com/molejo-platform/molejo/apps/molejoctl/internal/tlssetup"
+	"github.com/molejo-platform/molejo/apps/molejoctl/internal/capability/tls"
 )
 
 type fakeTLSOperator struct {
-	prepareOptions tlssetup.Options
-	verifyOptions  tlssetup.Options
-	report         tlssetup.Report
+	prepareOptions tls.Options
+	verifyOptions  tls.Options
+	report         tls.Report
 	err            error
 }
 
-func (f *fakeTLSOperator) Prepare(_ context.Context, options tlssetup.Options) (tlssetup.Report, error) {
+func (f *fakeTLSOperator) Prepare(_ context.Context, options tls.Options) (tls.Report, error) {
 	f.prepareOptions = options
 	return f.report, f.err
 }
 
-func (f *fakeTLSOperator) Verify(_ context.Context, options tlssetup.Options) (tlssetup.Report, error) {
+func (f *fakeTLSOperator) Verify(_ context.Context, options tls.Options) (tls.Report, error) {
 	f.verifyOptions = options
 	return f.report, f.err
 }
@@ -66,10 +65,10 @@ func TestTLSCommandReturnsFailure(t *testing.T) {
 	}
 }
 
-func readyTLSReport() tlssetup.Report {
-	return tlssetup.Report{
-		Setup:       clustertls.Setup{Metadata: clustertls.Metadata{Name: "molejo-dev"}, Spec: clustertls.SetupSpec{DNSNames: []string{"*.molejo.dev"}, TargetSecretRef: clustertls.ObjectReference{Namespace: "molejo-system", Name: "molejo-dev-tls"}}},
-		Certificate: clustertls.CertificateFacts{Valid: true, NotAfter: time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC)},
+func readyTLSReport() tls.Report {
+	return tls.Report{
+		Setup:       tls.Setup{Metadata: tls.Metadata{Name: "molejo-dev"}, Spec: tls.SetupSpec{DNSNames: []string{"*.molejo.dev"}, TargetSecretRef: tls.ObjectReference{Namespace: "molejo-system", Name: "molejo-dev-tls"}}},
+		Certificate: tls.CertificateFacts{Valid: true, NotAfter: time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC)},
 	}
 }
 

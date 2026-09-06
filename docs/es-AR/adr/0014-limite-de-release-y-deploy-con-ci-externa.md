@@ -55,5 +55,5 @@ porque Kubernetes ya posee ese contrato.
 
 ## Referencias
 
-- [Operación con CI externa](../operations/external-ci.md)
+- [Operación con CI externa](../application-loop/external-ci.md)
 - [ADR-0013: identidad y pairing saliente del Cluster Agent](0013-outbound-cluster-agent-identity-and-pairing.md)

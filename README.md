@@ -23,9 +23,10 @@ structure whenever an equivalent page is available.
 
 Current experimental components:
 
-- [Platform Operator](docs/en/operations/platform-operator.md)
-- [Outbound Cluster Agent](docs/en/operations/cluster-agent.md)
-- [Cluster TLS](docs/en/operations/tls.md)
+- [Operational model](docs/en/architecture/operational-model.md)
+- [Platform Operator](docs/en/platform/platform-operator.md)
+- [Outbound Cluster Agent](docs/en/platform/cluster-agent.md)
+- [Cluster capabilities](docs/en/capabilities/README.md)
 
 ## Contributing
 

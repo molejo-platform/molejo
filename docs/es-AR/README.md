@@ -69,16 +69,20 @@ El inglés es el idioma canónico de la documentación. Las versiones en portugu
 (`pt-BR`) y español de Argentina (`es-AR`) se mantienen en conjunto, y se podrán
 incorporar otros idiomas en el futuro.
 
-Guías actuales de los componentes:
+Guías actuales de arquitectura y componentes:
 
-- [Platform Operator](operations/platform-operator.md)
-- [Cluster Agent outbound](operations/cluster-agent.md)
-- [TLS del clúster](operations/tls.md)
-- [Setup day zero en K3s](operations/cluster-setup.md)
-- [Acceso al registry de aplicaciones](operations/registry-access.md)
-- [Releases con CI externa](operations/external-ci.md)
+- [Modelo operativo](architecture/operational-model.md)
+- [Inspección de la foundation](foundation/inspect.md)
+- [Ciclo de vida de la plataforma](platform/lifecycle.md)
+- [Platform Operator](platform/platform-operator.md)
+- [Cluster Agent outbound](platform/cluster-agent.md)
+- [Capacidades del clúster](capabilities/README.md)
+- [Application loop](application-loop/README.md)
+- [Releases con CI externa](application-loop/external-ci.md)
 - [ADR de identidad y pairing del Cluster Agent outbound](adr/0013-outbound-cluster-agent-identity-and-pairing.md)
 - [ADR del límite de Release y deploy con CI externa](adr/0014-limite-de-release-y-deploy-con-ci-externa.md)
+- [ADR de ownership de capacidades](adr/0015-ownership-de-capacidades.md)
+- [ADR de política de ciclo de vida alfa](adr/0016-politica-de-ciclo-de-vida-alfa.md)
 
 ## Contribuciones
 

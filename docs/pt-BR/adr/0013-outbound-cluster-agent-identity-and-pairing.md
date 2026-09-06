@@ -56,4 +56,4 @@ alternativas não foram escolhidas.
 ## References
 
 - [ADR-0006: Control Plane Topology and Runtime Boundary](0006-control-plane-topology-and-runtime-boundary.md)
-- [Operação do Cluster Agent](../operations/cluster-agent.md)
+- [Operação do Cluster Agent](../platform/cluster-agent.md)

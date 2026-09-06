@@ -49,7 +49,7 @@ install_control_plane() {
   fi
   (
     cd "$repository_root"
-    go run ./apps/molejoctl control-plane install --kube-context "$context_name" --version "$version"
+    go run ./apps/molejoctl platform control-plane install --kube-context "$context_name" --version "$version"
   )
 }
 

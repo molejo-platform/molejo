@@ -14,7 +14,7 @@ func TestHelpAndVersion(t *testing.T) {
 		args []string
 		want []string
 	}{
-		{name: "help", args: []string{"--help"}, want: []string{"Install and operate Molejo", "molejoctl", "cluster"}},
+		{name: "help", args: []string{"--help"}, want: []string{"Install and operate Molejo", "foundation", "platform", "capability"}},
 		{name: "version", args: []string{"--version"}, want: []string{"v0.1.0-alpha.1", "abcdef", "2026-09-01T00:00:00Z"}},
 	}
 	for _, test := range tests {
@@ -34,5 +34,14 @@ func TestHelpAndVersion(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestAlphaCommandTreeDoesNotExposeLegacyTopLevelCommands(t *testing.T) {
+	command := New("v0.1.0-alpha.3", "abcdef", "2026-09-06T00:00:00Z")
+	for _, legacy := range []string{"cluster", "control-plane"} {
+		if found, _, _ := command.Find([]string{legacy}); found != command {
+			t.Fatalf("legacy top-level command %q is still registered", legacy)
+		}
 	}
 }

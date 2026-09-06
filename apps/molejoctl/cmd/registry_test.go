@@ -8,41 +8,41 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/molejo-platform/molejo/apps/molejoctl/internal/registrysetup"
+	"github.com/molejo-platform/molejo/apps/molejoctl/internal/capability/registry"
 )
 
 type fakeRegistryRunner struct {
-	options registrysetup.Options
-	report  registrysetup.Report
+	options registry.Options
+	report  registry.Report
 	err     error
 	applied bool
 	smoked  bool
 }
 
-func (f *fakeRegistryRunner) Plan(_ context.Context, options registrysetup.Options) (registrysetup.Report, error) {
+func (f *fakeRegistryRunner) Plan(_ context.Context, options registry.Options) (registry.Report, error) {
 	f.options = options
 	return f.report, f.err
 }
 
-func (f *fakeRegistryRunner) Apply(_ context.Context, options registrysetup.Options) (registrysetup.Report, error) {
+func (f *fakeRegistryRunner) Apply(_ context.Context, options registry.Options) (registry.Report, error) {
 	f.options = options
 	f.applied = true
 	return f.report, f.err
 }
 
-func (f *fakeRegistryRunner) Verify(_ context.Context, options registrysetup.Options) (registrysetup.Report, error) {
+func (f *fakeRegistryRunner) Verify(_ context.Context, options registry.Options) (registry.Report, error) {
 	f.options = options
 	return f.report, f.err
 }
 
-func (f *fakeRegistryRunner) Smoke(_ context.Context, options registrysetup.Options) (registrysetup.Report, error) {
+func (f *fakeRegistryRunner) Smoke(_ context.Context, options registry.Options) (registry.Report, error) {
 	f.options = options
 	f.smoked = true
 	return f.report, f.err
 }
 
-func registryCommandSetup() registrysetup.Setup {
-	return registrysetup.Initial(registrysetup.InitialOptions{
+func registryCommandSetup() registry.Setup {
+	return registry.Initial(registry.InitialOptions{
 		Name: "application-images", Host: "registry.molejo.dev", SecretName: "molejo-application-registry",
 		Namespace: "molejo-registry-e2e", ServiceAccount: "default",
 		ProbeImage: "registry.molejo.dev/molejo/testkit@sha256:" + strings.Repeat("a", 64),
@@ -74,7 +74,7 @@ func TestRegistryInitWritesCredentialFreeSetup(t *testing.T) {
 
 func TestRegistryApplyPlansBeforeConfirmationAndRedactsCredential(t *testing.T) {
 	setup := registryCommandSetup()
-	runner := &fakeRegistryRunner{report: registrysetup.Report{Setup: setup, Plan: registrysetup.Plan{Operations: []registrysetup.Operation{{Kind: registrysetup.OperationEnsureSecret, Detail: "ensure Secret"}}}}}
+	runner := &fakeRegistryRunner{report: registry.Report{Setup: setup, Plan: registry.Plan{Operations: []registry.Operation{{Kind: registry.OperationEnsureSecret, Detail: "ensure Secret"}}}}}
 	command := newRegistryApplyCommand(runner)
 	output := &bytes.Buffer{}
 	command.SetOut(output)
@@ -95,7 +95,7 @@ func TestRegistryApplyPlansBeforeConfirmationAndRedactsCredential(t *testing.T) 
 
 func TestRegistryApplyUsesOneStdinReadAndConverges(t *testing.T) {
 	setup := registryCommandSetup()
-	runner := &fakeRegistryRunner{report: registrysetup.Report{Setup: setup, Plan: registrysetup.Plan{Ready: true}}}
+	runner := &fakeRegistryRunner{report: registry.Report{Setup: setup, Plan: registry.Plan{Ready: true}}}
 	command := newRegistryApplyCommand(runner)
 	command.SetIn(strings.NewReader(`{"auths":{"registry.molejo.dev":{"auth":"c2Vuc2l0aXZl"}}}`))
 	command.SetArgs([]string{"--kube-context", "molejo-k3s", "--file", "registry.yaml", "--from-docker-config", "-", "--yes"})
@@ -109,7 +109,7 @@ func TestRegistryApplyUsesOneStdinReadAndConverges(t *testing.T) {
 
 func TestRegistrySmokeReportsRemovedProbe(t *testing.T) {
 	setup := registryCommandSetup()
-	runner := &fakeRegistryRunner{report: registrysetup.Report{Setup: setup, Smoke: registrysetup.SmokeResult{
+	runner := &fakeRegistryRunner{report: registry.Report{Setup: setup, Smoke: registry.SmokeResult{
 		PodName: "application-images-smoke", Image: setup.Spec.Probe.Image, ImageID: "docker-pullable://" + setup.Spec.Probe.Image,
 	}}}
 	command := newRegistrySmokeCommand(runner)

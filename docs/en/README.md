@@ -66,16 +66,20 @@ English is the canonical documentation language. Portuguese (`pt-BR`) and
 Argentinian Spanish (`es-AR`) versions are maintained alongside it, and more
 languages may be added later.
 
-Current component guides:
+Current architecture and component guides:
 
-- [Platform Operator](operations/platform-operator.md)
-- [Outbound Cluster Agent](operations/cluster-agent.md)
-- [Cluster TLS](operations/tls.md)
-- [K3s day-zero setup](operations/cluster-setup.md)
-- [Application registry access](operations/registry-access.md)
-- [External CI releases](operations/external-ci.md)
+- [Operational model](architecture/operational-model.md)
+- [Foundation inspection](foundation/inspect.md)
+- [Platform lifecycle](platform/lifecycle.md)
+- [Platform Operator](platform/platform-operator.md)
+- [Outbound Cluster Agent](platform/cluster-agent.md)
+- [Cluster capabilities](capabilities/README.md)
+- [Application loop](application-loop/README.md)
+- [External CI releases](application-loop/external-ci.md)
 - [Outbound Cluster Agent identity and pairing ADR](adr/0013-outbound-cluster-agent-identity-and-pairing.md)
 - [External CI release and deployment boundary ADR](adr/0014-external-ci-release-and-deployment-boundary.md)
+- [Capability ownership ADR](adr/0015-capability-ownership.md)
+- [Alpha lifecycle policy ADR](adr/0016-alpha-lifecycle-policy.md)
 
 ## Contributing
 

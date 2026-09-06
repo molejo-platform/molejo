@@ -9,15 +9,15 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/molejo-platform/molejo/apps/molejoctl/internal/tlssetup"
+	"github.com/molejo-platform/molejo/apps/molejoctl/internal/capability/tls"
 )
 
 type tlsOperator interface {
-	Prepare(context.Context, tlssetup.Options) (tlssetup.Report, error)
-	Verify(context.Context, tlssetup.Options) (tlssetup.Report, error)
+	Prepare(context.Context, tls.Options) (tls.Report, error)
+	Verify(context.Context, tls.Options) (tls.Report, error)
 }
 
-func newKubernetesTLSOperator() tlsOperator { return tlssetup.New() }
+func newKubernetesTLSOperator() tlsOperator { return tls.New() }
 
 func newTLSCommand(operator tlsOperator) *cobra.Command {
 	command := &cobra.Command{Use: "tls", Short: "Prepare and verify cluster TLS material", Args: cobra.NoArgs}
@@ -26,7 +26,7 @@ func newTLSCommand(operator tlsOperator) *cobra.Command {
 }
 
 func newTLSPrepareCommand(operator tlsOperator) *cobra.Command {
-	var options tlssetup.Options
+	var options tls.Options
 	command := &cobra.Command{
 		Use:   "prepare",
 		Short: "Run an optional TLS setup recipe",
@@ -52,7 +52,7 @@ func newTLSPrepareCommand(operator tlsOperator) *cobra.Command {
 }
 
 func newTLSVerifyCommand(operator tlsOperator) *cobra.Command {
-	var options tlssetup.Options
+	var options tls.Options
 	command := &cobra.Command{
 		Use:   "verify",
 		Short: "Verify existing TLS material without changing the cluster",
@@ -74,20 +74,20 @@ func newTLSVerifyCommand(operator tlsOperator) *cobra.Command {
 	return command
 }
 
-func addTLSCommonFlags(command *cobra.Command, options *tlssetup.Options) {
+func addTLSCommonFlags(command *cobra.Command, options *tls.Options) {
 	command.Flags().StringVar(&options.ContextName, "kube-context", "", "kubeconfig context to use")
 	command.Flags().StringVarP(&options.SetupPath, "file", "f", "", "TLSSetup YAML file")
 	_ = command.MarkFlagRequired("kube-context")
 	_ = command.MarkFlagRequired("file")
 }
 
-func normalizeTLSOptions(options *tlssetup.Options) {
+func normalizeTLSOptions(options *tls.Options) {
 	options.ContextName = strings.TrimSpace(options.ContextName)
 	options.SetupPath = strings.TrimSpace(options.SetupPath)
 	options.CredentialEnv = strings.TrimSpace(options.CredentialEnv)
 }
 
-func writeTLSReport(writer io.Writer, report tlssetup.Report, contextName, verb string) {
+func writeTLSReport(writer io.Writer, report tls.Report, contextName, verb string) {
 	_, _ = fmt.Fprintf(writer, "%s TLS setup %s in context %s\n", verb, report.Setup.Metadata.Name, contextName)
 	_, _ = fmt.Fprintf(writer, "Certificate: %s/%s\n", report.Setup.Spec.TargetSecretRef.Namespace, report.Setup.Spec.TargetSecretRef.Name)
 	_, _ = fmt.Fprintf(writer, "DNS names: %s\n", strings.Join(report.Setup.Spec.DNSNames, ", "))
