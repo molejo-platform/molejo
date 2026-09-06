@@ -60,7 +60,10 @@ distribution-test:
 
 test: operator-test agent-test contract-test distribution-test
 
-verify: mod-check generate fmt-check lint test control-plane-build distribution-build
+integration-test:
+    MOLEJO_TESTCONTAINERS=1 go test -count=1 ./services/control-plane-api/internal/api ./services/control-plane-api/internal/store
+
+verify: mod-check generate fmt-check lint test integration-test control-plane-build distribution-build
 
 ci: verify
     git diff --check

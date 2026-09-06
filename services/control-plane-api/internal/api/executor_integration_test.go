@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -106,10 +105,7 @@ func TestSessionReadKeepsTheExistingSessionStable(t *testing.T) {
 }
 
 func TestLogoutDoesNotClaimSuccessWhenRevocationFails(t *testing.T) {
-	dsn := strings.TrimSpace(os.Getenv("MOLEJO_TEST_DATABASE_URL"))
-	if dsn == "" {
-		t.Skip("set MOLEJO_TEST_DATABASE_URL to run PostgreSQL integration tests")
-	}
+	dsn := testsupport.PostgresURL(t)
 	brokenStore, err := store.New(context.Background(), dsn)
 	if err != nil {
 		t.Fatal(err)
@@ -171,10 +167,7 @@ func createExecutorRelease(t *testing.T, s *store.Store, workspaceID, actorID in
 
 func newExecutorIntegrationFixture(t *testing.T) (*store.Store, int64, int64, string) {
 	t.Helper()
-	dsn := strings.TrimSpace(os.Getenv("MOLEJO_TEST_DATABASE_URL"))
-	if dsn == "" {
-		t.Skip("set MOLEJO_TEST_DATABASE_URL to run PostgreSQL integration tests")
-	}
+	dsn := testsupport.PostgresURL(t)
 	ctx := context.Background()
 	isolatedDSN, cleanup, err := testsupport.IsolatedPostgres(ctx, dsn, "control_plane_api")
 	if err != nil {

@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"io/fs"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -20,10 +19,7 @@ import (
 )
 
 func TestParameterHardeningMigrationBackfillsArchivedParameters(t *testing.T) {
-	dsn := strings.TrimSpace(os.Getenv("MOLEJO_TEST_DATABASE_URL"))
-	if dsn == "" {
-		t.Skip("set MOLEJO_TEST_DATABASE_URL to run PostgreSQL integration tests")
-	}
+	dsn := testsupport.PostgresURL(t)
 	ctx := context.Background()
 	isolatedDSN, cleanup, err := testsupport.IsolatedPostgres(ctx, dsn, "parameter_hardening_upgrade")
 	if err != nil {
@@ -77,10 +73,7 @@ func TestParameterHardeningMigrationBackfillsArchivedParameters(t *testing.T) {
 }
 
 func TestReleaseAutomationMigrationBackfillsImmutableAuditPrincipals(t *testing.T) {
-	dsn := strings.TrimSpace(os.Getenv("MOLEJO_TEST_DATABASE_URL"))
-	if dsn == "" {
-		t.Skip("set MOLEJO_TEST_DATABASE_URL to run PostgreSQL integration tests")
-	}
+	dsn := testsupport.PostgresURL(t)
 	ctx := context.Background()
 	isolatedDSN, cleanup, err := testsupport.IsolatedPostgres(ctx, dsn, "release_automation_upgrade")
 	if err != nil {
@@ -705,10 +698,7 @@ func createRelease(t *testing.T, storage *Store, workspaceID, actorID int64, pro
 
 func newIntegrationFixture(t *testing.T) (*Store, int64, int64) {
 	t.Helper()
-	dsn := strings.TrimSpace(os.Getenv("MOLEJO_TEST_DATABASE_URL"))
-	if dsn == "" {
-		t.Skip("set MOLEJO_TEST_DATABASE_URL to run PostgreSQL integration tests")
-	}
+	dsn := testsupport.PostgresURL(t)
 	ctx := context.Background()
 	isolatedDSN, cleanup, err := testsupport.IsolatedPostgres(ctx, dsn, "control_plane_store")
 	if err != nil {
