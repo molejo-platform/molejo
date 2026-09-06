@@ -6,6 +6,7 @@ go_sources := "apps contracts packages services test tools/cmd tools/internal"
 
 default: verify
 
+# Format maintained Go sources.
 fmt:
     go tool -modfile={{ tool_mod }} gofumpt -w {{ go_sources }}
     go tool -modfile={{ tool_mod }} gci write --skip-generated -s standard -s default -s localmodule {{ go_sources }}
@@ -25,6 +26,7 @@ mod-check:
     go -C tools mod tidy -diff
     go -C tools mod verify
 
+# Install the repository Git hooks.
 hooks-install:
     hook_bin="$(git rev-parse --path-format=absolute --git-path lefthook)"; GOCACHE="${GOCACHE:-/tmp/molejo-go-cache}" go -C tools build -o "$hook_bin" github.com/evilmartians/lefthook/v2; "$hook_bin" install
 
@@ -40,8 +42,11 @@ generate:
 operator-test:
     KUBEBUILDER_ASSETS="$(go tool setup-envtest use -p path {{ envtest_version }})" go test ./packages/kubernetes-api/... ./services/platform-operator/...
 
-agent-test:
-    go test ./contracts/... ./services/cluster-agent/... ./services/control-plane-api/...
+cluster-agent-test:
+    KUBEBUILDER_ASSETS="$(go tool setup-envtest use -p path {{ envtest_version }})" go test ./contracts/... ./services/cluster-agent/...
+
+control-plane-test:
+    go test ./services/control-plane-api/...
 
 contract-test:
     go test ./test/contracts
@@ -58,13 +63,20 @@ distribution-test:
     go test ./apps/...
     go -C tools test ./cmd/release/... ./internal/release/...
 
-test: operator-test agent-test contract-test distribution-test
+script-check:
+    bash -n tools/testing/*.sh
 
+# Run the fast automated suite without Docker.
+test: operator-test cluster-agent-test control-plane-test contract-test distribution-test script-check
+
+# Run PostgreSQL integration tests with Testcontainers.
 integration-test:
     MOLEJO_TESTCONTAINERS=1 go test -count=1 ./services/control-plane-api/internal/api ./services/control-plane-api/internal/store
 
+# Run every local quality, test, and build gate.
 verify: mod-check generate fmt-check lint test integration-test control-plane-build distribution-build
 
+# Run the clean-worktree gate used by CI.
 ci: verify
     git diff --check
     git diff --exit-code

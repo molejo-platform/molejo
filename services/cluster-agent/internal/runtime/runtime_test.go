@@ -448,6 +448,7 @@ func runtimeTestIntent(name string) runtimecontract.DeploymentIntent {
 			Limits:   runtimecontract.ResourceValues{CPUMillis: 250, MemoryMiB: 128},
 		},
 		Probes: runtimecontract.Probes{
+			Startup:   runtimecontract.Probe{Path: "/readyz"},
 			Liveness:  runtimecontract.Probe{Path: "/healthz"},
 			Readiness: runtimecontract.Probe{Path: "/readyz"},
 		},

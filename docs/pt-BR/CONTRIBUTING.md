@@ -1,6 +1,14 @@
 # Contribuição
 
-As diretrizes de contribuição serão adicionadas em breve.
+## Pré-requisitos
+
+- Go 1.26.6, a versão utilizada pelo CI.
+- `just` 1.57 ou superior.
+- Docker para os testes de integração com PostgreSQL.
+- `kubectl` somente para testes de aceitação em um cluster real.
+
+A primeira execução baixa os módulos Go e os binários do Kubernetes `envtest`.
+Use `just --list` para descobrir os comandos mantidos.
 
 ## Testes
 
@@ -26,3 +34,17 @@ MOLEJO_TEST_DATABASE_URL='postgres://user:password@host/database?sslmode=disable
 
 `just verify` executa ambas as suítes e todos os gates de qualidade do
 repositório.
+
+## Testes de aceitação no K3s
+
+Estes testes para mantenedores não fazem parte do `just verify`, pois exigem um
+cluster existente:
+
+```bash
+tools/testing/control-plane-k3s.sh verify --context molejo-k3s
+tools/testing/tls-k3s.sh verify --context molejo-k3s --profile default
+```
+
+Os modos `teardown` e `cycle` modificam o cluster e exigem o argumento explícito
+`--confirm <context>`. Execute os scripts sem argumentos para consultar o uso
+completo.

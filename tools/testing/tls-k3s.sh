@@ -43,7 +43,10 @@ verify() {
   local secret_namespace secret_name
   secret_namespace="$(kubectl --context "$context_name" -n molejo-system get configmap "$binding_name" -o jsonpath='{.data.binding\.yaml}' | awk '/namespace:/ {print $2; exit}')"
   secret_name="$(kubectl --context "$context_name" -n molejo-system get configmap "$binding_name" -o jsonpath='{.data.binding\.yaml}' | awk '/name:/ {seen++; if (seen == 2) {print $2; exit}}')"
-  [[ -n "$secret_namespace" && -n "$secret_name" ]]
+  if [[ -z "$secret_namespace" || -z "$secret_name" ]]; then
+    echo "TLS profile $profile_name does not contain a valid Secret reference" >&2
+    return 1
+  fi
   kubectl --context "$context_name" -n "$secret_namespace" get secret "$secret_name" >/dev/null
   echo "TLS profile $profile_name is configured in context $context_name"
 }

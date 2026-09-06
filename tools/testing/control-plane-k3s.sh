@@ -59,12 +59,25 @@ agent_status() {
   kubectl --context "$context_name" get --raw "/api/v1/namespaces/molejo-system/pods/${pod_name}:8081/proxy/status"
 }
 
+check_equal() {
+  local label="$1" actual="$2" expected="$3"
+  if [[ "$actual" != "$expected" ]]; then
+    echo "$label: got '$actual', want '$expected'" >&2
+    return 1
+  fi
+}
+
 verify_control_plane() {
-  [[ "$(kubectl --context "$context_name" -n molejo-control-plane get pvc data-postgres-0 -o jsonpath='{.status.phase}')" == "Bound" ]]
-  [[ "$(kubectl --context "$context_name" -n molejo-control-plane get statefulset postgres -o jsonpath='{.status.readyReplicas}')" == "1" ]]
-  [[ "$(kubectl --context "$context_name" -n molejo-control-plane get job control-plane-bootstrap -o jsonpath='{.status.succeeded}')" == "1" ]]
-  [[ "$(kubectl --context "$context_name" -n molejo-control-plane get deployment control-plane-api -o jsonpath='{.status.availableReplicas}')" == "1" ]]
-  agent_status | grep -q '"state":"Paired"'
+  check_equal "PostgreSQL PVC phase" "$(kubectl --context "$context_name" -n molejo-control-plane get pvc data-postgres-0 -o jsonpath='{.status.phase}')" "Bound"
+  check_equal "PostgreSQL ready replicas" "$(kubectl --context "$context_name" -n molejo-control-plane get statefulset postgres -o jsonpath='{.status.readyReplicas}')" "1"
+  check_equal "bootstrap succeeded jobs" "$(kubectl --context "$context_name" -n molejo-control-plane get job control-plane-bootstrap -o jsonpath='{.status.succeeded}')" "1"
+  check_equal "control-plane available replicas" "$(kubectl --context "$context_name" -n molejo-control-plane get deployment control-plane-api -o jsonpath='{.status.availableReplicas}')" "1"
+  local status
+  status="$(agent_status)"
+  if ! grep -q '"state":"Paired"' <<<"$status"; then
+    echo "cluster-agent is not paired: $status" >&2
+    return 1
+  fi
   if kubectl --context "$context_name" -n molejo-system get secret molejo-agent-enrollment -o jsonpath='{.data.token}' | grep -q .; then
     echo "Agent enrollment token was not cleared" >&2
     exit 1
