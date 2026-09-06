@@ -1,8 +1,13 @@
 package api
 
 import (
+	"errors"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/molejo-platform/molejo/services/control-plane-api/internal/store"
 )
 
 func TestAutomationBearerToken(t *testing.T) {
@@ -25,5 +30,42 @@ func TestAutomationBearerToken(t *testing.T) {
 				t.Fatalf("automationBearerToken() = (%q,%v), want valid=%v", value, valid, test.valid)
 			}
 		})
+	}
+}
+
+func TestWriteAutomationErrorPreservesAuthenticationAndStorageFailures(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		err  error
+		code int
+	}{
+		{name: "invalid credential", err: store.ErrAutomationAuthentication, code: http.StatusUnauthorized},
+		{name: "name conflict", err: store.ErrNameConflict, code: http.StatusConflict},
+		{name: "idempotency conflict", err: store.ErrIdempotencyConflict, code: http.StatusConflict},
+		{name: "storage failure", err: errors.New("database unavailable"), code: http.StatusInternalServerError},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			writeAutomationError(response, httptest.NewRequest(http.MethodGet, "/", nil), test.err)
+			if response.Code != test.code {
+				t.Fatalf("status=%d body=%s, want %d", response.Code, response.Body.String(), test.code)
+			}
+		})
+	}
+}
+
+func TestValidEnvironmentScopeEnforcesPublishedLimit(t *testing.T) {
+	values := make([]string, 20)
+	for index := range values {
+		values[index] = "aev-" + strings.Repeat(string(rune('a'+index)), 20)
+	}
+	if !validEnvironmentScope(values) {
+		t.Fatal("20 unique App Environment IDs must be accepted")
+	}
+	if validEnvironmentScope(append(values, "aev-"+strings.Repeat("z", 20))) {
+		t.Fatal("21 App Environment IDs must be rejected")
+	}
+	if validEnvironmentScope([]string{values[0], values[0]}) {
+		t.Fatal("duplicate App Environment IDs must be rejected")
 	}
 }

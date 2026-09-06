@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/molejo-platform/molejo/services/control-plane-api/internal/audit"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/domain"
 )
 
@@ -118,6 +119,6 @@ func (q *recordingDeliveryQueue) FindAppEnvironment(context.Context, int64, stri
 	return domain.AppEnvironment{}, nil
 }
 
-func (q *recordingDeliveryQueue) CreateDeployment(context.Context, int64, int64, string, string, string, int64, int64, string, []byte, []byte) (domain.Deployment, domain.Operation, bool, error) {
+func (q *recordingDeliveryQueue) CreateDeployment(context.Context, int64, int64, string, string, string, int64, int64, string, []byte, []byte, audit.Event) (domain.Deployment, domain.Operation, bool, error) {
 	return domain.Deployment{}, domain.Operation{}, false, nil
 }

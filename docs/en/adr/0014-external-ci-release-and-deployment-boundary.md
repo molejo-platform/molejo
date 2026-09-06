@@ -19,14 +19,16 @@ the Cluster Agent continues to transport only versioned runtime commands to the
 Platform Operator.
 
 External automation authenticates as a first-class ServiceAccount Principal.
-Its opaque credential is stored only as a hash, expires, can be revoked, and is
-issued once. Grants are restricted to `release.write` for one App and
+Its opaque credentials are stored only as hashes, expire, and can be individually
+revoked. Each bearer secret is issued once, while the ServiceAccount remains a
+durable identity across credential rotations. Grants are restricted to `release.write` for one App and
 `deployment.create` for explicitly selected App Environments. Deployment keeps
 the existing `If-Match` and idempotency contracts. An automation identity may
 read its granted environment and only operations that it requested.
 
 Release registration is provider-independent. Source and producer provenance
-are descriptive metadata; GitHub is not a database relation. An idempotency key
+are caller-declared, non-attested descriptive metadata and are returned with
+`provenanceStatus=Declared`; GitHub is not a database relation. An idempotency key
 replays the same payload and conflicts with a different payload. Equal digests
 may be registered by different apps or provenance runs. Releases are immutable
 history and are not expired by an implicit per-environment counter.
@@ -42,9 +44,9 @@ authentication and image pulling remain Kubernetes/operator-runbook concerns;
 the control plane only enforces its registry allowlist. Neither the Cluster
 Agent nor the Platform Operator receives CI tokens or provider-specific code.
 
-Creating and revoking automation credentials is initially restricted to
-Workspace Owners or explicit Managers. Credential rotation is a create-update-
-revoke operation performed by the pipeline operator.
+Creating and revoking automation credentials is restricted to Workspace Owners
+or explicit Managers. Credential rotation issues a second token for the same
+ServiceAccount, updates the CI secret, and then revokes the previous token.
 
 ## Alternatives Considered
 

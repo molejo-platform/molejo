@@ -7,9 +7,15 @@ immutable result. The integration never patches Kubernetes directly.
 
 A Workspace Owner creates an App service account through
 `POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/service-accounts`.
-The request chooses the App Environments that may receive deployments. The
-response exposes the token once; store it as a masked CI secret and never commit
-it. Create a replacement before revoking the old service account when rotating.
+The request chooses the App Environments that may receive deployments. Issue a
+credential with `POST .../service-accounts/{serviceAccountId}/tokens`. That
+response exposes the bearer token once; store it as a masked CI secret and never
+commit it. Rotation issues a second token for the same identity, updates the CI
+secret, and revokes the previous token with `DELETE .../tokens/{tokenId}`.
+
+Source and producer fields are declarations made by the authenticated pipeline,
+not cryptographic attestations. Releases expose this explicitly as
+`provenanceStatus=Declared`.
 
 ## Pipeline contract
 

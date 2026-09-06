@@ -52,7 +52,7 @@ jobs:
             > "$RUNNER_TEMP/molejo-release-input.json"
           curl --fail-with-body --silent --show-error \
             -H "Authorization: Bearer $MOLEJO_TOKEN" \
-            -H "Idempotency-Key: release-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
+            -H "Idempotency-Key: release-$GITHUB_RUN_ID" \
             -H "Content-Type: application/json" \
             --data-binary "@$RUNNER_TEMP/molejo-release-input.json" \
             "$base/releases" > "$RUNNER_TEMP/molejo-release.json"
@@ -79,7 +79,7 @@ jobs:
             > "$RUNNER_TEMP/molejo-deployment-input.json"
           curl --fail-with-body --silent --show-error \
             -H "Authorization: Bearer $MOLEJO_TOKEN" \
-            -H "Idempotency-Key: deployment-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
+            -H "Idempotency-Key: deployment-$GITHUB_RUN_ID" \
             -H "If-Match: $version" \
             -H "Content-Type: application/json" \
             --data-binary "@$RUNNER_TEMP/molejo-deployment-input.json" \

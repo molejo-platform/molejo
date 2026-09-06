@@ -88,25 +88,16 @@ func (h *generatedHandler) CreateAppServiceAccount(w http.ResponseWriter, r *htt
 		return
 	}
 	var input struct {
-		Name                     string     `json:"name"`
-		DeploymentEnvironmentIDs []string   `json:"deploymentEnvironmentIds"`
-		ExpiresAt                *time.Time `json:"expiresAt,omitempty"`
+		Name                     string    `json:"name"`
+		DeploymentEnvironmentIDs *[]string `json:"deploymentEnvironmentIds"`
 	}
 	if err := decodeJSON(r, &input); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_json", "request body is invalid", r)
 		return
 	}
 	name, err := automation.NormalizeName(input.Name)
-	if err != nil || !validEnvironmentScope(input.DeploymentEnvironmentIDs) {
+	if err != nil || input.DeploymentEnvironmentIDs == nil || !validEnvironmentScope(*input.DeploymentEnvironmentIDs) {
 		writeError(w, http.StatusBadRequest, "service_account_invalid", "service account name or environment scope is invalid", r)
-		return
-	}
-	expiresAt := time.Now().Add(defaultAutomationCredentialTTL).UTC()
-	if input.ExpiresAt != nil {
-		expiresAt = input.ExpiresAt.UTC()
-	}
-	if expiresAt.Before(time.Now().Add(time.Minute)) || expiresAt.After(time.Now().Add(maximumAutomationCredentialTTL)) {
-		writeError(w, http.StatusBadRequest, "credential_expiry_invalid", "credential expiry must be between one minute and 365 days", r)
 		return
 	}
 	for range 3 {
@@ -114,6 +105,56 @@ func (h *generatedHandler) CreateAppServiceAccount(w http.ResponseWriter, r *htt
 		if idErr != nil {
 			break
 		}
+		event := h.server.auditEvent(r, "service_account.create", "ServiceAccount", serviceAccountID, audit.Succeeded)
+		account, createErr := h.server.store.CreateServiceAccount(r.Context(), workspace.ID, actor.ID, string(projectID), string(appID), serviceAccountID, name, *input.DeploymentEnvironmentIDs, event)
+		if errors.Is(createErr, store.ErrPublicIDCollision) {
+			continue
+		}
+		if createErr != nil {
+			writeAutomationError(w, r, createErr)
+			return
+		}
+		writeJSON(w, http.StatusCreated, account)
+		return
+	}
+	writeError(w, http.StatusServiceUnavailable, "id_generation_failed", "could not allocate a service account identifier", r)
+}
+
+func (h *generatedHandler) ListAppServiceAccountTokens(w http.ResponseWriter, r *http.Request, workspaceID generated.WorkspaceId, projectID generated.ProjectId, appID generated.AppId, serviceAccountID generated.ServiceAccountId) {
+	_, workspace, ok := h.authorizeWorkspacePermission(w, r, string(workspaceID), false, authorization.ManageAutomation)
+	if !ok || !h.appExists(w, r, workspace.ID, string(projectID), string(appID)) {
+		return
+	}
+	items, err := h.server.store.ListServiceAccountTokens(r.Context(), workspace.ID, string(projectID), string(appID), string(serviceAccountID))
+	if err != nil {
+		writeAutomationError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+func (h *generatedHandler) CreateAppServiceAccountToken(w http.ResponseWriter, r *http.Request, workspaceID generated.WorkspaceId, projectID generated.ProjectId, appID generated.AppId, serviceAccountID generated.ServiceAccountId) {
+	actor, workspace, ok := h.authorizeWorkspacePermission(w, r, string(workspaceID), true, authorization.ManageAutomation)
+	if !ok || !h.appExists(w, r, workspace.ID, string(projectID), string(appID)) {
+		return
+	}
+	var input struct {
+		ExpiresAt *time.Time `json:"expiresAt,omitempty"`
+	}
+	if err := decodeJSON(r, &input); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_json", "request body is invalid", r)
+		return
+	}
+	now := time.Now()
+	expiresAt := now.Add(defaultAutomationCredentialTTL).UTC()
+	if input.ExpiresAt != nil {
+		expiresAt = input.ExpiresAt.UTC()
+	}
+	if expiresAt.Before(now.Add(time.Minute)) || expiresAt.After(now.Add(maximumAutomationCredentialTTL)) {
+		writeError(w, http.StatusBadRequest, "credential_expiry_invalid", "credential expiry must be between one minute and 365 days", r)
+		return
+	}
+	for range 3 {
 		tokenID, idErr := domain.NewPublicID("sat")
 		if idErr != nil {
 			break
@@ -122,8 +163,8 @@ func (h *generatedHandler) CreateAppServiceAccount(w http.ResponseWriter, r *htt
 		if tokenErr != nil {
 			break
 		}
-		event := h.server.auditEvent(r, "service_account.create", "ServiceAccount", serviceAccountID, audit.Succeeded)
-		account, createErr := h.server.store.CreateServiceAccount(r.Context(), workspace.ID, actor.ID, string(projectID), string(appID), serviceAccountID, tokenID, name, input.DeploymentEnvironmentIDs, auth.HashToken(token), expiresAt, event)
+		event := h.server.auditEvent(r, "service_account_token.create", "ServiceAccountToken", tokenID, audit.Succeeded)
+		created, createErr := h.server.store.CreateServiceAccountToken(r.Context(), workspace.ID, actor.ID, string(projectID), string(appID), string(serviceAccountID), tokenID, auth.HashToken(token), expiresAt, event)
 		if errors.Is(createErr, store.ErrPublicIDCollision) {
 			continue
 		}
@@ -131,10 +172,24 @@ func (h *generatedHandler) CreateAppServiceAccount(w http.ResponseWriter, r *htt
 			writeAutomationError(w, r, createErr)
 			return
 		}
-		writeJSON(w, http.StatusCreated, automation.Credential{ServiceAccount: account, TokenID: tokenID, Token: token, ExpiresAt: expiresAt})
+		w.Header().Set("Cache-Control", "no-store")
+		writeJSON(w, http.StatusCreated, automation.Credential{TokenID: created.PublicID, Token: token, ExpiresAt: created.ExpiresAt})
 		return
 	}
 	writeError(w, http.StatusServiceUnavailable, "credential_generation_failed", "could not create service account credential", r)
+}
+
+func (h *generatedHandler) RevokeAppServiceAccountToken(w http.ResponseWriter, r *http.Request, workspaceID generated.WorkspaceId, projectID generated.ProjectId, appID generated.AppId, serviceAccountID generated.ServiceAccountId, tokenID generated.ServiceAccountTokenId) {
+	actor, workspace, ok := h.authorizeWorkspacePermission(w, r, string(workspaceID), true, authorization.ManageAutomation)
+	if !ok {
+		return
+	}
+	event := h.server.auditEvent(r, "service_account_token.revoke", "ServiceAccountToken", string(tokenID), audit.Succeeded)
+	if err := h.server.store.RevokeServiceAccountToken(r.Context(), workspace.ID, actor.ID, string(projectID), string(appID), string(serviceAccountID), string(tokenID), event); err != nil {
+		writeAutomationError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *generatedHandler) RevokeAppServiceAccount(w http.ResponseWriter, r *http.Request, workspaceID generated.WorkspaceId, projectID generated.ProjectId, appID generated.AppId, serviceAccountID generated.ServiceAccountId) {
@@ -158,7 +213,7 @@ func (h *generatedHandler) authorizeAutomation(w http.ResponseWriter, r *http.Re
 	}
 	actor, err := h.server.store.AuthenticateServiceAccount(r.Context(), auth.HashToken(token))
 	if err != nil {
-		writeError(w, http.StatusUnauthorized, "automation_unauthenticated", "valid service account bearer token is required", r)
+		writeAutomationError(w, r, err)
 		return principal.Principal{}, domain.Workspace{}, false
 	}
 	workspace, err := h.server.store.AuthorizeServiceAccount(r.Context(), actor, workspaceID, projectID, appID, appEnvironmentID, permission)
@@ -179,6 +234,9 @@ func automationBearerToken(header string) (string, bool) {
 }
 
 func validEnvironmentScope(values []string) bool {
+	if len(values) > 20 {
+		return false
+	}
 	seen := make(map[string]struct{}, len(values))
 	for _, value := range values {
 		if domain.ValidateAppEnvironmentID(value) != nil {
@@ -200,8 +258,12 @@ func writeAutomationError(w http.ResponseWriter, r *http.Request, err error) {
 		writeError(w, http.StatusForbidden, "automation_forbidden", "service account scope does not allow this action", r)
 	case errors.Is(err, store.ErrNotFound):
 		writeError(w, http.StatusNotFound, "resource_not_found", "resource was not found", r)
-	case errors.Is(err, store.ErrConflict):
+	case errors.Is(err, store.ErrNameConflict):
+		writeError(w, http.StatusConflict, "service_account_name_conflict", "a service account with this name already exists", r)
+	case errors.Is(err, store.ErrIdempotencyConflict):
 		writeError(w, http.StatusConflict, "idempotency_conflict", "idempotency key was already used with a different request", r)
+	case errors.Is(err, store.ErrConflict):
+		writeError(w, http.StatusConflict, "resource_conflict", "resource state conflicts with this request", r)
 	default:
 		writeError(w, http.StatusInternalServerError, "storage_failed", "automation request could not be completed", r)
 	}

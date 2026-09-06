@@ -254,13 +254,20 @@ func (s *Store) Bootstrap(ctx context.Context, workspace domain.Workspace, users
 		if normalizeErr != nil {
 			return normalizeErr
 		}
-		publicID, idErr := domain.NewPublicID("usr")
-		if idErr != nil {
-			return idErr
+		if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, "bootstrap-user:"+normalized); err != nil {
+			return err
 		}
 		var userID int64
-		if err = tx.QueryRow(ctx, `INSERT INTO users(public_id,username,username_key,display_name,status)
-			VALUES($1,$2,$2,$2,'Active') ON CONFLICT(username_key) DO UPDATE SET updated_at=now() RETURNING id`, publicID, normalized).Scan(&userID); err != nil {
+		err = tx.QueryRow(ctx, `SELECT id FROM users WHERE username_key=$1`, normalized).Scan(&userID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			publicID, idErr := domain.NewPublicID("usr")
+			if idErr != nil {
+				return idErr
+			}
+			err = tx.QueryRow(ctx, `INSERT INTO users(public_id,username,username_key,display_name,status)
+				VALUES($1,$2,$2,$2,'Active') RETURNING id`, publicID, normalized).Scan(&userID)
+		}
+		if err != nil {
 			return err
 		}
 		if _, err = tx.Exec(ctx, `INSERT INTO password_credentials(user_id,password_hash) VALUES($1,$2)
@@ -454,7 +461,7 @@ var ErrDependencyConflict = fmt.Errorf("dependency conflict: %w", ErrConflict)
 var (
 	ErrParameterBinding    = errors.New("parameter binding is invalid")
 	ErrParameterInUse      = errors.New("parameter is in use")
-	ErrIdempotencyConflict = errors.New("idempotency key was reused with another payload")
+	ErrIdempotencyConflict = fmt.Errorf("idempotency key was reused with another payload: %w", ErrConflict)
 )
 
 var ErrLeaseLost = errors.New("operation lease lost")

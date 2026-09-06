@@ -14,6 +14,7 @@ import (
 
 	"github.com/pressly/goose/v3"
 
+	"github.com/molejo-platform/molejo/services/control-plane-api/internal/audit"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/domain"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/testsupport"
 )
@@ -137,6 +138,62 @@ func TestSchemaReadyAcceptsTheAppEnvironmentMigration(t *testing.T) {
 	storage, _, _ := newIntegrationFixture(t)
 	if err := storage.SchemaReady(context.Background()); err != nil {
 		t.Fatalf("current schema is not ready: %v", err)
+	}
+}
+
+func TestBootstrapRetryDoesNotCreateOrphanPrincipal(t *testing.T) {
+	storage, workspaceID, actorID := newIntegrationFixture(t)
+	ctx := context.Background()
+	workspace, err := storage.Workspace(ctx, workspaceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var username string
+	if err = storage.Pool.QueryRow(ctx, `SELECT username FROM users WHERE id=$1`, actorID).Scan(&username); err != nil {
+		t.Fatal(err)
+	}
+	if err = storage.Bootstrap(ctx, workspace, map[string]struct{ Role, PasswordHash string }{username: {Role: "owner", PasswordHash: "rotated"}}); err != nil {
+		t.Fatal(err)
+	}
+	var orphanCount int
+	if err = storage.Pool.QueryRow(ctx, `SELECT count(*) FROM principals p LEFT JOIN users u ON u.principal_id=p.id
+		LEFT JOIN service_accounts sa ON sa.principal_id=p.id WHERE u.id IS NULL AND sa.principal_id IS NULL`).Scan(&orphanCount); err != nil {
+		t.Fatal(err)
+	}
+	if orphanCount != 0 {
+		t.Fatalf("orphan principals = %d, want 0", orphanCount)
+	}
+}
+
+func TestReleaseHardeningSupportsPreviousWriterAndRejectsPartialIdempotency(t *testing.T) {
+	storage, workspaceID, actorID := newIntegrationFixture(t)
+	ctx := context.Background()
+	project, app, environment := createHierarchy(t, storage, workspaceID)
+	target, err := storage.CreateAppEnvironment(ctx, workspaceID, actorID, newID(t, "aev"), project.PublicID, app.PublicID, environment.PublicID, "main", integrationConfiguration("compatibility"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	buildID := newID(t, "bld")
+	commit := strings.Repeat("a", 40)
+	var internalBuildID int64
+	err = storage.Pool.QueryRow(ctx, `INSERT INTO builds(public_id,workspace_id,project_id,app_id,app_environment_id,requested_by_user_id,github_installation_external_id,repository_id,repository_full_name,source_branch,commit_sha,platform,status,idempotency_hash,payload_hash)
+		VALUES($1,$2,$3,$4,$5,$6,1,1,'molejo/testkit','main',$7,'linux/amd64','Succeeded',$8,$9) RETURNING id`,
+		buildID, workspaceID, project.ID, app.ID, target.ID, actorID, commit, domain.SHA256([]byte(buildID)), domain.SHA256([]byte("payload:"+buildID))).Scan(&internalBuildID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	releaseID := newID(t, "rel")
+	image := "registry.example/molejo/testkit@sha256:" + strings.Repeat("b", 64)
+	if _, err = storage.Pool.Exec(ctx, `INSERT INTO releases(public_id,workspace_id,project_id,app_id,app_environment_id,build_id,commit_sha,image,platform)
+		VALUES($1,$2,$3,$4,$5,$6,$7,$8,'linux/amd64')`, releaseID, workspaceID, project.ID, app.ID, target.ID, internalBuildID, commit, image); err != nil {
+		t.Fatalf("previous writer insert: %v", err)
+	}
+	var principalID int64
+	if err = storage.Pool.QueryRow(ctx, `SELECT created_by_principal_id FROM releases WHERE public_id=$1`, releaseID).Scan(&principalID); err != nil || principalID == 0 {
+		t.Fatalf("compatibility principal=%d err=%v", principalID, err)
+	}
+	if _, err = storage.Pool.Exec(ctx, `UPDATE releases SET idempotency_hash=$1,payload_hash=NULL WHERE public_id=$2`, domain.SHA256([]byte("partial")), releaseID); err == nil {
+		t.Fatal("partial idempotency hashes must violate the database constraint")
 	}
 }
 
@@ -357,7 +414,7 @@ func TestDeploymentsAreImmutableConfigurationSnapshots(t *testing.T) {
 		t.Fatal(err)
 	}
 	releaseID, image := createRelease(t, storage, workspaceID, actorID, project, app, appEnvironment)
-	first, _, _, err := storage.CreateDeployment(ctx, workspaceID, actorID, appEnvironment.PublicID, newID(t, "dpl"), releaseID, 1, appEnvironment.Version, "", domain.SHA256([]byte("deploy-1")), domain.SHA256([]byte("payload-1")))
+	first, _, _, err := storage.CreateDeployment(ctx, workspaceID, actorID, appEnvironment.PublicID, newID(t, "dpl"), releaseID, 1, appEnvironment.Version, "", domain.SHA256([]byte("deploy-1")), domain.SHA256([]byte("payload-1")), deploymentAudit(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -378,7 +435,7 @@ func TestDeploymentsAreImmutableConfigurationSnapshots(t *testing.T) {
 	if updated.ConfigurationVersion != 2 || updated.SourceBranch != "main" {
 		t.Fatalf("updated App Environment = %+v", updated)
 	}
-	second, _, _, err := storage.CreateDeployment(ctx, workspaceID, actorID, appEnvironment.PublicID, newID(t, "dpl"), releaseID, 2, updated.Version, first.PublicID, domain.SHA256([]byte("deploy-2")), domain.SHA256([]byte("payload-2")))
+	second, _, _, err := storage.CreateDeployment(ctx, workspaceID, actorID, appEnvironment.PublicID, newID(t, "dpl"), releaseID, 2, updated.Version, first.PublicID, domain.SHA256([]byte("deploy-2")), domain.SHA256([]byte("payload-2")), deploymentAudit(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -436,7 +493,7 @@ func TestDeploymentUsesTheReviewedConfigurationRevisionAndCurrentState(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	deployment, _, _, err := storage.CreateDeployment(ctx, workspaceID, actorID, target.PublicID, newID(t, "dpl"), releaseID, 1, target.Version, "", domain.SHA256([]byte("reviewed-v1")), domain.SHA256([]byte("reviewed-v1-payload")))
+	deployment, _, _, err := storage.CreateDeployment(ctx, workspaceID, actorID, target.PublicID, newID(t, "dpl"), releaseID, 1, target.Version, "", domain.SHA256([]byte("reviewed-v1")), domain.SHA256([]byte("reviewed-v1-payload")), deploymentAudit(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -454,7 +511,7 @@ func TestDeploymentUsesTheReviewedConfigurationRevisionAndCurrentState(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, _, _, err = storage.CreateDeployment(ctx, workspaceID, actorID, target.PublicID, newID(t, "dpl"), releaseID, 2, target.Version, "", domain.SHA256([]byte("stale-current")), domain.SHA256([]byte("stale-current-payload")))
+	_, _, _, err = storage.CreateDeployment(ctx, workspaceID, actorID, target.PublicID, newID(t, "dpl"), releaseID, 2, target.Version, "", domain.SHA256([]byte("stale-current")), domain.SHA256([]byte("stale-current-payload")), deploymentAudit(t))
 	if !errors.Is(err, ErrVersionConflict) {
 		t.Fatalf("stale current deployment error = %v, want version conflict", err)
 	}
@@ -510,7 +567,7 @@ func TestDeploymentRejectsAReleaseFromAnotherApp(t *testing.T) {
 		t.Fatal(err)
 	}
 	releaseID, _ := createRelease(t, storage, workspaceID, actorID, project, otherApp, otherTarget)
-	_, _, _, err = storage.CreateDeployment(ctx, workspaceID, actorID, target.PublicID, newID(t, "dpl"), releaseID, target.ConfigurationVersion, target.Version, "", domain.SHA256([]byte("cross-app")), domain.SHA256([]byte("cross-app-payload")))
+	_, _, _, err = storage.CreateDeployment(ctx, workspaceID, actorID, target.PublicID, newID(t, "dpl"), releaseID, target.ConfigurationVersion, target.Version, "", domain.SHA256([]byte("cross-app")), domain.SHA256([]byte("cross-app-payload")), deploymentAudit(t))
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("cross-App release error = %v, want not found", err)
 	}
@@ -722,4 +779,9 @@ func newID(t *testing.T, prefix string) string {
 		t.Fatal(err)
 	}
 	return value
+}
+
+func deploymentAudit(t *testing.T) audit.Event {
+	t.Helper()
+	return audit.Event{PublicID: newID(t, "aud"), Action: "deployment.create", TargetType: "Deployment", Outcome: audit.Succeeded}
 }

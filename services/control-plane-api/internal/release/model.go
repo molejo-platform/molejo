@@ -53,13 +53,13 @@ func Validate(command RegisterCommand) error {
 	if err != nil || canonical != command.Artifact.Reference {
 		return errors.New("artifact reference must be a canonical OCI image digest")
 	}
-	for name, value := range map[string]string{
-		"source provider":   command.Source.Provider,
-		"source repository": command.Source.Repository,
-		"source revision":   command.Source.Revision,
-		"producer":          command.Provenance.Producer,
+	for _, field := range []struct{ name, value string }{
+		{"source provider", command.Source.Provider},
+		{"source repository", command.Source.Repository},
+		{"source revision", command.Source.Revision},
+		{"producer", command.Provenance.Producer},
 	} {
-		if err = validateText(name, value, 255, true); err != nil {
+		if err = validateText(field.name, field.value, 255, true); err != nil {
 			return err
 		}
 	}

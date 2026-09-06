@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/molejo-platform/molejo/services/control-plane-api/internal/audit"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/auth"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/domain"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/githubapp"
@@ -24,7 +25,7 @@ type Queue interface {
 	MarkDeliveryTarget(context.Context, int64, string, string, string) error
 	AttachDeliveryDeployment(context.Context, int64, int64) error
 	FindAppEnvironment(context.Context, int64, string) (domain.AppEnvironment, error)
-	CreateDeployment(context.Context, int64, int64, string, string, string, int64, int64, string, []byte, []byte) (domain.Deployment, domain.Operation, bool, error)
+	CreateDeployment(context.Context, int64, int64, string, string, string, int64, int64, string, []byte, []byte, audit.Event) (domain.Deployment, domain.Operation, bool, error)
 }
 
 type CommitResolver interface {
@@ -148,9 +149,14 @@ func (w Worker) createDeployment(ctx context.Context, target domain.DeliveryTarg
 	}
 	idempotencyHash := auth.HashToken("delivery-target:" + target.PublicID)
 	payloadHash := domain.SHA256([]byte(target.ReleasePublicID + "\n" + appEnvironment.CurrentDeploymentPublicID + "\n" + target.CommitSHA))
+	auditID, err := domain.NewPublicID("aud")
+	if err != nil {
+		return err
+	}
+	event := audit.Event{PublicID: auditID, Action: "deployment.create", TargetType: "Deployment", TargetPublicID: deploymentID, Outcome: audit.Succeeded}
 	deployment, _, _, err := w.Queue.CreateDeployment(ctx, target.WorkspaceID, target.RequestedByActorID,
 		target.AppEnvironmentPublicID, deploymentID, target.ReleasePublicID, appEnvironment.ConfigurationVersion,
-		appEnvironment.Version, appEnvironment.CurrentDeploymentPublicID, idempotencyHash, payloadHash)
+		appEnvironment.Version, appEnvironment.CurrentDeploymentPublicID, idempotencyHash, payloadHash, event)
 	if err != nil {
 		return err
 	}

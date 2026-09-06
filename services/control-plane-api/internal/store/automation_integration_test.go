@@ -24,15 +24,32 @@ func TestExternalReleaseAndDeploymentUseScopedServiceAccount(t *testing.T) {
 	}
 	token := "automation-" + strings.Repeat("a", 64)
 	accountID := newID(t, "svc")
-	account, err := storage.CreateServiceAccount(ctx, workspaceID, userID, project.PublicID, app.PublicID, accountID, newID(t, "sat"), "GitHub Actions", []string{target.PublicID}, auth.HashToken(token), time.Now().Add(time.Hour), audit.Event{
+	account, err := storage.CreateServiceAccount(ctx, workspaceID, userID, project.PublicID, app.PublicID, accountID, "GitHub Actions", []string{target.PublicID}, audit.Event{
 		PublicID: newID(t, "aud"), Action: "service_account.create", TargetType: "ServiceAccount", Outcome: audit.Succeeded,
 	})
 	if err != nil || account.PublicID != accountID || len(account.DeploymentEnvironmentIDs) != 1 {
 		t.Fatalf("account=%+v err=%v", account, err)
 	}
+	if _, err = storage.CreateServiceAccountToken(ctx, workspaceID, userID, project.PublicID, app.PublicID, accountID, newID(t, "sat"), auth.HashToken(token), time.Now().Add(time.Hour), audit.Event{
+		PublicID: newID(t, "aud"), Action: "service_account_token.create", TargetType: "ServiceAccountToken", Outcome: audit.Succeeded,
+	}); err != nil {
+		t.Fatal(err)
+	}
 	actor, err := storage.AuthenticateServiceAccount(ctx, auth.HashToken(token))
 	if err != nil {
 		t.Fatal(err)
+	}
+	authenticationErrors := make(chan error, 20)
+	for range 20 {
+		go func() {
+			_, authenticateErr := storage.AuthenticateServiceAccount(ctx, auth.HashToken(token))
+			authenticationErrors <- authenticateErr
+		}()
+	}
+	for range 20 {
+		if authenticateErr := <-authenticationErrors; authenticateErr != nil {
+			t.Fatalf("concurrent authentication: %v", authenticateErr)
+		}
 	}
 	workspace, err := storage.AuthorizeServiceAccount(ctx, actor, account.WorkspacePublicID, project.PublicID, app.PublicID, "", automation.PermissionReleaseWrite)
 	if err != nil || workspace.ID != workspaceID {
@@ -64,12 +81,30 @@ func TestExternalReleaseAndDeploymentUseScopedServiceAccount(t *testing.T) {
 		t.Fatalf("idempotency conflict error = %v", err)
 	}
 
-	deployment, operation, replay, err := storage.CreateDeploymentForPrincipal(ctx, workspaceID, actor, target.PublicID, newID(t, "dpl"), registered.PublicID, target.ConfigurationVersion, target.Version, "", domain.SHA256([]byte("deployment-key")), domain.SHA256([]byte("deployment-payload")))
-	if err != nil || replay || deployment.RequestedBy != "GitHub Actions" || operation.Kind != domain.OperationApplyDeployment {
+	deployment, operation, replay, err := storage.CreateDeploymentForPrincipal(ctx, workspaceID, actor, target.PublicID, newID(t, "dpl"), registered.PublicID, target.ConfigurationVersion, target.Version, "", domain.SHA256([]byte("deployment-key")), domain.SHA256([]byte("deployment-payload")), deploymentAudit(t))
+	if err != nil || replay || deployment.RequestedBy.DisplayName != "GitHub Actions" || deployment.RequestedBy.ID != accountID || operation.Kind != domain.OperationApplyDeployment {
 		t.Fatalf("deployment=%+v operation=%+v replay=%v err=%v", deployment, operation, replay, err)
 	}
 	claimed, _, claimedDeployment, ok, err := storage.ClaimNext(ctx, "external-worker", time.Minute)
 	if err != nil || !ok || claimed.ID != operation.ID || claimedDeployment.ID != deployment.ID {
 		t.Fatalf("claimed=%+v deployment=%+v ok=%v err=%v", claimed, claimedDeployment, ok, err)
+	}
+	if err = storage.RevokeServiceAccount(ctx, workspaceID, userID, project.PublicID, app.PublicID, accountID, audit.Event{
+		PublicID: newID(t, "aud"), Action: "service_account.revoke", TargetType: "ServiceAccount", Outcome: audit.Succeeded,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	events, _, err := storage.ListAuditEvents(ctx, workspaceID, 0, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	actions := make(map[string]bool, len(events))
+	for _, event := range events {
+		actions[event.Action] = true
+	}
+	for _, action := range []string{"service_account.create", "service_account_token.create", "release.register", "deployment.create", "service_account.revoke"} {
+		if !actions[action] {
+			t.Errorf("workspace audit is missing %q: %+v", action, actions)
+		}
 	}
 }

@@ -7,10 +7,16 @@ resultado inmutable. La integración nunca modifica Kubernetes directamente.
 
 Un Owner del Workspace crea un service account del App mediante
 `POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/service-accounts`.
-La solicitud elige los App Environments habilitados para deploy. La respuesta
-muestra el token una sola vez; guardalo como secreto enmascarado de CI y nunca
-lo incluyas en un commit. Para rotarlo, creá el reemplazo antes de revocar la
-cuenta anterior.
+La solicitud elige los App Environments habilitados para deploy. Emití una
+credencial mediante `POST .../service-accounts/{serviceAccountId}/tokens`. Esa
+respuesta muestra el bearer token una sola vez; guardalo como secreto
+enmascarado de CI y nunca lo incluyas en un commit. Para rotarlo, emití un
+segundo token para la misma identidad, actualizá el secreto de CI y revocá el
+token anterior mediante `DELETE .../tokens/{tokenId}`.
+
+Los campos de origen y productor son declaraciones del pipeline autenticado, no
+attestations criptográficas. La Release lo explicita como
+`provenanceStatus=Declared`.
 
 ## Contrato del pipeline
 

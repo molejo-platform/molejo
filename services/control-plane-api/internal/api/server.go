@@ -395,7 +395,7 @@ func securityMiddleware(s *Server, next http.Handler) http.Handler {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
-		if strings.HasPrefix(r.URL.Path, "/api/v1/session") || strings.HasPrefix(r.URL.Path, "/api/v1/users") || strings.HasPrefix(r.URL.Path, "/api/v1/admin/users") || strings.HasPrefix(r.URL.Path, "/api/v1/admin/clusters") || strings.HasPrefix(r.URL.Path, "/api/v1/admin/agent-installations") || strings.HasPrefix(r.URL.Path, "/api/v1/password-resets") || strings.HasPrefix(r.URL.Path, "/agent/") {
+		if strings.HasPrefix(r.URL.Path, "/api/v1/session") || strings.HasPrefix(r.URL.Path, "/api/v1/users") || strings.HasPrefix(r.URL.Path, "/api/v1/admin/users") || strings.HasPrefix(r.URL.Path, "/api/v1/admin/clusters") || strings.HasPrefix(r.URL.Path, "/api/v1/admin/agent-installations") || strings.HasPrefix(r.URL.Path, "/api/v1/password-resets") || strings.Contains(r.URL.Path, "/service-accounts") || strings.HasPrefix(r.URL.Path, "/agent/") {
 			w.Header().Set("Cache-Control", "no-store")
 		}
 		if strings.HasPrefix(s.config.PublicURL, "https://") && s.isHTTPS(r) {

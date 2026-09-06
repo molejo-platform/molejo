@@ -28,10 +28,17 @@ type ServiceAccount struct {
 }
 
 type Credential struct {
-	ServiceAccount ServiceAccount `json:"serviceAccount"`
-	TokenID        string         `json:"tokenId"`
-	Token          string         `json:"token"`
-	ExpiresAt      time.Time      `json:"expiresAt"`
+	TokenID   string    `json:"tokenId"`
+	Token     string    `json:"token"`
+	ExpiresAt time.Time `json:"expiresAt"`
+}
+
+type Token struct {
+	PublicID   string     `json:"id"`
+	ExpiresAt  time.Time  `json:"expiresAt"`
+	RevokedAt  *time.Time `json:"revokedAt,omitempty"`
+	LastUsedAt *time.Time `json:"lastUsedAt,omitempty"`
+	CreatedAt  time.Time  `json:"createdAt"`
 }
 
 func NormalizeName(value string) (string, error) {

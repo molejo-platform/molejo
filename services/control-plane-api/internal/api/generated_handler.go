@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/auth"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/authorization"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/domain"
+	"github.com/molejo-platform/molejo/services/control-plane-api/internal/store"
 )
 
 type generatedHandler struct {
@@ -83,12 +85,16 @@ func (h *generatedHandler) GetOperation(w http.ResponseWriter, r *http.Request, 
 		}
 		actor, err := h.server.store.AuthenticateServiceAccount(r.Context(), auth.HashToken(token))
 		if err != nil {
-			writeError(w, http.StatusUnauthorized, "automation_unauthenticated", "valid service account bearer token is required", r)
+			writeAutomationError(w, r, err)
 			return
 		}
 		operation, err := h.server.store.GetOperationForPrincipal(r.Context(), actor.ID, operationID)
 		if err != nil {
-			writeError(w, http.StatusNotFound, "operation_not_found", "operation was not found", r)
+			if errors.Is(err, store.ErrNotFound) {
+				writeError(w, http.StatusNotFound, "operation_not_found", "operation was not found", r)
+			} else {
+				writeError(w, http.StatusInternalServerError, "storage_failed", "operation could not be loaded", r)
+			}
 			return
 		}
 		writeJSON(w, http.StatusOK, operation)

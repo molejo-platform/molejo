@@ -35,7 +35,7 @@ func TestCompleteRuntimeSnapshotQueuesOneDurableRepairForMissingDeployment(t *te
 		t.Fatal(err)
 	}
 	releaseID, image := createRelease(t, storage, workspaceID, actorID, project, app, target)
-	deployment, _, _, err := storage.CreateDeployment(ctx, workspaceID, actorID, target.PublicID, newID(t, "dpl"), releaseID, target.ConfigurationVersion, target.Version, "", domain.SHA256([]byte("initial-deploy")), domain.SHA256([]byte("initial-payload")))
+	deployment, _, _, err := storage.CreateDeployment(ctx, workspaceID, actorID, target.PublicID, newID(t, "dpl"), releaseID, target.ConfigurationVersion, target.Version, "", domain.SHA256([]byte("initial-deploy")), domain.SHA256([]byte("initial-payload")), deploymentAudit(t))
 	if err != nil {
 		t.Fatal(err)
 	}

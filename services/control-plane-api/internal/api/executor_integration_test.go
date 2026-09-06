@@ -13,6 +13,7 @@ import (
 
 	clusteragentv1alpha1 "github.com/molejo-platform/molejo/contracts/molejo/clusteragent/v1alpha1"
 	"github.com/molejo-platform/molejo/packages/runtimecontract"
+	"github.com/molejo-platform/molejo/services/control-plane-api/internal/audit"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/domain"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/operationworker"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/store"
@@ -25,7 +26,7 @@ func TestAgentCommandCompletesADeploymentWithoutControlPlaneKubernetesAccess(t *
 	ctx := context.Background()
 	s, workspaceID, actorID, _ := newExecutorIntegrationFixture(t)
 	target, releaseID, image := createExecutorTargetAndRelease(t, s, workspaceID, actorID)
-	deployment, operation, _, err := s.CreateDeployment(ctx, workspaceID, actorID, target.PublicID, mustAPIID(t, "dpl"), releaseID, target.ConfigurationVersion, target.Version, "", domain.SHA256([]byte("agent-apply")), domain.SHA256([]byte("agent-apply-payload")))
+	deployment, operation, _, err := s.CreateDeployment(ctx, workspaceID, actorID, target.PublicID, mustAPIID(t, "dpl"), releaseID, target.ConfigurationVersion, target.Version, "", domain.SHA256([]byte("agent-apply")), domain.SHA256([]byte("agent-apply-payload")), audit.Event{PublicID: mustAPIID(t, "aud"), Action: "deployment.create", TargetType: "Deployment", Outcome: audit.Succeeded})
 	if err != nil {
 		t.Fatal(err)
 	}

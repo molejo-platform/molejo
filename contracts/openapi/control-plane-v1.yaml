@@ -261,6 +261,7 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
   /api/v1/admin/clusters/{clusterId}/enrollment-invitations:
     parameters: [{ $ref: '#/components/parameters/ClusterId' }]
     post:
@@ -1158,11 +1159,49 @@ paths:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/ServiceAccountCreateInput' } } }
       responses:
-        '201': { description: Service account and one-time credential, content: { application/json: { schema: { $ref: '#/components/schemas/ServiceAccountCredential' } } } }
+        '201': { description: Durable App service account, content: { application/json: { schema: { $ref: '#/components/schemas/ServiceAccount' } } } }
         '400': { $ref: '#/components/responses/BadRequest' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/service-accounts/{serviceAccountId}/tokens:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/AppId' }
+      - { $ref: '#/components/parameters/ServiceAccountId' }
+    get:
+      operationId: listAppServiceAccountTokens
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { description: Credential metadata without bearer secrets, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/ServiceAccountToken' } } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      operationId: createAppServiceAccountToken
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ServiceAccountTokenCreateInput' } } }
+      responses:
+        '201': { description: One-time credential; the bearer token is never returned again, content: { application/json: { schema: { $ref: '#/components/schemas/ServiceAccountCredential' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/service-accounts/{serviceAccountId}/tokens/{tokenId}:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/AppId' }
+      - { $ref: '#/components/parameters/ServiceAccountId' }
+      - { $ref: '#/components/parameters/ServiceAccountTokenId' }
+    delete:
+      operationId: revokeAppServiceAccountToken
+      security: [{ sessionCookie: [] }]
+      responses:
+        '204': { description: Service account credential revoked }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/service-accounts/{serviceAccountId}:
     parameters:
       - { $ref: '#/components/parameters/WorkspaceId' }
@@ -1569,6 +1608,7 @@ components:
       type: http
       scheme: bearer
       bearerFormat: Molejo service account token
+      description: When Authorization is present on a dual-authentication operation, bearer authentication is authoritative and the server never falls back to a session cookie.
   parameters:
     Cursor:
       name: cursor
@@ -1637,6 +1677,11 @@ components:
       in: path
       required: true
       schema: { type: string, pattern: '^svc-[a-z2-7]{20}$' }
+    ServiceAccountTokenId:
+      name: tokenId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^sat-[a-z2-7]{20}$' }
     UserId:
       name: userId
       in: path
@@ -2220,7 +2265,7 @@ components:
         createdAt: { type: string, format: date-time }
     Release:
       type: object
-      required: [id, projectId, appId, origin, sourceProvider, sourceRepository, sourceRevision, producer, createdBy, image, availabilityStatus, createdAt]
+      required: [id, projectId, appId, origin, sourceProvider, sourceRepository, sourceRevision, producer, provenanceStatus, createdBy, image, availabilityStatus, createdAt]
       additionalProperties: false
       properties:
         id: { type: string, pattern: '^rel-[a-z2-7]{20}$' }
@@ -2236,7 +2281,8 @@ components:
         producer: { type: string, minLength: 1, maxLength: 255 }
         producerExternalId: { type: string, minLength: 1, maxLength: 255 }
         producerUrl: { type: string, format: uri }
-        createdBy: { type: string, minLength: 1, maxLength: 120 }
+        provenanceStatus: { type: string, enum: [Declared], description: Source and producer metadata were declared by the authenticated caller and were not cryptographically attested. }
+        createdBy: { $ref: '#/components/schemas/ActorReference' }
         branch: { type: string, minLength: 1, maxLength: 255 }
         commitSha: { type: string, pattern: '^[a-f0-9]{40}$' }
         commitTitle: { type: string, maxLength: 500 }
@@ -2289,7 +2335,6 @@ components:
           uniqueItems: true
           maxItems: 20
           items: { type: string, pattern: '^aev-[a-z2-7]{20}$' }
-        expiresAt: { type: string, format: date-time }
     ServiceAccount:
       type: object
       required: [id, workspaceId, projectId, appId, name, status, deploymentEnvironmentIds, createdAt, updatedAt]
@@ -2306,13 +2351,35 @@ components:
         updatedAt: { type: string, format: date-time }
     ServiceAccountCredential:
       type: object
-      required: [serviceAccount, tokenId, token, expiresAt]
+      required: [tokenId, token, expiresAt]
       additionalProperties: false
       properties:
-        serviceAccount: { $ref: '#/components/schemas/ServiceAccount' }
         tokenId: { type: string, pattern: '^sat-[a-z2-7]{20}$' }
         token: { type: string, minLength: 64 }
         expiresAt: { type: string, format: date-time }
+    ServiceAccountTokenCreateInput:
+      type: object
+      additionalProperties: false
+      properties:
+        expiresAt: { type: string, format: date-time }
+    ServiceAccountToken:
+      type: object
+      required: [id, expiresAt, createdAt]
+      additionalProperties: false
+      properties:
+        id: { type: string, pattern: '^sat-[a-z2-7]{20}$' }
+        expiresAt: { type: string, format: date-time }
+        revokedAt: { type: string, format: date-time }
+        lastUsedAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+    ActorReference:
+      type: object
+      required: [id, kind, displayName]
+      additionalProperties: false
+      properties:
+        id: { type: string, pattern: '^(usr|svc|sys)-[a-z2-7]{20}$' }
+        kind: { type: string, enum: [User, ServiceAccount, System] }
+        displayName: { type: string, minLength: 1, maxLength: 120, description: Current display label; id is the stable historical identity. }
     DeliveryPolicyInput:
       type: object
       required: [pushEnabled, releaseEnabled]
@@ -2600,7 +2667,7 @@ components:
         appVolumeId: { type: string, pattern: '^vol-[a-z2-7]{20}$' }
         configurationVersion: { type: integer, minimum: 1 }
         configuration: { $ref: '#/components/schemas/RuntimeConfiguration' }
-        requestedBy: { type: string, minLength: 1 }
+        requestedBy: { $ref: '#/components/schemas/ActorReference' }
         state: { type: string, enum: [Pending, Progressing, Ready, Degraded] }
         message: { type: string }
         createdAt: { type: string, format: date-time }

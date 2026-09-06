@@ -536,6 +536,7 @@ type Release struct {
 	CreatedByPrincipalID int64              `json:"created_by_principal_id"`
 	IdempotencyHash      []byte             `json:"idempotency_hash"`
 	PayloadHash          []byte             `json:"payload_hash"`
+	ProvenanceStatus     string             `json:"provenance_status"`
 }
 
 type ReleaseGcCandidate struct {

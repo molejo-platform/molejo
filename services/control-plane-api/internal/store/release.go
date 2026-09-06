@@ -17,7 +17,7 @@ import (
 const releaseSelectColumns = `r.id,r.public_id,r.workspace_id,r.project_id,r.app_id,COALESCE(r.app_environment_id,0),
 	COALESCE(b.public_id,''),r.origin_kind,COALESCE(r.source_provider,''),COALESCE(r.source_repository,''),
 	COALESCE(r.source_revision,''),COALESCE(r.source_ref,''),r.producer_kind,COALESCE(r.producer_external_id,''),
-	COALESCE(r.producer_url,''),principal.display_name,COALESCE(b.source_branch,''),COALESCE(r.commit_sha,''),
+	COALESCE(r.producer_url,''),r.provenance_status,principal.public_id,principal.kind,principal.display_name,COALESCE(b.source_branch,''),COALESCE(r.commit_sha,''),
 	COALESCE(b.commit_title,''),COALESCE(b.commit_author_name,''),COALESCE(b.commit_author_login,''),b.committed_at,
 	COALESCE(b.trigger_type,''),r.image,COALESCE(r.platform,''),r.availability_status,r.expired_at,r.created_at,
 	project.public_id,app.public_id,COALESCE(app_environment.public_id,'')`
@@ -59,7 +59,7 @@ func (s *Store) RegisterExternalRelease(ctx context.Context, actor principal.Pri
 	}
 	if found {
 		if string(storedPayload) != string(payloadHash) {
-			return domain.Release{}, false, ErrConflict
+			return domain.Release{}, false, ErrIdempotencyConflict
 		}
 		if err = tx.Commit(ctx); err != nil {
 			return domain.Release{}, false, err
@@ -157,7 +157,8 @@ func scanReleaseWithPayload(row pgx.Row, payloadHash *[]byte) (domain.Release, e
 	targets := []any{
 		&item.ID, &item.PublicID, &item.WorkspaceID, &item.ProjectID, &item.AppID, &item.AppEnvironmentID,
 		&item.BuildPublicID, &item.OriginKind, &item.SourceProvider, &item.SourceRepository, &item.SourceRevision,
-		&item.SourceRef, &item.ProducerKind, &item.ProducerExternalID, &item.ProducerURL, &item.CreatedBy,
+		&item.SourceRef, &item.ProducerKind, &item.ProducerExternalID, &item.ProducerURL, &item.ProvenanceStatus,
+		&item.CreatedBy.ID, &item.CreatedBy.Kind, &item.CreatedBy.DisplayName,
 		&item.SourceBranch, &item.CommitSHA, &item.CommitTitle, &item.CommitAuthorName, &item.CommitAuthorLogin,
 		&item.CommittedAt, &item.TriggerType, &item.Image, &item.Platform, &item.AvailabilityStatus, &item.ExpiredAt,
 		&item.CreatedAt, &item.ProjectPublicID, &item.AppPublicID, &item.AppEnvironmentPublicID,

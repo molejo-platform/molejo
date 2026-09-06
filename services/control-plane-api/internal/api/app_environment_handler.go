@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/api/generated"
+	"github.com/molejo-platform/molejo/services/control-plane-api/internal/audit"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/auth"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/automation"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/domain"
@@ -215,10 +216,11 @@ func (h *generatedHandler) CreateAppEnvironmentDeployment(w http.ResponseWriter,
 		var deployment domain.Deployment
 		var operation domain.Operation
 		var createErr error
+		event := h.server.auditEvent(r, "deployment.create", "Deployment", deploymentID, audit.Succeeded)
 		if isAutomation {
-			deployment, operation, _, createErr = h.server.store.CreateDeploymentForPrincipal(r.Context(), workspace.ID, automationActor, string(appEnvironmentID), deploymentID, input.ReleaseID, input.ConfigurationVersion, int64(params.IfMatch), expectedCurrentDeploymentID, auth.HashToken(idempotencyKey), scopedBuildPayloadHash(r, payloadHash))
+			deployment, operation, _, createErr = h.server.store.CreateDeploymentForPrincipal(r.Context(), workspace.ID, automationActor, string(appEnvironmentID), deploymentID, input.ReleaseID, input.ConfigurationVersion, int64(params.IfMatch), expectedCurrentDeploymentID, auth.HashToken(idempotencyKey), scopedBuildPayloadHash(r, payloadHash), event)
 		} else {
-			deployment, operation, _, createErr = h.server.store.CreateDeployment(r.Context(), workspace.ID, actorUserID, string(appEnvironmentID), deploymentID, input.ReleaseID, input.ConfigurationVersion, int64(params.IfMatch), expectedCurrentDeploymentID, auth.HashToken(idempotencyKey), scopedBuildPayloadHash(r, payloadHash))
+			deployment, operation, _, createErr = h.server.store.CreateDeployment(r.Context(), workspace.ID, actorUserID, string(appEnvironmentID), deploymentID, input.ReleaseID, input.ConfigurationVersion, int64(params.IfMatch), expectedCurrentDeploymentID, auth.HashToken(idempotencyKey), scopedBuildPayloadHash(r, payloadHash), event)
 		}
 		if errors.Is(createErr, store.ErrPublicIDCollision) {
 			continue
@@ -352,6 +354,8 @@ func writeAppEnvironmentError(w http.ResponseWriter, r *http.Request, err error)
 		writeError(w, http.StatusNotFound, "app_environment_not_found", "App Environment was not found", r)
 	case errors.Is(err, store.ErrVersionConflict):
 		writeError(w, http.StatusConflict, "version_conflict", "App Environment changed since it was read", r)
+	case errors.Is(err, store.ErrIdempotencyConflict):
+		writeError(w, http.StatusConflict, "idempotency_conflict", "idempotency key was already used with a different request", r)
 	case errors.Is(err, store.ErrConflict):
 		writeError(w, http.StatusConflict, "app_environment_conflict", "App Environment conflicts with existing state", r)
 	case errors.Is(err, store.ErrParameterBinding):

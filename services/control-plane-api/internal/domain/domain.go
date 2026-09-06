@@ -358,24 +358,24 @@ type AppEnvironment struct {
 }
 
 type Deployment struct {
-	ID                     int64         `json:"-"`
-	PublicID               string        `json:"id"`
-	WorkspaceID            int64         `json:"-"`
-	AppEnvironmentID       int64         `json:"-"`
-	AppID                  int64         `json:"-"`
-	AppEnvironmentPublicID string        `json:"appEnvironmentId"`
-	ReleasePublicID        string        `json:"releaseId"`
-	Image                  string        `json:"-"`
-	ConfigurationVersion   int64         `json:"configurationVersion"`
-	Configuration          RuntimeConfig `json:"configuration"`
-	WorkloadKind           WorkloadKind  `json:"workloadKind"`
-	AppVolumePublicID      string        `json:"appVolumeId,omitempty"`
-	RequestedBy            string        `json:"requestedBy"`
-	State                  string        `json:"state"`
-	Message                string        `json:"message,omitempty"`
-	ObservedRelease        string        `json:"-"`
-	CreatedAt              time.Time     `json:"createdAt"`
-	UpdatedAt              time.Time     `json:"updatedAt"`
+	ID                     int64          `json:"-"`
+	PublicID               string         `json:"id"`
+	WorkspaceID            int64          `json:"-"`
+	AppEnvironmentID       int64          `json:"-"`
+	AppID                  int64          `json:"-"`
+	AppEnvironmentPublicID string         `json:"appEnvironmentId"`
+	ReleasePublicID        string         `json:"releaseId"`
+	Image                  string         `json:"-"`
+	ConfigurationVersion   int64          `json:"configurationVersion"`
+	Configuration          RuntimeConfig  `json:"configuration"`
+	WorkloadKind           WorkloadKind   `json:"workloadKind"`
+	AppVolumePublicID      string         `json:"appVolumeId,omitempty"`
+	RequestedBy            ActorReference `json:"requestedBy"`
+	State                  string         `json:"state"`
+	Message                string         `json:"message,omitempty"`
+	ObservedRelease        string         `json:"-"`
+	CreatedAt              time.Time      `json:"createdAt"`
+	UpdatedAt              time.Time      `json:"updatedAt"`
 }
 
 type Operation struct {
