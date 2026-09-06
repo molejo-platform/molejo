@@ -10,25 +10,19 @@ import (
 )
 
 const (
-	BuildPending     = "Pending"
-	BuildRunning     = "Running"
-	BuildSucceeded   = "Succeeded"
-	BuildFailed      = "Failed"
-	BuildSuperseded  = "Superseded"
-	BuildTimedOut    = "TimedOut"
-	BuildPlatform    = "linux/amd64"
-	TriggerManual    = "Manual"
-	TriggerPush      = "Push"
-	TriggerRelease   = "Release"
-	ReleaseAvailable = "Available"
-	ReleaseExpired   = "Expired"
+	BuildPending    = "Pending"
+	BuildRunning    = "Running"
+	BuildSucceeded  = "Succeeded"
+	BuildFailed     = "Failed"
+	BuildSuperseded = "Superseded"
+	BuildTimedOut   = "TimedOut"
+	BuildPlatform   = "linux/amd64"
+	TriggerManual   = "Manual"
+	TriggerPush     = "Push"
+	TriggerRelease  = "Release"
 )
 
-var (
-	commitSHAPattern  = regexp.MustCompile(`^[a-f0-9]{40}$`)
-	digestPattern     = regexp.MustCompile(`^sha256:[a-f0-9]{64}$`)
-	repositoryPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._:/-]*$`)
-)
+var commitSHAPattern = regexp.MustCompile(`^[a-f0-9]{40}$`)
 
 type Build struct {
 	ID                     int64      `json:"-"`
@@ -68,41 +62,6 @@ type BuildLog struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 
-type Release struct {
-	ID                     int64          `json:"-"`
-	PublicID               string         `json:"id"`
-	WorkspaceID            int64          `json:"-"`
-	ProjectID              int64          `json:"-"`
-	AppID                  int64          `json:"-"`
-	AppEnvironmentID       int64          `json:"-"`
-	ProjectPublicID        string         `json:"projectId"`
-	AppPublicID            string         `json:"appId"`
-	AppEnvironmentPublicID string         `json:"appEnvironmentId,omitempty"`
-	BuildPublicID          string         `json:"buildId,omitempty"`
-	OriginKind             string         `json:"origin"`
-	SourceProvider         string         `json:"sourceProvider"`
-	SourceRepository       string         `json:"sourceRepository"`
-	SourceRevision         string         `json:"sourceRevision"`
-	SourceRef              string         `json:"sourceRef,omitempty"`
-	ProducerKind           string         `json:"producer"`
-	ProducerExternalID     string         `json:"producerExternalId,omitempty"`
-	ProducerURL            string         `json:"producerUrl,omitempty"`
-	ProvenanceStatus       string         `json:"provenanceStatus"`
-	CreatedBy              ActorReference `json:"createdBy"`
-	SourceBranch           string         `json:"branch,omitempty"`
-	CommitSHA              string         `json:"commitSha,omitempty"`
-	CommitTitle            string         `json:"commitTitle"`
-	CommitAuthorName       string         `json:"commitAuthorName"`
-	CommitAuthorLogin      string         `json:"commitAuthorLogin"`
-	CommittedAt            *time.Time     `json:"committedAt,omitempty"`
-	TriggerType            string         `json:"trigger,omitempty"`
-	Image                  string         `json:"image"`
-	Platform               string         `json:"platform,omitempty"`
-	AvailabilityStatus     string         `json:"availabilityStatus"`
-	ExpiredAt              *time.Time     `json:"expiredAt,omitempty"`
-	CreatedAt              time.Time      `json:"createdAt"`
-}
-
 func ValidateCommitSHA(value string) error {
 	if !commitSHAPattern.MatchString(value) {
 		return errors.New("commit SHA must be a full lowercase SHA-1 object ID")
@@ -121,18 +80,4 @@ func NormalizeSourceBranch(value string) (string, error) {
 		}
 	}
 	return value, nil
-}
-
-func ReleaseImageReference(repository, digest string) (string, error) {
-	if !repositoryPattern.MatchString(repository) || strings.Contains(repository, "@") {
-		return "", errors.New("image repository is invalid")
-	}
-	lastSlash := strings.LastIndexByte(repository, '/')
-	if strings.Contains(repository[lastSlash+1:], ":") {
-		return "", errors.New("image repository must not contain a tag")
-	}
-	if !digestPattern.MatchString(digest) {
-		return "", errors.New("image digest is invalid")
-	}
-	return repository + "@" + digest, nil
 }

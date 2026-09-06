@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -28,20 +29,31 @@ const releaseJoins = `JOIN projects project ON project.id=r.project_id
 	LEFT JOIN builds b ON b.id=r.build_id
 	LEFT JOIN app_environments app_environment ON app_environment.id=r.app_environment_id`
 
-func (s *Store) RegisterExternalRelease(ctx context.Context, actor principal.Principal, workspaceID int64, projectPublicID, appPublicID, releasePublicID string, command releasecontract.RegisterCommand, idempotencyHash, payloadHash []byte, event audit.Event) (domain.Release, bool, error) {
+type RegisterExternalReleaseParams struct {
+	WorkspaceID     int64
+	ProjectPublicID string
+	AppPublicID     string
+	ReleasePublicID string
+	Command         releasecontract.RegisterCommand
+	IdempotencyHash []byte
+	PayloadHash     []byte
+	AuditEvent      audit.Event
+}
+
+func (s *Store) RegisterExternalRelease(ctx context.Context, actor principal.Principal, params RegisterExternalReleaseParams) (domain.Release, bool, error) {
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return domain.Release{}, false, err
 	}
 	defer tx.Rollback(ctx)
-	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, "release:"+fmt.Sprintf("%x", idempotencyHash)); err != nil {
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, "release:"+fmt.Sprintf("%x", params.IdempotencyHash)); err != nil {
 		return domain.Release{}, false, err
 	}
 
 	var projectID, appID int64
 	err = tx.QueryRow(ctx, `SELECT project.id,app.id FROM projects project JOIN apps app ON app.project_id=project.id
 		WHERE project.workspace_id=$1 AND project.public_id=$2 AND app.public_id=$3
-		  AND project.archived_at IS NULL AND app.archived_at IS NULL`, workspaceID, projectPublicID, appPublicID).
+		  AND project.archived_at IS NULL AND app.archived_at IS NULL`, params.WorkspaceID, params.ProjectPublicID, params.AppPublicID).
 		Scan(&projectID, &appID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.Release{}, false, ErrNotFound
@@ -49,16 +61,16 @@ func (s *Store) RegisterExternalRelease(ctx context.Context, actor principal.Pri
 	if err != nil {
 		return domain.Release{}, false, err
 	}
-	if actor.WorkspaceID != workspaceID || actor.ProjectID != projectID || actor.AppID != appID {
+	if actor.WorkspaceID != params.WorkspaceID || actor.ProjectID != projectID || actor.AppID != appID {
 		return domain.Release{}, false, ErrAutomationAuthorization
 	}
 
-	existing, storedPayload, found, err := releaseByIdempotency(ctx, tx, appID, actor.ID, idempotencyHash)
+	existing, storedPayload, found, err := releaseByIdempotency(ctx, tx, appID, actor.ID, params.IdempotencyHash)
 	if err != nil {
 		return domain.Release{}, false, err
 	}
 	if found {
-		if string(storedPayload) != string(payloadHash) {
+		if !bytes.Equal(storedPayload, params.PayloadHash) {
 			return domain.Release{}, false, ErrIdempotencyConflict
 		}
 		if err = tx.Commit(ctx); err != nil {
@@ -70,23 +82,24 @@ func (s *Store) RegisterExternalRelease(ctx context.Context, actor principal.Pri
 	_, err = tx.Exec(ctx, `INSERT INTO releases(
 		public_id,workspace_id,project_id,app_id,origin_kind,source_provider,source_repository,source_revision,source_ref,
 		producer_kind,producer_external_id,producer_url,created_by_principal_id,idempotency_hash,payload_hash,image)
-		VALUES($1,$2,$3,$4,'External',$5,$6,$7,NULLIF($8,''),$9,NULLIF($10,''),NULLIF($11,''),$12,$13,$14,$15)`,
-		releasePublicID, workspaceID, projectID, appID, command.Source.Provider, command.Source.Repository, command.Source.Revision,
-		command.Source.Ref, command.Provenance.Producer, command.Provenance.ExternalRunID, command.Provenance.URL, actor.ID,
-		idempotencyHash, payloadHash, command.Artifact.Reference)
+		VALUES($1,$2,$3,$4,$5,$6,$7,$8,NULLIF($9,''),$10,NULLIF($11,''),NULLIF($12,''),$13,$14,$15,$16)`,
+		params.ReleasePublicID, params.WorkspaceID, projectID, appID, domain.ReleaseOriginExternal, params.Command.Source.Provider, params.Command.Source.Repository, params.Command.Source.Revision,
+		params.Command.Source.Ref, params.Command.Provenance.Producer, params.Command.Provenance.ExternalRunID, params.Command.Provenance.URL, actor.ID,
+		params.IdempotencyHash, params.PayloadHash, params.Command.Artifact.Reference)
 	if uniqueConstraint(err) == "releases_public_id_key" {
 		return domain.Release{}, false, ErrPublicIDCollision
 	}
 	if err != nil {
 		return domain.Release{}, false, translateDBError(err)
 	}
-	item, err := releaseByPublicID(ctx, tx, workspaceID, projectPublicID, appPublicID, releasePublicID)
+	item, err := releaseByPublicID(ctx, tx, params.WorkspaceID, params.ProjectPublicID, params.AppPublicID, params.ReleasePublicID)
 	if err != nil {
 		return domain.Release{}, false, err
 	}
+	event := params.AuditEvent
 	event.ActorPrincipalID = &actor.ID
-	event.WorkspaceID = &workspaceID
-	event.TargetPublicID = releasePublicID
+	event.WorkspaceID = &params.WorkspaceID
+	event.TargetPublicID = params.ReleasePublicID
 	if err = insertAudit(ctx, tx, event); err != nil {
 		return domain.Release{}, false, err
 	}

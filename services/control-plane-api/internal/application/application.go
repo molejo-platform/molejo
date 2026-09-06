@@ -309,7 +309,7 @@ func runDeliveryWorker() error {
 	if err != nil {
 		return err
 	}
-	worker := controldelivery.Worker{Queue: s, GitHub: github, Lease: lease}
+	worker := controldelivery.Worker{Store: s, GitHub: github, Lease: lease}
 	worker.Run(ctx, env("MOLEJO_DELIVERY_WORKER_ID", "delivery-worker-1"))
 	return nil
 }

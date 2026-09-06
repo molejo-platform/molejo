@@ -16,7 +16,7 @@ func TestWorkerSchedulesEveryMatchingAppEnvironmentFromOneDelivery(t *testing.T)
 		{WorkspaceID: 1, AppEnvironmentID: 20, AppEnvironmentPublicID: "aev-bbbbbbbbbbbbbbbbbbbb", SourceBranch: "main"},
 	}}
 	github := &recordingCommitResolver{metadata: domain.CommitMetadata{SHA: delivery.CommitSHA, Title: "Ship it"}}
-	worker := Worker{Queue: queue, GitHub: github}
+	worker := Worker{Store: queue, GitHub: github}
 
 	worked, err := worker.RunOnce(context.Background(), "worker")
 	if err != nil || !worked {
@@ -33,7 +33,7 @@ func TestWorkerSchedulesEveryMatchingAppEnvironmentFromOneDelivery(t *testing.T)
 func TestWorkerIgnoresADeletedBranchWithoutResolvingACommit(t *testing.T) {
 	queue := &recordingDeliveryQueue{delivery: domain.GitHubDelivery{ID: 1, DeliveryID: "delivery-delete", EventType: "push", InstallationExternalID: 42, RepositoryID: 99, SourceBranch: "main", CommitSHA: "", WorkerID: "worker", FencingToken: 1}}
 	github := &recordingCommitResolver{}
-	worker := Worker{Queue: queue, GitHub: github}
+	worker := Worker{Store: queue, GitHub: github}
 
 	worked, err := worker.RunOnce(context.Background(), "worker")
 	if err != nil || !worked || github.calls != 0 || !queue.completed || !queue.ignored {
@@ -44,7 +44,7 @@ func TestWorkerIgnoresADeletedBranchWithoutResolvingACommit(t *testing.T) {
 func TestWorkerIgnoresATagPushWithoutResolvingACommit(t *testing.T) {
 	queue := &recordingDeliveryQueue{delivery: domain.GitHubDelivery{ID: 1, DeliveryID: "delivery-tag", EventType: "push", InstallationExternalID: 42, RepositoryID: 99, SourceRef: "refs/tags/v1.0.0", CommitSHA: "0123456789abcdef0123456789abcdef01234567", WorkerID: "worker", FencingToken: 1}}
 	github := &recordingCommitResolver{}
-	worker := Worker{Queue: queue, GitHub: github}
+	worker := Worker{Store: queue, GitHub: github}
 
 	worked, err := worker.RunOnce(context.Background(), "worker")
 	if err != nil || !worked || github.calls != 0 || !queue.completed || !queue.ignored {
@@ -119,6 +119,6 @@ func (q *recordingDeliveryQueue) FindAppEnvironment(context.Context, int64, stri
 	return domain.AppEnvironment{}, nil
 }
 
-func (q *recordingDeliveryQueue) CreateDeployment(context.Context, int64, int64, string, string, string, int64, int64, string, []byte, []byte, audit.Event) (domain.Deployment, domain.Operation, bool, error) {
+func (q *recordingDeliveryQueue) CreateDeployment(context.Context, int64, domain.DeploymentRequest, audit.Event) (domain.Deployment, domain.Operation, bool, error) {
 	return domain.Deployment{}, domain.Operation{}, false, nil
 }

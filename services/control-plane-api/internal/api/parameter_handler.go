@@ -74,7 +74,7 @@ func (h *generatedHandler) CreateParameter(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusBadRequest, "idempotency_required", "Idempotency-Key is required for Secret parameters", r)
 		return
 	}
-	payloadHash = scopedBuildPayloadHash(r, payloadHash)
+	payloadHash = scopedRequestPayloadHash(r, payloadHash)
 	if !h.secretBackendAvailable(w, r) {
 		return
 	}
@@ -163,7 +163,7 @@ func (h *generatedHandler) ReplaceParameter(w http.ResponseWriter, r *http.Reque
 		writeError(w, http.StatusBadRequest, "idempotency_required", "Idempotency-Key is required for Secret parameters", r)
 		return
 	}
-	payloadHash = scopedBuildPayloadHash(r, payloadHash)
+	payloadHash = scopedRequestPayloadHash(r, payloadHash)
 	if !h.secretBackendAvailable(w, r) {
 		return
 	}

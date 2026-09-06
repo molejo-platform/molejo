@@ -46,16 +46,16 @@ func TestAutomationAPIRegistersAndDeploysExternalRelease(t *testing.T) {
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("missing environment scope status=%d body=%s", response.Code, response.Body.String())
 	}
-	response = hierarchyRequest(t, server, owner, http.MethodPost, base+"/service-accounts", `{"name":"GitHub Actions","deploymentEnvironmentIds":["`+target.PublicID+`"]}`, nil)
+	response = hierarchyRequest(t, server, owner, http.MethodPost, base+"/service-accounts", `{"name":"External CI","deploymentEnvironmentIds":["`+target.PublicID+`"]}`, nil)
 	if response.Code != http.StatusCreated {
 		t.Fatalf("create service account status=%d body=%s", response.Code, response.Body.String())
 	}
 	var account automation.ServiceAccount
 	decodeResponse(t, response, &account)
-	if account.Name != "GitHub Actions" || response.Header().Get("Cache-Control") != "no-store" {
+	if account.Name != "External CI" || response.Header().Get("Cache-Control") != "no-store" {
 		t.Fatalf("account=%+v cache-control=%q", account, response.Header().Get("Cache-Control"))
 	}
-	response = hierarchyRequest(t, server, owner, http.MethodPost, base+"/service-accounts", `{"name":"GitHub Actions","deploymentEnvironmentIds":["`+target.PublicID+`"]}`, nil)
+	response = hierarchyRequest(t, server, owner, http.MethodPost, base+"/service-accounts", `{"name":"External CI","deploymentEnvironmentIds":["`+target.PublicID+`"]}`, nil)
 	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), `"service_account_name_conflict"`) {
 		t.Fatalf("duplicate service account status=%d body=%s", response.Code, response.Body.String())
 	}
@@ -74,7 +74,7 @@ func TestAutomationAPIRegistersAndDeploysExternalRelease(t *testing.T) {
 	}
 
 	image := "registry.example/molejo/api@sha256:" + strings.Repeat("a", 64)
-	releaseBody := `{"artifact":{"kind":"OCIImage","reference":"` + image + `"},"source":{"provider":"GitHub","repository":"molejo-platform/api","revision":"` + strings.Repeat("b", 40) + `","ref":"refs/heads/main"},"provenance":{"producer":"github-actions","externalRunId":"123","url":"https://github.com/molejo-platform/api/actions/runs/123"}}`
+	releaseBody := `{"artifact":{"kind":"OCIImage","reference":"` + image + `"},"source":{"provider":"example-source","repository":"example/api","revision":"` + strings.Repeat("b", 40) + `","ref":"refs/heads/main"},"provenance":{"producer":"example-ci","externalRunId":"123","url":"https://ci.example/runs/123"}}`
 	automationHeaders := map[string]string{"Authorization": "Bearer " + credential.Token, "Idempotency-Key": "release-123"}
 	response = hierarchyRequest(t, server, apiSession{}, http.MethodPost, base+"/releases", releaseBody, automationHeaders)
 	if response.Code != http.StatusCreated {
@@ -82,7 +82,7 @@ func TestAutomationAPIRegistersAndDeploysExternalRelease(t *testing.T) {
 	}
 	var registered domain.Release
 	decodeResponse(t, response, &registered)
-	if registered.Image != image || registered.OriginKind != "External" || registered.ProvenanceStatus != "Declared" || registered.CreatedBy.ID != account.PublicID || registered.CreatedBy.DisplayName != "GitHub Actions" {
+	if registered.Image != image || registered.OriginKind != domain.ReleaseOriginExternal || registered.ProvenanceStatus != domain.ReleaseProvenanceDeclared || registered.CreatedBy.ID != account.PublicID || registered.CreatedBy.DisplayName != "External CI" {
 		t.Fatalf("registered=%+v", registered)
 	}
 	response = hierarchyRequest(t, server, apiSession{}, http.MethodPost, base+"/releases", releaseBody, automationHeaders)
@@ -95,7 +95,7 @@ func TestAutomationAPIRegistersAndDeploysExternalRelease(t *testing.T) {
 	if response.Code != http.StatusAccepted {
 		t.Fatalf("create deployment status=%d body=%s", response.Code, response.Body.String())
 	}
-	if !strings.Contains(response.Body.String(), `"requestedBy":{"id":"`+account.PublicID+`","kind":"ServiceAccount","displayName":"GitHub Actions"}`) {
+	if !strings.Contains(response.Body.String(), `"requestedBy":{"id":"`+account.PublicID+`","kind":"ServiceAccount","displayName":"External CI"}`) {
 		t.Fatalf("deployment attribution body=%s", response.Body.String())
 	}
 	var accepted struct {

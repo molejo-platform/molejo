@@ -282,13 +282,13 @@ func (s *Store) CompleteBuild(ctx context.Context, build domain.Build, releasePu
 	release.CommitAuthorLogin = build.CommitAuthorLogin
 	release.CommittedAt = build.CommittedAt
 	release.TriggerType = build.TriggerType
-	release.OriginKind = "ManagedBuild"
+	release.OriginKind = domain.ReleaseOriginManagedBuild
 	release.SourceProvider = "GitHub"
 	release.SourceRepository = build.RepositoryFullName
 	release.SourceRevision = build.CommitSHA
 	release.SourceRef = build.SourceBranch
 	release.ProducerKind = "buildkit"
-	release.ProvenanceStatus = "Declared"
+	release.ProvenanceStatus = domain.ReleaseProvenanceDeclared
 	if err = tx.QueryRow(ctx, `SELECT p.public_id,p.kind,p.display_name FROM builds b JOIN users u ON u.id=b.requested_by_user_id JOIN principals p ON p.id=u.principal_id WHERE b.id=$1`, build.ID).
 		Scan(&release.CreatedBy.ID, &release.CreatedBy.Kind, &release.CreatedBy.DisplayName); err != nil {
 		return domain.Release{}, err

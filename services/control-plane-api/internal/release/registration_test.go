@@ -8,8 +8,8 @@ import (
 func TestValidate(t *testing.T) {
 	valid := RegisterCommand{
 		Artifact:   Artifact{Kind: ArtifactOCIImage, Reference: "registry.example/app@sha256:" + strings.Repeat("a", 64)},
-		Source:     Source{Provider: "GitHub", Repository: "molejo-platform/molejo", Revision: strings.Repeat("b", 40), Ref: "refs/heads/main"},
-		Provenance: Provenance{Producer: "github-actions", ExternalRunID: "123", URL: "https://github.com/molejo-platform/molejo/actions/runs/123"},
+		Source:     Source{Provider: "example-source", Repository: "example/molejo", Revision: strings.Repeat("b", 40), Ref: "refs/heads/main"},
+		Provenance: Provenance{Producer: "example-ci", ExternalRunID: "123", URL: "https://ci.example/runs/123"},
 	}
 	if err := Validate(valid); err != nil {
 		t.Fatalf("Validate() error = %v", err)

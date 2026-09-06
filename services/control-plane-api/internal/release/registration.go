@@ -14,7 +14,6 @@ import (
 
 const (
 	ArtifactOCIImage = "OCIImage"
-	OriginExternal   = "External"
 )
 
 type Artifact struct {

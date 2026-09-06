@@ -57,7 +57,7 @@ func (h *generatedHandler) ExpandAppEnvironmentVolume(w http.ResponseWriter, r *
 		writeError(w, http.StatusBadRequest, "volume_size_invalid", "sizeGiB must be positive", r)
 		return
 	}
-	volume, operation, _, err := h.server.store.ExpandAppVolume(r.Context(), workspace.ID, actor.ID, string(appEnvironmentID), int64(input.SizeGiB), int64(params.IfMatch), auth.HashToken(idempotencyKey), scopedBuildPayloadHash(r, payloadHash))
+	volume, operation, _, err := h.server.store.ExpandAppVolume(r.Context(), workspace.ID, actor.ID, string(appEnvironmentID), int64(input.SizeGiB), int64(params.IfMatch), auth.HashToken(idempotencyKey), scopedRequestPayloadHash(r, payloadHash))
 	if err != nil {
 		writeVolumeError(w, r, err)
 		return
@@ -80,7 +80,7 @@ func (h *generatedHandler) DeleteAppEnvironmentVolume(w http.ResponseWriter, r *
 		writeError(w, http.StatusBadRequest, "idempotency_required", "Idempotency-Key is required", r)
 		return
 	}
-	volume, operation, _, err := h.server.store.DeleteAppVolume(r.Context(), workspace.ID, actor.ID, string(appEnvironmentID), int64(params.IfMatch), auth.HashToken(idempotencyKey), scopedBuildPayloadHash(r, payloadHash))
+	volume, operation, _, err := h.server.store.DeleteAppVolume(r.Context(), workspace.ID, actor.ID, string(appEnvironmentID), int64(params.IfMatch), auth.HashToken(idempotencyKey), scopedRequestPayloadHash(r, payloadHash))
 	if err != nil {
 		writeVolumeError(w, r, err)
 		return

@@ -24,14 +24,39 @@ func TestExternalReleaseAndDeploymentUseScopedServiceAccount(t *testing.T) {
 	}
 	token := "automation-" + strings.Repeat("a", 64)
 	accountID := newID(t, "svc")
-	account, err := storage.CreateServiceAccount(ctx, workspaceID, userID, project.PublicID, app.PublicID, accountID, "GitHub Actions", []string{target.PublicID}, audit.Event{
-		PublicID: newID(t, "aud"), Action: "service_account.create", TargetType: "ServiceAccount", Outcome: audit.Succeeded,
+	account, err := storage.CreateServiceAccount(ctx, CreateServiceAccountParams{
+		WorkspaceID:              workspaceID,
+		UserID:                   userID,
+		ProjectPublicID:          project.PublicID,
+		AppPublicID:              app.PublicID,
+		ServiceAccountPublicID:   accountID,
+		Name:                     "External CI",
+		DeploymentEnvironmentIDs: []string{target.PublicID},
+		AuditEvent: audit.Event{
+			PublicID:   newID(t, "aud"),
+			Action:     "service_account.create",
+			TargetType: "ServiceAccount",
+			Outcome:    audit.Succeeded,
+		},
 	})
 	if err != nil || account.PublicID != accountID || len(account.DeploymentEnvironmentIDs) != 1 {
 		t.Fatalf("account=%+v err=%v", account, err)
 	}
-	if _, err = storage.CreateServiceAccountToken(ctx, workspaceID, userID, project.PublicID, app.PublicID, accountID, newID(t, "sat"), auth.HashToken(token), time.Now().Add(time.Hour), audit.Event{
-		PublicID: newID(t, "aud"), Action: "service_account_token.create", TargetType: "ServiceAccountToken", Outcome: audit.Succeeded,
+	if _, err = storage.CreateServiceAccountToken(ctx, CreateServiceAccountTokenParams{
+		WorkspaceID:            workspaceID,
+		UserID:                 userID,
+		ProjectPublicID:        project.PublicID,
+		AppPublicID:            app.PublicID,
+		ServiceAccountPublicID: accountID,
+		TokenPublicID:          newID(t, "sat"),
+		TokenHash:              auth.HashToken(token),
+		ExpiresAt:              time.Now().Add(time.Hour),
+		AuditEvent: audit.Event{
+			PublicID:   newID(t, "aud"),
+			Action:     "service_account_token.create",
+			TargetType: "ServiceAccountToken",
+			Outcome:    audit.Succeeded,
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -61,28 +86,65 @@ func TestExternalReleaseAndDeploymentUseScopedServiceAccount(t *testing.T) {
 
 	command := releasecontract.RegisterCommand{
 		Artifact:   releasecontract.Artifact{Kind: releasecontract.ArtifactOCIImage, Reference: "registry.example/molejo/testkit@sha256:" + strings.Repeat("b", 64)},
-		Source:     releasecontract.Source{Provider: "GitHub", Repository: "molejo-platform/testkit", Revision: strings.Repeat("c", 40), Ref: "refs/heads/main"},
-		Provenance: releasecontract.Provenance{Producer: "github-actions", ExternalRunID: "42", URL: "https://github.com/molejo-platform/testkit/actions/runs/42"},
+		Source:     releasecontract.Source{Provider: "example-source", Repository: "example/testkit", Revision: strings.Repeat("c", 40), Ref: "refs/heads/main"},
+		Provenance: releasecontract.Provenance{Producer: "example-ci", ExternalRunID: "42", URL: "https://ci.example/runs/42"},
 	}
 	idempotencyHash := domain.SHA256([]byte("release-key"))
 	payloadHash := domain.SHA256([]byte("release-payload"))
 	releaseID := newID(t, "rel")
-	registered, replay, err := storage.RegisterExternalRelease(ctx, actor, workspaceID, project.PublicID, app.PublicID, releaseID, command, idempotencyHash, payloadHash, audit.Event{
-		PublicID: newID(t, "aud"), Action: "release.register", TargetType: "Release", Outcome: audit.Succeeded,
+	registered, replay, err := storage.RegisterExternalRelease(ctx, actor, RegisterExternalReleaseParams{
+		WorkspaceID:     workspaceID,
+		ProjectPublicID: project.PublicID,
+		AppPublicID:     app.PublicID,
+		ReleasePublicID: releaseID,
+		Command:         command,
+		IdempotencyHash: idempotencyHash,
+		PayloadHash:     payloadHash,
+		AuditEvent: audit.Event{
+			PublicID:   newID(t, "aud"),
+			Action:     "release.register",
+			TargetType: "Release",
+			Outcome:    audit.Succeeded,
+		},
 	})
-	if err != nil || replay || registered.Image != command.Artifact.Reference || registered.BuildPublicID != "" || registered.OriginKind != releasecontract.OriginExternal {
+	if err != nil || replay || registered.Image != command.Artifact.Reference || registered.BuildPublicID != "" || registered.OriginKind != domain.ReleaseOriginExternal {
 		t.Fatalf("release=%+v replay=%v err=%v", registered, replay, err)
 	}
-	replayed, replay, err := storage.RegisterExternalRelease(ctx, actor, workspaceID, project.PublicID, app.PublicID, newID(t, "rel"), command, idempotencyHash, payloadHash, audit.Event{})
+	replayed, replay, err := storage.RegisterExternalRelease(ctx, actor, RegisterExternalReleaseParams{
+		WorkspaceID:     workspaceID,
+		ProjectPublicID: project.PublicID,
+		AppPublicID:     app.PublicID,
+		ReleasePublicID: newID(t, "rel"),
+		Command:         command,
+		IdempotencyHash: idempotencyHash,
+		PayloadHash:     payloadHash,
+	})
 	if err != nil || !replay || replayed.PublicID != registered.PublicID {
 		t.Fatalf("replayed=%+v replay=%v err=%v", replayed, replay, err)
 	}
-	if _, _, err = storage.RegisterExternalRelease(ctx, actor, workspaceID, project.PublicID, app.PublicID, newID(t, "rel"), command, idempotencyHash, domain.SHA256([]byte("different")), audit.Event{}); !errors.Is(err, ErrConflict) {
+	if _, _, err = storage.RegisterExternalRelease(ctx, actor, RegisterExternalReleaseParams{
+		WorkspaceID:     workspaceID,
+		ProjectPublicID: project.PublicID,
+		AppPublicID:     app.PublicID,
+		ReleasePublicID: newID(t, "rel"),
+		Command:         command,
+		IdempotencyHash: idempotencyHash,
+		PayloadHash:     domain.SHA256([]byte("different")),
+	}); !errors.Is(err, ErrConflict) {
 		t.Fatalf("idempotency conflict error = %v", err)
 	}
 
-	deployment, operation, replay, err := storage.CreateDeploymentForPrincipal(ctx, workspaceID, actor, target.PublicID, newID(t, "dpl"), registered.PublicID, target.ConfigurationVersion, target.Version, "", domain.SHA256([]byte("deployment-key")), domain.SHA256([]byte("deployment-payload")), deploymentAudit(t))
-	if err != nil || replay || deployment.RequestedBy.DisplayName != "GitHub Actions" || deployment.RequestedBy.ID != accountID || operation.Kind != domain.OperationApplyDeployment {
+	deployment, operation, replay, err := storage.CreateDeploymentForPrincipal(ctx, actor, domain.DeploymentRequest{
+		WorkspaceID:            workspaceID,
+		AppEnvironmentPublicID: target.PublicID,
+		DeploymentPublicID:     newID(t, "dpl"),
+		ReleasePublicID:        registered.PublicID,
+		ConfigurationVersion:   target.ConfigurationVersion,
+		ExpectedVersion:        target.Version,
+		IdempotencyHash:        domain.SHA256([]byte("deployment-key")),
+		PayloadHash:            domain.SHA256([]byte("deployment-payload")),
+	}, deploymentAudit(t))
+	if err != nil || replay || deployment.RequestedBy.DisplayName != "External CI" || deployment.RequestedBy.ID != accountID || operation.Kind != domain.OperationApplyDeployment {
 		t.Fatalf("deployment=%+v operation=%+v replay=%v err=%v", deployment, operation, replay, err)
 	}
 	claimed, _, claimedDeployment, ok, err := storage.ClaimNext(ctx, "external-worker", time.Minute)
@@ -90,7 +152,10 @@ func TestExternalReleaseAndDeploymentUseScopedServiceAccount(t *testing.T) {
 		t.Fatalf("claimed=%+v deployment=%+v ok=%v err=%v", claimed, claimedDeployment, ok, err)
 	}
 	if err = storage.RevokeServiceAccount(ctx, workspaceID, userID, project.PublicID, app.PublicID, accountID, audit.Event{
-		PublicID: newID(t, "aud"), Action: "service_account.revoke", TargetType: "ServiceAccount", Outcome: audit.Succeeded,
+		PublicID:   newID(t, "aud"),
+		Action:     "service_account.revoke",
+		TargetType: "ServiceAccount",
+		Outcome:    audit.Succeeded,
 	}); err != nil {
 		t.Fatal(err)
 	}

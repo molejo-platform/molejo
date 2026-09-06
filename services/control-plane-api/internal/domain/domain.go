@@ -16,45 +16,35 @@ import (
 )
 
 const (
-	ExposurePrivate                       = "Private"
-	ExposurePublic                        = "Public"
-	PortProtocolTCP                       = "TCP"
-	ProbeHTTP                             = "HTTP"
-	ProbeTCP                              = "TCP"
-	EndpointHTTP                          = "HTTP"
-	EndpointTCP                           = "TCP"
-	StatePending                          = "Pending"
-	StateProgressing                      = "Progressing"
-	StateReady                            = "Ready"
-	StateDegraded                         = "Degraded"
-	StateUnknown                          = "Unknown"
-	Unknown                               = StateUnknown
-	Progressing                           = StateProgressing
-	Ready                                 = StateReady
-	Degraded                              = StateDegraded
-	OperationPending                      = "Pending"
-	OperationRunning                      = "Running"
-	OperationSucceeded                    = "Succeeded"
-	OperationFailed                       = "Failed"
-	OperationEnsureWorkspace              = "EnsureWorkspace"
-	OperationApplyDeployment              = "ApplyDeployment"
-	OperationDeleteAppEnv                 = "DeleteAppEnvironment"
-	OperationEnsureVolume                 = "EnsureVolume"
-	OperationExpandVolume                 = "ExpandVolume"
-	OperationDeleteVolume                 = "DeleteVolume"
-	ParameterPlainText                    = "PlainText"
-	ParameterSecret                       = "Secret"
-	WorkloadStateless        WorkloadKind = "Stateless"
-	WorkloadStateful         WorkloadKind = "Stateful"
-	VolumeDesiredReady                    = "Ready"
-	VolumeDesiredDeleted                  = "Deleted"
-	VolumeStatePending                    = "Pending"
-	VolumeStateProvisioning               = "Provisioning"
-	VolumeStateReady                      = "Ready"
-	VolumeStateExpanding                  = "Expanding"
-	VolumeStateRetained                   = "Retained"
-	VolumeStateDegraded                   = "Degraded"
-	VolumeRetentionPreserve               = "Preserve"
+	ExposurePrivate                      = "Private"
+	ExposurePublic                       = "Public"
+	PortProtocolTCP                      = "TCP"
+	ProbeHTTP                            = "HTTP"
+	ProbeTCP                             = "TCP"
+	EndpointHTTP                         = "HTTP"
+	EndpointTCP                          = "TCP"
+	StatePending                         = "Pending"
+	StateProgressing                     = "Progressing"
+	StateReady                           = "Ready"
+	StateDegraded                        = "Degraded"
+	StateUnknown                         = "Unknown"
+	Unknown                              = StateUnknown
+	Progressing                          = StateProgressing
+	Ready                                = StateReady
+	Degraded                             = StateDegraded
+	ParameterPlainText                   = "PlainText"
+	ParameterSecret                      = "Secret"
+	WorkloadStateless       WorkloadKind = "Stateless"
+	WorkloadStateful        WorkloadKind = "Stateful"
+	VolumeDesiredReady                   = "Ready"
+	VolumeDesiredDeleted                 = "Deleted"
+	VolumeStatePending                   = "Pending"
+	VolumeStateProvisioning              = "Provisioning"
+	VolumeStateReady                     = "Ready"
+	VolumeStateExpanding                 = "Expanding"
+	VolumeStateRetained                  = "Retained"
+	VolumeStateDegraded                  = "Degraded"
+	VolumeRetentionPreserve              = "Preserve"
 )
 
 var (
@@ -246,12 +236,6 @@ type Intent struct {
 	Slug                 string           `json:"-"`
 }
 
-type Actor struct {
-	ID   int64
-	Key  string
-	Role string
-}
-
 type Workspace struct {
 	ID             int64     `json:"-"`
 	PublicID       string    `json:"id"`
@@ -355,52 +339,6 @@ type AppEnvironment struct {
 	UpdatedAt                   time.Time     `json:"updatedAt"`
 	DeletionRequestedAt         *time.Time    `json:"-"`
 	ArchivedAt                  *time.Time    `json:"-"`
-}
-
-type Deployment struct {
-	ID                     int64          `json:"-"`
-	PublicID               string         `json:"id"`
-	WorkspaceID            int64          `json:"-"`
-	AppEnvironmentID       int64          `json:"-"`
-	AppID                  int64          `json:"-"`
-	AppEnvironmentPublicID string         `json:"appEnvironmentId"`
-	ReleasePublicID        string         `json:"releaseId"`
-	Image                  string         `json:"-"`
-	ConfigurationVersion   int64          `json:"configurationVersion"`
-	Configuration          RuntimeConfig  `json:"configuration"`
-	WorkloadKind           WorkloadKind   `json:"workloadKind"`
-	AppVolumePublicID      string         `json:"appVolumeId,omitempty"`
-	RequestedBy            ActorReference `json:"requestedBy"`
-	State                  string         `json:"state"`
-	Message                string         `json:"message,omitempty"`
-	ObservedRelease        string         `json:"-"`
-	CreatedAt              time.Time      `json:"createdAt"`
-	UpdatedAt              time.Time      `json:"updatedAt"`
-}
-
-type Operation struct {
-	ID                     int64      `json:"-"`
-	ClusterID              int64      `json:"-"`
-	PublicID               string     `json:"id"`
-	AppEnvironmentID       int64      `json:"-"`
-	AppEnvironmentPublicID string     `json:"appEnvironmentId,omitempty"`
-	DeploymentID           int64      `json:"-"`
-	DeploymentPublicID     string     `json:"deploymentId,omitempty"`
-	AppVolumeID            int64      `json:"-"`
-	AppVolumePublicID      string     `json:"appVolumeId,omitempty"`
-	WorkspaceID            int64      `json:"-"`
-	ActorID                int64      `json:"-"`
-	Kind                   string     `json:"kind"`
-	Status                 string     `json:"status"`
-	DesiredVersion         int64      `json:"desiredVersion"`
-	Attempts               int        `json:"attempts"`
-	WorkerID               string     `json:"-"`
-	FencingToken           int64      `json:"-"`
-	LeaseUntil             *time.Time `json:"-"`
-	ErrorCode              string     `json:"errorCode,omitempty"`
-	ErrorMessage           string     `json:"errorMessage,omitempty"`
-	CreatedAt              time.Time  `json:"createdAt"`
-	UpdatedAt              time.Time  `json:"updatedAt"`
 }
 
 func NewPublicID(prefix string) (string, error) {

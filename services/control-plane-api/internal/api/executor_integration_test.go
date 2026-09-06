@@ -26,7 +26,21 @@ func TestAgentCommandCompletesADeploymentWithoutControlPlaneKubernetesAccess(t *
 	ctx := context.Background()
 	s, workspaceID, actorID, _ := newExecutorIntegrationFixture(t)
 	target, releaseID, image := createExecutorTargetAndRelease(t, s, workspaceID, actorID)
-	deployment, operation, _, err := s.CreateDeployment(ctx, workspaceID, actorID, target.PublicID, mustAPIID(t, "dpl"), releaseID, target.ConfigurationVersion, target.Version, "", domain.SHA256([]byte("agent-apply")), domain.SHA256([]byte("agent-apply-payload")), audit.Event{PublicID: mustAPIID(t, "aud"), Action: "deployment.create", TargetType: "Deployment", Outcome: audit.Succeeded})
+	deployment, operation, _, err := s.CreateDeployment(ctx, actorID, domain.DeploymentRequest{
+		WorkspaceID:            workspaceID,
+		AppEnvironmentPublicID: target.PublicID,
+		DeploymentPublicID:     mustAPIID(t, "dpl"),
+		ReleasePublicID:        releaseID,
+		ConfigurationVersion:   target.ConfigurationVersion,
+		ExpectedVersion:        target.Version,
+		IdempotencyHash:        domain.SHA256([]byte("agent-apply")),
+		PayloadHash:            domain.SHA256([]byte("agent-apply-payload")),
+	}, audit.Event{
+		PublicID:   mustAPIID(t, "aud"),
+		Action:     "deployment.create",
+		TargetType: "Deployment",
+		Outcome:    audit.Succeeded,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

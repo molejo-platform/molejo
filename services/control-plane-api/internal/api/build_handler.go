@@ -39,7 +39,7 @@ func (h *generatedHandler) CreateAppBuild(w http.ResponseWriter, r *http.Request
 		return
 	}
 	idempotencyHash := auth.HashToken(idempotencyKey)
-	payloadHash = scopedBuildPayloadHash(r, payloadHash)
+	payloadHash = scopedRequestPayloadHash(r, payloadHash)
 	var input struct {
 		AppEnvironmentID string `json:"appEnvironmentId"`
 		CommitSHA        string `json:"commitSha"`
@@ -136,28 +136,6 @@ func (h *generatedHandler) ListAppBuildLogs(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})
 }
 
-func (h *generatedHandler) ListAppReleases(w http.ResponseWriter, r *http.Request, workspaceID generated.WorkspaceId, projectID generated.ProjectId, appID generated.AppId, params generated.ListAppReleasesParams) {
-	_, workspace, ok := h.authorizeWorkspace(w, r, string(workspaceID), false)
-	if !ok || !h.appExists(w, r, workspace.ID, string(projectID), string(appID)) {
-		return
-	}
-	beforeID, limit, ok := hierarchyPage(w, r, params.Cursor, params.Limit)
-	if !ok {
-		return
-	}
-	items, nextCursor, err := h.server.store.ListReleases(r.Context(), workspace.ID, string(projectID), string(appID), beforeID, limit)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "storage_failed", "could not list releases", r)
-		return
-	}
-	writeHierarchyList(w, items, nextCursor)
-}
-
-func scopedBuildPayloadHash(r *http.Request, bodyHash []byte) []byte {
-	value := append([]byte(r.Method+"\n"+r.URL.EscapedPath()+"\n"), bodyHash...)
-	return domain.SHA256(value)
-}
-
 func (h *generatedHandler) appBuild(w http.ResponseWriter, r *http.Request, workspaceID int64, projectID, appID, buildID string) (domain.Build, bool) {
 	build, err := h.server.store.FindBuild(r.Context(), workspaceID, buildID)
 	if err != nil || build.ProjectPublicID != projectID || build.AppPublicID != appID {
@@ -169,15 +147,6 @@ func (h *generatedHandler) appBuild(w http.ResponseWriter, r *http.Request, work
 		return domain.Build{}, false
 	}
 	return build, true
-}
-
-func (h *generatedHandler) appExists(w http.ResponseWriter, r *http.Request, workspaceID int64, projectID, appID string) bool {
-	_, err := h.server.store.FindApp(r.Context(), workspaceID, projectID, appID)
-	if err != nil {
-		writeBuildError(w, r, err)
-		return false
-	}
-	return true
 }
 
 func writeBuildError(w http.ResponseWriter, r *http.Request, err error) {

@@ -173,8 +173,8 @@ func TestIdempotencyPayloadIncludesTheMutationPath(t *testing.T) {
 
 	_, firstBodyHash, firstOK := idempotency(first)
 	_, secondBodyHash, secondOK := idempotency(second)
-	firstHash := scopedBuildPayloadHash(first, firstBodyHash)
-	secondHash := scopedBuildPayloadHash(second, secondBodyHash)
+	firstHash := scopedRequestPayloadHash(first, firstBodyHash)
+	secondHash := scopedRequestPayloadHash(second, secondBodyHash)
 	if !firstOK || !secondOK || bytes.Equal(firstHash, secondHash) {
 		t.Fatal("the same key and body on different build resources were treated as the same mutation")
 	}
@@ -217,5 +217,31 @@ func TestClusterEnrollmentEndpointsDisableCaching(t *testing.T) {
 		if got := recorder.Header().Get("Cache-Control"); got != "no-store" {
 			t.Fatalf("%s Cache-Control = %q, want no-store", path, got)
 		}
+	}
+}
+
+func TestRequiresNoStore(t *testing.T) {
+	tests := []struct {
+		path string
+		want bool
+	}{
+		{path: "/api/v1/session", want: true},
+		{path: "/api/v1/users/usr-1", want: true},
+		{path: "/api/v1/admin/users", want: true},
+		{path: "/api/v1/admin/clusters", want: true},
+		{path: "/api/v1/admin/agent-installations", want: true},
+		{path: "/api/v1/password-resets/token", want: true},
+		{path: "/api/v1/workspaces/ws-1/service-accounts", want: true},
+		{path: "/agent/v1/operations", want: true},
+		{path: "/api/v1/workspaces", want: false},
+		{path: "/healthz", want: false},
+	}
+
+	for _, test := range tests {
+		t.Run(test.path, func(t *testing.T) {
+			if got := requiresNoStore(test.path); got != test.want {
+				t.Fatalf("requiresNoStore(%q) = %t, want %t", test.path, got, test.want)
+			}
+		})
 	}
 }

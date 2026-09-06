@@ -53,19 +53,3 @@ func TestWriteAutomationErrorPreservesAuthenticationAndStorageFailures(t *testin
 		})
 	}
 }
-
-func TestValidEnvironmentScopeEnforcesPublishedLimit(t *testing.T) {
-	values := make([]string, 20)
-	for index := range values {
-		values[index] = "aev-" + strings.Repeat(string(rune('a'+index)), 20)
-	}
-	if !validEnvironmentScope(values) {
-		t.Fatal("20 unique App Environment IDs must be accepted")
-	}
-	if validEnvironmentScope(append(values, "aev-"+strings.Repeat("z", 20))) {
-		t.Fatal("21 App Environment IDs must be rejected")
-	}
-	if validEnvironmentScope([]string{values[0], values[0]}) {
-		t.Fatal("duplicate App Environment IDs must be rejected")
-	}
-}

@@ -25,6 +25,40 @@ type ConfigurationRevision struct {
 	CreatedAt              time.Time     `json:"createdAt"`
 }
 
+type Deployment struct {
+	ID                     int64          `json:"-"`
+	PublicID               string         `json:"id"`
+	WorkspaceID            int64          `json:"-"`
+	AppEnvironmentID       int64          `json:"-"`
+	AppID                  int64          `json:"-"`
+	AppEnvironmentPublicID string         `json:"appEnvironmentId"`
+	ReleasePublicID        string         `json:"releaseId"`
+	Image                  string         `json:"-"`
+	ConfigurationVersion   int64          `json:"configurationVersion"`
+	Configuration          RuntimeConfig  `json:"configuration"`
+	WorkloadKind           WorkloadKind   `json:"workloadKind"`
+	AppVolumePublicID      string         `json:"appVolumeId,omitempty"`
+	RequestedBy            ActorReference `json:"requestedBy"`
+	State                  string         `json:"state"`
+	Message                string         `json:"message,omitempty"`
+	ObservedRelease        string         `json:"-"`
+	CreatedAt              time.Time      `json:"createdAt"`
+	UpdatedAt              time.Time      `json:"updatedAt"`
+}
+
+// DeploymentRequest is the provider-neutral intent used to create an immutable Deployment.
+type DeploymentRequest struct {
+	WorkspaceID                       int64
+	AppEnvironmentPublicID            string
+	DeploymentPublicID                string
+	ReleasePublicID                   string
+	ConfigurationVersion              int64
+	ExpectedVersion                   int64
+	ExpectedCurrentDeploymentPublicID string
+	IdempotencyHash                   []byte
+	PayloadHash                       []byte
+}
+
 type DeploymentTarget struct {
 	ReleasePublicID      string `json:"releaseId"`
 	ConfigurationVersion int64  `json:"configurationVersion"`

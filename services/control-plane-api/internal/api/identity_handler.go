@@ -582,37 +582,6 @@ func (h *generatedHandler) DeleteWorkspaceAccessGrant(w http.ResponseWriter, r *
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *generatedHandler) authorizeInstallation(w http.ResponseWriter, r *http.Request, mutation bool, permission authorization.Permission) (identity.User, bool) {
-	user, ok := h.authorizeUser(w, r, mutation)
-	if !ok {
-		return identity.User{}, false
-	}
-	context, err := h.server.store.AuthorizationContext(r.Context(), user.ID, 0, "Installation", "default")
-	if err != nil || !authorization.Allowed(context, permission) {
-		writeError(w, http.StatusForbidden, "permission_denied", "installation administration is required", r)
-		return identity.User{}, false
-	}
-	return user, true
-}
-
-func (h *generatedHandler) authorizeWorkspacePermission(w http.ResponseWriter, r *http.Request, publicID string, mutation bool, permission authorization.Permission) (identity.User, domain.Workspace, bool) {
-	user, ok := h.authorizeUser(w, r, mutation)
-	if !ok {
-		return identity.User{}, domain.Workspace{}, false
-	}
-	workspace, err := h.server.store.FindWorkspaceForUser(r.Context(), user.ID, publicID)
-	if err != nil {
-		writeError(w, http.StatusNotFound, "resource_not_found", "resource was not found", r)
-		return identity.User{}, domain.Workspace{}, false
-	}
-	context, err := h.server.store.AuthorizationContext(r.Context(), user.ID, workspace.ID, "Workspace", workspace.PublicID)
-	if err != nil || !authorization.Allowed(context, permission) {
-		writeError(w, http.StatusForbidden, "permission_denied", "permission is required", r)
-		return identity.User{}, domain.Workspace{}, false
-	}
-	return user, workspace, true
-}
-
 func validMembership(role, status string) bool {
 	validRole := role == authorization.RoleOwner || role == authorization.RoleMember || role == authorization.RoleViewer
 	return validRole && (status == "Active" || status == "Suspended")

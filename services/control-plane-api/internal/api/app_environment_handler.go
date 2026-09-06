@@ -3,7 +3,6 @@ package api
 import (
 	"errors"
 	"net/http"
-	"strings"
 
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/api/generated"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/audit"
@@ -92,7 +91,7 @@ func (h *generatedHandler) CreateAppEnvironment(w http.ResponseWriter, r *http.R
 func (h *generatedHandler) GetAppEnvironment(w http.ResponseWriter, r *http.Request, workspaceID generated.WorkspaceId, projectID generated.ProjectId, appID generated.AppId, appEnvironmentID generated.AppEnvironmentId) {
 	var workspace domain.Workspace
 	var ok bool
-	if strings.TrimSpace(r.Header.Get("Authorization")) != "" {
+	if usesAutomationAuthentication(r) {
 		_, workspace, ok = h.authorizeAutomation(w, r, string(workspaceID), string(projectID), string(appID), string(appEnvironmentID), automation.PermissionDeploymentCreate)
 	} else {
 		_, workspace, ok = h.authorizeWorkspace(w, r, string(workspaceID), false)
@@ -140,7 +139,7 @@ func (h *generatedHandler) DeleteAppEnvironment(w http.ResponseWriter, r *http.R
 		writeError(w, http.StatusBadRequest, "idempotency_required", "Idempotency-Key is required", r)
 		return
 	}
-	operation, err := h.server.store.DeleteAppEnvironment(r.Context(), workspace.ID, actor.ID, string(appEnvironmentID), int64(params.IfMatch), auth.HashToken(idempotencyKey), scopedBuildPayloadHash(r, payloadHash))
+	operation, err := h.server.store.DeleteAppEnvironment(r.Context(), workspace.ID, actor.ID, string(appEnvironmentID), int64(params.IfMatch), auth.HashToken(idempotencyKey), scopedRequestPayloadHash(r, payloadHash))
 	if err != nil {
 		writeAppEnvironmentError(w, r, err)
 		return
@@ -175,7 +174,7 @@ func (h *generatedHandler) CreateAppEnvironmentDeployment(w http.ResponseWriter,
 	var automationActor principal.Principal
 	var workspace domain.Workspace
 	var ok bool
-	isAutomation := strings.TrimSpace(r.Header.Get("Authorization")) != ""
+	isAutomation := usesAutomationAuthentication(r)
 	if isAutomation {
 		automationActor, workspace, ok = h.authorizeAutomation(w, r, string(workspaceID), string(projectID), string(appID), string(appEnvironmentID), automation.PermissionDeploymentCreate)
 	} else {
@@ -217,10 +216,21 @@ func (h *generatedHandler) CreateAppEnvironmentDeployment(w http.ResponseWriter,
 		var operation domain.Operation
 		var createErr error
 		event := h.server.auditEvent(r, "deployment.create", "Deployment", deploymentID, audit.Succeeded)
+		request := domain.DeploymentRequest{
+			WorkspaceID:                       workspace.ID,
+			AppEnvironmentPublicID:            string(appEnvironmentID),
+			DeploymentPublicID:                deploymentID,
+			ReleasePublicID:                   input.ReleaseID,
+			ConfigurationVersion:              input.ConfigurationVersion,
+			ExpectedVersion:                   int64(params.IfMatch),
+			ExpectedCurrentDeploymentPublicID: expectedCurrentDeploymentID,
+			IdempotencyHash:                   auth.HashToken(idempotencyKey),
+			PayloadHash:                       scopedRequestPayloadHash(r, payloadHash),
+		}
 		if isAutomation {
-			deployment, operation, _, createErr = h.server.store.CreateDeploymentForPrincipal(r.Context(), workspace.ID, automationActor, string(appEnvironmentID), deploymentID, input.ReleaseID, input.ConfigurationVersion, int64(params.IfMatch), expectedCurrentDeploymentID, auth.HashToken(idempotencyKey), scopedBuildPayloadHash(r, payloadHash), event)
+			deployment, operation, _, createErr = h.server.store.CreateDeploymentForPrincipal(r.Context(), automationActor, request, event)
 		} else {
-			deployment, operation, _, createErr = h.server.store.CreateDeployment(r.Context(), workspace.ID, actorUserID, string(appEnvironmentID), deploymentID, input.ReleaseID, input.ConfigurationVersion, int64(params.IfMatch), expectedCurrentDeploymentID, auth.HashToken(idempotencyKey), scopedBuildPayloadHash(r, payloadHash), event)
+			deployment, operation, _, createErr = h.server.store.CreateDeployment(r.Context(), actorUserID, request, event)
 		}
 		if errors.Is(createErr, store.ErrPublicIDCollision) {
 			continue
