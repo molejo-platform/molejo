@@ -4,13 +4,12 @@ import { type FormEvent, useState } from "react";
 
 import { userFacingError } from "../../shared/api/errors";
 import type { Parameter, ParameterInput } from "../../shared/api/types";
-import { canEditWorkspace } from "../../shared/auth/permissions";
 import { Alert } from "../../shared/ui/Alert";
 import { Button } from "../../shared/ui/Button";
 import { ConfirmAction } from "../../shared/ui/ConfirmAction";
 import { Field, SelectField, TextareaField } from "../../shared/ui/Field";
 import { EmptyState, PageHeader } from "../../shared/ui/Page";
-import { useSessionQuery } from "../authentication/public";
+import { useEffectiveCapabilities } from "../workspace-access/public";
 import { archiveParameter, createParameter, listParameters, replaceParameter } from "./api";
 import { parameterKeys } from "./queries";
 
@@ -18,14 +17,14 @@ const emptyInput: ParameterInput = { path: "", type: "PlainText", description: "
 
 export function ParametersPage() {
   const { workspaceId } = useParams({ from: "/protected/workspaces/$workspaceId/parameters" });
-  const session = useSessionQuery();
-  const canMutate = canEditWorkspace(session.data, workspaceId);
+  const capabilities = useEffectiveCapabilities(workspaceId, "Workspace", workspaceId);
+  const canMutate = capabilities.data?.editResources === true;
   const queryClient = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<Parameter>();
   const query = useQuery({
     queryKey: parameterKeys.list(workspaceId),
-    queryFn: () => listParameters(workspaceId),
+    queryFn: ({ signal }) => listParameters(workspaceId, signal),
   });
   const create = useMutation({
     mutationFn: (input: ParameterInput) => createParameter(workspaceId, input),
@@ -46,7 +45,7 @@ export function ParametersPage() {
     mutationFn: (parameter: Parameter) => archiveParameter(workspaceId, parameter),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: parameterKeys.list(workspaceId) }),
   });
-  const error = query.error ?? create.error ?? replace.error ?? archive.error;
+  const error = capabilities.error ?? query.error ?? create.error ?? replace.error ?? archive.error;
 
   return (
     <div className="stack">
@@ -68,7 +67,9 @@ export function ParametersPage() {
         }
       />
       {error && <Alert>{userFacingError(error)}</Alert>}
-      {!canMutate && <Alert tone="info">Seu acesso é somente leitura. Apenas o owner pode alterar Parameters.</Alert>}
+      {capabilities.isSuccess && !canMutate && (
+        <Alert tone="info">Sua identidade não possui a capacidade de alterar Parameters.</Alert>
+      )}
       {showCreate && canMutate && (
         <ParameterForm
           submitLabel="Criar Parameter"

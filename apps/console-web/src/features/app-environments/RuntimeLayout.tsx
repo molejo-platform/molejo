@@ -18,9 +18,8 @@ export function EnvironmentAppLayout({
   const params = requireEnvironmentParams(useParams({ strict: false }));
   const targets = useQuery({
     queryKey: environmentKeys.applications(params.workspaceId, params.projectId, params.environmentId),
-    queryFn: () => listEnvironmentApps(params.workspaceId, params.projectId, params.environmentId),
-    refetchInterval: (query) =>
-      query.state.data?.items.some((target) => target.state === "Progressing") ? 2_000 : false,
+    queryFn: ({ signal }) => listEnvironmentApps(params.workspaceId, params.projectId, params.environmentId, signal),
+    refetchInterval: (query) => (query.state.data?.items.some((item) => item.state === "Progressing") ? 2_000 : false),
   });
   if (targets.isPending) {
     return (

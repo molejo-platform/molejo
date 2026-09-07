@@ -1,21 +1,22 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useParams } from "@tanstack/react-router";
+import { useParams, useSearch } from "@tanstack/react-router";
+import { useEffect } from "react";
 
 import { userFacingError } from "../../../shared/api/errors";
-import { canManageWorkspace } from "../../../shared/auth/permissions";
 import { Alert } from "../../../shared/ui/Alert";
 import { Button } from "../../../shared/ui/Button";
 import { ConfirmAction } from "../../../shared/ui/ConfirmAction";
 import { EmptyState } from "../../../shared/ui/Page";
-import { useSessionQuery } from "../../authentication/public";
+import { useEffectiveCapabilities } from "../../workspace-access/public";
 import { WorkspaceSettingsLayout } from "../../workspaces/public";
 import { connectGitHubInstallation, disconnectGitHubInstallation, listGitHubInstallations } from "./api";
 import { githubKeys } from "./queries";
 
 export function GitHubSettingsPage() {
   const { workspaceId } = useParams({ from: "/protected/workspaces/$workspaceId/settings/github" });
-  const session = useSessionQuery();
-  const canMutate = canManageWorkspace(session.data, workspaceId);
+  const search = useSearch({ from: "/protected/workspaces/$workspaceId/settings/github" });
+  const capabilities = useEffectiveCapabilities(workspaceId, "Workspace", workspaceId);
+  const canMutate = capabilities.data?.manageWorkspace === true;
   const queryClient = useQueryClient();
   const installations = useQuery({
     queryKey: githubKeys.installations(workspaceId),
@@ -29,6 +30,10 @@ export function GitHubSettingsPage() {
     mutationFn: (id: string) => disconnectGitHubInstallation(workspaceId, id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: githubKeys.installations(workspaceId) }),
   });
+  useEffect(() => {
+    if (search.github === "connected")
+      void queryClient.invalidateQueries({ queryKey: githubKeys.installations(workspaceId) });
+  }, [queryClient, search.github, workspaceId]);
 
   if (installations.isError) {
     return (
@@ -58,7 +63,10 @@ export function GitHubSettingsPage() {
         {(installations.error || connect.error || disconnect.error) && (
           <Alert>{userFacingError(installations.error ?? connect.error ?? disconnect.error)}</Alert>
         )}
-        {!canMutate && <Alert tone="info">Somente o owner pode conectar ou remover instalações.</Alert>}
+        {search.github === "connected" && <Alert tone="success">Instalação do GitHub conectada.</Alert>}
+        {capabilities.isSuccess && !canMutate && (
+          <Alert tone="info">Sua identidade não possui a capacidade de gerenciar integrações do Workspace.</Alert>
+        )}
         {installations.isPending ? (
           <p className="muted" role="status">
             Carregando instalações…

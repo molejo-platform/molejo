@@ -3,10 +3,12 @@ package api
 import (
 	"errors"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/api/generated"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/auth"
+	"github.com/molejo-platform/molejo/services/control-plane-api/internal/authorization"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/domain"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/store"
 )
@@ -17,7 +19,7 @@ const (
 )
 
 func (h *generatedHandler) ConnectGitHubInstallation(w http.ResponseWriter, r *http.Request, workspaceID generated.WorkspaceId) {
-	actor, workspace, ok := h.authorizeWorkspace(w, r, string(workspaceID), true)
+	actor, workspace, ok := h.authorizeWorkspacePermission(w, r, string(workspaceID), true, authorization.ManageWorkspace)
 	if !ok {
 		return
 	}
@@ -132,7 +134,13 @@ func (h *generatedHandler) CompleteGitHubAuthorization(w http.ResponseWriter, r 
 		return
 	}
 	h.clearGitHubCookie(w, r)
-	http.Redirect(w, r, h.server.config.PublicURL+"/admin?github=connected", http.StatusFound)
+	workspace, err := h.server.store.Workspace(r.Context(), pending.WorkspaceID)
+	if err != nil {
+		h.server.logger().Error("read GitHub callback workspace", "request_id", requestID(r), "error", err)
+		writeError(w, http.StatusServiceUnavailable, "github_connection_failed", "GitHub connection return path could not be resolved", r)
+		return
+	}
+	http.Redirect(w, r, h.server.config.PublicURL+"/workspaces/"+url.PathEscape(workspace.PublicID)+"/settings/github?github=connected", http.StatusFound)
 }
 
 func (h *generatedHandler) ListGitHubInstallations(w http.ResponseWriter, r *http.Request, workspaceID generated.WorkspaceId) {
@@ -168,7 +176,7 @@ func (h *generatedHandler) ListGitHubRepositories(w http.ResponseWriter, r *http
 }
 
 func (h *generatedHandler) DisconnectGitHubInstallation(w http.ResponseWriter, r *http.Request, workspaceID generated.WorkspaceId, githubInstallationID generated.GitHubInstallationId) {
-	_, workspace, ok := h.authorizeWorkspace(w, r, string(workspaceID), true)
+	_, workspace, ok := h.authorizeWorkspacePermission(w, r, string(workspaceID), true, authorization.ManageWorkspace)
 	if !ok || !h.githubAvailable(w, r) {
 		return
 	}

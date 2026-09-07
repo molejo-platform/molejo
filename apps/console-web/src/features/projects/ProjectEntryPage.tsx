@@ -20,7 +20,7 @@ export function ProjectEntryPage() {
   });
   const environments = useQuery({
     queryKey: environmentKeys.list(workspaceId, projectId),
-    queryFn: () => listEnvironments(workspaceId, projectId),
+    queryFn: ({ signal }) => listEnvironments(workspaceId, projectId, signal),
   });
   const firstEnvironmentId = environments.data?.items[0]?.id;
   useEffect(() => {

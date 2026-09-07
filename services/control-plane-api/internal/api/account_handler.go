@@ -126,7 +126,7 @@ func (h *generatedHandler) RequestPasswordReset(w http.ResponseWriter, r *http.R
 	}
 	username, _ := identity.NormalizeUsername(input.Username)
 	_ = h.server.recordAudit(r, audit.Event{Action: "identity.password_reset.request", TargetType: "User", TargetPublicID: username, Outcome: audit.Succeeded})
-	writeJSON(w, http.StatusAccepted, map[string]bool{"accepted": true})
+	w.WriteHeader(http.StatusAccepted)
 }
 
 func (h *generatedHandler) VerifyPasswordReset(w http.ResponseWriter, r *http.Request) {

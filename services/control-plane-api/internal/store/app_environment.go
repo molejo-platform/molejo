@@ -89,6 +89,17 @@ func (s *Store) CreateAppEnvironmentOnCluster(ctx context.Context, workspaceID, 
 		return domain.AppEnvironment{}, nil, err
 	}
 	defer tx.Rollback(ctx)
+	var clusterReady bool
+	if err = tx.QueryRow(ctx, `SELECT EXISTS(
+		SELECT 1 FROM agent_installations i
+		JOIN workspace_clusters wc ON wc.installation_id=i.id
+		WHERE i.public_id=$1 AND i.status='Active' AND wc.workspace_id=$2 AND wc.state='Ready'
+	)`, clusterPublicID, workspaceID).Scan(&clusterReady); err != nil {
+		return domain.AppEnvironment{}, nil, err
+	}
+	if !clusterReady {
+		return domain.AppEnvironment{}, nil, ErrAgentUnavailable
+	}
 	query := `WITH inserted AS (
 		INSERT INTO app_environments(public_id,workspace_id,project_id,app_id,environment_id,cluster_id,source_branch,runtime_name,workload_kind,configuration_json)
 		SELECT $1,p.workspace_id,p.id,a.id,e.id,i.id,$6,$7,$8,$9

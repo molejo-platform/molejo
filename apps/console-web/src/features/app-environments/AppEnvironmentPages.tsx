@@ -4,7 +4,6 @@ import { type FormEvent, useEffect, useMemo, useState } from "react";
 
 import { userFacingError } from "../../shared/api/errors";
 import type { AppEnvironment, Release, RuntimeConfiguration } from "../../shared/api/types";
-import { canEditWorkspace } from "../../shared/auth/permissions";
 import { formatDateTime, shortSha } from "../../shared/format";
 import { Alert } from "../../shared/ui/Alert";
 import { Button } from "../../shared/ui/Button";
@@ -14,6 +13,12 @@ import { EmptyState } from "../../shared/ui/Page";
 import { StatusBadge } from "../../shared/ui/StatusBadge";
 import { applicationKeys, createApp, getAppSource, listApps } from "../applications/public";
 import { useSessionQuery } from "../authentication/public";
+import {
+  clusterPlacementKeys,
+  listWorkspaceClusters,
+  readyWorkspaceClusters,
+  reconcileClusterSelection,
+} from "../cluster-placement/public";
 import {
   createAppBuild,
   createAppEnvironmentDeployment,
@@ -28,6 +33,7 @@ import {
 } from "../delivery/public";
 import { environmentKeys, listEnvironmentApps } from "../environments/public";
 import { listParameters, parameterKeys } from "../parameters/public";
+import { useOperationTracker } from "../operations/public";
 import { normalizeResourceName, validateResourceName } from "../projects/public";
 import {
   defaultRuntimeConfiguration,
@@ -37,8 +43,10 @@ import {
   RuntimeConfigurationFields,
   runtimeConfigurationKeys,
 } from "../runtime-configuration/public";
+import { useEffectiveCapabilities } from "../workspace-access/public";
 import { AppEnvironmentLayout } from "./AppEnvironmentLayout";
 import { createAppEnvironment } from "./api";
+import { appEnvironmentKeys } from "./queries";
 import { publicationAddress } from "./publication";
 import { EnvironmentAppLayout } from "./RuntimeLayout";
 import type { EnvironmentParams } from "./runtime-ref";
@@ -56,18 +64,19 @@ export function EnvironmentAppsPage() {
     from: "/protected/workspaces/$workspaceId/projects/$projectId/environments/$environmentId",
   });
   const session = useSessionQuery();
-  const canMutate = canEditWorkspace(session.data, workspaceId);
+  const capabilities = useEffectiveCapabilities(workspaceId, "Project", projectId);
+  const canMutate = capabilities.data?.editResources === true;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const targets = useQuery({
     queryKey: environmentKeys.applications(workspaceId, projectId, environmentId),
-    queryFn: () => listEnvironmentApps(workspaceId, projectId, environmentId),
+    queryFn: ({ signal }) => listEnvironmentApps(workspaceId, projectId, environmentId, signal),
     refetchInterval: (query) =>
       query.state.data?.items.some((target) => target.state === "Progressing") ? 2_000 : false,
   });
   const apps = useQuery({
     queryKey: applicationKeys.list(workspaceId, projectId),
-    queryFn: () => listApps(workspaceId, projectId),
+    queryFn: ({ signal }) => listApps(workspaceId, projectId, signal),
   });
   const [showAdd, setShowAdd] = useState(false);
   const linkedApps = useMemo(() => new Set(targets.data?.items.map((target) => target.appId)), [targets.data?.items]);
@@ -93,7 +102,9 @@ export function EnvironmentAppsPage() {
             </Button>
           )}
         </div>
-        {(targets.error || apps.error) && <Alert>{userFacingError(targets.error ?? apps.error)}</Alert>}
+        {(capabilities.error || targets.error || apps.error) && (
+          <Alert>{userFacingError(capabilities.error ?? targets.error ?? apps.error)}</Alert>
+        )}
         {showAdd && canMutate && (
           <AddAppToEnvironment
             workspaceId={workspaceId}
@@ -186,17 +197,23 @@ function AddAppToEnvironment({
   const queryClient = useQueryClient();
   const parameters = useQuery({
     queryKey: parameterKeys.list(workspaceId),
-    queryFn: () => listParameters(workspaceId),
+    queryFn: ({ signal }) => listParameters(workspaceId, signal),
   });
   const storageProfiles = useQuery({
     queryKey: runtimeConfigurationKeys.storageProfiles(workspaceId),
     queryFn: () => listStorageProfiles(workspaceId),
   });
+  const placements = useQuery({
+    queryKey: clusterPlacementKeys.workspace(workspaceId),
+    queryFn: ({ signal }) => listWorkspaceClusters(workspaceId, signal),
+  });
+  const readyClusters = useMemo(() => readyWorkspaceClusters(placements.data?.items), [placements.data?.items]);
   const [mode, setMode] = useState<"existing" | "new">(availableApps.length ? "existing" : "new");
   const [appId, setAppId] = useState(availableApps[0]?.id ?? "");
   const [name, setName] = useState("");
   const [nameError, setNameError] = useState("");
   const [branch, setBranch] = useState("main");
+  const [clusterId, setClusterId] = useState("");
   const [workloadKind, setWorkloadKind] = useState<"Stateless" | "Stateful">("Stateless");
   const [storageProfileId, setStorageProfileId] = useState("");
   const [sizeGiB, setSizeGiB] = useState(1);
@@ -212,6 +229,14 @@ function AddAppToEnvironment({
     if (!storageProfiles.data?.items.some((profile) => profile.id === storageProfileId))
       setStorageProfileId(storageProfiles.data?.items[0]?.id ?? "");
   }, [storageProfileId, storageProfiles.data?.items]);
+  useEffect(() => {
+    setClusterId((current) =>
+      reconcileClusterSelection(
+        readyClusters.map((cluster) => cluster.clusterId),
+        current,
+      ),
+    );
+  }, [readyClusters]);
   const create = useMutation({
     mutationFn: async () => {
       const parsedVariables = parseRuntimeVariables(variables);
@@ -235,7 +260,7 @@ function AddAppToEnvironment({
       };
       return createAppEnvironment(workspaceId, projectId, selectedAppId, {
         environmentId,
-        clusterId: "",
+        clusterId,
         branch: branch.trim(),
         workloadKind,
         configuration: runtime,
@@ -249,7 +274,7 @@ function AddAppToEnvironment({
   });
   function submit(event: FormEvent) {
     event.preventDefault();
-    if (branch.trim()) create.mutate();
+    if (branch.trim() && clusterId) create.mutate();
   }
   const selectedProfile = storageProfiles.data?.items.find((profile) => profile.id === storageProfileId);
   const statefulInvalid =
@@ -309,6 +334,25 @@ function AddAppToEnvironment({
         maxLength={255}
         required
       />
+      <SelectField
+        label="Cluster de runtime"
+        helper="Somente placements prontos deste Workspace podem receber o App."
+        value={clusterId}
+        onChange={(event) => setClusterId(event.target.value)}
+        disabled={placements.isPending}
+        required
+      >
+        <option value="">Selecione</option>
+        {readyClusters.map((cluster) => (
+          <option key={cluster.clusterId} value={cluster.clusterId}>
+            {cluster.clusterName}
+          </option>
+        ))}
+      </SelectField>
+      {placements.error && <Alert>{userFacingError(placements.error)}</Alert>}
+      {placements.isSuccess && !readyClusters.length && (
+        <Alert tone="warning">Este Workspace ainda não possui um cluster pronto para executar Apps.</Alert>
+      )}
       <SelectField
         label="Tipo de execução"
         helper="Stateless não mantém arquivos locais. Stateful preserva um volume entre releases e recriações."
@@ -401,7 +445,13 @@ function AddAppToEnvironment({
         <Button
           type="submit"
           loading={create.isPending}
-          disabled={!branch.trim() || statefulInvalid || (mode === "existing" ? !appId : !name.trim())}
+          disabled={
+            !branch.trim() ||
+            !clusterId ||
+            !readyClusters.length ||
+            statefulInvalid ||
+            (mode === "existing" ? !appId : !name.trim())
+          }
         >
           {mode === "new" ? "Criar e adicionar" : "Adicionar ao Environment"}
         </Button>
@@ -471,19 +521,13 @@ function TargetOverview({ target }: { target: AppEnvironment }) {
 }
 
 export function EnvironmentAppBuildsPage() {
-  const session = useSessionQuery();
   const queryClient = useQueryClient();
   return (
     <EnvironmentAppLayout>
       {(target, params) => (
         <section className="stack">
           <DeliveryNav params={params} />
-          <TargetBuilds
-            target={target}
-            params={params}
-            canMutate={canEditWorkspace(session.data, params.workspaceId)}
-            queryClient={queryClient}
-          />
+          <TargetBuilds target={target} params={params} queryClient={queryClient} />
         </section>
       )}
     </EnvironmentAppLayout>
@@ -493,17 +537,17 @@ export function EnvironmentAppBuildsPage() {
 function TargetBuilds({
   target,
   params,
-  canMutate,
   queryClient,
 }: {
   target: AppEnvironment;
   params: EnvironmentParams;
-  canMutate: boolean;
   queryClient: ReturnType<typeof useQueryClient>;
 }) {
+  const capabilities = useEffectiveCapabilities(params.workspaceId, "AppEnvironment", target.id);
+  const canMutate = capabilities.data?.deploy === true;
   const builds = useQuery({
     queryKey: deliveryKeys.builds(params.workspaceId, params.projectId, target.appId),
-    queryFn: () => listAppBuilds(params.workspaceId, params.projectId, target.appId),
+    queryFn: ({ signal }) => listAppBuilds(params.workspaceId, params.projectId, target.appId, signal),
     refetchInterval: (query) =>
       query.state.data?.items.some((build) => build.status === "Pending" || build.status === "Running") ? 2_000 : false,
   });
@@ -521,7 +565,7 @@ function TargetBuilds({
         queryKey: deliveryKeys.builds(params.workspaceId, params.projectId, target.appId),
       }),
   });
-  const error = builds.error ?? source.error ?? create.error;
+  const error = capabilities.error ?? builds.error ?? source.error ?? create.error;
   if (builds.isError) return <Alert>{userFacingError(builds.error)}</Alert>;
   return (
     <section className="stack">
@@ -705,19 +749,13 @@ function TargetBuildDetail({ target, params }: { target: AppEnvironment; params:
 }
 
 export function EnvironmentAppDeploymentsPage() {
-  const session = useSessionQuery();
   const queryClient = useQueryClient();
   return (
     <EnvironmentAppLayout>
       {(target, params) => (
         <section className="stack">
           <DeliveryNav params={params} />
-          <TargetDeployments
-            target={target}
-            params={params}
-            canMutate={canEditWorkspace(session.data, params.workspaceId)}
-            queryClient={queryClient}
-          />
+          <TargetDeployments target={target} params={params} queryClient={queryClient} />
         </section>
       )}
     </EnvironmentAppLayout>
@@ -727,21 +765,22 @@ export function EnvironmentAppDeploymentsPage() {
 function TargetDeployments({
   target,
   params,
-  canMutate,
   queryClient,
 }: {
   target: AppEnvironment;
   params: EnvironmentParams;
-  canMutate: boolean;
   queryClient: ReturnType<typeof useQueryClient>;
 }) {
+  const capabilities = useEffectiveCapabilities(params.workspaceId, "AppEnvironment", target.id);
+  const canMutate = capabilities.data?.deploy === true;
   const deployments = useQuery({
     queryKey: deliveryKeys.deployments(params.workspaceId, params.projectId, target.appId, target.id),
-    queryFn: () => listAppEnvironmentDeployments(params.workspaceId, params.projectId, target.appId, target.id),
+    queryFn: ({ signal }) =>
+      listAppEnvironmentDeployments(params.workspaceId, params.projectId, target.appId, target.id, signal),
   });
   const releases = useQuery({
     queryKey: deliveryKeys.releases(params.workspaceId, params.projectId, target.appId),
-    queryFn: () => listAppReleases(params.workspaceId, params.projectId, target.appId),
+    queryFn: ({ signal }) => listAppReleases(params.workspaceId, params.projectId, target.appId, signal),
   });
   const availableReleases = useMemo(
     () =>
@@ -752,8 +791,8 @@ function TargetDeployments({
   );
   const revisions = useQuery({
     queryKey: runtimeConfigurationKeys.versions(params.workspaceId, params.projectId, target.appId, target.id),
-    queryFn: () =>
-      listAppEnvironmentConfigurationVersions(params.workspaceId, params.projectId, target.appId, target.id),
+    queryFn: ({ signal }) =>
+      listAppEnvironmentConfigurationVersions(params.workspaceId, params.projectId, target.appId, target.id, signal),
   });
   const [releaseId, setReleaseId] = useState("");
   const [configurationVersion, setConfigurationVersion] = useState(target.configurationVersion);
@@ -773,6 +812,29 @@ function TargetDeployments({
       }),
     enabled: !!releaseId && configurationVersion > 0,
   });
+  const operation = useOperationTracker();
+  useEffect(() => {
+    if (!operation.isSucceeded) return;
+    void Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: deliveryKeys.deployments(params.workspaceId, params.projectId, target.appId, target.id),
+      }),
+      queryClient.invalidateQueries({
+        queryKey: appEnvironmentKeys.detail(params.workspaceId, params.projectId, target.appId, target.id),
+      }),
+      queryClient.invalidateQueries({
+        queryKey: environmentKeys.applications(params.workspaceId, params.projectId, params.environmentId),
+      }),
+    ]);
+  }, [
+    operation.isSucceeded,
+    params.environmentId,
+    params.projectId,
+    params.workspaceId,
+    queryClient,
+    target.appId,
+    target.id,
+  ]);
   const deploy = useMutation({
     mutationFn: () =>
       createAppEnvironmentDeployment(params.workspaceId, params.projectId, target.appId, target.id, target.version, {
@@ -780,16 +842,16 @@ function TargetDeployments({
         configurationVersion,
         currentDeploymentId: target.currentDeploymentId ?? null,
       }),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: deliveryKeys.deployments(params.workspaceId, params.projectId, target.appId, target.id),
-      });
-      await queryClient.invalidateQueries({
-        queryKey: environmentKeys.applications(params.workspaceId, params.projectId, params.environmentId),
-      });
-    },
+    onSuccess: (accepted) => operation.track(accepted.operation),
   });
-  const error = deployments.error ?? releases.error ?? revisions.error ?? preview.error ?? deploy.error;
+  const error =
+    capabilities.error ??
+    deployments.error ??
+    releases.error ??
+    revisions.error ??
+    preview.error ??
+    deploy.error ??
+    operation.error;
   const labels: Record<string, string> = {
     InitialDeployment: "Primeira implantação",
     Release: "Nova release",
@@ -881,16 +943,21 @@ function TargetDeployments({
           <div className="form-actions">
             <Button
               type="submit"
-              loading={deploy.isPending}
-              disabled={!releaseId || !preview.data || target.state === "Progressing"}
+              loading={deploy.isPending || operation.isActive}
+              disabled={!releaseId || !preview.data || target.state === "Progressing" || operation.isActive}
             >
               {preview.data?.rolloutRequired === false ? "Reimplantar estado atual" : "Confirmar implantação"}
             </Button>
           </div>
         </form>
       )}
-      {deploy.isSuccess && (
-        <Alert tone="success">Implantação solicitada. O runtime será atualizado de forma assíncrona.</Alert>
+      {operation.isActive && <Alert tone="info">Implantação em andamento no cluster.</Alert>}
+      {deploy.isSuccess && !operation.isSucceeded && !operation.isFailed && (
+        <Alert tone="info">Implantação solicitada. Aguardando a reconciliação do cluster.</Alert>
+      )}
+      {operation.isSucceeded && <Alert tone="success">Implantação concluída no cluster.</Alert>}
+      {operation.isFailed && (
+        <Alert>{operation.operation?.errorMessage ?? "O cluster não conseguiu concluir a implantação."}</Alert>
       )}
       {deployments.isPending ? (
         <p className="muted" role="status">

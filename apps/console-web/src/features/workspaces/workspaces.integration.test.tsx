@@ -13,6 +13,11 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("./queries", () => ({
   useWorkspaceQuery: () => mocks.query,
+  useWorkspaceDetailQuery: (workspaceId: string) => ({
+    data: workspaces.find((workspace) => workspace.id === workspaceId),
+    isPending: false,
+    error: undefined,
+  }),
 }));
 
 beforeEach(() => {

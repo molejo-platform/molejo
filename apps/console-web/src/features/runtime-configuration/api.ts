@@ -1,4 +1,4 @@
-import { createIdempotencyKey, request } from "../../shared/api/http-client";
+import { createIdempotencyKey, request, requestAllPages } from "../../shared/api/http-client";
 import type { AppVolume, AppVolumeMutation, ConfigurationRevision, StorageProfile } from "../../shared/api/types";
 
 type ResourceList<T> = { items: T[]; nextCursor: string | null };
@@ -12,10 +12,12 @@ export const listAppEnvironmentConfigurationVersions = (
   projectId: string,
   appId: string,
   appEnvironmentId: string,
+  signal?: AbortSignal,
 ) =>
-  request<ResourceList<ConfigurationRevision>>(
+  requestAllPages<ConfigurationRevision>(
     `${runtimeBase(workspaceId, projectId, appId, appEnvironmentId)}/configuration-versions`,
-  );
+    signal,
+  ) as Promise<ResourceList<ConfigurationRevision>>;
 export const listStorageProfiles = (workspaceId: string) =>
   request<{ items: StorageProfile[] }>(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/storage-profiles`);
 export const getAppEnvironmentVolume = (

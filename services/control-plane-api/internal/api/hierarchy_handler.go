@@ -52,6 +52,10 @@ func (h *generatedHandler) CreateWorkspace(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusBadRequest, "invalid_json", "request body is invalid", r)
 		return
 	}
+	if input.ClusterId == "" {
+		writeError(w, http.StatusBadRequest, "cluster_required", "clusterId is required", r)
+		return
+	}
 	name, _, err := domain.NormalizeHierarchyName(input.Name)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_name", err.Error(), r)
@@ -68,11 +72,7 @@ func (h *generatedHandler) CreateWorkspace(w http.ResponseWriter, r *http.Reques
 		}
 		var workspace domain.Workspace
 		var operation domain.Operation
-		if input.ClusterId == "" {
-			workspace, operation, _, err = h.server.store.CreateWorkspace(r.Context(), user.ID, workspaceID, operationID, name, domain.SHA256([]byte(idem)), payload)
-		} else {
-			workspace, operation, _, err = h.server.store.CreateWorkspaceOnCluster(r.Context(), user.ID, input.ClusterId, workspaceID, operationID, name, domain.SHA256([]byte(idem)), payload)
-		}
+		workspace, operation, _, err = h.server.store.CreateWorkspaceOnCluster(r.Context(), user.ID, input.ClusterId, workspaceID, operationID, name, domain.SHA256([]byte(idem)), payload)
 		if errors.Is(err, store.ErrPublicIDCollision) {
 			continue
 		}

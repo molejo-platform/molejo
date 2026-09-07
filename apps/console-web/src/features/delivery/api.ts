@@ -1,4 +1,4 @@
-import { createIdempotencyKey, request } from "../../shared/api/http-client";
+import { createIdempotencyKey, request, requestAllPages } from "../../shared/api/http-client";
 import type {
   Build,
   BuildInput,
@@ -21,8 +21,8 @@ const buildBase = (workspaceId: string, projectId: string, appId: string) =>
 const runtimeBase = (workspaceId: string, projectId: string, appId: string, appEnvironmentId: string) =>
   `${appBase(workspaceId, projectId, appId)}/environments/${encodeURIComponent(appEnvironmentId)}`;
 
-export const listAppBuilds = (workspaceId: string, projectId: string, appId: string) =>
-  request<ResourceList<Build>>(buildBase(workspaceId, projectId, appId));
+export const listAppBuilds = (workspaceId: string, projectId: string, appId: string, signal?: AbortSignal) =>
+  requestAllPages<Build>(buildBase(workspaceId, projectId, appId), signal) as Promise<ResourceList<Build>>;
 export const createAppBuild = (workspaceId: string, projectId: string, appId: string, input: BuildInput) =>
   request<Build>(buildBase(workspaceId, projectId, appId), {
     method: "POST",
@@ -33,14 +33,21 @@ export const getAppBuild = (workspaceId: string, projectId: string, appId: strin
   request<Build>(`${buildBase(workspaceId, projectId, appId)}/${encodeURIComponent(buildId)}`);
 export const listAppBuildLogs = (workspaceId: string, projectId: string, appId: string, buildId: string) =>
   request<{ items: BuildLog[] }>(`${buildBase(workspaceId, projectId, appId)}/${encodeURIComponent(buildId)}/logs`);
-export const listAppReleases = (workspaceId: string, projectId: string, appId: string) =>
-  request<ResourceList<Release>>(`${appBase(workspaceId, projectId, appId)}/releases`);
+export const listAppReleases = (workspaceId: string, projectId: string, appId: string, signal?: AbortSignal) =>
+  requestAllPages<Release>(`${appBase(workspaceId, projectId, appId)}/releases`, signal) as Promise<
+    ResourceList<Release>
+  >;
 export const listAppEnvironmentDeployments = (
   workspaceId: string,
   projectId: string,
   appId: string,
   appEnvironmentId: string,
-) => request<ResourceList<Deployment>>(`${runtimeBase(workspaceId, projectId, appId, appEnvironmentId)}/deployments`);
+  signal?: AbortSignal,
+) =>
+  requestAllPages<Deployment>(
+    `${runtimeBase(workspaceId, projectId, appId, appEnvironmentId)}/deployments`,
+    signal,
+  ) as Promise<ResourceList<Deployment>>;
 export const createAppEnvironmentDeployment = (
   workspaceId: string,
   projectId: string,

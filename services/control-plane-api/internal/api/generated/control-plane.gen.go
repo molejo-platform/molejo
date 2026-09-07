@@ -2691,8 +2691,7 @@ type ListWorkspacesParams struct {
 
 // CreateWorkspaceParams defines parameters for CreateWorkspace.
 type CreateWorkspaceParams struct {
-	// IdempotencyKey Required for Secret parameter mutations; ignored for PlainText mutations.
-	IdempotencyKey *OptionalIdempotencyKey `json:"Idempotency-Key,omitempty"`
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
 // UpdateWorkspaceParams defines parameters for UpdateWorkspace.
@@ -5165,23 +5164,27 @@ func (siw *ServerInterfaceWrapper) CreateWorkspace(w http.ResponseWriter, r *htt
 
 	headers := r.Header
 
-	// ------------- Optional header parameter "Idempotency-Key" -------------
+	// ------------- Required header parameter "Idempotency-Key" -------------
 	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
-		var IdempotencyKey OptionalIdempotencyKey
+		var IdempotencyKey IdempotencyKey
 		n := len(valueList)
 		if n != 1 {
 			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
 			return
 		}
 
-		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
 		if err != nil {
 			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
 			return
 		}
 
-		params.IdempotencyKey = &IdempotencyKey
+		params.IdempotencyKey = IdempotencyKey
 
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

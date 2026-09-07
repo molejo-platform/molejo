@@ -54,7 +54,7 @@ func TestGitHubConnectionRequiresOwnerBrowserStateAndUserInstallationAccess(t *t
 		t.Fatal(err)
 	}
 	callback := callbackRequest(server, "/api/v1/github/callback?code=one-time-code&state="+url.QueryEscape(authorizationURL.Query().Get("state")), browserCookie)
-	if callback.Code != http.StatusFound || callback.Header().Get("Location") != "https://console.example/admin?github=connected" {
+	if callback.Code != http.StatusFound || callback.Header().Get("Location") != "https://console.example/workspaces/"+workspace.PublicID+"/settings/github?github=connected" {
 		t.Fatalf("authorization status=%d location=%q body=%s", callback.Code, callback.Header().Get("Location"), callback.Body.String())
 	}
 	installations, err := storage.ListGitHubInstallations(context.Background(), workspaceID)

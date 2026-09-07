@@ -3646,9 +3646,8 @@ export interface operations {
     createWorkspace: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description Required for Secret parameter mutations; ignored for PlainText mutations. */
-                "Idempotency-Key"?: components["parameters"]["OptionalIdempotencyKey"];
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path?: never;
             cookie?: never;

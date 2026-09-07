@@ -13,6 +13,7 @@ const runtimeConfiguration = () => import("../../features/runtime-configuration/
 const observability = () => import("../../features/observability/routes");
 const github = () => import("../../features/integrations/github/routes");
 const workspaceAccess = () => import("../../features/workspace-access/routes");
+const externalCI = () => import("../../features/external-ci/routes");
 
 const runtimePath =
   "/workspaces/$workspaceId/projects/$projectId/environments/$environmentId/apps/$appEnvironmentId" as const;
@@ -160,12 +161,20 @@ export const workspaceRoutes = [
   }),
   createRoute({
     getParentRoute: () => protectedRoute,
+    path: "/workspaces/$workspaceId/projects/$projectId/apps/$appId/automation",
+    component: lazyRouteComponent(externalCI, "AppAutomationPage"),
+  }),
+  createRoute({
+    getParentRoute: () => protectedRoute,
     path: "/workspaces/$workspaceId/settings",
     component: lazyRouteComponent(workspaces, "WorkspaceSettingsPage"),
   }),
   createRoute({
     getParentRoute: () => protectedRoute,
     path: "/workspaces/$workspaceId/settings/github",
+    validateSearch: (search: Record<string, unknown>) => ({
+      github: search.github === "connected" ? ("connected" as const) : undefined,
+    }),
     component: lazyRouteComponent(github, "GitHubSettingsPage"),
   }),
   createRoute({

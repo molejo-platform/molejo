@@ -6,7 +6,7 @@ import { userFacingError } from "../../shared/api/errors";
 import { Alert } from "../../shared/ui/Alert";
 import { SelectField } from "../../shared/ui/Field";
 import { PageHeader } from "../../shared/ui/Page";
-import { environmentKeys, listEnvironments } from "../environments/public";
+import { environmentKeys, getEnvironment, listEnvironments } from "../environments/public";
 import { getProject, projectKeys } from "../projects/public";
 
 export function AppEnvironmentLayout({
@@ -27,29 +27,32 @@ export function AppEnvironmentLayout({
   });
   const environments = useQuery({
     queryKey: environmentKeys.list(workspaceId, projectId),
-    queryFn: () => listEnvironments(workspaceId, projectId),
+    queryFn: ({ signal }) => listEnvironments(workspaceId, projectId, signal),
   });
-  const error = project.error ?? environments.error;
-  if (project.isPending || environments.isPending)
+  const environment = useQuery({
+    queryKey: environmentKeys.detail(workspaceId, projectId, environmentId),
+    queryFn: ({ signal }) => getEnvironment(workspaceId, projectId, environmentId, signal),
+  });
+  const error = project.error ?? environments.error ?? environment.error;
+  if (project.isPending || environments.isPending || environment.isPending)
     return (
       <p className="muted" role="status">
         Carregando Environment…
       </p>
     );
   const environmentItems = environments.data?.items ?? [];
-  const environment = environmentItems.find((item) => item.id === environmentId);
-  if (error || !project.data || !environment)
+  if (error || !project.data || !environment.data)
     return <Alert>{error ? userFacingError(error) : "Environment não encontrado."}</Alert>;
   return (
     <div className="stack">
       <PageHeader
         eyebrow="Project"
         title={project.data.name}
-        description={`Apps ativos em ${environment.name}.`}
+        description={`Apps ativos em ${environment.data.name}.`}
         breadcrumbs={[
           { label: "Projects", to: "/workspaces/$workspaceId/projects", params: { workspaceId } },
           { label: project.data.name },
-          { label: environment.name },
+          { label: environment.data.name },
         ]}
         actions={
           <div className="environment-actions">

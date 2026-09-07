@@ -14,7 +14,7 @@ export function OverviewPage() {
   const { workspace } = useSelectedWorkspace();
   const projects = useQuery({
     queryKey: projectKeys.list(workspaceId),
-    queryFn: () => listProjects(workspaceId),
+    queryFn: ({ signal }) => listProjects(workspaceId, signal),
   });
   const installations = useQuery({
     queryKey: githubKeys.installations(workspaceId),

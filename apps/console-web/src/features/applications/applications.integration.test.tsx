@@ -29,6 +29,9 @@ vi.mock("../authentication/public", () => ({
     data: { workspaceMemberships: [{ workspaceId: "ws-aaaaaaaaaaaaaaaaaaaa", role: "Owner" }] },
   }),
 }));
+vi.mock("../workspace-access/public", () => ({
+  useEffectiveCapabilities: () => ({ data: { editResources: true }, isSuccess: true }),
+}));
 vi.mock("./ApplicationLayout", () => ({
   ApplicationLayout: ({ children }: { children: (name: string) => React.ReactNode }) => <>{children("Platform")}</>,
 }));

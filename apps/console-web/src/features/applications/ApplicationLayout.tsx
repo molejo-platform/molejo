@@ -63,6 +63,7 @@ export function ApplicationLayout({
         items={[
           { label: "Visão geral", to: "/workspaces/$workspaceId/projects/$projectId/apps/$appId", params },
           { label: "Fonte", to: "/workspaces/$workspaceId/projects/$projectId/apps/$appId/source", params },
+          { label: "Automação", to: "/workspaces/$workspaceId/projects/$projectId/apps/$appId/automation", params },
         ]}
       />
       {children(app.data.name)}

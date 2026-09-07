@@ -1,11 +1,12 @@
-import { request } from "../../shared/api/http-client";
+import { request, requestAllPages } from "../../shared/api/http-client";
 import type { Parameter, ParameterInput } from "../../shared/api/types";
 
 export type ParameterList = { items: Parameter[]; nextCursor?: string | null };
 
 const base = (workspaceId: string) => `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/parameters`;
 
-export const listParameters = (workspaceId: string) => request<ParameterList>(base(workspaceId));
+export const listParameters = (workspaceId: string, signal?: AbortSignal) =>
+  requestAllPages<Parameter>(base(workspaceId), signal) as Promise<ParameterList>;
 export const createParameter = (workspaceId: string, input: ParameterInput) =>
   request<Parameter>(base(workspaceId), {
     method: "POST",

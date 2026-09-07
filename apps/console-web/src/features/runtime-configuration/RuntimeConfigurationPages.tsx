@@ -4,7 +4,6 @@ import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "rea
 
 import { ApiRequestError, userFacingError } from "../../shared/api/errors";
 import type { AppEnvironment, DeliveryPolicy, Parameter, RuntimeConfiguration } from "../../shared/api/types";
-import { canEditWorkspace } from "../../shared/auth/permissions";
 import { Alert } from "../../shared/ui/Alert";
 import { Button } from "../../shared/ui/Button";
 import { ConfirmAction } from "../../shared/ui/ConfirmAction";
@@ -23,6 +22,8 @@ import { useSessionQuery } from "../authentication/public";
 import { deliveryKeys, getAppEnvironmentDeliveryPolicy, replaceAppEnvironmentDeliveryPolicy } from "../delivery/public";
 import { environmentKeys } from "../environments/public";
 import { listParameters, parameterKeys } from "../parameters/public";
+import { useOperationTracker } from "../operations/public";
+import { useEffectiveCapabilities } from "../workspace-access/public";
 import { runtimeConfigurationKeys } from "./queries";
 import { ResourceField } from "./ResourceField";
 import { parseRuntimeVariables, runtimeVariablesToText } from "./RuntimeConfigurationForm";
@@ -72,7 +73,6 @@ function page(
   ) => ReactNode,
 ) {
   return function ConfigurationPage() {
-    const session = useSessionQuery();
     return (
       <EnvironmentAppLayout>
         {(target, params) => (
@@ -84,7 +84,6 @@ function page(
               section={section}
               title={title}
               description={description}
-              canMutate={canEditWorkspace(session.data, params.workspaceId)}
               render={render}
             />
           </section>
@@ -93,14 +92,12 @@ function page(
     );
   };
 }
-
 function ConfigurationEditor({
   target,
   params,
   section,
   title,
   description,
-  canMutate,
   render,
 }: {
   target: AppEnvironment;
@@ -108,7 +105,6 @@ function ConfigurationEditor({
   section: Section;
   title: string;
   description: string;
-  canMutate: boolean;
   render: (
     draft: RuntimeConfiguration,
     setDraft: (value: RuntimeConfiguration) => void,
@@ -118,10 +114,12 @@ function ConfigurationEditor({
     target: AppEnvironment,
   ) => ReactNode;
 }) {
+  const capabilities = useEffectiveCapabilities(params.workspaceId, "AppEnvironment", target.id);
+  const canMutate = capabilities.data?.editResources === true;
   const queryClient = useQueryClient();
   const parameters = useQuery({
     queryKey: parameterKeys.list(params.workspaceId),
-    queryFn: () => listParameters(params.workspaceId),
+    queryFn: ({ signal }) => listParameters(params.workspaceId, signal),
   });
   const [branch, setBranch] = useState(target.branch);
   const [draft, setDraft] = useState(target.configuration);
@@ -202,6 +200,7 @@ function ConfigurationEditor({
         </Alert>
       )}
       {save.isError && !conflict && <Alert>{userFacingError(save.error)}</Alert>}
+      {capabilities.error && <Alert>{userFacingError(capabilities.error)}</Alert>}
       {parameters.error && <Alert>{userFacingError(parameters.error)}</Alert>}
       <form className="panel stack" onSubmit={submit}>
         {section === "build" ? (
@@ -251,7 +250,6 @@ function ConfigurationEditor({
     </section>
   );
 }
-
 function mergeInput(latest: AppEnvironment, branch: string, draft: RuntimeConfiguration, section: Section) {
   const configuration = { ...latest.configuration };
   if (section === "variables") configuration.variables = draft.variables;
@@ -271,7 +269,6 @@ export const EnvironmentVariablesPage = page(
     <VariablesEditor draft={draft} setDraft={setDraft} disabled={disabled} onValidityChange={onValidityChange} />
   ),
 );
-
 function VariablesEditor({
   draft,
   setDraft,
@@ -804,33 +801,49 @@ export const EnvironmentResourcesPage = page(
 );
 
 export function EnvironmentBuildConfigurationPage() {
-  const session = useSessionQuery();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   return (
     <EnvironmentAppLayout>
       {(target, params) => {
-        const canMutate = canEditWorkspace(session.data, params.workspaceId);
         return (
-          <section className="stack">
-            <ConfigurationNav params={params} workloadKind={target.workloadKind} />
-            <ConfigurationEditor
-              target={target}
-              params={params}
-              section="build"
-              title="Build e branch"
-              description="A branch pertence a este App dentro deste Environment; cada build resolve e registra um SHA imutável."
-              canMutate={canMutate}
-              render={() => null}
-            />
-            <DeliveryAutomation target={target} params={params} canMutate={canMutate} />
-            {canMutate && (
-              <RemoveFromEnvironment target={target} params={params} navigate={navigate} queryClient={queryClient} />
-            )}
-          </section>
+          <BuildConfigurationContent target={target} params={params} navigate={navigate} queryClient={queryClient} />
         );
       }}
     </EnvironmentAppLayout>
+  );
+}
+
+function BuildConfigurationContent({
+  target,
+  params,
+  navigate,
+  queryClient,
+}: {
+  target: AppEnvironment;
+  params: EnvironmentParams;
+  navigate: ReturnType<typeof useNavigate>;
+  queryClient: ReturnType<typeof useQueryClient>;
+}) {
+  const capabilities = useEffectiveCapabilities(params.workspaceId, "AppEnvironment", target.id);
+  const canMutate = capabilities.data?.editResources === true;
+  return (
+    <section className="stack">
+      <ConfigurationNav params={params} workloadKind={target.workloadKind} />
+      {capabilities.error && <Alert>{userFacingError(capabilities.error)}</Alert>}
+      <ConfigurationEditor
+        target={target}
+        params={params}
+        section="build"
+        title="Build e branch"
+        description="A branch pertence a este App dentro deste Environment; cada build resolve e registra um SHA imutável."
+        render={() => null}
+      />
+      <DeliveryAutomation target={target} params={params} canMutate={canMutate} />
+      {canMutate && (
+        <RemoveFromEnvironment target={target} params={params} navigate={navigate} queryClient={queryClient} />
+      )}
+    </section>
   );
 }
 
@@ -938,18 +951,24 @@ function RemoveFromEnvironment({
   navigate: ReturnType<typeof useNavigate>;
   queryClient: ReturnType<typeof useQueryClient>;
 }) {
+  const operation = useOperationTracker();
+  useEffect(() => {
+    if (!operation.isSucceeded) return;
+    void queryClient
+      .invalidateQueries({
+        queryKey: environmentKeys.applications(params.workspaceId, params.projectId, params.environmentId),
+      })
+      .then(() =>
+        navigate({
+          to: "/workspaces/$workspaceId/projects/$projectId/environments/$environmentId",
+          params: { workspaceId: params.workspaceId, projectId: params.projectId, environmentId: params.environmentId },
+        }),
+      );
+  }, [navigate, operation.isSucceeded, params.environmentId, params.projectId, params.workspaceId, queryClient]);
   const remove = useMutation({
     mutationFn: () =>
       deleteAppEnvironment(params.workspaceId, params.projectId, target.appId, target.id, target.version),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: environmentKeys.applications(params.workspaceId, params.projectId, params.environmentId),
-      });
-      await navigate({
-        to: "/workspaces/$workspaceId/projects/$projectId/environments/$environmentId",
-        params: { workspaceId: params.workspaceId, projectId: params.projectId, environmentId: params.environmentId },
-      });
-    },
+    onSuccess: operation.track,
   });
   return (
     <section className="danger-zone">
@@ -965,8 +984,14 @@ function RemoveFromEnvironment({
         onConfirm={async () => {
           await remove.mutateAsync();
         }}
-        pending={remove.isPending}
-        error={remove.error ? userFacingError(remove.error) : ""}
+        pending={remove.isPending || operation.isActive}
+        error={
+          remove.error || operation.error
+            ? userFacingError(remove.error ?? operation.error)
+            : operation.isFailed
+              ? (operation.operation?.errorMessage ?? "O cluster não conseguiu remover o App.")
+              : ""
+        }
       />
     </section>
   );

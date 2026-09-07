@@ -15,6 +15,12 @@ vi.mock("../authentication/public", () => ({
     data: { workspaceMemberships: [{ workspaceId: "ws-aaaaaaaaaaaaaaaaaaaa", role: mocks.role }] },
   }),
 }));
+vi.mock("../workspace-access/public", () => ({
+  useEffectiveCapabilities: () => ({
+    data: { editResources: mocks.role === "Owner" },
+    isSuccess: true,
+  }),
+}));
 vi.mock("./api", () => ({
   listParameters: mocks.listParameters,
   createParameter: mocks.createParameter,
@@ -110,6 +116,6 @@ describe("Parameters page", () => {
     renderWithQueryClient(<ParametersPage />);
     await screen.findByText("Nenhum Parameter");
     expect(screen.queryByRole("button", { name: "Novo Parameter" })).toBeNull();
-    expect(screen.getByText(/Apenas o owner/).textContent).toContain("Apenas o owner");
+    expect(screen.getByText(/não possui a capacidade/).textContent).toContain("não possui a capacidade");
   });
 });

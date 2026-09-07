@@ -3,14 +3,14 @@ import { useEffect, useState } from "react";
 
 import { userFacingError } from "../../shared/api/errors";
 import type { AppEnvironment } from "../../shared/api/types";
-import { canEditWorkspace } from "../../shared/auth/permissions";
 import { Alert } from "../../shared/ui/Alert";
 import { Button } from "../../shared/ui/Button";
 import { ConfirmAction } from "../../shared/ui/ConfirmAction";
 import { Field } from "../../shared/ui/Field";
 import { EmptyState } from "../../shared/ui/Page";
 import { EnvironmentAppLayout, type EnvironmentParams } from "../app-environments/public";
-import { useSessionQuery } from "../authentication/public";
+import { useOperationTracker } from "../operations/public";
+import { useEffectiveCapabilities } from "../workspace-access/public";
 import {
   deleteAppEnvironmentVolume,
   expandAppEnvironmentVolume,
@@ -21,32 +21,21 @@ import { runtimeConfigurationKeys } from "./queries";
 import { ConfigurationNav } from "./RuntimeConfigurationPages";
 
 export function EnvironmentStoragePage() {
-  const session = useSessionQuery();
   return (
     <EnvironmentAppLayout>
       {(target, params) => (
         <section className="stack">
           <ConfigurationNav params={params} workloadKind={target.workloadKind} />
-          <StorageEditor
-            target={target}
-            params={params}
-            canMutate={canEditWorkspace(session.data, params.workspaceId)}
-          />
+          <StorageEditor target={target} params={params} />
         </section>
       )}
     </EnvironmentAppLayout>
   );
 }
 
-function StorageEditor({
-  target,
-  params,
-  canMutate,
-}: {
-  target: AppEnvironment;
-  params: EnvironmentParams;
-  canMutate: boolean;
-}) {
+function StorageEditor({ target, params }: { target: AppEnvironment; params: EnvironmentParams }) {
+  const capabilities = useEffectiveCapabilities(params.workspaceId, "AppEnvironment", target.id);
+  const canMutate = capabilities.data?.editResources === true;
   const queryClient = useQueryClient();
   const key = runtimeConfigurationKeys.volume(params.workspaceId, params.projectId, target.appId, target.id);
   const volume = useQuery({
@@ -63,6 +52,12 @@ function StorageEditor({
   useEffect(() => {
     if (volume.data) setSizeGiB(volume.data.sizeGiB);
   }, [volume.data]);
+  const expansionOperation = useOperationTracker();
+  const removalOperation = useOperationTracker();
+  useEffect(() => {
+    if (expansionOperation.isSucceeded || removalOperation.isSucceeded)
+      void queryClient.invalidateQueries({ queryKey: key });
+  }, [expansionOperation.isSucceeded, key, queryClient, removalOperation.isSucceeded]);
   const expand = useMutation({
     mutationFn: () =>
       expandAppEnvironmentVolume(
@@ -73,9 +68,7 @@ function StorageEditor({
         volume.data?.version ?? 0,
         sizeGiB,
       ),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: key });
-    },
+    onSuccess: (accepted) => expansionOperation.track(accepted.operation),
   });
   const remove = useMutation({
     mutationFn: () =>
@@ -86,9 +79,7 @@ function StorageEditor({
         target.id,
         volume.data?.version ?? 0,
       ),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: key });
-    },
+    onSuccess: (accepted) => removalOperation.track(accepted.operation),
   });
   if (target.workloadKind !== "Stateful")
     return (
@@ -103,8 +94,20 @@ function StorageEditor({
         Carregando armazenamento…
       </p>
     );
-  if (volume.isError || !volume.data)
-    return <Alert>{volume.error ? userFacingError(volume.error) : "Volume não encontrado."}</Alert>;
+  if (capabilities.error || volume.isError || profiles.isError || !volume.data)
+    return (
+      <Alert>
+        {capabilities.error || volume.error || profiles.error
+          ? userFacingError(capabilities.error ?? volume.error ?? profiles.error)
+          : "Volume não encontrado."}
+      </Alert>
+    );
+  if (profiles.isPending)
+    return (
+      <p className="muted" role="status">
+        Carregando perfis de armazenamento…
+      </p>
+    );
   const profile = profiles.data?.items.find((item) => item.id === volume.data.storageProfileId);
   const invalidExpansion =
     !profile?.expandable ||
@@ -120,14 +123,24 @@ function StorageEditor({
           O volume pertence a este App no Environment e sobrevive a releases e recriações do runtime.
         </p>
       </div>
-      {expand.isSuccess && (
-        <Alert tone="success">Expansão solicitada. A capacidade nunca é reduzida automaticamente.</Alert>
+      {expansionOperation.isActive && <Alert tone="info">Expansão em andamento no cluster.</Alert>}
+      {expansionOperation.isSucceeded && (
+        <Alert tone="success">Expansão concluída. A capacidade nunca é reduzida automaticamente.</Alert>
       )}
-      {expand.isError && <Alert>{userFacingError(expand.error)}</Alert>}
-      {remove.isSuccess && (
-        <Alert tone="success">Remoção solicitada. O volume será excluído somente depois de estar desvinculado.</Alert>
+      {(expand.error || expansionOperation.error) && (
+        <Alert>{userFacingError(expand.error ?? expansionOperation.error)}</Alert>
       )}
-      {remove.isError && <Alert>{userFacingError(remove.error)}</Alert>}
+      {expansionOperation.isFailed && (
+        <Alert>{expansionOperation.operation?.errorMessage ?? "A expansão do volume falhou."}</Alert>
+      )}
+      {removalOperation.isActive && <Alert tone="info">Remoção em andamento no cluster.</Alert>}
+      {removalOperation.isSucceeded && <Alert tone="success">Volume removido do cluster.</Alert>}
+      {(remove.error || removalOperation.error) && (
+        <Alert>{userFacingError(remove.error ?? removalOperation.error)}</Alert>
+      )}
+      {removalOperation.isFailed && (
+        <Alert>{removalOperation.operation?.errorMessage ?? "A remoção do volume falhou."}</Alert>
+      )}
       <section className="panel stack">
         <div className="section-heading">
           <div>
@@ -178,8 +191,8 @@ function StorageEditor({
             />
             <Button
               type="button"
-              loading={expand.isPending}
-              disabled={invalidExpansion}
+              loading={expand.isPending || expansionOperation.isActive}
+              disabled={invalidExpansion || expansionOperation.isActive}
               onClick={() => expand.mutate()}
             >
               Expandir volume
@@ -205,7 +218,7 @@ function StorageEditor({
             onConfirm={async () => {
               await remove.mutateAsync();
             }}
-            pending={remove.isPending}
+            pending={remove.isPending || removalOperation.isActive}
             error={remove.error ? userFacingError(remove.error) : ""}
             disabled={volume.data.attached}
           />

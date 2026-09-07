@@ -20,6 +20,12 @@ vi.mock("../authentication/public", () => ({
     data: { workspaceMemberships: [{ workspaceId: "ws-aaaaaaaaaaaaaaaaaaaa", role: mocks.role }] },
   }),
 }));
+vi.mock("../workspace-access/public", () => ({
+  useEffectiveCapabilities: () => ({
+    data: { editResources: mocks.role === "Owner" },
+    isSuccess: true,
+  }),
+}));
 vi.mock("../applications/public", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../applications/public")>()),
   listApps: mocks.listApps,

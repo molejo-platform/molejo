@@ -1,10 +1,11 @@
-import { request } from "../../shared/api/http-client";
+import { request, requestAllPages } from "../../shared/api/http-client";
 import type { HierarchyInput, Project } from "../../shared/api/types";
 
 type ResourceList<T> = { items: T[]; nextCursor: string | null };
 const projectBase = (workspaceId: string) => `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/projects`;
 
-export const listProjects = (workspaceId: string) => request<ResourceList<Project>>(projectBase(workspaceId));
+export const listProjects = (workspaceId: string, signal?: AbortSignal) =>
+  requestAllPages<Project>(projectBase(workspaceId), signal) as Promise<ResourceList<Project>>;
 export const createProject = (workspaceId: string, input: HierarchyInput) =>
   request<Project>(projectBase(workspaceId), { method: "POST", body: JSON.stringify(input) });
 export const getProject = (workspaceId: string, projectId: string) =>

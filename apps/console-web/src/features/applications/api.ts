@@ -1,4 +1,4 @@
-import { request } from "../../shared/api/http-client";
+import { request, requestAllPages } from "../../shared/api/http-client";
 import type { App, GitHubSource, GitHubSourceInput, HierarchyInput } from "../../shared/api/types";
 
 type ResourceList<T> = { items: T[]; nextCursor: string | null };
@@ -7,8 +7,8 @@ const applicationBase = (workspaceId: string, projectId: string) =>
 const applicationPath = (workspaceId: string, projectId: string, appId: string) =>
   `${applicationBase(workspaceId, projectId)}/${encodeURIComponent(appId)}`;
 
-export const listApps = (workspaceId: string, projectId: string) =>
-  request<ResourceList<App>>(applicationBase(workspaceId, projectId));
+export const listApps = (workspaceId: string, projectId: string, signal?: AbortSignal) =>
+  requestAllPages<App>(applicationBase(workspaceId, projectId), signal) as Promise<ResourceList<App>>;
 export const createApp = (workspaceId: string, projectId: string, input: HierarchyInput) =>
   request<App>(applicationBase(workspaceId, projectId), { method: "POST", body: JSON.stringify(input) });
 export const getApp = (workspaceId: string, projectId: string, appId: string) =>

@@ -21,8 +21,8 @@ export function EnvironmentConfigurationVersionsPage() {
 function ConfigurationVersions({ target, params }: { target: AppEnvironment; params: EnvironmentParams }) {
   const revisions = useQuery({
     queryKey: runtimeConfigurationKeys.versions(params.workspaceId, params.projectId, target.appId, target.id),
-    queryFn: () =>
-      listAppEnvironmentConfigurationVersions(params.workspaceId, params.projectId, target.appId, target.id),
+    queryFn: ({ signal }) =>
+      listAppEnvironmentConfigurationVersions(params.workspaceId, params.projectId, target.appId, target.id, signal),
   });
   const errorMessage = revisions.error ? userFacingError(revisions.error) : "";
   if (errorMessage)

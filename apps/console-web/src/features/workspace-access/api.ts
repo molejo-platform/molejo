@@ -1,4 +1,4 @@
-import { request } from "../../shared/api/http-client";
+import { request, requestAllPages } from "../../shared/api/http-client";
 import type {
   AccessGrant,
   AuditEvent,
@@ -18,15 +18,17 @@ export const workspaceAccessKeys = {
     ["workspaces", workspaceId, "capabilities", resourceType, resourceId] as const,
 };
 
+const workspaceBase = (workspaceId: string) => `/api/v1/workspaces/${encodeURIComponent(workspaceId)}`;
+
 export function listMembers(workspaceId: string) {
-  return request<{ items: WorkspaceMembership[] }>(`/api/v1/workspaces/${workspaceId}/members`);
+  return request<{ items: WorkspaceMembership[] }>(`${workspaceBase(workspaceId)}/members`);
 }
 
 export function createMember(
   workspaceId: string,
   input: { username: string; role: WorkspaceMembership["role"]; status: WorkspaceMembership["status"] },
 ) {
-  return request<WorkspaceMembership>(`/api/v1/workspaces/${workspaceId}/members`, {
+  return request<WorkspaceMembership>(`${workspaceBase(workspaceId)}/members`, {
     method: "POST",
     body: JSON.stringify(input),
   });
@@ -38,7 +40,7 @@ export function updateMember(
   role: WorkspaceMembership["role"],
   status: WorkspaceMembership["status"],
 ) {
-  return request<WorkspaceMembership>(`/api/v1/workspaces/${workspaceId}/members/${member.userId}`, {
+  return request<WorkspaceMembership>(`${workspaceBase(workspaceId)}/members/${encodeURIComponent(member.userId)}`, {
     method: "PUT",
     headers: { "If-Match": String(member.version) },
     body: JSON.stringify({ role, status }),
@@ -46,38 +48,46 @@ export function updateMember(
 }
 
 export function deleteMember(workspaceId: string, userId: string) {
-  return request<void>(`/api/v1/workspaces/${workspaceId}/members/${userId}`, { method: "DELETE" });
+  return request<void>(`${workspaceBase(workspaceId)}/members/${encodeURIComponent(userId)}`, { method: "DELETE" });
 }
 
 export function listGroups(workspaceId: string) {
-  return request<{ items: WorkspaceGroup[] }>(`/api/v1/workspaces/${workspaceId}/groups`);
+  return request<{ items: WorkspaceGroup[] }>(`${workspaceBase(workspaceId)}/groups`);
 }
 
 export function createGroup(workspaceId: string, name: string) {
-  return request<WorkspaceGroup>(`/api/v1/workspaces/${workspaceId}/groups`, {
+  return request<WorkspaceGroup>(`${workspaceBase(workspaceId)}/groups`, {
     method: "POST",
     body: JSON.stringify({ name }),
   });
 }
 
 export function listGroupMembers(workspaceId: string, groupId: string) {
-  return request<{ items: WorkspaceMembership[] }>(`/api/v1/workspaces/${workspaceId}/groups/${groupId}/members`);
+  return request<{ items: WorkspaceMembership[] }>(
+    `${workspaceBase(workspaceId)}/groups/${encodeURIComponent(groupId)}/members`,
+  );
 }
 
 export function addGroupMember(workspaceId: string, groupId: string, userId: string) {
-  return request<void>(`/api/v1/workspaces/${workspaceId}/groups/${groupId}/members/${userId}`, { method: "PUT" });
+  return request<void>(
+    `${workspaceBase(workspaceId)}/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(userId)}`,
+    { method: "PUT" },
+  );
 }
 
 export function removeGroupMember(workspaceId: string, groupId: string, userId: string) {
-  return request<void>(`/api/v1/workspaces/${workspaceId}/groups/${groupId}/members/${userId}`, { method: "DELETE" });
+  return request<void>(
+    `${workspaceBase(workspaceId)}/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(userId)}`,
+    { method: "DELETE" },
+  );
 }
 
-export function listAudit(workspaceId: string) {
-  return request<{ items: AuditEvent[]; nextCursor: string | null }>(`/api/v1/workspaces/${workspaceId}/audit-events`);
+export function listAudit(workspaceId: string, signal?: AbortSignal) {
+  return requestAllPages<AuditEvent>(`${workspaceBase(workspaceId)}/audit-events`, signal);
 }
 
 export function listAccessGrants(workspaceId: string) {
-  return request<{ items: AccessGrant[] }>(`/api/v1/workspaces/${workspaceId}/access-grants`);
+  return request<{ items: AccessGrant[] }>(`${workspaceBase(workspaceId)}/access-grants`);
 }
 
 export function createAccessGrant(
@@ -90,14 +100,14 @@ export function createAccessGrant(
     relation: AccessGrant["relation"];
   },
 ) {
-  return request<AccessGrant>(`/api/v1/workspaces/${workspaceId}/access-grants`, {
+  return request<AccessGrant>(`${workspaceBase(workspaceId)}/access-grants`, {
     method: "POST",
     body: JSON.stringify(input),
   });
 }
 
 export function deleteAccessGrant(workspaceId: string, id: string) {
-  return request<void>(`/api/v1/workspaces/${workspaceId}/access-grants/${id}`, { method: "DELETE" });
+  return request<void>(`${workspaceBase(workspaceId)}/access-grants/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
 export function getEffectiveCapabilities(
@@ -106,6 +116,6 @@ export function getEffectiveCapabilities(
   resourceId: string,
 ) {
   return request<EffectiveCapabilities>(
-    `/api/v1/workspaces/${workspaceId}/authorization/capabilities?resourceType=${resourceType}&resourceId=${encodeURIComponent(resourceId)}`,
+    `${workspaceBase(workspaceId)}/authorization/capabilities?resourceType=${resourceType}&resourceId=${encodeURIComponent(resourceId)}`,
   );
 }

@@ -3,14 +3,13 @@ import { Link, useParams } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 
 import { userFacingError } from "../../shared/api/errors";
-import { canEditWorkspace } from "../../shared/auth/permissions";
 import { Alert } from "../../shared/ui/Alert";
 import { Button } from "../../shared/ui/Button";
 import { ConfirmAction } from "../../shared/ui/ConfirmAction";
 import { SelectField } from "../../shared/ui/Field";
 import { EmptyState } from "../../shared/ui/Page";
-import { useSessionQuery } from "../authentication/public";
 import { githubKeys, listGitHubInstallations, listGitHubRepositories } from "../integrations/github/public";
+import { useEffectiveCapabilities } from "../workspace-access/public";
 import { ApplicationLayout } from "./ApplicationLayout";
 import { clearAppSource, getAppSource, setAppSource } from "./api";
 import { applicationKeys } from "./queries";
@@ -19,8 +18,8 @@ export function AppSourcePage() {
   const { workspaceId, projectId, appId } = useParams({
     from: "/protected/workspaces/$workspaceId/projects/$projectId/apps/$appId/source",
   });
-  const session = useSessionQuery();
-  const canMutate = canEditWorkspace(session.data, workspaceId);
+  const capabilities = useEffectiveCapabilities(workspaceId, "App", appId);
+  const canMutate = capabilities.data?.editResources === true;
   const queryClient = useQueryClient();
   const [installationId, setInstallationId] = useState("");
   const [repositoryId, setRepositoryId] = useState("");
@@ -62,7 +61,8 @@ export function AppSourcePage() {
     mutationFn: () => clearAppSource(workspaceId, projectId, appId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: applicationKeys.source(workspaceId, projectId, appId) }),
   });
-  const error = installations.error ?? source.error ?? repositories.error ?? save.error ?? clear.error;
+  const error =
+    capabilities.error ?? installations.error ?? source.error ?? repositories.error ?? save.error ?? clear.error;
   return (
     <ApplicationLayout workspaceId={workspaceId} projectId={projectId} appId={appId}>
       {(appName) => (
@@ -146,6 +146,7 @@ export function AppSourcePage() {
                   className="button-link primary"
                   to="/workspaces/$workspaceId/settings/github"
                   params={{ workspaceId }}
+                  search={{ github: undefined }}
                 >
                   Abrir integração GitHub
                 </Link>

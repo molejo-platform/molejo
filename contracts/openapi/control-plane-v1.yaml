@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: Molejo Control Plane API
   version: 1.0.0
-  description: Pre-alpha control-plane contract for the local beta workspace.
+  description: Molejo Control Plane contract. Session-authenticated mutations require the CSRF security scheme and an allowed Origin.
 servers:
   - url: /
 paths:
@@ -47,7 +47,7 @@ paths:
         '500': { $ref: '#/components/responses/InternalError' }
     delete:
       operationId: logout
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       parameters:
         - { $ref: '#/components/parameters/Origin' }
         - { $ref: '#/components/parameters/CSRFToken' }
@@ -87,7 +87,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
     put:
       operationId: updateOwnProfile
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       parameters: [{ $ref: '#/components/parameters/IfMatch' }]
       requestBody:
         required: true
@@ -98,7 +98,7 @@ paths:
   /api/v1/users/me/password:
     put:
       operationId: changeOwnPassword
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       parameters: [{ $ref: '#/components/parameters/CSRFToken' }]
       requestBody:
         required: true
@@ -124,7 +124,7 @@ paths:
     parameters: [{ $ref: '#/components/parameters/UserSessionId' }]
     delete:
       operationId: revokeOwnSession
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       responses:
         '204': { description: Session revoked }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -137,7 +137,7 @@ paths:
   /api/v1/users/me/mfa/totp/enrollment:
     post:
       operationId: beginTOTPEnrollment
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       parameters: [{ $ref: '#/components/parameters/CSRFToken' }]
       requestBody:
         required: true
@@ -152,7 +152,7 @@ paths:
         '503': { $ref: '#/components/responses/Unavailable' }
     put:
       operationId: confirmTOTPEnrollment
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       parameters: [{ $ref: '#/components/parameters/CSRFToken' }]
       requestBody:
         required: true
@@ -166,7 +166,7 @@ paths:
         '503': { $ref: '#/components/responses/Unavailable' }
     delete:
       operationId: disableOwnTOTP
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       parameters: [{ $ref: '#/components/parameters/CSRFToken' }]
       requestBody:
         required: true
@@ -238,7 +238,7 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
     post:
       operationId: createUser
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/UserCreateInput' } } }
@@ -250,7 +250,7 @@ paths:
     parameters: [{ $ref: '#/components/parameters/UserId' }]
     put:
       operationId: updateUserStatus
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       parameters: [{ $ref: '#/components/parameters/IfMatch' }]
       requestBody:
         required: true
@@ -263,7 +263,7 @@ paths:
     parameters: [{ $ref: '#/components/parameters/UserId' }]
     post:
       operationId: createPasswordResetGrant
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       responses:
         '201':
           description: One-time reset code; returned only on creation
@@ -274,7 +274,7 @@ paths:
     parameters: [{ $ref: '#/components/parameters/UserId' }]
     put:
       operationId: updateUserInstallationRole
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       parameters: [{ $ref: '#/components/parameters/IfMatch' }]
       requestBody:
         required: true
@@ -287,7 +287,7 @@ paths:
     parameters: [{ $ref: '#/components/parameters/UserId' }]
     post:
       operationId: createUserInvitation
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       responses:
         '201': { description: Replacement one-time activation credential, content: { application/json: { schema: { $ref: '#/components/schemas/UserInvitationCredential' } } } }
         '403': { $ref: '#/components/responses/Forbidden' }
@@ -322,7 +322,7 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
     post:
       operationId: createCluster
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/ClusterCreateInput' } } }
@@ -343,7 +343,7 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
     delete:
       operationId: revokeCluster
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/ClusterRevocationInput' } } }
@@ -357,7 +357,7 @@ paths:
     parameters: [{ $ref: '#/components/parameters/ClusterId' }]
     post:
       operationId: createClusterEnrollmentInvitation
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       responses:
         '201': { description: Replacement one-time enrollment invitation, content: { application/json: { schema: { $ref: '#/components/schemas/AgentEnrollmentInvitation' } } } }
         '403': { $ref: '#/components/responses/Forbidden' }
@@ -367,7 +367,7 @@ paths:
     post:
       operationId: createAgentInstallation
       deprecated: true
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/AgentInstallationCreateInput' } } }
@@ -402,7 +402,7 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
     post:
       operationId: createWorkspaceMember
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/WorkspaceMemberCreateInput' } } }
@@ -417,7 +417,7 @@ paths:
       - { $ref: '#/components/parameters/UserId' }
     put:
       operationId: putWorkspaceMember
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       parameters: [{ $ref: '#/components/parameters/OptionalIfMatch' }]
       requestBody:
         required: true
@@ -428,7 +428,7 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
     delete:
       operationId: deleteWorkspaceMember
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       responses:
         '204': { description: Membership deleted }
         '403': { $ref: '#/components/responses/Forbidden' }
@@ -444,7 +444,7 @@ paths:
           content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/WorkspaceGroup' } } } } } }
     post:
       operationId: createWorkspaceGroup
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/WorkspaceGroupInput' } } }
@@ -459,14 +459,14 @@ paths:
       - { $ref: '#/components/parameters/UserId' }
     put:
       operationId: addWorkspaceGroupMember
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       responses:
         '204': { description: Group member added }
         '403': { $ref: '#/components/responses/Forbidden' }
         '409': { $ref: '#/components/responses/Conflict' }
     delete:
       operationId: removeWorkspaceGroupMember
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       responses:
         '204': { description: Group member removed }
         '403': { $ref: '#/components/responses/Forbidden' }
@@ -516,7 +516,7 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
     post:
       operationId: createWorkspaceAccessGrant
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/AccessGrantInput' } } }
@@ -531,7 +531,7 @@ paths:
       - { $ref: '#/components/parameters/AccessGrantId' }
     delete:
       operationId: deleteWorkspaceAccessGrant
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       responses:
         '204': { description: Relation revoked }
         '403': { $ref: '#/components/responses/Forbidden' }
@@ -585,8 +585,8 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
     post:
       operationId: createWorkspace
-      security: [{ sessionCookie: [] }]
-      parameters: [{ $ref: '#/components/parameters/OptionalIdempotencyKey' }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
       requestBody:
         required: true
         content:
@@ -618,7 +618,7 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
     put:
       operationId: updateWorkspace
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       parameters: [{ $ref: '#/components/parameters/IfMatch' }]
       requestBody:
         required: true
@@ -642,7 +642,7 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
     post:
       operationId: attachWorkspaceCluster
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
       requestBody:
         required: true
@@ -684,7 +684,7 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
     post:
       operationId: createParameter
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
       requestBody:
         required: true
@@ -712,7 +712,7 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
     put:
       operationId: replaceParameter
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       parameters:
         - { $ref: '#/components/parameters/OptionalIdempotencyKey' }
         - { $ref: '#/components/parameters/IfMatch' }
@@ -730,7 +730,7 @@ paths:
         '503': { $ref: '#/components/responses/Unavailable' }
     delete:
       operationId: archiveParameter
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       parameters: [{ $ref: '#/components/parameters/IfMatch' }]
       responses:
         '204': { description: Parameter archived }
@@ -760,7 +760,7 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
     post:
       operationId: createProject
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/HierarchyInput' } } }
@@ -786,7 +786,7 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
     put:
       operationId: updateProject
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       parameters: [{ $ref: '#/components/parameters/IfMatch' }]
       requestBody:
         required: true
@@ -801,7 +801,7 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
     delete:
       operationId: archiveProject
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       parameters: [{ $ref: '#/components/parameters/IfMatch' }]
       responses:
         '204': { description: Project archived }
@@ -833,7 +833,7 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
     post:
       operationId: createEnvironment
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/HierarchyInput' } } }
@@ -860,7 +860,7 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
     put:
       operationId: updateEnvironment
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       parameters: [{ $ref: '#/components/parameters/IfMatch' }]
       requestBody:
         required: true
@@ -875,7 +875,7 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
     delete:
       operationId: archiveEnvironment
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       parameters: [{ $ref: '#/components/parameters/IfMatch' }]
       responses:
         '204': { description: Environment archived }
@@ -930,7 +930,7 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
     post:
       operationId: createApp
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/HierarchyInput' } } }
@@ -957,7 +957,7 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
     put:
       operationId: updateApp
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       parameters: [{ $ref: '#/components/parameters/IfMatch' }]
       requestBody:
         required: true
@@ -972,7 +972,7 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
     delete:
       operationId: archiveApp
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       parameters: [{ $ref: '#/components/parameters/IfMatch' }]
       responses:
         '204': { description: App archived }
@@ -983,7 +983,7 @@ paths:
     parameters: [{ $ref: '#/components/parameters/WorkspaceId' }]
     post:
       operationId: connectGitHubInstallation
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       responses:
         '200':
           description: Short-lived GitHub App installation URL
@@ -1066,7 +1066,7 @@ paths:
       - { $ref: '#/components/parameters/GitHubInstallationId' }
     delete:
       operationId: disconnectGitHubInstallation
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       responses:
         '204': { description: GitHub App installation disconnected and uninstalled }
         '403': { $ref: '#/components/responses/Forbidden' }
@@ -1116,7 +1116,7 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
     put:
       operationId: setAppSource
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       requestBody:
         required: true
         content:
@@ -1132,7 +1132,7 @@ paths:
         '503': { $ref: '#/components/responses/Unavailable' }
     delete:
       operationId: clearAppSource
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       responses:
         '204': { description: GitHub source removed from the App }
         '403': { $ref: '#/components/responses/Forbidden' }
@@ -1162,7 +1162,7 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
     post:
       operationId: createAppBuild
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
       requestBody:
         required: true
@@ -1263,7 +1263,7 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
     post:
       operationId: createAppServiceAccount
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/ServiceAccountCreateInput' } } }
@@ -1288,7 +1288,7 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
     post:
       operationId: createAppServiceAccountToken
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/ServiceAccountTokenCreateInput' } } }
@@ -1306,7 +1306,7 @@ paths:
       - { $ref: '#/components/parameters/ServiceAccountTokenId' }
     delete:
       operationId: revokeAppServiceAccountToken
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       responses:
         '204': { description: Service account credential revoked }
         '403': { $ref: '#/components/responses/Forbidden' }
@@ -1319,7 +1319,7 @@ paths:
       - { $ref: '#/components/parameters/ServiceAccountId' }
     delete:
       operationId: revokeAppServiceAccount
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       responses:
         '204': { description: Service account revoked }
         '403': { $ref: '#/components/responses/Forbidden' }
@@ -1349,7 +1349,7 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
     post:
       operationId: createAppEnvironment
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/AppEnvironmentCreateInput' } } }
@@ -1377,7 +1377,7 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
     put:
       operationId: updateAppEnvironment
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       parameters: [{ $ref: '#/components/parameters/IfMatch' }]
       requestBody:
         required: true
@@ -1392,7 +1392,7 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
     delete:
       operationId: deleteAppEnvironment
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       parameters:
         - { $ref: '#/components/parameters/IdempotencyKey' }
         - { $ref: '#/components/parameters/IfMatch' }
@@ -1439,7 +1439,7 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
     put:
       operationId: expandAppEnvironmentVolume
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       parameters:
         - { $ref: '#/components/parameters/IdempotencyKey' }
         - { $ref: '#/components/parameters/IfMatch' }
@@ -1456,7 +1456,7 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
     delete:
       operationId: deleteAppEnvironmentVolume
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       parameters:
         - { $ref: '#/components/parameters/IdempotencyKey' }
         - { $ref: '#/components/parameters/IfMatch' }
@@ -1484,7 +1484,7 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
     put:
       operationId: replaceAppEnvironmentDeliveryPolicy
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       parameters: [{ $ref: '#/components/parameters/DeliveryPolicyIfMatch' }]
       requestBody:
         required: true
@@ -1523,7 +1523,7 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
     post:
       operationId: createAppEnvironmentDeployment
-      security: [{ sessionCookie: [] }, { automationBearer: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }, { automationBearer: [] }]
       parameters:
         - { $ref: '#/components/parameters/IdempotencyKey' }
         - { $ref: '#/components/parameters/IfMatch' }
@@ -1544,7 +1544,7 @@ paths:
       - { $ref: '#/components/parameters/AppEnvironmentId' }
     post:
       operationId: previewAppEnvironmentDeployment
-      security: [{ sessionCookie: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/DeploymentPreviewInput' } } }
@@ -1713,6 +1713,11 @@ components:
       type: apiKey
       in: cookie
       name: molejo_session
+    csrfHeader:
+      type: apiKey
+      in: header
+      name: X-CSRF-Token
+      description: Required with session-cookie authentication for state-changing requests; browsers must also send an allowed Origin.
     automationBearer:
       type: http
       scheme: bearer

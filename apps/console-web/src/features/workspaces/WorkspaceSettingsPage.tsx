@@ -2,12 +2,11 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 import { type FormEvent, useEffect, useState } from "react";
 import { userFacingError } from "../../shared/api/errors";
-import { canManageWorkspace } from "../../shared/auth/permissions";
 import { Alert } from "../../shared/ui/Alert";
 import { Button } from "../../shared/ui/Button";
 import { Field } from "../../shared/ui/Field";
-import { useSessionQuery } from "../authentication/public";
 import { normalizeResourceName, validateResourceName } from "../projects/public";
+import { useEffectiveCapabilities } from "../workspace-access/public";
 import { updateWorkspace } from "./api";
 import { workspaceQueryKey } from "./queries";
 import { useSelectedWorkspace } from "./WorkspaceContext";
@@ -16,7 +15,7 @@ import { WorkspaceSettingsLayout } from "./WorkspaceSettingsLayout";
 export function WorkspaceSettingsPage() {
   const { workspaceId } = useParams({ from: "/protected/workspaces/$workspaceId/settings" });
   const { workspace } = useSelectedWorkspace();
-  const session = useSessionQuery();
+  const capabilities = useEffectiveCapabilities(workspaceId, "Workspace", workspaceId);
   const queryClient = useQueryClient();
   const [name, setName] = useState(workspace?.name ?? "");
   const [validation, setValidation] = useState("");
@@ -44,7 +43,7 @@ export function WorkspaceSettingsPage() {
           <h2>Identidade do Workspace</h2>
           <p className="muted">O nome identifica o contexto ativo no Console; IDs técnicos permanecem estáveis.</p>
         </div>
-        {canManageWorkspace(session.data, workspaceId) ? (
+        {capabilities.data?.manageWorkspace ? (
           <form className="form-row" onSubmit={submit}>
             <Field
               label="Nome do Workspace"
@@ -59,8 +58,11 @@ export function WorkspaceSettingsPage() {
             </Button>
           </form>
         ) : (
-          <Alert tone="info">Somente owners podem alterar este Workspace.</Alert>
+          capabilities.isSuccess && (
+            <Alert tone="info">Sua identidade não possui a capacidade de gerenciar este Workspace.</Alert>
+          )
         )}
+        {capabilities.error && <Alert>{userFacingError(capabilities.error)}</Alert>}
         {update.isSuccess && <Alert tone="success">Workspace atualizado.</Alert>}
         {update.isError && <Alert>{userFacingError(update.error)}</Alert>}
       </section>

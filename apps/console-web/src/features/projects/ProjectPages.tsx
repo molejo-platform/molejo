@@ -3,14 +3,12 @@ import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
 import { userFacingError } from "../../shared/api/errors";
 import type { App, Environment } from "../../shared/api/types";
-import { canEditWorkspace } from "../../shared/auth/permissions";
 import { Alert } from "../../shared/ui/Alert";
 import { Button } from "../../shared/ui/Button";
 import { ConfirmAction } from "../../shared/ui/ConfirmAction";
 import { Field } from "../../shared/ui/Field";
 import { EmptyState, PageHeader } from "../../shared/ui/Page";
 import { applicationKeys, archiveApp, createApp, listApps, updateApp } from "../applications/public";
-import { useSessionQuery } from "../authentication/public";
 import {
   archiveEnvironment,
   createEnvironment,
@@ -18,6 +16,7 @@ import {
   listEnvironments,
   updateEnvironment,
 } from "../environments/public";
+import { useEffectiveCapabilities } from "../workspace-access/public";
 import { archiveProject, createProject, getProject, listProjects, updateProject } from "./api";
 import { normalizeResourceName, validateResourceName } from "./model";
 import { ProjectLayout } from "./ProjectLayout";
@@ -25,12 +24,12 @@ import { projectKeys } from "./queries";
 
 export function ProjectsPage() {
   const { workspaceId } = useParams({ from: "/protected/workspaces/$workspaceId/projects" });
-  const session = useSessionQuery();
-  const canMutate = canEditWorkspace(session.data, workspaceId);
+  const capabilities = useEffectiveCapabilities(workspaceId, "Workspace", workspaceId);
+  const canMutate = capabilities.data?.editResources === true;
   const queryClient = useQueryClient();
   const projects = useQuery({
     queryKey: projectKeys.list(workspaceId),
-    queryFn: () => listProjects(workspaceId),
+    queryFn: ({ signal }) => listProjects(workspaceId, signal),
   });
   const create = useMutation({
     mutationFn: (name: string) => createProject(workspaceId, { name }),
@@ -53,7 +52,7 @@ export function ProjectsPage() {
           )
         }
       />
-      {create.isError && <Alert>{userFacingError(create.error)}</Alert>}
+      {(capabilities.error || create.error) && <Alert>{userFacingError(capabilities.error ?? create.error)}</Alert>}
       {projects.isError && <Alert>{userFacingError(projects.error)}</Alert>}
       {projects.isPending ? (
         <p className="muted" role="status">
@@ -90,15 +89,15 @@ export function ProjectOverviewPage() {
   });
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const session = useSessionQuery();
-  const canMutate = canEditWorkspace(session.data, workspaceId);
+  const capabilities = useEffectiveCapabilities(workspaceId, "Project", projectId);
+  const canMutate = capabilities.data?.editResources === true;
   const apps = useQuery({
     queryKey: applicationKeys.list(workspaceId, projectId),
-    queryFn: () => listApps(workspaceId, projectId),
+    queryFn: ({ signal }) => listApps(workspaceId, projectId, signal),
   });
   const environments = useQuery({
     queryKey: environmentKeys.list(workspaceId, projectId),
-    queryFn: () => listEnvironments(workspaceId, projectId),
+    queryFn: ({ signal }) => listEnvironments(workspaceId, projectId, signal),
   });
   const project = useQuery({
     queryKey: projectKeys.detail(workspaceId, projectId),
@@ -122,7 +121,9 @@ export function ProjectOverviewPage() {
     <ProjectLayout workspaceId={workspaceId} projectId={projectId}>
       {(name) => (
         <>
-          {(apps.error || environments.error) && <Alert>{userFacingError(apps.error ?? environments.error)}</Alert>}
+          {(capabilities.error || apps.error || environments.error) && (
+            <Alert>{userFacingError(capabilities.error ?? apps.error ?? environments.error)}</Alert>
+          )}
           <div className="summary-grid">
             <SummaryCard
               label="Apps no catálogo"
@@ -234,8 +235,8 @@ function ProjectResourcePage<T extends App | Environment>({
   archive: (resource: T) => Promise<void>;
   href?: (resource: T) => { to: string; params: Record<string, string> };
 }) {
-  const session = useSessionQuery();
-  const canMutate = canEditWorkspace(session.data, workspaceId);
+  const capabilities = useEffectiveCapabilities(workspaceId, "Project", projectId);
+  const canMutate = capabilities.data?.editResources === true;
   const queryClient = useQueryClient();
   const resources = useQuery({ queryKey, queryFn: list });
   const createMutation = useMutation({
@@ -269,10 +270,18 @@ function ProjectResourcePage<T extends App | Environment>({
               />
             )}
           </div>
-          {(resources.error || createMutation.error || updateMutation.error || archiveMutation.error) && (
+          {(capabilities.error ||
+            resources.error ||
+            createMutation.error ||
+            updateMutation.error ||
+            archiveMutation.error) && (
             <Alert>
               {userFacingError(
-                resources.error ?? createMutation.error ?? updateMutation.error ?? archiveMutation.error,
+                capabilities.error ??
+                  resources.error ??
+                  createMutation.error ??
+                  updateMutation.error ??
+                  archiveMutation.error,
               )}
             </Alert>
           )}

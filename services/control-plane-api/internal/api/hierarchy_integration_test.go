@@ -36,7 +36,12 @@ func TestHierarchyAPIEnforcesMembershipRoleAndDeploymentAncestry(t *testing.T) {
 		Workspace domain.Workspace `json:"workspace"`
 		Operation domain.Operation `json:"operation"`
 	}
-	response := hierarchyRequest(t, server, owner, http.MethodPost, "/api/v1/workspaces", `{"name":"Second Workspace"}`, map[string]string{"Idempotency-Key": "second-workspace"})
+	response := hierarchyRequest(t, server, owner, http.MethodPost, "/api/v1/workspaces", `{"name":"Second Workspace"}`, map[string]string{"Idempotency-Key": "missing-cluster"})
+	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), `"cluster_required"`) {
+		t.Fatalf("create workspace without cluster status=%d body=%s", response.Code, response.Body.String())
+	}
+	workspaceInput := fmt.Sprintf(`{"name":"Second Workspace","clusterId":%q}`, testAgentInstallationID)
+	response = hierarchyRequest(t, server, owner, http.MethodPost, "/api/v1/workspaces", workspaceInput, map[string]string{"Idempotency-Key": "second-workspace"})
 	if response.Code != http.StatusAccepted {
 		t.Fatalf("create workspace status=%d body=%s", response.Code, response.Body.String())
 	}
@@ -54,7 +59,7 @@ func TestHierarchyAPIEnforcesMembershipRoleAndDeploymentAncestry(t *testing.T) {
 		Workspace domain.Workspace `json:"workspace"`
 		Operation domain.Operation `json:"operation"`
 	}
-	response = hierarchyRequest(t, server, owner, http.MethodPost, "/api/v1/workspaces", `{"name":"Second Workspace"}`, map[string]string{"Idempotency-Key": "second-workspace"})
+	response = hierarchyRequest(t, server, owner, http.MethodPost, "/api/v1/workspaces", workspaceInput, map[string]string{"Idempotency-Key": "second-workspace"})
 	decodeResponse(t, response, &retriedWorkspace)
 	if response.Code != http.StatusAccepted || retriedWorkspace.Workspace.PublicID != workspaceAccepted.Workspace.PublicID || retriedWorkspace.Operation.PublicID != workspaceAccepted.Operation.PublicID {
 		t.Fatalf("workspace retry status=%d first=%+v retry=%+v", response.Code, workspaceAccepted, retriedWorkspace)
@@ -117,6 +122,9 @@ func TestHierarchyAPIEnforcesMembershipRoleAndDeploymentAncestry(t *testing.T) {
 	}
 
 	configuration := fmt.Sprintf(`{"environmentId":%q,"clusterId":%q,"branch":"main","workloadKind":"Stateless","configuration":{"replicas":1,"ports":[{"name":"http","containerPort":8080,"protocol":"TCP"}],"resources":{"requests":{"cpuMillis":50,"memoryMiB":64},"limits":{"cpuMillis":250,"memoryMiB":128}},"probes":{"startup":{"type":"HTTP","portName":"http","path":"/readyz"},"liveness":{"type":"HTTP","portName":"http","path":"/healthz"},"readiness":{"type":"HTTP","portName":"http","path":"/readyz"}},"publicEndpoints":[],"variables":[],"parameters":[]}}`, environment.PublicID, testAgentInstallationID)
+	unavailableConfiguration := strings.Replace(configuration, testAgentInstallationID, "cls-aaaaaaaaaaaaaaaaaaaa", 1)
+	response = hierarchyRequest(t, server, owner, http.MethodPost, "/api/v1/workspaces/"+workspace.PublicID+"/projects/"+project.PublicID+"/apps/"+app.PublicID+"/environments", unavailableConfiguration, nil)
+	assertHierarchyConflict(t, response, "cluster_unavailable", "the selected cluster is unavailable or the workspace is not ready on it")
 	response = hierarchyRequest(t, server, owner, http.MethodPost, "/api/v1/workspaces/"+workspace.PublicID+"/projects/"+project.PublicID+"/apps/"+app.PublicID+"/environments", configuration, nil)
 	if response.Code != http.StatusCreated {
 		t.Fatalf("create App Environment status=%d body=%s", response.Code, response.Body.String())

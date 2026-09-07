@@ -104,6 +104,41 @@ vi.mock("../authentication/public", () => ({
     data: { workspaceMemberships: [{ workspaceId: "ws-aaaaaaaaaaaaaaaaaaaa", role: "Owner" }] },
   }),
 }));
+vi.mock("../workspace-access/public", () => ({
+  useEffectiveCapabilities: () => ({
+    data: { editResources: true, deploy: true },
+    isSuccess: true,
+  }),
+}));
+vi.mock("../cluster-placement/public", () => ({
+  clusterPlacementKeys: { workspace: (workspaceId: string) => ["workspaces", workspaceId, "clusters"] },
+  listWorkspaceClusters: vi.fn().mockResolvedValue({
+    items: [
+      {
+        clusterId: "cls-aaaaaaaaaaaaaaaaaaaa",
+        clusterName: "Development",
+        namespace: "molejo-ws-aaaaaaaa",
+        state: "Ready",
+        observedGeneration: 1,
+      },
+    ],
+  }),
+  readyWorkspaceClusters: (items: Array<{ state: string }> | undefined) =>
+    items?.filter((item) => item.state === "Ready") ?? [],
+  reconcileClusterSelection: (ids: string[], selected: string) =>
+    ids.includes(selected) ? selected : ids.length === 1 ? ids[0] : "",
+}));
+vi.mock("../operations/public", () => ({
+  useOperationTracker: () => ({
+    operation: undefined,
+    track: vi.fn(),
+    reset: vi.fn(),
+    isActive: false,
+    isSucceeded: false,
+    isFailed: false,
+    error: undefined,
+  }),
+}));
 vi.mock("../parameters/public", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../parameters/public")>()),
   listParameters: vi.fn().mockResolvedValue({

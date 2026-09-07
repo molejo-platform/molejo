@@ -2,13 +2,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { userFacingError } from "../../shared/api/errors";
 import type { AppEnvironment, Release } from "../../shared/api/types";
-import { canEditWorkspace } from "../../shared/auth/permissions";
 import { formatDateTime, shortSha } from "../../shared/format";
 import { Alert } from "../../shared/ui/Alert";
 import { Button } from "../../shared/ui/Button";
 import { EmptyState } from "../../shared/ui/Page";
 import { EnvironmentAppLayout, type EnvironmentParams } from "../app-environments/public";
-import { useSessionQuery } from "../authentication/public";
+import { useEffectiveCapabilities } from "../workspace-access/public";
 import { createAppBuild, listAppReleases } from "./api";
 import { DeliveryNav } from "./DeliveryNav";
 import { deliveryKeys } from "./queries";
@@ -18,18 +17,10 @@ function releaseRevision(release: Release) {
 }
 
 export function EnvironmentAppReleasesPage() {
-  const session = useSessionQuery();
   const queryClient = useQueryClient();
   return (
     <EnvironmentAppLayout>
-      {(target, params) => (
-        <TargetReleases
-          target={target}
-          params={params}
-          canMutate={canEditWorkspace(session.data, params.workspaceId)}
-          queryClient={queryClient}
-        />
-      )}
+      {(target, params) => <TargetReleases target={target} params={params} queryClient={queryClient} />}
     </EnvironmentAppLayout>
   );
 }
@@ -37,17 +28,17 @@ export function EnvironmentAppReleasesPage() {
 function TargetReleases({
   target,
   params,
-  canMutate,
   queryClient,
 }: {
   target: AppEnvironment;
   params: EnvironmentParams;
-  canMutate: boolean;
   queryClient: ReturnType<typeof useQueryClient>;
 }) {
+  const capabilities = useEffectiveCapabilities(params.workspaceId, "AppEnvironment", target.id);
+  const canMutate = capabilities.data?.deploy === true;
   const releases = useQuery({
     queryKey: deliveryKeys.releases(params.workspaceId, params.projectId, target.appId),
-    queryFn: () => listAppReleases(params.workspaceId, params.projectId, target.appId),
+    queryFn: ({ signal }) => listAppReleases(params.workspaceId, params.projectId, target.appId, signal),
   });
   const items = releases.data?.items.filter((release) => release.appEnvironmentId === target.id) ?? [];
   const rebuild = useMutation({
@@ -59,7 +50,10 @@ function TargetReleases({
       });
     },
   });
-  const errorMessage = releases.error || rebuild.error ? userFacingError(releases.error ?? rebuild.error) : "";
+  const errorMessage =
+    capabilities.error || releases.error || rebuild.error
+      ? userFacingError(capabilities.error ?? releases.error ?? rebuild.error)
+      : "";
   if (errorMessage)
     return (
       <section className="stack">

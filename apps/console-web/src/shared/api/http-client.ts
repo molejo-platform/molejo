@@ -47,6 +47,24 @@ export async function request<T>(path: string, init: RequestInit = {}, retryCSRF
     }
     throw new ApiRequestError(response.status, details);
   }
-  if (response.status === 204) return undefined as T;
+  if (response.status === 204 || response.body === null || response.headers?.get("content-length") === "0")
+    return undefined as T;
   return (await response.json()) as T;
+}
+
+export type CursorPage<T> = { items: T[]; nextCursor?: string | null };
+
+export async function requestAllPages<T>(path: string, signal?: AbortSignal): Promise<CursorPage<T>> {
+  const items: T[] = [];
+  let cursor: string | null = null;
+  do {
+    const separator = path.includes("?") ? "&" : "?";
+    const page: CursorPage<T> = await request(
+      cursor ? `${path}${separator}cursor=${encodeURIComponent(cursor)}` : path,
+      { signal },
+    );
+    items.push(...page.items);
+    cursor = page.nextCursor ?? null;
+  } while (cursor);
+  return { items, nextCursor: null };
 }

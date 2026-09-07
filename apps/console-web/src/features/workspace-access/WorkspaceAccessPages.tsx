@@ -498,7 +498,10 @@ export function WorkspaceAccessGrantsPage() {
 
 export function WorkspaceAuditPage() {
   const { workspaceId } = useParams({ from: "/protected/workspaces/$workspaceId/settings/audit" });
-  const audit = useQuery({ queryKey: workspaceAccessKeys.audit(workspaceId), queryFn: () => listAudit(workspaceId) });
+  const audit = useQuery({
+    queryKey: workspaceAccessKeys.audit(workspaceId),
+    queryFn: ({ signal }) => listAudit(workspaceId, signal),
+  });
   return (
     <WorkspaceSettingsLayout workspaceId={workspaceId}>
       <section className="panel stack">
@@ -509,6 +512,8 @@ export function WorkspaceAuditPage() {
         </div>
         {audit.isPending ? (
           <p role="status">Carregando auditoria…</p>
+        ) : audit.isError ? (
+          <Alert>{userFacingError(audit.error)}</Alert>
         ) : audit.data?.items.length ? (
           <div className="data-list">
             {audit.data.items.map((event) => (
@@ -527,7 +532,6 @@ export function WorkspaceAuditPage() {
         ) : (
           <EmptyState title="Sem eventos" description="As próximas ações relevantes aparecerão aqui." />
         )}
-        {audit.isError && <Alert>{userFacingError(audit.error)}</Alert>}
       </section>
     </WorkspaceSettingsLayout>
   );

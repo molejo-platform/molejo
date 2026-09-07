@@ -18,7 +18,7 @@ export function AppOverviewPage() {
   });
   const targets = useQuery({
     queryKey: appEnvironmentKeys.list(workspaceId, projectId, appId),
-    queryFn: () => listAppEnvironments(workspaceId, projectId, appId),
+    queryFn: ({ signal }) => listAppEnvironments(workspaceId, projectId, appId, signal),
   });
   const error = source.error ?? targets.error;
   const params = { workspaceId, projectId, appId };
