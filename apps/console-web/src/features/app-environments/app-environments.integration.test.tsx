@@ -42,9 +42,8 @@ const target = vi.hoisted(() => ({
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
-  createApp: vi.fn(),
+  createProjectAppEnvironment: vi.fn(),
   createAppBuild: vi.fn(),
-  createAppEnvironment: vi.fn(),
   createAppEnvironmentDeployment: vi.fn(),
   updateAppEnvironment: vi.fn(),
   getAppBuild: vi.fn(),
@@ -185,15 +184,16 @@ vi.mock("../environments/public", async (importOriginal) => ({
 }));
 vi.mock("../applications/public", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../applications/public")>()),
-  createApp: mocks.createApp,
   listApps: mocks.listApps,
   getAppSource: vi.fn().mockResolvedValue({ source: { repository: { fullName: "molejo/api" } } }),
 }));
 vi.mock("./api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./api")>()),
-  createAppEnvironment: mocks.createAppEnvironment,
   updateAppEnvironment: mocks.updateAppEnvironment,
   deleteAppEnvironment: vi.fn(),
+}));
+vi.mock("../application-setup/api", () => ({
+  createProjectAppEnvironment: mocks.createProjectAppEnvironment,
 }));
 vi.mock("../delivery/public", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../delivery/public")>()),
@@ -266,10 +266,10 @@ import {
 
 afterEach(() => {
   cleanup();
+  sessionStorage.clear();
   mocks.navigate.mockReset();
-  mocks.createApp.mockReset();
+  mocks.createProjectAppEnvironment.mockReset();
   mocks.createAppBuild.mockReset();
-  mocks.createAppEnvironment.mockReset();
   mocks.createAppEnvironmentDeployment.mockReset();
   mocks.updateAppEnvironment.mockReset();
   mocks.getAppBuild.mockReset();
@@ -280,23 +280,23 @@ afterEach(() => {
 });
 
 describe("Environment-first project experience", () => {
-  it("opens a Project in its first Environment", async () => {
+  it("keeps the Project as a stable orientation page", async () => {
     renderWithQueryClient(<ProjectEntryPage />);
-    await waitFor(() =>
-      expect(mocks.navigate).toHaveBeenCalledWith({
-        to: "/workspaces/$workspaceId/projects/$projectId/environments/$environmentId",
-        params: { workspaceId: params.workspaceId, projectId: params.projectId, environmentId: params.environmentId },
-        replace: true,
-      }),
-    );
+    expect(await screen.findByRole("heading", { name: "Platform" })).toBeTruthy();
+    expect(screen.getByText("Production")).toBeTruthy();
+    expect(mocks.navigate).not.toHaveBeenCalled();
   });
 
   it("lists only Apps configured in the active Environment and adds an existing App", async () => {
-    mocks.createAppEnvironment.mockResolvedValue({
+    const createdTarget = {
       ...target,
       id: "aev-bbbbbbbbbbbbbbbbbbbb",
       appId: "app-bbbbbbbbbbbbbbbbbbbb",
       appName: "Worker",
+    };
+    mocks.createProjectAppEnvironment.mockResolvedValue({
+      app: { id: createdTarget.appId, name: "Worker", version: 1 },
+      appEnvironment: createdTarget,
     });
     const user = userEvent.setup();
     renderWithQueryClient(<EnvironmentAppsPage />);
@@ -307,16 +307,19 @@ describe("Environment-first project experience", () => {
     await user.selectOptions(screen.getByLabelText("App existente"), "app-bbbbbbbbbbbbbbbbbbbb");
     await user.clear(screen.getByLabelText("Branch"));
     await user.type(screen.getByLabelText("Branch"), "develop");
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await user.click(screen.getByText("Ajustar rede, escala e recursos"));
     await user.type(screen.getByLabelText("Variáveis comuns"), "APP_MODE=staging");
     await user.click(screen.getByRole("button", { name: "Adicionar parâmetro" }));
-    await user.click(screen.getByRole("button", { name: "Adicionar ao Environment" }));
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await user.click(screen.getByRole("button", { name: "Criar App no Environment" }));
 
     await waitFor(() =>
-      expect(mocks.createAppEnvironment).toHaveBeenCalledWith(
+      expect(mocks.createProjectAppEnvironment).toHaveBeenCalledWith(
         params.workspaceId,
         params.projectId,
-        "app-bbbbbbbbbbbbbbbbbbbb",
         expect.objectContaining({
+          app: { mode: "Existing", id: "app-bbbbbbbbbbbbbbbbbbbb" },
           environmentId: params.environmentId,
           branch: "develop",
           configuration: expect.objectContaining({
@@ -324,17 +327,41 @@ describe("Environment-first project experience", () => {
             parameters: [{ name: "API_TOKEN", parameterId: "par-aaaaaaaaaaaaaaaaaaaa", parameterVersion: 2 }],
           }),
         }),
+        expect.any(String),
       ),
     );
   });
 
+  it("summarizes invalid fields and links back to the affected control", async () => {
+    const user = userEvent.setup();
+    renderWithQueryClient(<EnvironmentAppsPage />);
+
+    await user.click(await screen.findByRole("button", { name: "Adicionar App" }));
+    await user.clear(screen.getByLabelText("Branch"));
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+
+    expect((await screen.findByText("Revise os campos indicados")).parentElement?.textContent).toContain(
+      "Informe a branch usada neste Environment.",
+    );
+    const branch = screen.getByLabelText("Branch");
+    expect(branch.getAttribute("aria-invalid")).toBe("true");
+    expect(branch.getAttribute("aria-describedby")).toBe("setup-branch-helper setup-branch-error");
+    const summaryLink = screen.getByRole("link", { name: "Informe a branch usada neste Environment." });
+    expect(summaryLink.getAttribute("href")).toBe("#setup-branch");
+    await user.click(summaryLink);
+    expect(document.activeElement).toBe(branch);
+  });
+
   it("creates a new App and immediately configures it in the active Environment", async () => {
-    mocks.createApp.mockResolvedValue({ id: "app-cccccccccccccccccccc", name: "Frontend", version: 1 });
-    mocks.createAppEnvironment.mockResolvedValue({
+    const createdTarget = {
       ...target,
       id: "aev-cccccccccccccccccccc",
       appId: "app-cccccccccccccccccccc",
       appName: "Frontend",
+    };
+    mocks.createProjectAppEnvironment.mockResolvedValue({
+      app: { id: createdTarget.appId, name: "Frontend", version: 1 },
+      appEnvironment: createdTarget,
     });
     const user = userEvent.setup();
     renderWithQueryClient(<EnvironmentAppsPage />);
@@ -342,42 +369,49 @@ describe("Environment-first project experience", () => {
     await user.click(await screen.findByRole("button", { name: "Adicionar App" }));
     await user.click(screen.getByRole("button", { name: "Criar novo App" }));
     await user.type(screen.getByLabelText("Nome do novo App"), "Frontend");
-    await user.click(screen.getByRole("button", { name: "Criar e adicionar" }));
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await user.click(screen.getByRole("button", { name: "Criar App no Environment" }));
 
     await waitFor(() =>
-      expect(mocks.createApp).toHaveBeenCalledWith(params.workspaceId, params.projectId, { name: "Frontend" }),
-    );
-    expect(mocks.createAppEnvironment).toHaveBeenCalledWith(
-      params.workspaceId,
-      params.projectId,
-      "app-cccccccccccccccccccc",
-      expect.objectContaining({ environmentId: params.environmentId }),
+      expect(mocks.createProjectAppEnvironment).toHaveBeenCalledWith(
+        params.workspaceId,
+        params.projectId,
+        expect.objectContaining({ app: { mode: "New", name: "Frontend" } }),
+        expect.any(String),
+      ),
     );
   });
 
   it("creates a Stateful App with an explicit portable volume", async () => {
-    mocks.createAppEnvironment.mockResolvedValue({ ...target, workloadKind: "Stateful" });
+    mocks.createProjectAppEnvironment.mockResolvedValue({
+      app: { id: target.appId, name: target.appName, version: 1 },
+      appEnvironment: { ...target, workloadKind: "Stateful" },
+    });
     const user = userEvent.setup();
     renderWithQueryClient(<EnvironmentAppsPage />);
 
     await user.click(await screen.findByRole("button", { name: "Adicionar App" }));
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
     await user.selectOptions(screen.getByLabelText("Tipo de execução"), "Stateful");
     expect(screen.getByLabelText("Perfil de armazenamento")).toBeTruthy();
     await user.clear(screen.getByLabelText("Capacidade (GiB)"));
     await user.type(screen.getByLabelText("Capacidade (GiB)"), "2");
     await user.clear(screen.getByLabelText("Caminho de montagem"));
     await user.type(screen.getByLabelText("Caminho de montagem"), "/var/lib/app");
-    await user.click(screen.getByRole("button", { name: "Adicionar ao Environment" }));
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await user.click(screen.getByRole("button", { name: "Criar App no Environment" }));
 
     await waitFor(() =>
-      expect(mocks.createAppEnvironment).toHaveBeenCalledWith(
+      expect(mocks.createProjectAppEnvironment).toHaveBeenCalledWith(
         params.workspaceId,
         params.projectId,
-        "app-bbbbbbbbbbbbbbbbbbbb",
         expect.objectContaining({
+          app: { mode: "Existing", id: "app-bbbbbbbbbbbbbbbbbbbb" },
           workloadKind: "Stateful",
           volume: { storageProfileId: "persistent-standard", sizeGiB: 2, mountPath: "/var/lib/app" },
         }),
+        expect.any(String),
       ),
     );
   });
@@ -535,7 +569,8 @@ describe("Environment-first project experience", () => {
     );
     renderWithQueryClient(<EnvironmentBuildDetailPage />);
 
-    expect((await screen.findByRole("alert")).textContent).toContain("logs unavailable");
+    expect((await screen.findByRole("alert")).textContent).toContain("temporariamente indisponível");
+    expect(screen.getByRole("alert").textContent).toContain("request");
     expect(screen.queryByText("Logs ainda indisponíveis")).toBeNull();
   });
 });

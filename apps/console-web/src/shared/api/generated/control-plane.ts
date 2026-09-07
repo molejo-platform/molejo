@@ -620,6 +620,42 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspaceId}/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        get: operations["getWorkspaceSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/operations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        get: operations["listWorkspaceOperations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspaceId}/clusters": {
         parameters: {
             query?: never;
@@ -765,6 +801,25 @@ export interface paths {
         get: operations["listEnvironmentApps"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/projects/{projectId}/app-environments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createProjectAppEnvironment"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1756,6 +1811,30 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
         };
+        WorkspaceSummary: {
+            counts: {
+                projects: number;
+                environments: number;
+                apps: number;
+                appEnvironments: number;
+                appsWithSource: number;
+                appsWithRelease: number;
+                deployedAppEnvironments: number;
+            };
+            clusters: {
+                total: number;
+                ready: number;
+            };
+            runtime: {
+                ready: number;
+                progressing: number;
+                degraded: number;
+            };
+            operations: {
+                active: number;
+                failed: number;
+            };
+        };
         Project: {
             id: string;
             name: string;
@@ -2035,6 +2114,26 @@ export interface components {
             volume?: components["schemas"]["AppVolumeRequest"];
             configuration: components["schemas"]["RuntimeConfiguration"];
         };
+        AppEnvironmentSetupApp: {
+            /** @enum {string} */
+            mode: "Existing" | "New";
+            id?: string;
+            name?: string;
+        };
+        AppEnvironmentSetupInput: {
+            app: components["schemas"]["AppEnvironmentSetupApp"];
+            environmentId: string;
+            clusterId: string;
+            branch: string;
+            /** @enum {string} */
+            workloadKind: "Stateless" | "Stateful";
+            volume?: components["schemas"]["AppVolumeRequest"];
+            configuration: components["schemas"]["RuntimeConfiguration"];
+        };
+        AppEnvironmentSetup: {
+            app: components["schemas"]["App"];
+            appEnvironment: components["schemas"]["AppEnvironment"];
+        };
         AppEnvironment: {
             id: string;
             clusterId: string;
@@ -2276,6 +2375,12 @@ export interface components {
             code: string;
             message: string;
             requestId: string;
+            retryable?: boolean;
+            violations?: {
+                field: string;
+                code: string;
+                message: string;
+            }[];
         };
     };
     responses: {
@@ -3730,6 +3835,64 @@ export interface operations {
             409: components["responses"]["Conflict"];
         };
     };
+    getWorkspaceSummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Application-loop facts for Workspace orientation */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceSummary"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listWorkspaceOperations: {
+        parameters: {
+            query?: {
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+                status?: "Pending" | "Running" | "Succeeded" | "Failed";
+                kind?: "ApplyDeployment" | "DeleteAppEnvironment" | "EnsureWorkspace" | "EnsureVolume" | "ExpandVolume" | "DeleteVolume";
+                appEnvironmentId?: string;
+            };
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Workspace operations ordered from newest to oldest */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["Operation"][];
+                        nextCursor?: string | null;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     listWorkspaceClusters: {
         parameters: {
             query?: never;
@@ -4259,6 +4422,39 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+        };
+    };
+    createProjectAppEnvironment: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AppEnvironmentSetupInput"];
+            };
+        };
+        responses: {
+            /** @description App and App Environment committed atomically */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppEnvironmentSetup"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     listApps: {

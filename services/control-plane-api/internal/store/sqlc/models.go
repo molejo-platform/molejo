@@ -144,6 +144,16 @@ type AppEnvironmentParameterBinding struct {
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 }
 
+type AppEnvironmentSetup struct {
+	WorkspaceID       int64              `json:"workspace_id"`
+	RequestedByUserID int64              `json:"requested_by_user_id"`
+	IdempotencyHash   []byte             `json:"idempotency_hash"`
+	PayloadHash       []byte             `json:"payload_hash"`
+	AppID             int64              `json:"app_id"`
+	AppEnvironmentID  int64              `json:"app_environment_id"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+}
+
 type AppGithubSource struct {
 	AppID                int64              `json:"app_id"`
 	GithubInstallationID int64              `json:"github_installation_id"`

@@ -6,31 +6,38 @@ import { Alert } from "../../shared/ui/Alert";
 import { Icon } from "../../shared/ui/Icon";
 import { PageHeader } from "../../shared/ui/Page";
 import { githubKeys, listGitHubInstallations } from "../integrations/github/public";
-import { listProjects, projectKeys } from "../projects/public";
-import { useSelectedWorkspace } from "../workspaces/public";
+import { useSelectedWorkspace, useWorkspaceSummaryQuery } from "../workspaces/public";
 
 export function OverviewPage() {
   const { workspaceId } = useParams({ from: "/protected/workspaces/$workspaceId/overview" });
   const { workspace } = useSelectedWorkspace();
-  const projects = useQuery({
-    queryKey: projectKeys.list(workspaceId),
-    queryFn: ({ signal }) => listProjects(workspaceId, signal),
-  });
+  const summary = useWorkspaceSummaryQuery(workspaceId);
   const installations = useQuery({
     queryKey: githubKeys.installations(workspaceId),
     queryFn: () => listGitHubInstallations(workspaceId),
   });
-  const error = projects.error ?? installations.error;
+  const error = summary.error ?? installations.error;
   const tasks = [
     {
-      label: "Organizar Apps em um Project",
-      done: Boolean(projects.data?.items.length),
+      label: "Criar a estrutura do primeiro Project",
+      done: Boolean(summary.data?.counts.projects && summary.data.counts.environments),
       to: "/workspaces/$workspaceId/projects",
     },
     {
       label: "Autorizar repositórios no GitHub",
       done: Boolean(installations.data?.items.length),
+      optional: true,
       to: "/workspaces/$workspaceId/settings/github",
+    },
+    {
+      label: "Configurar um App em um Environment",
+      done: Boolean(summary.data?.counts.appEnvironments),
+      to: "/workspaces/$workspaceId/projects",
+    },
+    {
+      label: "Produzir e implantar a primeira Release",
+      done: Boolean(summary.data?.counts.deployedAppEnvironments),
+      to: "/workspaces/$workspaceId/projects",
     },
   ];
   return (
@@ -41,14 +48,19 @@ export function OverviewPage() {
         description="Organize produtos e acompanhe o ciclo de cada App sem expor detalhes do Kubernetes."
       />
       {error && <Alert>{userFacingError(error)}</Alert>}
+      {summary.data?.operations.failed ? (
+        <Alert>
+          {summary.data.operations.failed} operação(ões) falharam.{" "}
+          <Link to="/workspaces/$workspaceId/activity" params={{ workspaceId }}>
+            Ver atividade
+          </Link>
+        </Alert>
+      ) : null}
       <div className="summary-grid">
-        <Metric label="Projects" value={projects.data?.items.length} />
-        <Metric label="Integrações GitHub" value={installations.data?.items.length} />
-        <div className="summary-card static">
-          <span>Ciclo do App</span>
-          <strong className="summary-text">Fonte → Build → Release</strong>
-          <small>Fluxo operacional</small>
-        </div>
+        <Metric label="Projects" value={summary.data?.counts.projects} detail="Produtos organizados" />
+        <Metric label="Apps em Environments" value={summary.data?.counts.appEnvironments} detail="Alvos configurados" />
+        <Metric label="Runtimes prontos" value={summary.data?.runtime.ready} detail="Em operação" />
+        <Metric label="Operações ativas" value={summary.data?.operations.active} detail="Em andamento" />
       </div>
       <section className="panel stack">
         <div>
@@ -66,7 +78,7 @@ export function OverviewPage() {
               </span>
               <span>
                 <strong>{task.label}</strong>
-                <small>{task.done ? "Concluído" : "Pendente"}</small>
+                <small>{task.done ? "Concluído" : task.optional ? "Opcional" : "Pendente"}</small>
               </span>
               <Link to={task.to} params={{ workspaceId }}>
                 {task.done ? "Revisar" : "Continuar"}
@@ -79,12 +91,12 @@ export function OverviewPage() {
   );
 }
 
-function Metric({ label, value }: { label: string; value?: number }) {
+function Metric({ label, value, detail }: { label: string; value?: number; detail: string }) {
   return (
     <div className="summary-card static">
       <span>{label}</span>
       <strong>{value ?? "—"}</strong>
-      <small>{value === undefined ? "Carregando" : "No Workspace atual"}</small>
+      <small>{value === undefined ? "Carregando" : detail}</small>
     </div>
   );
 }

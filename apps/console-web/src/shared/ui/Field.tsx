@@ -8,6 +8,29 @@ import {
 
 type FieldMeta = { label: string; helper?: string; error?: string };
 
+function describedBy(id: string, helper?: string, error?: string) {
+  return (
+    [helper ? `${id}-helper` : undefined, error ? `${id}-error` : undefined].filter(Boolean).join(" ") || undefined
+  );
+}
+
+function FieldDescription({ id, helper, error }: { id: string; helper?: string; error?: string }) {
+  return (
+    <>
+      {helper && (
+        <small id={`${id}-helper`} className="field-helper">
+          {helper}
+        </small>
+      )}
+      {error && (
+        <small id={`${id}-error`} className="field-error" role="alert">
+          {error}
+        </small>
+      )}
+    </>
+  );
+}
+
 export function Field({
   label,
   helper,
@@ -18,7 +41,7 @@ export function Field({
 }: InputHTMLAttributes<HTMLInputElement> & FieldMeta) {
   const generatedId = useId();
   const id = providedId ?? generatedId;
-  const descriptionId = helper || error ? `${id}-description` : undefined;
+  const descriptionId = describedBy(id, helper, error);
   const className = `field${props.type === "checkbox" ? " field-checkbox" : ""}${required ? " is-required" : ""}`;
   const input = (
     <input
@@ -44,11 +67,7 @@ export function Field({
           {input}
         </>
       )}
-      {descriptionId && (
-        <small id={descriptionId} className={error ? "field-error" : "field-helper"}>
-          {error ?? helper}
-        </small>
-      )}
+      <FieldDescription id={id} helper={helper} error={error} />
     </div>
   );
 }
@@ -64,7 +83,7 @@ export function SelectField({
 }: SelectHTMLAttributes<HTMLSelectElement> & FieldMeta & { children: ReactNode }) {
   const generatedId = useId();
   const id = providedId ?? generatedId;
-  const descriptionId = helper || error ? `${id}-description` : undefined;
+  const descriptionId = describedBy(id, helper, error);
   return (
     <div className={`field${required ? " is-required" : ""}`} data-invalid={Boolean(error)}>
       <label htmlFor={id}>
@@ -79,11 +98,7 @@ export function SelectField({
       >
         {children}
       </select>
-      {descriptionId && (
-        <small id={descriptionId} className={error ? "field-error" : "field-helper"}>
-          {error ?? helper}
-        </small>
-      )}
+      <FieldDescription id={id} helper={helper} error={error} />
     </div>
   );
 }
@@ -98,7 +113,7 @@ export function TextareaField({
 }: TextareaHTMLAttributes<HTMLTextAreaElement> & FieldMeta) {
   const generatedId = useId();
   const id = providedId ?? generatedId;
-  const descriptionId = helper || error ? `${id}-description` : undefined;
+  const descriptionId = describedBy(id, helper, error);
   return (
     <div className={`field${required ? " is-required" : ""}`} data-invalid={Boolean(error)}>
       <label htmlFor={id}>
@@ -111,11 +126,7 @@ export function TextareaField({
         aria-describedby={descriptionId}
         {...props}
       />
-      {descriptionId && (
-        <small id={descriptionId} className={error ? "field-error" : "field-helper"}>
-          {error ?? helper}
-        </small>
-      )}
+      <FieldDescription id={id} helper={helper} error={error} />
     </div>
   );
 }

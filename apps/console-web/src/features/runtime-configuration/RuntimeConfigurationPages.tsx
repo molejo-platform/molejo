@@ -951,7 +951,7 @@ function RemoveFromEnvironment({
   navigate: ReturnType<typeof useNavigate>;
   queryClient: ReturnType<typeof useQueryClient>;
 }) {
-  const operation = useOperationTracker();
+  const operation = useOperationTracker({ workspaceId: params.workspaceId, scope: `app-remove:${target.id}` });
   useEffect(() => {
     if (!operation.isSucceeded) return;
     void queryClient

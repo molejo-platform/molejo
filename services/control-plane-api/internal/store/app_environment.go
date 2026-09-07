@@ -76,6 +76,19 @@ func (s *Store) CreateAppEnvironmentWithWorkload(ctx context.Context, workspaceI
 // CreateAppEnvironmentOnCluster is the product path: the caller selects the
 // durable cluster explicitly instead of relying on a process-wide default.
 func (s *Store) CreateAppEnvironmentOnCluster(ctx context.Context, workspaceID, actorID int64, publicID, projectPublicID, appPublicID, environmentPublicID, clusterPublicID, branch string, workloadKind domain.WorkloadKind, configuration domain.RuntimeConfig, volumeRequest *domain.VolumeRequest) (domain.AppEnvironment, *domain.AppVolume, error) {
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return domain.AppEnvironment{}, nil, err
+	}
+	defer tx.Rollback(ctx)
+	item, volume, err := s.createAppEnvironmentOnCluster(ctx, tx, workspaceID, actorID, publicID, projectPublicID, appPublicID, environmentPublicID, clusterPublicID, branch, workloadKind, configuration, volumeRequest)
+	if err != nil {
+		return domain.AppEnvironment{}, nil, err
+	}
+	return item, volume, tx.Commit(ctx)
+}
+
+func (s *Store) createAppEnvironmentOnCluster(ctx context.Context, tx pgx.Tx, workspaceID, actorID int64, publicID, projectPublicID, appPublicID, environmentPublicID, clusterPublicID, branch string, workloadKind domain.WorkloadKind, configuration domain.RuntimeConfig, volumeRequest *domain.VolumeRequest) (domain.AppEnvironment, *domain.AppVolume, error) {
 	configuration = domain.NormalizeRuntimeConfig(configuration)
 	if err := domain.ValidateWorkloadConfiguration(workloadKind, configuration, volumeRequest); err != nil {
 		return domain.AppEnvironment{}, nil, err
@@ -84,11 +97,6 @@ func (s *Store) CreateAppEnvironmentOnCluster(ctx context.Context, workspaceID, 
 	if err != nil {
 		return domain.AppEnvironment{}, nil, err
 	}
-	tx, err := s.Pool.Begin(ctx)
-	if err != nil {
-		return domain.AppEnvironment{}, nil, err
-	}
-	defer tx.Rollback(ctx)
 	var clusterReady bool
 	if err = tx.QueryRow(ctx, `SELECT EXISTS(
 		SELECT 1 FROM agent_installations i
@@ -150,7 +158,7 @@ func (s *Store) CreateAppEnvironmentOnCluster(ctx context.Context, workspaceID, 
 		item.State = domain.StateProgressing
 		item.Message = "persistent storage is being prepared"
 	}
-	return item, volume, tx.Commit(ctx)
+	return item, volume, nil
 }
 
 func (s *Store) UpdateAppEnvironment(ctx context.Context, workspaceID, actorID int64, publicID, branch string, configuration domain.RuntimeConfig, version int64) (domain.AppEnvironment, error) {

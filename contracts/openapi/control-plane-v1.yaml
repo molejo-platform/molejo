@@ -631,6 +631,48 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/workspaces/{workspaceId}/summary:
+    parameters: [{ $ref: '#/components/parameters/WorkspaceId' }]
+    get:
+      operationId: getWorkspaceSummary
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Application-loop facts for Workspace orientation
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkspaceSummary' } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/workspaces/{workspaceId}/operations:
+    parameters: [{ $ref: '#/components/parameters/WorkspaceId' }]
+    get:
+      operationId: listWorkspaceOperations
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+        - name: status
+          in: query
+          schema: { type: string, enum: [Pending, Running, Succeeded, Failed] }
+        - name: kind
+          in: query
+          schema: { type: string, enum: [ApplyDeployment, DeleteAppEnvironment, EnsureWorkspace, EnsureVolume, ExpandVolume, DeleteVolume] }
+        - name: appEnvironmentId
+          in: query
+          schema: { type: string, pattern: '^aev-[a-z2-7]{20}$' }
+      responses:
+        '200':
+          description: Workspace operations ordered from newest to oldest
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Operation' } }
+                  nextCursor: { type: [string, 'null'] }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /api/v1/workspaces/{workspaceId}/clusters:
     parameters: [{ $ref: '#/components/parameters/WorkspaceId' }]
     get:
@@ -905,6 +947,25 @@ paths:
                   items: { type: array, items: { $ref: '#/components/schemas/AppEnvironment' } }
                   nextCursor: { type: [string, 'null'] }
         '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/app-environments:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+    post:
+      operationId: createProjectAppEnvironment
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AppEnvironmentSetupInput' } } }
+      responses:
+        '201':
+          description: App and App Environment committed atomically
+          content: { application/json: { schema: { $ref: '#/components/schemas/AppEnvironmentSetup' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
   /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps:
     parameters:
       - { $ref: '#/components/parameters/WorkspaceId' }
@@ -2330,6 +2391,45 @@ components:
         observedGeneration: { type: integer, minimum: 0 }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
+    WorkspaceSummary:
+      type: object
+      required: [counts, clusters, runtime, operations]
+      additionalProperties: false
+      properties:
+        counts:
+          type: object
+          required: [projects, environments, apps, appEnvironments, appsWithSource, appsWithRelease, deployedAppEnvironments]
+          additionalProperties: false
+          properties:
+            projects: { type: integer, minimum: 0 }
+            environments: { type: integer, minimum: 0 }
+            apps: { type: integer, minimum: 0 }
+            appEnvironments: { type: integer, minimum: 0 }
+            appsWithSource: { type: integer, minimum: 0 }
+            appsWithRelease: { type: integer, minimum: 0 }
+            deployedAppEnvironments: { type: integer, minimum: 0 }
+        clusters:
+          type: object
+          required: [total, ready]
+          additionalProperties: false
+          properties:
+            total: { type: integer, minimum: 0 }
+            ready: { type: integer, minimum: 0 }
+        runtime:
+          type: object
+          required: [ready, progressing, degraded]
+          additionalProperties: false
+          properties:
+            ready: { type: integer, minimum: 0 }
+            progressing: { type: integer, minimum: 0 }
+            degraded: { type: integer, minimum: 0 }
+        operations:
+          type: object
+          required: [active, failed]
+          additionalProperties: false
+          properties:
+            active: { type: integer, minimum: 0 }
+            failed: { type: integer, minimum: 0 }
     Project:
       type: object
       required: [id, name, version, createdAt, updatedAt]
@@ -2666,6 +2766,33 @@ components:
         workloadKind: { type: string, enum: [Stateless, Stateful] }
         volume: { $ref: '#/components/schemas/AppVolumeRequest' }
         configuration: { $ref: '#/components/schemas/RuntimeConfiguration' }
+    AppEnvironmentSetupApp:
+      type: object
+      required: [mode]
+      additionalProperties: false
+      properties:
+        mode: { type: string, enum: [Existing, New] }
+        id: { type: string, pattern: '^app-[a-z2-7]{20}$' }
+        name: { type: string, minLength: 1, maxLength: 80 }
+    AppEnvironmentSetupInput:
+      type: object
+      required: [app, environmentId, clusterId, branch, workloadKind, configuration]
+      additionalProperties: false
+      properties:
+        app: { $ref: '#/components/schemas/AppEnvironmentSetupApp' }
+        environmentId: { type: string, pattern: '^env-[a-z2-7]{20}$' }
+        clusterId: { type: string, pattern: '^(cls|agi)-[a-z2-7]{20}$' }
+        branch: { type: string, minLength: 1, maxLength: 255 }
+        workloadKind: { type: string, enum: [Stateless, Stateful] }
+        volume: { $ref: '#/components/schemas/AppVolumeRequest' }
+        configuration: { $ref: '#/components/schemas/RuntimeConfiguration' }
+    AppEnvironmentSetup:
+      type: object
+      required: [app, appEnvironment]
+      additionalProperties: false
+      properties:
+        app: { $ref: '#/components/schemas/App' }
+        appEnvironment: { $ref: '#/components/schemas/AppEnvironment' }
     AppEnvironment:
       type: object
       required: [id, clusterId, projectId, appId, appName, environmentId, environmentName, branch, workloadKind, configuration, configurationVersion, version, state, createdAt, updatedAt]
@@ -2954,7 +3081,19 @@ components:
     Error:
       type: object
       required: [code, message, requestId]
+      additionalProperties: false
       properties:
         code: { type: string }
         message: { type: string }
         requestId: { type: string }
+        retryable: { type: boolean }
+        violations:
+          type: array
+          items:
+            type: object
+            required: [field, code, message]
+            additionalProperties: false
+            properties:
+              field: { type: string, pattern: '^/' }
+              code: { type: string }
+              message: { type: string }

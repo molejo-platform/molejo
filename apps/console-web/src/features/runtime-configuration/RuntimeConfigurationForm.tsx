@@ -24,6 +24,7 @@ type RuntimeConfigurationFieldsProps = {
   variables: string;
   onVariablesChange: (value: string) => void;
   variablesError?: string;
+  variablesId?: string;
   availableParameters?: Parameter[];
   disabled?: boolean;
   replicasLocked?: boolean;
@@ -35,6 +36,7 @@ export function RuntimeConfigurationFields({
   variables,
   onVariablesChange,
   variablesError,
+  variablesId,
   availableParameters = [],
   disabled = false,
   replicasLocked = false,
@@ -238,6 +240,7 @@ export function RuntimeConfigurationFields({
             />
           </div>
           <TextareaField
+            id={variablesId}
             label="Variáveis comuns"
             helper="Uma por linha no formato NOME=valor. São versionadas no App Environment."
             error={variablesError}

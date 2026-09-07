@@ -26,8 +26,22 @@ export function userFacingError(error: unknown) {
     if (error.details?.code === "name_conflict") return "Já existe um recurso ativo com esse nome.";
     if (error.details?.code === "dependency_conflict")
       return "O recurso possui dependências ativas e não pode ser arquivado.";
-    if (error.status === 409) return "O deployment mudou. Recarregue os dados antes de tentar novamente.";
-    return error.message;
+    if (error.details?.code === "idempotency_conflict")
+      return "Esta tentativa já foi usada com dados diferentes. Recarregue a página e tente novamente.";
+    if (error.details?.code === "cluster_not_ready") return "O cluster selecionado ainda não está pronto.";
+    if (error.details?.code === "cluster_unavailable") return "O cluster selecionado não está disponível.";
+    if (error.details?.code === "validation_failed") return "Revise os campos indicados e tente novamente.";
+    if (error.status >= 500) return withRequestId("O serviço está temporariamente indisponível.", error);
+    return withRequestId(error.message, error);
   }
   return "Não foi possível concluir a operação.";
+}
+
+export function errorViolations(error: unknown) {
+  if (!(error instanceof ApiRequestError)) return [];
+  return error.details?.violations ?? [];
+}
+
+function withRequestId(message: string, error: ApiRequestError) {
+  return error.details?.requestId ? `${message} Referência: ${error.details.requestId}.` : message;
 }

@@ -14,6 +14,7 @@ const observability = () => import("../../features/observability/routes");
 const github = () => import("../../features/integrations/github/routes");
 const workspaceAccess = () => import("../../features/workspace-access/routes");
 const externalCI = () => import("../../features/external-ci/routes");
+const operations = () => import("../../features/operations/routes");
 
 const runtimePath =
   "/workspaces/$workspaceId/projects/$projectId/environments/$environmentId/apps/$appEnvironmentId" as const;
@@ -28,6 +29,11 @@ export const workspaceRoutes = [
     getParentRoute: () => protectedRoute,
     path: "/workspaces/$workspaceId/overview",
     component: lazyRouteComponent(overview, "OverviewPage"),
+  }),
+  createRoute({
+    getParentRoute: () => protectedRoute,
+    path: "/workspaces/$workspaceId/activity",
+    component: lazyRouteComponent(operations, "OperationActivityPage"),
   }),
   createRoute({
     getParentRoute: () => protectedRoute,

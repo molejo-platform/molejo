@@ -5,6 +5,7 @@ import type {
   WorkspaceCreateInput,
   WorkspaceList,
   WorkspaceMutationAccepted,
+  WorkspaceSummary,
 } from "../../shared/api/types";
 
 export function getCurrentWorkspace() {
@@ -13,6 +14,10 @@ export function getCurrentWorkspace() {
 
 export function getWorkspace(workspaceId: string, signal?: AbortSignal) {
   return request<Workspace>(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}`, { signal });
+}
+
+export function getWorkspaceSummary(workspaceId: string, signal?: AbortSignal) {
+  return request<WorkspaceSummary>(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/summary`, { signal });
 }
 
 export async function listWorkspaces(signal?: AbortSignal) {

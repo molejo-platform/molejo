@@ -1,24 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
-import { type FormEvent, useEffect, useMemo, useState } from "react";
-
+import { useEffect, useMemo, useState } from "react";
 import { userFacingError } from "../../shared/api/errors";
 import type { AppEnvironment, Release, RuntimeConfiguration } from "../../shared/api/types";
 import { formatDateTime, shortSha } from "../../shared/format";
 import { Alert } from "../../shared/ui/Alert";
 import { Button } from "../../shared/ui/Button";
-import { Field, SelectField } from "../../shared/ui/Field";
+import { SelectField } from "../../shared/ui/Field";
 import { Icon } from "../../shared/ui/Icon";
 import { EmptyState } from "../../shared/ui/Page";
 import { StatusBadge } from "../../shared/ui/StatusBadge";
-import { applicationKeys, createApp, getAppSource, listApps } from "../applications/public";
+import { applicationKeys, getAppSource, listApps } from "../applications/public";
+import { ApplicationSetupFlow } from "../application-setup/public";
 import { useSessionQuery } from "../authentication/public";
-import {
-  clusterPlacementKeys,
-  listWorkspaceClusters,
-  readyWorkspaceClusters,
-  reconcileClusterSelection,
-} from "../cluster-placement/public";
 import {
   createAppBuild,
   createAppEnvironmentDeployment,
@@ -32,20 +26,10 @@ import {
   previewAppEnvironmentDeployment,
 } from "../delivery/public";
 import { environmentKeys, listEnvironmentApps } from "../environments/public";
-import { listParameters, parameterKeys } from "../parameters/public";
 import { useOperationTracker } from "../operations/public";
-import { normalizeResourceName, validateResourceName } from "../projects/public";
-import {
-  defaultRuntimeConfiguration,
-  listAppEnvironmentConfigurationVersions,
-  listStorageProfiles,
-  parseRuntimeVariables,
-  RuntimeConfigurationFields,
-  runtimeConfigurationKeys,
-} from "../runtime-configuration/public";
+import { listAppEnvironmentConfigurationVersions, runtimeConfigurationKeys } from "../runtime-configuration/public";
 import { useEffectiveCapabilities } from "../workspace-access/public";
 import { AppEnvironmentLayout } from "./AppEnvironmentLayout";
-import { createAppEnvironment } from "./api";
 import { appEnvironmentKeys } from "./queries";
 import { publicationAddress } from "./publication";
 import { EnvironmentAppLayout } from "./RuntimeLayout";
@@ -106,7 +90,7 @@ export function EnvironmentAppsPage() {
           <Alert>{userFacingError(capabilities.error ?? targets.error ?? apps.error)}</Alert>
         )}
         {showAdd && canMutate && (
-          <AddAppToEnvironment
+          <ApplicationSetupFlow
             workspaceId={workspaceId}
             projectId={projectId}
             environmentId={environmentId}
@@ -178,285 +162,6 @@ export function EnvironmentAppsPage() {
         )}
       </section>
     </AppEnvironmentLayout>
-  );
-}
-
-function AddAppToEnvironment({
-  workspaceId,
-  projectId,
-  environmentId,
-  availableApps,
-  onCreated,
-}: {
-  workspaceId: string;
-  projectId: string;
-  environmentId: string;
-  availableApps: Array<{ id: string; name: string }>;
-  onCreated: (target: AppEnvironment) => Promise<void>;
-}) {
-  const queryClient = useQueryClient();
-  const parameters = useQuery({
-    queryKey: parameterKeys.list(workspaceId),
-    queryFn: ({ signal }) => listParameters(workspaceId, signal),
-  });
-  const storageProfiles = useQuery({
-    queryKey: runtimeConfigurationKeys.storageProfiles(workspaceId),
-    queryFn: () => listStorageProfiles(workspaceId),
-  });
-  const placements = useQuery({
-    queryKey: clusterPlacementKeys.workspace(workspaceId),
-    queryFn: ({ signal }) => listWorkspaceClusters(workspaceId, signal),
-  });
-  const readyClusters = useMemo(() => readyWorkspaceClusters(placements.data?.items), [placements.data?.items]);
-  const [mode, setMode] = useState<"existing" | "new">(availableApps.length ? "existing" : "new");
-  const [appId, setAppId] = useState(availableApps[0]?.id ?? "");
-  const [name, setName] = useState("");
-  const [nameError, setNameError] = useState("");
-  const [branch, setBranch] = useState("main");
-  const [clusterId, setClusterId] = useState("");
-  const [workloadKind, setWorkloadKind] = useState<"Stateless" | "Stateful">("Stateless");
-  const [storageProfileId, setStorageProfileId] = useState("");
-  const [sizeGiB, setSizeGiB] = useState(1);
-  const [mountPath, setMountPath] = useState("/data");
-  const [configuration, setConfiguration] = useState<RuntimeConfiguration>(defaultRuntimeConfiguration);
-  const [variables, setVariables] = useState("");
-  const [variablesError, setVariablesError] = useState("");
-  const [createdWithoutTarget, setCreatedWithoutTarget] = useState("");
-  useEffect(() => {
-    if (!availableApps.some((app) => app.id === appId)) setAppId(availableApps[0]?.id ?? "");
-  }, [appId, availableApps]);
-  useEffect(() => {
-    if (!storageProfiles.data?.items.some((profile) => profile.id === storageProfileId))
-      setStorageProfileId(storageProfiles.data?.items[0]?.id ?? "");
-  }, [storageProfileId, storageProfiles.data?.items]);
-  useEffect(() => {
-    setClusterId((current) =>
-      reconcileClusterSelection(
-        readyClusters.map((cluster) => cluster.clusterId),
-        current,
-      ),
-    );
-  }, [readyClusters]);
-  const create = useMutation({
-    mutationFn: async () => {
-      const parsedVariables = parseRuntimeVariables(variables);
-      setVariablesError(parsedVariables.error ?? "");
-      if (parsedVariables.error) throw new Error(parsedVariables.error);
-      let selectedAppId = appId;
-      if (mode === "new") {
-        const validation = validateResourceName(name);
-        setNameError(validation);
-        if (validation) throw new Error(validation);
-        const app = await createApp(workspaceId, projectId, { name: normalizeResourceName(name) });
-        selectedAppId = app.id;
-        setCreatedWithoutTarget(app.name);
-        await queryClient.invalidateQueries({ queryKey: applicationKeys.list(workspaceId, projectId) });
-      }
-      if (!selectedAppId) throw new Error("Selecione um App.");
-      const runtime = {
-        ...configuration,
-        replicas: workloadKind === "Stateful" ? 1 : configuration.replicas,
-        variables: parsedVariables.items,
-      };
-      return createAppEnvironment(workspaceId, projectId, selectedAppId, {
-        environmentId,
-        clusterId,
-        branch: branch.trim(),
-        workloadKind,
-        configuration: runtime,
-        ...(workloadKind === "Stateful" ? { volume: { storageProfileId, sizeGiB, mountPath: mountPath.trim() } } : {}),
-      });
-    },
-    onSuccess: async (target) => {
-      setCreatedWithoutTarget("");
-      await onCreated(target);
-    },
-  });
-  function submit(event: FormEvent) {
-    event.preventDefault();
-    if (branch.trim() && clusterId) create.mutate();
-  }
-  const selectedProfile = storageProfiles.data?.items.find((profile) => profile.id === storageProfileId);
-  const statefulInvalid =
-    workloadKind === "Stateful" &&
-    (!selectedProfile ||
-      sizeGiB < selectedProfile.minimumSizeGiB ||
-      sizeGiB > selectedProfile.maximumSizeGiB ||
-      sizeGiB > selectedProfile.availableGiB ||
-      !mountPath.trim().startsWith("/"));
-  return (
-    <form className="panel stack" onSubmit={submit}>
-      <div>
-        <p className="eyebrow">Novo vínculo</p>
-        <h3>Adicionar App ao Environment</h3>
-        <p className="muted">O App organiza a fonte; este vínculo define branch e runtime neste Environment.</p>
-      </div>
-      <div className="choice-grid">
-        <Button
-          variant={mode === "existing" ? "primary" : "secondary"}
-          type="button"
-          onClick={() => setMode("existing")}
-          disabled={!availableApps.length}
-        >
-          Usar App existente
-        </Button>
-        <Button variant={mode === "new" ? "primary" : "secondary"} type="button" onClick={() => setMode("new")}>
-          Criar novo App
-        </Button>
-      </div>
-      {mode === "existing" ? (
-        <SelectField label="App existente" value={appId} onChange={(event) => setAppId(event.target.value)} required>
-          <option value="">Selecione</option>
-          {availableApps.map((app) => (
-            <option key={app.id} value={app.id}>
-              {app.name}
-            </option>
-          ))}
-        </SelectField>
-      ) : (
-        <Field
-          label="Nome do novo App"
-          value={name}
-          onChange={(event) => {
-            setName(event.target.value);
-            setNameError("");
-          }}
-          error={nameError}
-          maxLength={80}
-          required
-        />
-      )}
-      <Field
-        label="Branch"
-        helper="Esta branch será construída para este Environment."
-        value={branch}
-        onChange={(event) => setBranch(event.target.value)}
-        maxLength={255}
-        required
-      />
-      <SelectField
-        label="Cluster de runtime"
-        helper="Somente placements prontos deste Workspace podem receber o App."
-        value={clusterId}
-        onChange={(event) => setClusterId(event.target.value)}
-        disabled={placements.isPending}
-        required
-      >
-        <option value="">Selecione</option>
-        {readyClusters.map((cluster) => (
-          <option key={cluster.clusterId} value={cluster.clusterId}>
-            {cluster.clusterName}
-          </option>
-        ))}
-      </SelectField>
-      {placements.error && <Alert>{userFacingError(placements.error)}</Alert>}
-      {placements.isSuccess && !readyClusters.length && (
-        <Alert tone="warning">Este Workspace ainda não possui um cluster pronto para executar Apps.</Alert>
-      )}
-      <SelectField
-        label="Tipo de execução"
-        helper="Stateless não mantém arquivos locais. Stateful preserva um volume entre releases e recriações."
-        value={workloadKind}
-        onChange={(event) => {
-          const next = event.target.value as "Stateless" | "Stateful";
-          setWorkloadKind(next);
-          if (next === "Stateful") setConfiguration((current) => ({ ...current, replicas: 1 }));
-        }}
-        required
-      >
-        <option value="Stateless">Stateless</option>
-        <option value="Stateful">Stateful</option>
-      </SelectField>
-      {workloadKind === "Stateful" && (
-        <section className="review stack" aria-label="Armazenamento persistente">
-          <div>
-            <strong>Armazenamento persistente</strong>
-            <p className="muted">
-              Um único volume, uma réplica e retenção por padrão. O volume não é recriado ao trocar a release.
-            </p>
-          </div>
-          {storageProfiles.error && <Alert>{userFacingError(storageProfiles.error)}</Alert>}
-          <SelectField
-            label="Perfil de armazenamento"
-            value={storageProfileId}
-            onChange={(event) => setStorageProfileId(event.target.value)}
-            disabled={storageProfiles.isPending}
-            required
-          >
-            <option value="">Selecione</option>
-            {storageProfiles.data?.items.map((profile) => (
-              <option key={profile.id} value={profile.id}>
-                {profile.name} · até {profile.maximumSizeGiB} GiB
-              </option>
-            ))}
-          </SelectField>
-          {selectedProfile && (
-            <p className="muted">
-              {selectedProfile.availableGiB} GiB disponíveis. Expansão{" "}
-              {selectedProfile.expandable ? "permitida" : "indisponível"}; snapshots e backup automático não fazem parte
-              deste perfil.
-            </p>
-          )}
-          <div className="form-row">
-            <Field
-              label="Capacidade (GiB)"
-              type="number"
-              min={selectedProfile?.minimumSizeGiB ?? 1}
-              max={Math.min(selectedProfile?.maximumSizeGiB ?? 1, selectedProfile?.availableGiB ?? 1)}
-              value={sizeGiB}
-              onChange={(event) => setSizeGiB(event.target.valueAsNumber)}
-              required
-            />
-            <Field
-              label="Caminho de montagem"
-              helper="Diretório gravável usado pela aplicação, por exemplo /data."
-              value={mountPath}
-              onChange={(event) => setMountPath(event.target.value)}
-              pattern="^/.+"
-              maxLength={255}
-              required
-            />
-          </div>
-          <Alert tone="warning">
-            Neste laboratório, a disponibilidade dos dados acompanha a máquina de armazenamento. Backups automáticos
-            ainda não estão incluídos.
-          </Alert>
-        </section>
-      )}
-      {parameters.error && <Alert>{userFacingError(parameters.error)}</Alert>}
-      <RuntimeConfigurationFields
-        value={configuration}
-        onChange={setConfiguration}
-        variables={variables}
-        onVariablesChange={(value) => {
-          setVariables(value);
-          setVariablesError("");
-        }}
-        variablesError={variablesError}
-        availableParameters={parameters.data?.items}
-      />
-      {createdWithoutTarget && create.isError && (
-        <Alert tone="warning">
-          O App {createdWithoutTarget} foi criado, mas o vínculo falhou. Tente novamente usando “App existente”.
-        </Alert>
-      )}
-      {create.isError && !variablesError && !nameError && <Alert>{userFacingError(create.error)}</Alert>}
-      <div className="form-actions">
-        <Button
-          type="submit"
-          loading={create.isPending}
-          disabled={
-            !branch.trim() ||
-            !clusterId ||
-            !readyClusters.length ||
-            statefulInvalid ||
-            (mode === "existing" ? !appId : !name.trim())
-          }
-        >
-          {mode === "new" ? "Criar e adicionar" : "Adicionar ao Environment"}
-        </Button>
-      </div>
-    </form>
   );
 }
 
@@ -812,7 +517,7 @@ function TargetDeployments({
       }),
     enabled: !!releaseId && configurationVersion > 0,
   });
-  const operation = useOperationTracker();
+  const operation = useOperationTracker({ workspaceId: params.workspaceId, scope: `deployment:${target.id}` });
   useEffect(() => {
     if (!operation.isSucceeded) return;
     void Promise.all([

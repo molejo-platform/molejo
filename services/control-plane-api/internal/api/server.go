@@ -551,11 +551,30 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 }
 
 func writeError(w http.ResponseWriter, status int, code, message string, r *http.Request) {
+	writeDetailedError(w, status, code, message, nil, r)
+}
+
+type errorViolation struct {
+	Field   string `json:"field"`
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+type errorResponse struct {
+	Code       string           `json:"code"`
+	Message    string           `json:"message"`
+	RequestID  string           `json:"requestId"`
+	Retryable  bool             `json:"retryable"`
+	Violations []errorViolation `json:"violations,omitempty"`
+}
+
+func writeDetailedError(w http.ResponseWriter, status int, code, message string, violations []errorViolation, r *http.Request) {
 	id := requestID(r)
 	if id == "" {
 		id, _ = randomToken(8)
 	}
-	writeJSON(w, status, map[string]string{"code": code, "message": message, "requestId": id})
+	retryable := status == http.StatusTooManyRequests || status >= http.StatusInternalServerError
+	writeJSON(w, status, errorResponse{Code: code, Message: message, RequestID: id, Retryable: retryable, Violations: violations})
 }
 
 func (s *Server) logger() *slog.Logger {

@@ -52,8 +52,14 @@ function StorageEditor({ target, params }: { target: AppEnvironment; params: Env
   useEffect(() => {
     if (volume.data) setSizeGiB(volume.data.sizeGiB);
   }, [volume.data]);
-  const expansionOperation = useOperationTracker();
-  const removalOperation = useOperationTracker();
+  const expansionOperation = useOperationTracker({
+    workspaceId: params.workspaceId,
+    scope: `volume-expand:${target.id}`,
+  });
+  const removalOperation = useOperationTracker({
+    workspaceId: params.workspaceId,
+    scope: `volume-remove:${target.id}`,
+  });
   useEffect(() => {
     if (expansionOperation.isSucceeded || removalOperation.isSucceeded)
       void queryClient.invalidateQueries({ queryKey: key });

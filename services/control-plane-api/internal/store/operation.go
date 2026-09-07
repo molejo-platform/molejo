@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -56,6 +57,34 @@ func (s *Store) ListAppEnvironmentOperations(ctx context.Context, workspaceID, a
 		items = append(items, item)
 	}
 	return items, rows.Err()
+}
+
+func (s *Store) ListWorkspaceOperations(ctx context.Context, workspaceID, beforeID int64, limit int, status, kind, appEnvironmentPublicID string) ([]domain.Operation, string, error) {
+	if beforeID == 0 {
+		beforeID = math.MaxInt64
+	}
+	rows, err := s.Pool.Query(ctx, `SELECT `+operationSelectColumns+` FROM operations o `+operationJoins+`
+		WHERE o.workspace_id=$1 AND o.id < $2
+		  AND ($3='' OR o.status=$3)
+		  AND ($4='' OR o.kind=$4)
+		  AND ($5='' OR ae.public_id=$5)
+		ORDER BY o.id DESC LIMIT $6`, workspaceID, beforeID, status, kind, appEnvironmentPublicID, limit+1)
+	if err != nil {
+		return nil, "", err
+	}
+	defer rows.Close()
+	items := make([]domain.Operation, 0, limit)
+	for rows.Next() {
+		item, scanErr := scanOperation(rows)
+		if scanErr != nil {
+			return nil, "", scanErr
+		}
+		if len(items) == limit {
+			return items, domain.EncodeCursor(items[len(items)-1].ID), nil
+		}
+		items = append(items, item)
+	}
+	return items, "", rows.Err()
 }
 
 func (s *Store) ClaimNext(ctx context.Context, worker string, lease time.Duration) (domain.Operation, domain.AppEnvironment, domain.Deployment, bool, error) {

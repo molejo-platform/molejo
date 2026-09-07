@@ -233,6 +233,42 @@ func (e AppEnvironmentCreateInputWorkloadKind) Valid() bool {
 	}
 }
 
+// Defines values for AppEnvironmentSetupAppMode.
+const (
+	Existing AppEnvironmentSetupAppMode = "Existing"
+	New      AppEnvironmentSetupAppMode = "New"
+)
+
+// Valid indicates whether the value is a known member of the AppEnvironmentSetupAppMode enum.
+func (e AppEnvironmentSetupAppMode) Valid() bool {
+	switch e {
+	case Existing:
+		return true
+	case New:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AppEnvironmentSetupInputWorkloadKind.
+const (
+	AppEnvironmentSetupInputWorkloadKindStateful  AppEnvironmentSetupInputWorkloadKind = "Stateful"
+	AppEnvironmentSetupInputWorkloadKindStateless AppEnvironmentSetupInputWorkloadKind = "Stateless"
+)
+
+// Valid indicates whether the value is a known member of the AppEnvironmentSetupInputWorkloadKind enum.
+func (e AppEnvironmentSetupInputWorkloadKind) Valid() bool {
+	switch e {
+	case AppEnvironmentSetupInputWorkloadKindStateful:
+		return true
+	case AppEnvironmentSetupInputWorkloadKindStateless:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AppVolumeDesiredState.
 const (
 	AppVolumeDesiredStateDeleted AppVolumeDesiredState = "Deleted"
@@ -598,28 +634,28 @@ func (e MFAChallengeMfaRequired) Valid() bool {
 
 // Defines values for OperationKind.
 const (
-	ApplyDeployment      OperationKind = "ApplyDeployment"
-	DeleteAppEnvironment OperationKind = "DeleteAppEnvironment"
-	DeleteVolume         OperationKind = "DeleteVolume"
-	EnsureVolume         OperationKind = "EnsureVolume"
-	EnsureWorkspace      OperationKind = "EnsureWorkspace"
-	ExpandVolume         OperationKind = "ExpandVolume"
+	OperationKindApplyDeployment      OperationKind = "ApplyDeployment"
+	OperationKindDeleteAppEnvironment OperationKind = "DeleteAppEnvironment"
+	OperationKindDeleteVolume         OperationKind = "DeleteVolume"
+	OperationKindEnsureVolume         OperationKind = "EnsureVolume"
+	OperationKindEnsureWorkspace      OperationKind = "EnsureWorkspace"
+	OperationKindExpandVolume         OperationKind = "ExpandVolume"
 )
 
 // Valid indicates whether the value is a known member of the OperationKind enum.
 func (e OperationKind) Valid() bool {
 	switch e {
-	case ApplyDeployment:
+	case OperationKindApplyDeployment:
 		return true
-	case DeleteAppEnvironment:
+	case OperationKindDeleteAppEnvironment:
 		return true
-	case DeleteVolume:
+	case OperationKindDeleteVolume:
 		return true
-	case EnsureVolume:
+	case OperationKindEnsureVolume:
 		return true
-	case EnsureWorkspace:
+	case OperationKindEnsureWorkspace:
 		return true
-	case ExpandVolume:
+	case OperationKindExpandVolume:
 		return true
 	default:
 		return false
@@ -1379,6 +1415,60 @@ func (e GetEffectiveCapabilitiesParamsResourceType) Valid() bool {
 	}
 }
 
+// Defines values for ListWorkspaceOperationsParamsStatus.
+const (
+	ListWorkspaceOperationsParamsStatusFailed    ListWorkspaceOperationsParamsStatus = "Failed"
+	ListWorkspaceOperationsParamsStatusPending   ListWorkspaceOperationsParamsStatus = "Pending"
+	ListWorkspaceOperationsParamsStatusRunning   ListWorkspaceOperationsParamsStatus = "Running"
+	ListWorkspaceOperationsParamsStatusSucceeded ListWorkspaceOperationsParamsStatus = "Succeeded"
+)
+
+// Valid indicates whether the value is a known member of the ListWorkspaceOperationsParamsStatus enum.
+func (e ListWorkspaceOperationsParamsStatus) Valid() bool {
+	switch e {
+	case ListWorkspaceOperationsParamsStatusFailed:
+		return true
+	case ListWorkspaceOperationsParamsStatusPending:
+		return true
+	case ListWorkspaceOperationsParamsStatusRunning:
+		return true
+	case ListWorkspaceOperationsParamsStatusSucceeded:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListWorkspaceOperationsParamsKind.
+const (
+	ListWorkspaceOperationsParamsKindApplyDeployment      ListWorkspaceOperationsParamsKind = "ApplyDeployment"
+	ListWorkspaceOperationsParamsKindDeleteAppEnvironment ListWorkspaceOperationsParamsKind = "DeleteAppEnvironment"
+	ListWorkspaceOperationsParamsKindDeleteVolume         ListWorkspaceOperationsParamsKind = "DeleteVolume"
+	ListWorkspaceOperationsParamsKindEnsureVolume         ListWorkspaceOperationsParamsKind = "EnsureVolume"
+	ListWorkspaceOperationsParamsKindEnsureWorkspace      ListWorkspaceOperationsParamsKind = "EnsureWorkspace"
+	ListWorkspaceOperationsParamsKindExpandVolume         ListWorkspaceOperationsParamsKind = "ExpandVolume"
+)
+
+// Valid indicates whether the value is a known member of the ListWorkspaceOperationsParamsKind enum.
+func (e ListWorkspaceOperationsParamsKind) Valid() bool {
+	switch e {
+	case ListWorkspaceOperationsParamsKindApplyDeployment:
+		return true
+	case ListWorkspaceOperationsParamsKindDeleteAppEnvironment:
+		return true
+	case ListWorkspaceOperationsParamsKindDeleteVolume:
+		return true
+	case ListWorkspaceOperationsParamsKindEnsureVolume:
+		return true
+	case ListWorkspaceOperationsParamsKindEnsureWorkspace:
+		return true
+	case ListWorkspaceOperationsParamsKindExpandVolume:
+		return true
+	default:
+		return false
+	}
+}
+
 // AccessGrant defines model for AccessGrant.
 type AccessGrant struct {
 	CreatedAt    time.Time               `json:"createdAt"`
@@ -1521,6 +1611,36 @@ type AppEnvironmentInput struct {
 	Branch        string               `json:"branch"`
 	Configuration RuntimeConfiguration `json:"configuration"`
 }
+
+// AppEnvironmentSetup defines model for AppEnvironmentSetup.
+type AppEnvironmentSetup struct {
+	App            App            `json:"app"`
+	AppEnvironment AppEnvironment `json:"appEnvironment"`
+}
+
+// AppEnvironmentSetupApp defines model for AppEnvironmentSetupApp.
+type AppEnvironmentSetupApp struct {
+	Id   *string                    `json:"id,omitempty"`
+	Mode AppEnvironmentSetupAppMode `json:"mode"`
+	Name *string                    `json:"name,omitempty"`
+}
+
+// AppEnvironmentSetupAppMode defines model for AppEnvironmentSetupApp.Mode.
+type AppEnvironmentSetupAppMode string
+
+// AppEnvironmentSetupInput defines model for AppEnvironmentSetupInput.
+type AppEnvironmentSetupInput struct {
+	App           AppEnvironmentSetupApp               `json:"app"`
+	Branch        string                               `json:"branch"`
+	ClusterId     string                               `json:"clusterId"`
+	Configuration RuntimeConfiguration                 `json:"configuration"`
+	EnvironmentId string                               `json:"environmentId"`
+	Volume        *AppVolumeRequest                    `json:"volume,omitempty"`
+	WorkloadKind  AppEnvironmentSetupInputWorkloadKind `json:"workloadKind"`
+}
+
+// AppEnvironmentSetupInputWorkloadKind defines model for AppEnvironmentSetupInput.WorkloadKind.
+type AppEnvironmentSetupInputWorkloadKind string
 
 // AppVolume defines model for AppVolume.
 type AppVolume struct {
@@ -1773,9 +1893,15 @@ type Environment struct {
 
 // Error defines model for Error.
 type Error struct {
-	Code      string `json:"code"`
-	Message   string `json:"message"`
-	RequestId string `json:"requestId"`
+	Code       string `json:"code"`
+	Message    string `json:"message"`
+	RequestId  string `json:"requestId"`
+	Retryable  *bool  `json:"retryable,omitempty"`
+	Violations *[]struct {
+		Code    string `json:"code"`
+		Field   string `json:"field"`
+		Message string `json:"message"`
+	} `json:"violations,omitempty"`
 }
 
 // GitHubInstallation defines model for GitHubInstallation.
@@ -2492,6 +2618,32 @@ type WorkspaceMembershipInputRole string
 // WorkspaceMembershipInputStatus defines model for WorkspaceMembershipInput.Status.
 type WorkspaceMembershipInputStatus string
 
+// WorkspaceSummary defines model for WorkspaceSummary.
+type WorkspaceSummary struct {
+	Clusters struct {
+		Ready int `json:"ready"`
+		Total int `json:"total"`
+	} `json:"clusters"`
+	Counts struct {
+		AppEnvironments         int `json:"appEnvironments"`
+		Apps                    int `json:"apps"`
+		AppsWithRelease         int `json:"appsWithRelease"`
+		AppsWithSource          int `json:"appsWithSource"`
+		DeployedAppEnvironments int `json:"deployedAppEnvironments"`
+		Environments            int `json:"environments"`
+		Projects                int `json:"projects"`
+	} `json:"counts"`
+	Operations struct {
+		Active int `json:"active"`
+		Failed int `json:"failed"`
+	} `json:"operations"`
+	Runtime struct {
+		Degraded    int `json:"degraded"`
+		Progressing int `json:"progressing"`
+		Ready       int `json:"ready"`
+	} `json:"runtime"`
+}
+
 // AccessGrantId defines model for AccessGrantId.
 type AccessGrantId = string
 
@@ -2724,6 +2876,21 @@ type PutWorkspaceMemberParams struct {
 	IfMatch *OptionalIfMatch `json:"If-Match,omitempty"`
 }
 
+// ListWorkspaceOperationsParams defines parameters for ListWorkspaceOperations.
+type ListWorkspaceOperationsParams struct {
+	Cursor           *Cursor                              `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit            *Limit                               `form:"limit,omitempty" json:"limit,omitempty"`
+	Status           *ListWorkspaceOperationsParamsStatus `form:"status,omitempty" json:"status,omitempty"`
+	Kind             *ListWorkspaceOperationsParamsKind   `form:"kind,omitempty" json:"kind,omitempty"`
+	AppEnvironmentId *string                              `form:"appEnvironmentId,omitempty" json:"appEnvironmentId,omitempty"`
+}
+
+// ListWorkspaceOperationsParamsStatus defines parameters for ListWorkspaceOperations.
+type ListWorkspaceOperationsParamsStatus string
+
+// ListWorkspaceOperationsParamsKind defines parameters for ListWorkspaceOperations.
+type ListWorkspaceOperationsParamsKind string
+
 // ListParametersParams defines parameters for ListParameters.
 type ListParametersParams struct {
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
@@ -2762,6 +2929,11 @@ type ArchiveProjectParams struct {
 // UpdateProjectParams defines parameters for UpdateProject.
 type UpdateProjectParams struct {
 	IfMatch IfMatch `json:"If-Match"`
+}
+
+// CreateProjectAppEnvironmentParams defines parameters for CreateProjectAppEnvironment.
+type CreateProjectAppEnvironmentParams struct {
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
 // ListAppsParams defines parameters for ListApps.
@@ -2999,6 +3171,9 @@ type CreateProjectJSONRequestBody = HierarchyInput
 // UpdateProjectJSONRequestBody defines body for UpdateProject for application/json ContentType.
 type UpdateProjectJSONRequestBody = HierarchyInput
 
+// CreateProjectAppEnvironmentJSONRequestBody defines body for CreateProjectAppEnvironment for application/json ContentType.
+type CreateProjectAppEnvironmentJSONRequestBody = AppEnvironmentSetupInput
+
 // CreateAppJSONRequestBody defines body for CreateApp for application/json ContentType.
 type CreateAppJSONRequestBody = HierarchyInput
 
@@ -3232,6 +3407,9 @@ type ServerInterface interface {
 	// (PUT /api/v1/workspaces/{workspaceId}/members/{userId})
 	PutWorkspaceMember(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, userId UserId, params PutWorkspaceMemberParams)
 
+	// (GET /api/v1/workspaces/{workspaceId}/operations)
+	ListWorkspaceOperations(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, params ListWorkspaceOperationsParams)
+
 	// (GET /api/v1/workspaces/{workspaceId}/parameters)
 	ListParameters(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, params ListParametersParams)
 
@@ -3261,6 +3439,9 @@ type ServerInterface interface {
 
 	// (PUT /api/v1/workspaces/{workspaceId}/projects/{projectId})
 	UpdateProject(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, params UpdateProjectParams)
+
+	// (POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/app-environments)
+	CreateProjectAppEnvironment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, params CreateProjectAppEnvironmentParams)
 
 	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps)
 	ListApps(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, params ListAppsParams)
@@ -3402,6 +3583,9 @@ type ServerInterface interface {
 
 	// (GET /api/v1/workspaces/{workspaceId}/storage-profiles)
 	ListStorageProfiles(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId)
+
+	// (GET /api/v1/workspaces/{workspaceId}/summary)
+	GetWorkspaceSummary(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId)
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
@@ -3715,6 +3899,11 @@ func (_ Unimplemented) PutWorkspaceMember(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// (GET /api/v1/workspaces/{workspaceId}/operations)
+func (_ Unimplemented) ListWorkspaceOperations(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, params ListWorkspaceOperationsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // (GET /api/v1/workspaces/{workspaceId}/parameters)
 func (_ Unimplemented) ListParameters(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, params ListParametersParams) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -3762,6 +3951,11 @@ func (_ Unimplemented) GetProject(w http.ResponseWriter, r *http.Request, worksp
 
 // (PUT /api/v1/workspaces/{workspaceId}/projects/{projectId})
 func (_ Unimplemented) UpdateProject(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, params UpdateProjectParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/app-environments)
+func (_ Unimplemented) CreateProjectAppEnvironment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, params CreateProjectAppEnvironmentParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -3997,6 +4191,11 @@ func (_ Unimplemented) ListEnvironmentApps(w http.ResponseWriter, r *http.Reques
 
 // (GET /api/v1/workspaces/{workspaceId}/storage-profiles)
 func (_ Unimplemented) ListStorageProfiles(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /api/v1/workspaces/{workspaceId}/summary)
+func (_ Unimplemented) GetWorkspaceSummary(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -6012,6 +6211,100 @@ func (siw *ServerInterfaceWrapper) PutWorkspaceMember(w http.ResponseWriter, r *
 	handler.ServeHTTP(w, r)
 }
 
+// ListWorkspaceOperations operation middleware
+func (siw *ServerInterfaceWrapper) ListWorkspaceOperations(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListWorkspaceOperationsParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "kind" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "kind", r.URL.Query(), &params.Kind, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "kind"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "kind", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "appEnvironmentId" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "appEnvironmentId", r.URL.Query(), &params.AppEnvironmentId, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "appEnvironmentId"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "appEnvironmentId", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListWorkspaceOperations(w, r, workspaceId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListParameters operation middleware
 func (siw *ServerInterfaceWrapper) ListParameters(w http.ResponseWriter, r *http.Request) {
 
@@ -6547,6 +6840,69 @@ func (siw *ServerInterfaceWrapper) UpdateProject(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateProject(w, r, workspaceId, projectId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateProjectAppEnvironment operation middleware
+func (siw *ServerInterfaceWrapper) CreateProjectAppEnvironment(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateProjectAppEnvironmentParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateProjectAppEnvironment(w, r, workspaceId, projectId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -9658,6 +10014,32 @@ func (siw *ServerInterfaceWrapper) ListStorageProfiles(w http.ResponseWriter, r 
 	handler.ServeHTTP(w, r)
 }
 
+// GetWorkspaceSummary operation middleware
+func (siw *ServerInterfaceWrapper) GetWorkspaceSummary(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetWorkspaceSummary(w, r, workspaceId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 type UnescapedCookieParamError struct {
 	ParamName string
 	Err       error
@@ -9925,6 +10307,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Put(options.BaseURL+"/api/v1/workspaces/{workspaceId}", wrapper.UpdateWorkspace)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/summary", wrapper.GetWorkspaceSummary)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/operations", wrapper.ListWorkspaceOperations)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/clusters", wrapper.ListWorkspaceClusters)
 	})
 	r.Group(func(r chi.Router) {
@@ -9977,6 +10365,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/environments/{environmentId}/apps", wrapper.ListEnvironmentApps)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/app-environments", wrapper.CreateProjectAppEnvironment)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/projects/{projectId}/apps", wrapper.ListApps)
@@ -13297,6 +13688,74 @@ func (response PutWorkspaceMember409JSONResponse) VisitPutWorkspaceMemberRespons
 	return err
 }
 
+type ListWorkspaceOperationsRequestObject struct {
+	WorkspaceId WorkspaceId `json:"workspaceId"`
+	Params      ListWorkspaceOperationsParams
+}
+
+type ListWorkspaceOperationsResponseObject interface {
+	VisitListWorkspaceOperationsResponse(w http.ResponseWriter) error
+}
+
+type ListWorkspaceOperations200JSONResponse struct {
+	Items      []Operation `json:"items"`
+	NextCursor *string     `json:"nextCursor,omitempty"`
+}
+
+func (response ListWorkspaceOperations200JSONResponse) VisitListWorkspaceOperationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListWorkspaceOperations400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response ListWorkspaceOperations400JSONResponse) VisitListWorkspaceOperationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListWorkspaceOperations403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response ListWorkspaceOperations403JSONResponse) VisitListWorkspaceOperationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListWorkspaceOperations404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ListWorkspaceOperations404JSONResponse) VisitListWorkspaceOperationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListParametersRequestObject struct {
 	WorkspaceId WorkspaceId `json:"workspaceId"`
 	Params      ListParametersParams
@@ -13909,6 +14368,87 @@ func (response UpdateProject404JSONResponse) VisitUpdateProjectResponse(w http.R
 type UpdateProject409JSONResponse struct{ ConflictJSONResponse }
 
 func (response UpdateProject409JSONResponse) VisitUpdateProjectResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateProjectAppEnvironmentRequestObject struct {
+	WorkspaceId WorkspaceId `json:"workspaceId"`
+	ProjectId   ProjectId   `json:"projectId"`
+	Params      CreateProjectAppEnvironmentParams
+	Body        *CreateProjectAppEnvironmentJSONRequestBody
+}
+
+type CreateProjectAppEnvironmentResponseObject interface {
+	VisitCreateProjectAppEnvironmentResponse(w http.ResponseWriter) error
+}
+
+type CreateProjectAppEnvironment201JSONResponse AppEnvironmentSetup
+
+func (response CreateProjectAppEnvironment201JSONResponse) VisitCreateProjectAppEnvironmentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateProjectAppEnvironment400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response CreateProjectAppEnvironment400JSONResponse) VisitCreateProjectAppEnvironmentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateProjectAppEnvironment403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response CreateProjectAppEnvironment403JSONResponse) VisitCreateProjectAppEnvironmentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateProjectAppEnvironment404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response CreateProjectAppEnvironment404JSONResponse) VisitCreateProjectAppEnvironmentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateProjectAppEnvironment409JSONResponse struct{ ConflictJSONResponse }
+
+func (response CreateProjectAppEnvironment409JSONResponse) VisitCreateProjectAppEnvironmentResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -16849,6 +17389,56 @@ func (response ListStorageProfiles404JSONResponse) VisitListStorageProfilesRespo
 	return err
 }
 
+type GetWorkspaceSummaryRequestObject struct {
+	WorkspaceId WorkspaceId `json:"workspaceId"`
+}
+
+type GetWorkspaceSummaryResponseObject interface {
+	VisitGetWorkspaceSummaryResponse(w http.ResponseWriter) error
+}
+
+type GetWorkspaceSummary200JSONResponse WorkspaceSummary
+
+func (response GetWorkspaceSummary200JSONResponse) VisitGetWorkspaceSummaryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetWorkspaceSummary403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response GetWorkspaceSummary403JSONResponse) VisitGetWorkspaceSummaryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetWorkspaceSummary404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response GetWorkspaceSummary404JSONResponse) VisitGetWorkspaceSummaryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 
@@ -17037,6 +17627,9 @@ type StrictServerInterface interface {
 	// (PUT /api/v1/workspaces/{workspaceId}/members/{userId})
 	PutWorkspaceMember(ctx context.Context, request PutWorkspaceMemberRequestObject) (PutWorkspaceMemberResponseObject, error)
 
+	// (GET /api/v1/workspaces/{workspaceId}/operations)
+	ListWorkspaceOperations(ctx context.Context, request ListWorkspaceOperationsRequestObject) (ListWorkspaceOperationsResponseObject, error)
+
 	// (GET /api/v1/workspaces/{workspaceId}/parameters)
 	ListParameters(ctx context.Context, request ListParametersRequestObject) (ListParametersResponseObject, error)
 
@@ -17066,6 +17659,9 @@ type StrictServerInterface interface {
 
 	// (PUT /api/v1/workspaces/{workspaceId}/projects/{projectId})
 	UpdateProject(ctx context.Context, request UpdateProjectRequestObject) (UpdateProjectResponseObject, error)
+
+	// (POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/app-environments)
+	CreateProjectAppEnvironment(ctx context.Context, request CreateProjectAppEnvironmentRequestObject) (CreateProjectAppEnvironmentResponseObject, error)
 
 	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps)
 	ListApps(ctx context.Context, request ListAppsRequestObject) (ListAppsResponseObject, error)
@@ -17207,6 +17803,9 @@ type StrictServerInterface interface {
 
 	// (GET /api/v1/workspaces/{workspaceId}/storage-profiles)
 	ListStorageProfiles(ctx context.Context, request ListStorageProfilesRequestObject) (ListStorageProfilesResponseObject, error)
+
+	// (GET /api/v1/workspaces/{workspaceId}/summary)
+	GetWorkspaceSummary(ctx context.Context, request GetWorkspaceSummaryRequestObject) (GetWorkspaceSummaryResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -18996,6 +19595,33 @@ func (sh *strictHandler) PutWorkspaceMember(w http.ResponseWriter, r *http.Reque
 	}
 }
 
+// ListWorkspaceOperations operation middleware
+func (sh *strictHandler) ListWorkspaceOperations(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, params ListWorkspaceOperationsParams) {
+	var request ListWorkspaceOperationsRequestObject
+
+	request.WorkspaceId = workspaceId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListWorkspaceOperations(ctx, request.(ListWorkspaceOperationsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListWorkspaceOperations")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListWorkspaceOperationsResponseObject); ok {
+		if err := validResponse.VisitListWorkspaceOperationsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // ListParameters operation middleware
 func (sh *strictHandler) ListParameters(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, params ListParametersParams) {
 	var request ListParametersRequestObject
@@ -19290,6 +19916,41 @@ func (sh *strictHandler) UpdateProject(w http.ResponseWriter, r *http.Request, w
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateProjectResponseObject); ok {
 		if err := validResponse.VisitUpdateProjectResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateProjectAppEnvironment operation middleware
+func (sh *strictHandler) CreateProjectAppEnvironment(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, params CreateProjectAppEnvironmentParams) {
+	var request CreateProjectAppEnvironmentRequestObject
+
+	request.WorkspaceId = workspaceId
+	request.ProjectId = projectId
+	request.Params = params
+
+	var body CreateProjectAppEnvironmentJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateProjectAppEnvironment(ctx, request.(CreateProjectAppEnvironmentRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateProjectAppEnvironment")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateProjectAppEnvironmentResponseObject); ok {
+		if err := validResponse.VisitCreateProjectAppEnvironmentResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -20755,6 +21416,32 @@ func (sh *strictHandler) ListStorageProfiles(w http.ResponseWriter, r *http.Requ
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ListStorageProfilesResponseObject); ok {
 		if err := validResponse.VisitListStorageProfilesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetWorkspaceSummary operation middleware
+func (sh *strictHandler) GetWorkspaceSummary(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId) {
+	var request GetWorkspaceSummaryRequestObject
+
+	request.WorkspaceId = workspaceId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetWorkspaceSummary(ctx, request.(GetWorkspaceSummaryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetWorkspaceSummary")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetWorkspaceSummaryResponseObject); ok {
+		if err := validResponse.VisitGetWorkspaceSummaryResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
