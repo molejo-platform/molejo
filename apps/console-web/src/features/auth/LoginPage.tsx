@@ -3,6 +3,7 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 
 import { userFacingError } from "../../shared/api/errors";
 import { Alert } from "../../shared/ui/Alert";
+import { BrandLogo } from "../../shared/ui/BrandLogo";
 import { Button } from "../../shared/ui/Button";
 import { Field } from "../../shared/ui/Field";
 import { useCompleteTOTPLoginMutation, useLoginMutation } from "./model";
@@ -56,7 +57,7 @@ export function LoginPage() {
 
   return (
     <main className="shell narrow">
-      <div className="brand"><span className="mark">M</span><span>Molejo Console</span></div>
+      <div className="brand"><BrandLogo surface="light" /><span className="brand-product-name">Console</span></div>
       <section className="card">
         <p className="eyebrow">Molejo</p>
         <h1>Entre para gerenciar seu Workspace</h1>

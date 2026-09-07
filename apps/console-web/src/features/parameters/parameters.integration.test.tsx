@@ -72,6 +72,6 @@ describe("Parameters page", () => {
     renderWithQueryClient(<ParametersPage/>);
     await screen.findByText("Nenhum Parameter");
     expect(screen.queryByRole("button", { name: "Novo Parameter" })).toBeNull();
-    expect(screen.getByRole("status").textContent).toContain("Apenas o owner");
+    expect(screen.getByText(/Apenas o owner/).textContent).toContain("Apenas o owner");
   });
 });

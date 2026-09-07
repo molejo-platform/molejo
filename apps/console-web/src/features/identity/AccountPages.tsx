@@ -6,6 +6,7 @@ import { userFacingError } from "../../shared/api/errors";
 import { clearSessionState } from "../../shared/auth/session-state";
 import { formatDateTime } from "../../shared/format";
 import { Alert } from "../../shared/ui/Alert";
+import { BrandLogo } from "../../shared/ui/BrandLogo";
 import { Button } from "../../shared/ui/Button";
 import { ConfirmAction } from "../../shared/ui/ConfirmAction";
 import { Field } from "../../shared/ui/Field";
@@ -134,7 +135,7 @@ export function ForgotPasswordPage() {
       complete.reset();
     }
   };
-  return <main className="shell narrow"><div className="brand"><span className="mark">M</span><span>Molejo Console</span></div><section className="card stack"><p className="eyebrow">Recuperação de acesso</p><h1>Redefinir senha</h1>
+  return <main className="shell narrow"><div className="brand"><BrandLogo surface="light"/><span className="brand-product-name">Console</span></div><section className="card stack"><p className="eyebrow">Recuperação de acesso</p><h1>Redefinir senha</h1>
     {!requestReset.isSuccess ? <form className="stack" onSubmit={submitRequest}><Field label="Username" value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" required/><p className="muted">Um administrador deverá gerar e entregar o código temporário. A resposta não confirma se o usuário existe.</p><Button type="submit" loading={requestReset.isPending}>Continuar</Button></form> : !ticket ? <form className="stack" onSubmit={submitVerification}><Alert tone="info">Solicitação registrada. Digite o código temporário fornecido pela administração.</Alert><Field label="Código temporário" value={code} onChange={(event) => setCode(event.target.value.toUpperCase())} autoComplete="one-time-code" required/><Button type="submit" loading={verify.isPending}>Verificar código</Button>{verifyError !== undefined && <Alert>{userFacingError(verifyError)}</Alert>}</form> : <form className="stack" onSubmit={submitNewPassword}><Field label="Nova senha" helper="Use ao menos 15 caracteres." type="password" minLength={15} value={newPassword} onChange={(event) => setNewPassword(event.target.value)} autoComplete="new-password" required/><Button type="submit" loading={complete.isPending}>Salvar nova senha</Button>{completeError !== undefined && <Alert>{userFacingError(completeError)}</Alert>}</form>}
     {requestReset.isError && <Alert>{userFacingError(requestReset.error)}</Alert>}<Link to="/login">Voltar ao login</Link></section></main>;
 }
@@ -159,5 +160,5 @@ export function AcceptInvitationPage() {
       accept.reset();
     }
   }
-  return <main className="shell narrow"><div className="brand"><span className="mark">M</span><span>Molejo Console</span></div><section className="card stack"><p className="eyebrow">Ativação de acesso</p><h1>Aceitar convite</h1><p className="muted">Use o token entregue pela administração e defina sua senha.</p><form className="stack" onSubmit={submit}><Field label="Token do convite" value={token} onChange={(event) => setToken(event.target.value.trim())} autoComplete="one-time-code" required/><Field label="Nova senha" helper="Use ao menos 15 caracteres." type="password" minLength={15} value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="new-password" required/><Button type="submit" loading={accept.isPending}>Ativar conta</Button></form>{actionError !== undefined && <Alert>{userFacingError(actionError)}</Alert>}<Link to="/login">Voltar ao login</Link></section></main>;
+  return <main className="shell narrow"><div className="brand"><BrandLogo surface="light"/><span className="brand-product-name">Console</span></div><section className="card stack"><p className="eyebrow">Ativação de acesso</p><h1>Aceitar convite</h1><p className="muted">Use o token entregue pela administração e defina sua senha.</p><form className="stack" onSubmit={submit}><Field label="Token do convite" value={token} onChange={(event) => setToken(event.target.value.trim())} autoComplete="one-time-code" required/><Field label="Nova senha" helper="Use ao menos 15 caracteres." type="password" minLength={15} value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="new-password" required/><Button type="submit" loading={accept.isPending}>Ativar conta</Button></form>{actionError !== undefined && <Alert>{userFacingError(actionError)}</Alert>}<Link to="/login">Voltar ao login</Link></section></main>;
 }
