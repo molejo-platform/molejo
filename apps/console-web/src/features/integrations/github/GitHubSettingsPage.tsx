@@ -60,8 +60,8 @@ export function GitHubSettingsPage() {
             </Button>
           )}
         </div>
-        {(installations.error || connect.error || disconnect.error) && (
-          <Alert>{userFacingError(installations.error ?? connect.error ?? disconnect.error)}</Alert>
+        {(installations.error || connect.error) && (
+          <Alert>{userFacingError(installations.error ?? connect.error)}</Alert>
         )}
         {search.github === "connected" && <Alert tone="success">Instalação do GitHub conectada.</Alert>}
         {capabilities.isSuccess && !canMutate && (
@@ -89,7 +89,12 @@ export function GitHubSettingsPage() {
                     description="Apps que usam repositórios desta instalação não poderão iniciar novos builds até que uma fonte válida seja configurada."
                     confirmLabel="Desconectar GitHub"
                     onConfirm={() => disconnect.mutateAsync(installation.id)}
-                    pending={disconnect.isPending}
+                    pending={disconnect.isPending && disconnect.variables === installation.id}
+                    error={
+                      disconnect.isError && disconnect.variables === installation.id
+                        ? userFacingError(disconnect.error)
+                        : ""
+                    }
                   />
                 )}
               </div>

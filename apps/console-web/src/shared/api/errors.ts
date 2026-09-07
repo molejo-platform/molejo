@@ -16,6 +16,10 @@ export function isUnauthenticatedError(error: unknown): boolean {
   return error instanceof ApiRequestError && error.status === 401 && error.details?.code === "unauthenticated";
 }
 
+export function isRetryableError(error: unknown): boolean {
+  return error instanceof ApiRequestError && error.details?.retryable === true;
+}
+
 export function userFacingError(error: unknown) {
   if (error instanceof ApiRequestError) {
     if (error.details?.code === "invalid_credentials") return "Credenciais inválidas.";

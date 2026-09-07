@@ -4,6 +4,7 @@ import { type FormEvent, useState } from "react";
 import { userFacingError } from "../../shared/api/errors";
 import type { App, Environment } from "../../shared/api/types";
 import { Alert } from "../../shared/ui/Alert";
+import { RefreshStatus, RetryAlert, Skeleton, SkeletonRegion } from "../../shared/ui/AsyncState";
 import { Button } from "../../shared/ui/Button";
 import { ConfirmAction } from "../../shared/ui/ConfirmAction";
 import { Field } from "../../shared/ui/Field";
@@ -47,18 +48,30 @@ export function ProjectsPage() {
               label="Novo Project"
               button="Criar Project"
               pending={create.isPending}
+              error={create.isError ? userFacingError(create.error) : ""}
               onCreate={(name) => create.mutateAsync(name)}
             />
           )
         }
       />
-      {(capabilities.error || create.error) && <Alert>{userFacingError(capabilities.error ?? create.error)}</Alert>}
-      {projects.isError && <Alert>{userFacingError(projects.error)}</Alert>}
-      {projects.isPending ? (
-        <p className="muted" role="status">
-          Carregando Projects…
-        </p>
-      ) : projects.isError ? null : projects.data?.items.length ? (
+      {capabilities.error && <Alert>{userFacingError(capabilities.error)}</Alert>}
+      {projects.isError && (
+        <RetryAlert
+          error={projects.error}
+          retry={() => void projects.refetch()}
+          retrySafe
+          pending={projects.isFetching}
+          tone={projects.data ? "warning" : "error"}
+        />
+      )}
+      <RefreshStatus active={projects.isFetching && !projects.isPending}>Atualizando Projects…</RefreshStatus>
+      {projects.isPending && !projects.data ? (
+        <SkeletonRegion className="data-list" label="Carregando Projects">
+          <Skeleton variant="row" />
+          <Skeleton variant="row" />
+          <Skeleton variant="row" />
+        </SkeletonRegion>
+      ) : projects.data?.items.length ? (
         <div className="data-list">
           {projects.data.items.map((project) => (
             <Link
@@ -76,7 +89,7 @@ export function ProjectsPage() {
             </Link>
           ))}
         </div>
-      ) : (
+      ) : projects.isError ? null : (
         <EmptyState title="Nenhum Project" description="Crie um Project para organizar Apps e Environments." />
       )}
     </div>
@@ -121,19 +134,37 @@ export function ProjectOverviewPage() {
     <ProjectLayout workspaceId={workspaceId} projectId={projectId}>
       {(name) => (
         <>
-          {(capabilities.error || apps.error || environments.error) && (
-            <Alert>{userFacingError(capabilities.error ?? apps.error ?? environments.error)}</Alert>
+          {capabilities.error && <Alert>{userFacingError(capabilities.error)}</Alert>}
+          {apps.isError && (
+            <RetryAlert
+              error={apps.error}
+              retry={() => void apps.refetch()}
+              retrySafe
+              pending={apps.isFetching}
+              tone={apps.data ? "warning" : "error"}
+            />
+          )}
+          {environments.isError && (
+            <RetryAlert
+              error={environments.error}
+              retry={() => void environments.refetch()}
+              retrySafe
+              pending={environments.isFetching}
+              tone={environments.data ? "warning" : "error"}
+            />
           )}
           <div className="summary-grid">
             <SummaryCard
               label="Apps no catálogo"
-              value={apps.data?.items.length ?? 0}
+              value={apps.data?.items.length}
+              loading={apps.isPending}
               to="/workspaces/$workspaceId/projects/$projectId/settings/apps"
               params={{ workspaceId, projectId }}
             />
             <SummaryCard
               label="Environments"
-              value={environments.data?.items.length ?? 0}
+              value={environments.data?.items.length}
+              loading={environments.isPending}
               to="/workspaces/$workspaceId/projects/$projectId/settings/environments"
               params={{ workspaceId, projectId }}
             />
@@ -266,30 +297,28 @@ function ProjectResourcePage<T extends App | Environment>({
                 label={`Novo ${kind}`}
                 button={`Criar ${kind}`}
                 pending={createMutation.isPending}
+                error={createMutation.isError ? userFacingError(createMutation.error) : ""}
                 onCreate={(name) => createMutation.mutateAsync(name)}
               />
             )}
           </div>
-          {(capabilities.error ||
-            resources.error ||
-            createMutation.error ||
-            updateMutation.error ||
-            archiveMutation.error) && (
-            <Alert>
-              {userFacingError(
-                capabilities.error ??
-                  resources.error ??
-                  createMutation.error ??
-                  updateMutation.error ??
-                  archiveMutation.error,
-              )}
-            </Alert>
+          {capabilities.error && <Alert>{userFacingError(capabilities.error)}</Alert>}
+          {resources.isError && (
+            <RetryAlert
+              error={resources.error}
+              retry={() => void resources.refetch()}
+              retrySafe
+              pending={resources.isFetching}
+              tone={resources.data ? "warning" : "error"}
+            />
           )}
-          {resources.isPending ? (
-            <p className="muted" role="status">
-              Carregando {plural}…
-            </p>
-          ) : resources.isError ? null : resources.data?.items.length ? (
+          <RefreshStatus active={resources.isFetching && !resources.isPending}>Atualizando {plural}…</RefreshStatus>
+          {resources.isPending && !resources.data ? (
+            <SkeletonRegion className="data-list" label={`Carregando ${plural}`}>
+              <Skeleton variant="row" />
+              <Skeleton variant="row" />
+            </SkeletonRegion>
+          ) : resources.data?.items.length ? (
             <div className="data-list">
               {resources.data.items.map((resource) => (
                 <div className="data-row resource-management" key={resource.id}>
@@ -309,7 +338,12 @@ function ProjectResourcePage<T extends App | Environment>({
                         compact
                         label={`Nome do ${kind} ${resource.name}`}
                         initial={resource.name}
-                        pending={updateMutation.isPending}
+                        pending={updateMutation.isPending && updateMutation.variables?.resource.id === resource.id}
+                        error={
+                          updateMutation.isError && updateMutation.variables?.resource.id === resource.id
+                            ? userFacingError(updateMutation.error)
+                            : ""
+                        }
                         onSave={(name) => updateMutation.mutateAsync({ resource, name })}
                       />
                       <ConfirmAction
@@ -318,14 +352,19 @@ function ProjectResourcePage<T extends App | Environment>({
                         description={`O ${kind} deixará de aparecer nas listas ativas. Dependências existentes podem bloquear a operação.`}
                         confirmLabel={`Arquivar ${kind}`}
                         onConfirm={() => archiveMutation.mutateAsync(resource)}
-                        pending={archiveMutation.isPending}
+                        pending={archiveMutation.isPending && archiveMutation.variables?.id === resource.id}
+                        error={
+                          archiveMutation.isError && archiveMutation.variables?.id === resource.id
+                            ? userFacingError(archiveMutation.error)
+                            : ""
+                        }
                       />
                     </div>
                   )}
                 </div>
               ))}
             </div>
-          ) : (
+          ) : resources.isError ? null : (
             <EmptyState title={`Nenhum ${kind}`} description={`Crie o primeiro ${kind} deste Project.`} />
           )}
         </section>
@@ -338,19 +377,21 @@ function NameCreateForm({
   label,
   button,
   pending,
+  error: requestError = "",
   onCreate,
 }: {
   label: string;
   button: string;
   pending: boolean;
+  error?: string;
   onCreate: (name: string) => Promise<unknown>;
 }) {
   const [name, setName] = useState("");
-  const [error, setError] = useState("");
+  const [validation, setValidation] = useState("");
   async function submit(event: FormEvent) {
     event.preventDefault();
     const nextError = validateResourceName(name);
-    setError(nextError);
+    setValidation(nextError);
     if (!nextError) {
       try {
         await onCreate(normalizeResourceName(name));
@@ -365,7 +406,7 @@ function NameCreateForm({
       <Field
         label={label}
         value={name}
-        error={error}
+        error={validation}
         onChange={(event) => setName(event.target.value)}
         maxLength={80}
         required
@@ -373,6 +414,7 @@ function NameCreateForm({
       <Button type="submit" loading={pending}>
         {button}
       </Button>
+      {requestError && <Alert>{requestError}</Alert>}
     </form>
   );
 }
@@ -447,19 +489,21 @@ function NameEditor({
 function SummaryCard({
   label,
   value,
+  loading = false,
   to,
   params,
 }: {
   label: string;
-  value: number;
+  value?: number;
+  loading?: boolean;
   to: string;
   params: Record<string, string>;
 }) {
   return (
     <Link className="summary-card" to={to} params={params}>
       <span>{label}</span>
-      <strong>{value}</strong>
-      <small>Ver detalhes</small>
+      {loading ? <Skeleton /> : <strong>{value ?? "—"}</strong>}
+      <small>{loading ? "Carregando" : value === undefined ? "Indisponível" : "Ver detalhes"}</small>
     </Link>
   );
 }

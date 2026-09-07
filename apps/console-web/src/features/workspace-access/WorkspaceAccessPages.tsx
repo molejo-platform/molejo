@@ -105,14 +105,12 @@ export function WorkspaceMembersPage() {
         {capabilities.isSuccess && !canManage && (
           <Alert tone="info">Sua identidade não possui a capacidade de gerenciar memberships.</Alert>
         )}
-        {(capabilities.error || members.error || create.error || update.error || remove.error) && (
-          <Alert>
-            {userFacingError(capabilities.error ?? members.error ?? create.error ?? update.error ?? remove.error)}
-          </Alert>
+        {(capabilities.error || members.error || create.error) && (
+          <Alert>{userFacingError(capabilities.error ?? members.error ?? create.error)}</Alert>
         )}
         {members.isPending ? (
           <p role="status">Carregando membros…</p>
-        ) : (
+        ) : members.data?.items.length ? (
           members.data?.items.map((member) => (
             <div className="data-row" key={member.userId}>
               <span>
@@ -126,6 +124,7 @@ export function WorkspaceMembersPage() {
                   <SelectField
                     label={`Papel de ${member.username}`}
                     value={member.role}
+                    disabled={update.isPending && update.variables?.member.userId === member.userId}
                     onChange={(event) =>
                       update.mutate({
                         member,
@@ -140,6 +139,7 @@ export function WorkspaceMembersPage() {
                   </SelectField>
                   <Button
                     variant="secondary"
+                    loading={update.isPending && update.variables?.member.userId === member.userId}
                     onClick={() =>
                       update.mutate({
                         member,
@@ -155,13 +155,21 @@ export function WorkspaceMembersPage() {
                     title={`Remover ${member.username}?`}
                     description="O usuário perde imediatamente o acesso a este Workspace e por grupos."
                     confirmLabel="Remover membro"
-                    pending={remove.isPending}
+                    pending={remove.isPending && remove.variables === member.userId}
+                    error={remove.isError && remove.variables === member.userId ? userFacingError(remove.error) : ""}
                     onConfirm={() => remove.mutateAsync(member.userId)}
                   />
                 </div>
               )}
+              {update.isError && update.variables?.member.userId === member.userId && (
+                <small className="field-error" role="alert">
+                  {userFacingError(update.error)}
+                </small>
+              )}
             </div>
           ))
+        ) : members.isError ? null : (
+          <EmptyState title="Nenhum membro" description="Adicione uma identidade existente a este Workspace." />
         )}
       </section>
     </WorkspaceSettingsLayout>
@@ -227,10 +235,11 @@ export function WorkspaceGroupsPage() {
               workspaceId={workspaceId}
               group={group}
               members={members.data?.items ?? []}
+              membersPending={members.isPending}
               canManage={canManage}
             />
           ))
-        ) : (
+        ) : groups.isError ? null : (
           <EmptyState title="Nenhum grupo" description="Crie um grupo para administrar relações em conjunto." />
         )}
       </section>
@@ -242,11 +251,13 @@ function GroupMembers({
   workspaceId,
   group,
   members,
+  membersPending,
   canManage,
 }: {
   workspaceId: string;
   group: WorkspaceGroup;
   members: WorkspaceMembership[];
+  membersPending: boolean;
   canManage: boolean;
 }) {
   const queryClient = useQueryClient();
@@ -286,6 +297,7 @@ function GroupMembers({
               label={`Adicionar ao grupo ${group.name}`}
               value={selected}
               onChange={(event) => setSelected(event.target.value)}
+              disabled={membersPending || add.isPending}
             >
               <option value="">Selecione um membro</option>
               {members
@@ -298,7 +310,7 @@ function GroupMembers({
             </SelectField>
             <Button
               variant="secondary"
-              disabled={!selected}
+              disabled={!selected || membersPending}
               loading={add.isPending}
               onClick={() => add.mutate(selected)}
             >
@@ -307,9 +319,10 @@ function GroupMembers({
           </div>
         )}
       </div>
+      {membersPending && <p role="status">Carregando membros disponíveis…</p>}
       {assigned.isPending ? (
         <p role="status">Carregando membros do grupo…</p>
-      ) : (
+      ) : assigned.data?.items.length ? (
         assigned.data?.items.map((member) => (
           <div className="data-row" key={member.userId}>
             <span>
@@ -317,16 +330,25 @@ function GroupMembers({
               <small>{member.username}</small>
             </span>
             {canManage && (
-              <Button variant="secondary" loading={remove.isPending} onClick={() => remove.mutate(member.userId)}>
+              <Button
+                variant="secondary"
+                loading={remove.isPending && remove.variables === member.userId}
+                onClick={() => remove.mutate(member.userId)}
+              >
                 Remover do grupo
               </Button>
             )}
+            {remove.isError && remove.variables === member.userId && (
+              <small className="field-error" role="alert">
+                {userFacingError(remove.error)}
+              </small>
+            )}
           </div>
         ))
+      ) : assigned.isError ? null : (
+        <p className="muted">Nenhum membro neste grupo.</p>
       )}
-      {(assigned.error || add.error || remove.error) && (
-        <Alert>{userFacingError(assigned.error ?? add.error ?? remove.error)}</Alert>
-      )}
+      {(assigned.error || add.error) && <Alert>{userFacingError(assigned.error ?? add.error)}</Alert>}
     </div>
   );
 }
@@ -377,7 +399,8 @@ export function WorkspaceAccessGrantsPage() {
     mutationFn: (id: string) => deleteAccessGrant(workspaceId, id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: workspaceAccessKeys.accessGrants(workspaceId) }),
   });
-  const error = capabilities.error ?? grants.error ?? members.error ?? groups.error ?? create.error ?? remove.error;
+  const dependenciesPending = members.isPending || groups.isPending;
+  const error = capabilities.error ?? grants.error ?? members.error ?? groups.error ?? create.error;
   return (
     <WorkspaceSettingsLayout workspaceId={workspaceId}>
       <section className="panel stack">
@@ -401,6 +424,7 @@ export function WorkspaceAccessGrantsPage() {
               label="Usuário ou grupo"
               value={input.subject}
               onChange={(event) => setInput({ ...input, subject: event.target.value })}
+              disabled={dependenciesPending || members.isError || groups.isError}
               required
             >
               <option value="">Selecione</option>
@@ -451,7 +475,11 @@ export function WorkspaceAccessGrantsPage() {
               <option value="Deployer">Deployer</option>
               <option value="Manager">Manager</option>
             </SelectField>
-            <Button type="submit" loading={create.isPending}>
+            <Button
+              type="submit"
+              loading={create.isPending}
+              disabled={dependenciesPending || members.isError || groups.isError}
+            >
               Conceder acesso
             </Button>
           </form>
@@ -478,14 +506,15 @@ export function WorkspaceAccessGrantsPage() {
                     title="Revogar esta relação?"
                     description="O acesso concedido por esta relação deixa de valer imediatamente."
                     confirmLabel="Revogar acesso"
-                    pending={remove.isPending}
+                    pending={remove.isPending && remove.variables === grant.id}
+                    error={remove.isError && remove.variables === grant.id ? userFacingError(remove.error) : ""}
                     onConfirm={() => remove.mutateAsync(grant.id)}
                   />
                 )}
               </div>
             ))}
           </div>
-        ) : (
+        ) : grants.isError ? null : (
           <EmptyState
             title="Nenhuma relação explícita"
             description="Os papéis de membership continuam válidos; relações refinam acessos específicos."

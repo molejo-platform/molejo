@@ -45,7 +45,7 @@ export function ParametersPage() {
     mutationFn: (parameter: Parameter) => archiveParameter(workspaceId, parameter),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: parameterKeys.list(workspaceId) }),
   });
-  const error = capabilities.error ?? query.error ?? create.error ?? replace.error ?? archive.error;
+  const error = capabilities.error ?? query.error ?? create.error ?? replace.error;
 
   return (
     <div className="stack">
@@ -118,7 +118,10 @@ export function ParametersPage() {
                       description="O Parameter deixará de aparecer no catálogo. Parameters vinculados serão protegidos contra remoção em uma próxima etapa."
                       confirmLabel="Arquivar Parameter"
                       onConfirm={() => archive.mutateAsync(parameter)}
-                      pending={archive.isPending}
+                      pending={archive.isPending && archive.variables?.id === parameter.id}
+                      error={
+                        archive.isError && archive.variables?.id === parameter.id ? userFacingError(archive.error) : ""
+                      }
                     />
                   </div>
                 )}

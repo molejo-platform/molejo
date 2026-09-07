@@ -2,6 +2,8 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, expect, it, vi } from "vitest";
 
+import { ApiRequestError } from "../../shared/api/errors";
+
 const getOperation = vi.hoisted(() => vi.fn());
 
 vi.mock("./api", () => ({ getOperation }));
@@ -13,9 +15,30 @@ function Tracker() {
   return <p>{tracker.operation?.status ?? "Sem operação"}</p>;
 }
 
+function CustomTracker() {
+  const tracker = useOperationTracker({ storageKey: "molejo:custom-operation" });
+  return <p>{tracker.operation?.status ?? "Sem operação"}</p>;
+}
+
 afterEach(() => {
   cleanup();
   sessionStorage.clear();
+  getOperation.mockReset();
+});
+
+it("forgets an operation that no longer exists instead of polling forever", async () => {
+  sessionStorage.setItem("molejo:custom-operation", "op-expired");
+  getOperation.mockRejectedValue(new ApiRequestError(404));
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+  render(
+    <QueryClientProvider client={queryClient}>
+      <CustomTracker />
+    </QueryClientProvider>,
+  );
+
+  await waitFor(() => expect(sessionStorage.getItem("molejo:custom-operation")).toBeNull());
+  expect(screen.getByText("Sem operação")).toBeTruthy();
 });
 
 it("recovers an accepted operation after the initiating view is reopened", async () => {

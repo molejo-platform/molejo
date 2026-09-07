@@ -1,8 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 
-import { userFacingError } from "../../shared/api/errors";
-import { Alert } from "../../shared/ui/Alert";
+import { RefreshStatus, RetryAlert, Skeleton, SkeletonRegion } from "../../shared/ui/AsyncState";
 import { EmptyState, PageHeader } from "../../shared/ui/Page";
 import { applicationKeys, listApps } from "../applications/public";
 import { environmentKeys, listEnvironments } from "../environments/public";
@@ -25,13 +24,20 @@ export function ProjectEntryPage() {
     queryKey: applicationKeys.list(workspaceId, projectId),
     queryFn: ({ signal }) => listApps(workspaceId, projectId, signal),
   });
-  const error = project.error ?? environments.error ?? apps.error;
-  if (error) return <Alert>{userFacingError(error)}</Alert>;
-  if (project.isPending || environments.isPending || apps.isPending)
+  if (project.isPending && !project.data)
     return (
-      <p className="muted" role="status">
-        Carregando Project…
-      </p>
+      <SkeletonRegion className="stack" label="Carregando Project">
+        <Skeleton />
+        <div className="summary-grid">
+          <Skeleton variant="card" />
+          <Skeleton variant="card" />
+          <Skeleton variant="card" />
+        </div>
+      </SkeletonRegion>
+    );
+  if (project.isError && !project.data)
+    return (
+      <RetryAlert error={project.error} retry={() => void project.refetch()} retrySafe pending={project.isFetching} />
     );
   return (
     <div className="stack">
@@ -44,15 +50,45 @@ export function ProjectEntryPage() {
           { label: project.data?.name ?? "Project" },
         ]}
       />
+      {project.isError && (
+        <RetryAlert
+          error={project.error}
+          retry={() => void project.refetch()}
+          retrySafe
+          pending={project.isFetching}
+          tone="warning"
+        />
+      )}
+      {environments.isError && (
+        <RetryAlert
+          error={environments.error}
+          retry={() => void environments.refetch()}
+          retrySafe
+          pending={environments.isFetching}
+          tone={environments.data ? "warning" : "error"}
+        />
+      )}
+      {apps.isError && (
+        <RetryAlert
+          error={apps.error}
+          retry={() => void apps.refetch()}
+          retrySafe
+          pending={apps.isFetching}
+          tone={apps.data ? "warning" : "error"}
+        />
+      )}
+      <RefreshStatus active={environments.isFetching && !environments.isPending}>
+        Atualizando Environments…
+      </RefreshStatus>
       <div className="summary-grid">
         <div className="summary-card static">
           <span>Environments</span>
-          <strong>{environments.data?.items.length ?? 0}</strong>
+          {environments.isPending ? <Skeleton /> : <strong>{environments.data?.items.length ?? "Indisponível"}</strong>}
           <small>Contextos de execução</small>
         </div>
         <div className="summary-card static">
           <span>Apps</span>
-          <strong>{apps.data?.items.length ?? 0}</strong>
+          {apps.isPending ? <Skeleton /> : <strong>{apps.data?.items.length ?? "Indisponível"}</strong>}
           <small>Catálogo do Project</small>
         </div>
         <Link
@@ -65,7 +101,12 @@ export function ProjectEntryPage() {
           <small>Gerenciar Apps e Environments</small>
         </Link>
       </div>
-      {environments.data?.items.length ? (
+      {environments.isPending && !environments.data ? (
+        <SkeletonRegion className="data-list" label="Carregando Environments">
+          <Skeleton variant="row" />
+          <Skeleton variant="row" />
+        </SkeletonRegion>
+      ) : environments.data?.items.length ? (
         <section className="stack">
           <div>
             <p className="eyebrow">Execução</p>
@@ -89,7 +130,7 @@ export function ProjectEntryPage() {
             ))}
           </div>
         </section>
-      ) : (
+      ) : environments.isError ? null : (
         <EmptyState
           title="Crie o primeiro Environment"
           description="Apps são configurados e operados dentro de um Environment."

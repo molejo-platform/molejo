@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
-import { userFacingError } from "../../shared/api/errors";
+import { ApiRequestError, userFacingError } from "../../shared/api/errors";
 import { canCreateWorkspace } from "../../shared/auth/permissions";
 import { Alert } from "../../shared/ui/Alert";
+import { RetryAlert } from "../../shared/ui/AsyncState";
 import { Button } from "../../shared/ui/Button";
 import { Field, SelectField } from "../../shared/ui/Field";
 import { PageHeader } from "../../shared/ui/Page";
@@ -20,6 +21,9 @@ import { createWorkspace } from "./api";
 import { workspaceQueryKey } from "./queries";
 import { useSelectedWorkspace } from "./WorkspaceContext";
 
+const pendingWorkspaceKey = "molejo:new-workspace:id";
+const pendingWorkspaceOperationKey = "molejo:new-workspace:operation";
+
 export function NewWorkspacePage() {
   const session = useSessionQuery();
   const navigate = useNavigate();
@@ -34,8 +38,8 @@ export function NewWorkspacePage() {
     enabled: canCreateWorkspace(session.data),
   });
   const availableClusters = useMemo(() => activeClusters(clusters.data?.items), [clusters.data?.items]);
-  const operation = useOperationTracker();
-  const [createdWorkspaceId, setCreatedWorkspaceId] = useState("");
+  const operation = useOperationTracker({ storageKey: pendingWorkspaceOperationKey });
+  const [createdWorkspaceId, setCreatedWorkspaceId] = useState(() => sessionStorage.getItem(pendingWorkspaceKey) ?? "");
   useEffect(() => {
     setClusterId((current) =>
       reconcileClusterSelection(
@@ -46,6 +50,8 @@ export function NewWorkspacePage() {
   }, [availableClusters]);
   useEffect(() => {
     if (!operation.isSucceeded || !createdWorkspaceId) return;
+    sessionStorage.removeItem(pendingWorkspaceKey);
+    sessionStorage.removeItem(pendingWorkspaceOperationKey);
     void queryClient.invalidateQueries({ queryKey: workspaceQueryKey }).then(async () => {
       selectWorkspace(createdWorkspaceId);
       await navigate({
@@ -55,9 +61,23 @@ export function NewWorkspacePage() {
       });
     });
   }, [createdWorkspaceId, navigate, operation.isSucceeded, queryClient, selectWorkspace]);
+  useEffect(() => {
+    if (!(operation.error instanceof ApiRequestError) || operation.error.status !== 404 || !createdWorkspaceId) return;
+    sessionStorage.removeItem(pendingWorkspaceKey);
+    sessionStorage.removeItem(pendingWorkspaceOperationKey);
+    void queryClient.invalidateQueries({ queryKey: workspaceQueryKey }).then(async () => {
+      selectWorkspace(createdWorkspaceId);
+      await navigate({
+        to: "/workspaces/$workspaceId/overview",
+        params: { workspaceId: createdWorkspaceId },
+        replace: true,
+      });
+    });
+  }, [createdWorkspaceId, navigate, operation.error, queryClient, selectWorkspace]);
   const create = useMutation({
     mutationFn: (nextName: string) => createWorkspace({ name: nextName, clusterId }),
     onSuccess: (result) => {
+      sessionStorage.setItem(pendingWorkspaceKey, result.workspace.id);
       setCreatedWorkspaceId(result.workspace.id);
       operation.track(result.operation);
     },
@@ -91,6 +111,7 @@ export function NewWorkspacePage() {
               error={validation}
               maxLength={80}
               autoFocus
+              disabled={Boolean(createdWorkspaceId)}
               required
             />
             <SelectField
@@ -98,6 +119,7 @@ export function NewWorkspacePage() {
               helper="O Workspace será preparado neste cluster. Outros clusters poderão ser anexados depois."
               value={clusterId}
               onChange={(event) => setClusterId(event.target.value)}
+              disabled={Boolean(createdWorkspaceId)}
               required
             >
               <option value="">Selecione</option>
@@ -112,23 +134,45 @@ export function NewWorkspacePage() {
               <Alert tone="warning">Nenhum cluster ativo está disponível para receber o Workspace.</Alert>
             )}
             <div className="form-actions">
-              <Link to="/" className="button-link secondary">
-                Cancelar
-              </Link>
+              {create.isPending || operation.isActive ? (
+                <span className="button-link secondary" aria-disabled="true">
+                  Cancelar
+                </span>
+              ) : (
+                <Link to="/" className="button-link secondary">
+                  Cancelar
+                </Link>
+              )}
               <Button
                 type="submit"
                 loading={create.isPending || operation.isActive}
-                disabled={!clusterId || !availableClusters.length}
+                disabled={!clusterId || !availableClusters.length || Boolean(createdWorkspaceId)}
               >
                 Criar Workspace
               </Button>
             </div>
           </form>
-          {(clusters.error || create.error || operation.error) && (
-            <Alert>{userFacingError(clusters.error ?? create.error ?? operation.error)}</Alert>
+          {(clusters.error || create.error || operation.error) &&
+            (clusters.error || create.error ? (
+              <Alert>{userFacingError(clusters.error ?? create.error)}</Alert>
+            ) : (
+              <RetryAlert error={operation.error} retry={() => void operation.retry()} retrySafe />
+            ))}
+          {createdWorkspaceId && !operation.isFailed && !operation.isSucceeded && (
+            <Alert tone="info" live>
+              {operation.isActive ? "Preparando o Workspace no cluster." : "Retomando a preparação do Workspace…"}
+            </Alert>
           )}
           {operation.isFailed && (
-            <Alert>{operation.operation?.errorMessage ?? "O cluster não conseguiu preparar o Workspace."}</Alert>
+            <Alert>
+              {operation.operation?.errorMessage ?? "O cluster não conseguiu preparar o Workspace."} O Workspace foi
+              criado e não será reenviado.{" "}
+              {createdWorkspaceId && (
+                <Link to="/workspaces/$workspaceId/activity" params={{ workspaceId: createdWorkspaceId }}>
+                  Ver atividade
+                </Link>
+              )}
+            </Alert>
           )}
         </section>
       )}

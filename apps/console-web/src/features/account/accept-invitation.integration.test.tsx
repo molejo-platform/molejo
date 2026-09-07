@@ -17,7 +17,11 @@ vi.mock("./api", async (importOriginal) => ({
 
 import { AcceptInvitationPage } from "./AccountPages";
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  mocks.acceptUserInvitation.mockReset();
+  mocks.navigate.mockReset();
+});
 
 describe("invitation activation", () => {
   it("submits the one-time token and user-selected password before returning to login", async () => {
@@ -38,5 +42,27 @@ describe("invitation activation", () => {
       expect(mocks.acceptUserInvitation).toHaveBeenCalledWith("one-time-invitation-token", "a durable user password"),
     );
     expect(mocks.navigate).toHaveBeenCalledWith({ to: "/login", search: { returnTo: "/" }, replace: true });
+  });
+
+  it("preserves the invitation and password after a correctable failure", async () => {
+    mocks.acceptUserInvitation.mockRejectedValue(new Error("temporarily unavailable"));
+    const queryClient = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
+    const user = userEvent.setup();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <AcceptInvitationPage />
+      </QueryClientProvider>,
+    );
+
+    const token = screen.getByLabelText("Token do convite") as HTMLInputElement;
+    const password = screen.getByLabelText("Nova senha") as HTMLInputElement;
+    await user.type(token, "one-time-invitation-token");
+    await user.type(password, "a durable user password");
+    await user.click(screen.getByRole("button", { name: "Ativar conta" }));
+
+    await screen.findByRole("alert");
+    expect(token.value).toBe("one-time-invitation-token");
+    expect(password.value).toBe("a durable user password");
+    expect(mocks.navigate).not.toHaveBeenCalled();
   });
 });

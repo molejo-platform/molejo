@@ -9,7 +9,7 @@ import { formatDateTime } from "../../shared/format";
 import { Alert } from "../../shared/ui/Alert";
 import { Button } from "../../shared/ui/Button";
 import { Field, SelectField } from "../../shared/ui/Field";
-import { PageHeader } from "../../shared/ui/Page";
+import { EmptyState, PageHeader } from "../../shared/ui/Page";
 import { useSessionQuery } from "../authentication/public";
 import {
   createResetGrant,
@@ -39,7 +39,7 @@ export function AdministrationPage() {
   const audit = useQuery({ queryKey: installationUserKeys.audit, queryFn: listInstallationAudit, enabled });
   const [form, setForm] = useState({ username: "", displayName: "", installationAdministrator: false });
   const [credential, setCredential] = useState<OneTimeCredential>();
-  const [oneTimeError, setOneTimeError] = useState<unknown>();
+  const [oneTimeError, setOneTimeError] = useState<{ userId: string; error: unknown }>();
 
   async function refreshUser(updated: InstallationUser) {
     if (updated.id === session.data?.user.id) {
@@ -99,7 +99,7 @@ export function AdministrationPage() {
       setCredential({ kind: "Convite", username: result.username, value: result.token, expiresAt: result.expiresAt });
       await queryClient.invalidateQueries({ queryKey: installationUserKeys.audit });
     } catch (error) {
-      setOneTimeError(error);
+      setOneTimeError({ userId: user.id, error });
     } finally {
       invitation.reset();
     }
@@ -112,7 +112,7 @@ export function AdministrationPage() {
       setCredential({ kind: "Reset", username: result.username, value: result.code, expiresAt: result.expiresAt });
       await queryClient.invalidateQueries({ queryKey: installationUserKeys.audit });
     } catch (error) {
-      setOneTimeError(error);
+      setOneTimeError({ userId: user.id, error });
     } finally {
       reset.reset();
     }
@@ -131,7 +131,7 @@ export function AdministrationPage() {
     );
 
   const directory = users.data?.pages.flatMap((page) => page.items) ?? [];
-  const actionError = users.error ?? create.error ?? status.error ?? role.error ?? oneTimeError;
+  const actionError = users.error ?? create.error;
 
   return (
     <div className="stack">
@@ -187,7 +187,7 @@ export function AdministrationPage() {
         <h2>Diretório</h2>
         {users.isPending ? (
           <p role="status">Carregando usuários…</p>
-        ) : (
+        ) : directory.length ? (
           directory.map((user) => (
             <div className="data-row" key={user.id}>
               <span>
@@ -201,7 +201,7 @@ export function AdministrationPage() {
                   <Button
                     variant="secondary"
                     onClick={() => void revealInvitation(user)}
-                    loading={invitation.isPending}
+                    loading={invitation.isPending && invitation.variables?.id === user.id}
                   >
                     Novo convite
                   </Button>
@@ -212,7 +212,7 @@ export function AdministrationPage() {
                     onChange={(event) =>
                       status.mutate({ user, next: event.target.value as "Active" | "Locked" | "Disabled" })
                     }
-                    disabled={status.isPending}
+                    disabled={status.isPending && status.variables?.user.id === user.id}
                   >
                     <option value="Active">Ativo</option>
                     <option value="Locked">Bloqueado</option>
@@ -222,18 +222,39 @@ export function AdministrationPage() {
                 <Button
                   variant="secondary"
                   onClick={() => role.mutate({ user, administrator: !user.installationAdministrator })}
-                  loading={role.isPending}
+                  loading={role.isPending && role.variables?.user.id === user.id}
                 >
                   {user.installationAdministrator ? "Remover admin" : "Tornar admin"}
                 </Button>
                 {user.status === "Active" && (
-                  <Button variant="secondary" onClick={() => void revealReset(user)} loading={reset.isPending}>
+                  <Button
+                    variant="secondary"
+                    onClick={() => void revealReset(user)}
+                    loading={reset.isPending && reset.variables?.id === user.id}
+                  >
                     Gerar reset
                   </Button>
                 )}
               </div>
+              {status.isError && status.variables?.user.id === user.id && (
+                <small className="field-error" role="alert">
+                  {userFacingError(status.error)}
+                </small>
+              )}
+              {role.isError && role.variables?.user.id === user.id && (
+                <small className="field-error" role="alert">
+                  {userFacingError(role.error)}
+                </small>
+              )}
+              {oneTimeError?.userId === user.id && (
+                <small className="field-error" role="alert">
+                  {userFacingError(oneTimeError.error)}
+                </small>
+              )}
             </div>
           ))
+        ) : users.isError ? null : (
+          <EmptyState title="Nenhum usuário" description="Crie o primeiro convite para iniciar o diretório." />
         )}
         {users.hasNextPage && (
           <Button variant="secondary" onClick={() => void users.fetchNextPage()} loading={users.isFetchingNextPage}>
@@ -249,7 +270,7 @@ export function AdministrationPage() {
         </div>
         {audit.isPending ? (
           <p role="status">Carregando auditoria…</p>
-        ) : (
+        ) : audit.data?.items.length ? (
           audit.data?.items.map((event) => (
             <div className="data-row" key={event.id}>
               <span>
@@ -262,6 +283,8 @@ export function AdministrationPage() {
               <span className="mono">{event.requestId || event.id}</span>
             </div>
           ))
+        ) : audit.isError ? null : (
+          <EmptyState title="Sem eventos" description="As próximas alterações administrativas aparecerão aqui." />
         )}
         {audit.isError && <Alert>{userFacingError(audit.error)}</Alert>}
       </section>

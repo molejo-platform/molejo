@@ -1,8 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 
-import { userFacingError } from "../../shared/api/errors";
-import { Alert } from "../../shared/ui/Alert";
+import { RefreshStatus, RetryAlert, Skeleton, SkeletonRegion } from "../../shared/ui/AsyncState";
 import { appEnvironmentKeys, listAppEnvironments } from "../app-environments/public";
 import { ApplicationLayout } from "./ApplicationLayout";
 import { getAppSource } from "./api";
@@ -20,19 +19,30 @@ export function AppOverviewPage() {
     queryKey: appEnvironmentKeys.list(workspaceId, projectId, appId),
     queryFn: ({ signal }) => listAppEnvironments(workspaceId, projectId, appId, signal),
   });
-  const error = source.error ?? targets.error;
   const params = { workspaceId, projectId, appId };
-  if (targets.isError)
-    return (
-      <ApplicationLayout workspaceId={workspaceId} projectId={projectId} appId={appId}>
-        {() => <Alert>{userFacingError(targets.error)}</Alert>}
-      </ApplicationLayout>
-    );
   return (
     <ApplicationLayout workspaceId={workspaceId} projectId={projectId} appId={appId}>
       {() => (
         <section className="stack">
-          {error && <Alert>{userFacingError(error)}</Alert>}
+          {source.isError && (
+            <RetryAlert
+              error={source.error}
+              retry={() => void source.refetch()}
+              retrySafe
+              pending={source.isFetching}
+              tone={source.data ? "warning" : "error"}
+            />
+          )}
+          {targets.isError && (
+            <RetryAlert
+              error={targets.error}
+              retry={() => void targets.refetch()}
+              retrySafe
+              pending={targets.isFetching}
+              tone={targets.data ? "warning" : "error"}
+            />
+          )}
+          <RefreshStatus active={targets.isFetching && !targets.isPending}>Atualizando Environments…</RefreshStatus>
           <div className="summary-grid">
             <Link
               className="summary-card"
@@ -41,7 +51,13 @@ export function AppOverviewPage() {
             >
               <span>Fonte compartilhada</span>
               <strong className="summary-text">
-                {source.data?.source ? source.data.source.repository.fullName : "Não configurada"}
+                {source.isPending
+                  ? "Carregando…"
+                  : source.data?.source
+                    ? source.data.source.repository.fullName
+                    : source.isError
+                      ? "Indisponível"
+                      : "Não configurada"}
               </strong>
               <small>Selecionar repositório</small>
             </Link>
@@ -57,10 +73,11 @@ export function AppOverviewPage() {
               <h2>Onde este App está configurado</h2>
               <p className="muted">Branch, runtime, builds e deployments pertencem a cada vínculo abaixo.</p>
             </div>
-            {targets.isPending ? (
-              <p className="muted" role="status">
-                Carregando Environments…
-              </p>
+            {targets.isPending && !targets.data ? (
+              <SkeletonRegion className="data-list" label="Carregando Environments">
+                <Skeleton variant="row" />
+                <Skeleton variant="row" />
+              </SkeletonRegion>
             ) : targets.data?.items.length ? (
               <div className="data-list">
                 {targets.data.items.map((target) => (
@@ -83,7 +100,7 @@ export function AppOverviewPage() {
                   </Link>
                 ))}
               </div>
-            ) : (
+            ) : targets.isError ? null : (
               <p className="muted">Este App ainda não foi adicionado a nenhum Environment.</p>
             )}
           </section>

@@ -10,7 +10,7 @@ import { BrandLogo } from "../../shared/ui/BrandLogo";
 import { Button } from "../../shared/ui/Button";
 import { ConfirmAction } from "../../shared/ui/ConfirmAction";
 import { Field } from "../../shared/ui/Field";
-import { PageHeader } from "../../shared/ui/Page";
+import { EmptyState, PageHeader } from "../../shared/ui/Page";
 import { useAuthenticationCapabilitiesQuery, useSessionQuery } from "../authentication/public";
 import {
   acceptUserInvitation,
@@ -135,7 +135,7 @@ export function AccountPage() {
         </div>
         {sessions.isPending ? (
           <p role="status">Carregando sessões…</p>
-        ) : (
+        ) : sessions.data?.items.length ? (
           sessions.data?.items.map((item) => (
             <div className="data-row" key={item.id}>
               <span>
@@ -154,7 +154,7 @@ export function AccountPage() {
                     : "O dispositivo precisará autenticar novamente."
                 }
                 confirmLabel="Revogar sessão"
-                pending={revoke.isPending}
+                pending={revoke.isPending && revoke.variables === item.id}
                 onConfirm={async () => {
                   await revoke.mutateAsync(item.id);
                   if (item.current) {
@@ -165,6 +165,8 @@ export function AccountPage() {
               />
             </div>
           ))
+        ) : sessions.isError ? null : (
+          <EmptyState title="Nenhuma sessão ativa" description="Entre novamente para iniciar uma nova sessão." />
         )}
         {sessions.isError && <Alert>{userFacingError(sessions.error)}</Alert>}
       </section>
@@ -330,10 +332,10 @@ export function ForgotPasswordPage() {
     setVerifyError(undefined);
     try {
       setTicket((await verify.mutateAsync()).ticket);
+      setCode("");
     } catch (error) {
       setVerifyError(error);
     } finally {
-      setCode("");
       verify.reset();
     }
   };
@@ -342,11 +344,11 @@ export function ForgotPasswordPage() {
     setCompleteError(undefined);
     try {
       await complete.mutateAsync();
+      setNewPassword("");
       await navigate({ to: "/login", search: { returnTo: "/" }, replace: true });
     } catch (error) {
       setCompleteError(error);
     } finally {
-      setNewPassword("");
       complete.reset();
     }
   };
@@ -428,12 +430,12 @@ export function AcceptInvitationPage() {
     setActionError(undefined);
     try {
       await accept.mutateAsync();
+      setToken("");
+      setPassword("");
       await navigate({ to: "/login", search: { returnTo: "/" }, replace: true });
     } catch (error) {
       setActionError(error);
     } finally {
-      setToken("");
-      setPassword("");
       accept.reset();
     }
   }

@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { ApiRequestError } from "../../shared/api/errors";
 import type { Operation } from "../../shared/api/types";
 import { getOperation } from "./api";
 import { operationIsActive } from "./model";
@@ -8,8 +9,14 @@ export const operationKeys = {
   detail: (operationId: string) => ["operations", operationId] as const,
 };
 
-export function useOperationTracker(options?: { workspaceId: string; scope: string }) {
-  const storageKey = options ? `molejo:operation:${options.workspaceId}:${options.scope}` : undefined;
+type OperationTrackerOptions = { workspaceId: string; scope: string } | { storageKey: string };
+
+export function useOperationTracker(options?: OperationTrackerOptions) {
+  const storageKey = options
+    ? "storageKey" in options
+      ? options.storageKey
+      : `molejo:operation:${options.workspaceId}:${options.scope}`
+    : undefined;
   const [accepted, setAccepted] = useState<Operation>();
   const [operationId, setOperationId] = useState(() => (storageKey ? sessionStorage.getItem(storageKey) : null));
   const query = useQuery({
@@ -19,6 +26,12 @@ export function useOperationTracker(options?: { workspaceId: string; scope: stri
     initialData: accepted?.id === operationId ? accepted : undefined,
     refetchInterval: ({ state }) => (operationIsActive(state.data) ? 1_000 : false),
   });
+  useEffect(() => {
+    if (!(query.error instanceof ApiRequestError) || query.error.status !== 404) return;
+    setAccepted(undefined);
+    setOperationId(null);
+    if (storageKey) sessionStorage.removeItem(storageKey);
+  }, [query.error, storageKey]);
   const operation = query.data ?? accepted;
   return {
     operation,
@@ -36,5 +49,6 @@ export function useOperationTracker(options?: { workspaceId: string; scope: stri
     isSucceeded: operation?.status === "Succeeded",
     isFailed: operation?.status === "Failed",
     error: query.error,
+    retry: query.refetch,
   };
 }

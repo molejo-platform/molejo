@@ -51,9 +51,7 @@ function TargetReleases({
     },
   });
   const errorMessage =
-    capabilities.error || releases.error || rebuild.error
-      ? userFacingError(capabilities.error ?? releases.error ?? rebuild.error)
-      : "";
+    capabilities.error || releases.error ? userFacingError(capabilities.error ?? releases.error) : "";
   if (errorMessage)
     return (
       <section className="stack">
@@ -93,7 +91,7 @@ function TargetReleases({
                   <Button
                     type="button"
                     variant="secondary"
-                    loading={rebuild.isPending}
+                    loading={rebuild.isPending && rebuild.variables === releaseRevision(release)}
                     onClick={() => rebuild.mutate(releaseRevision(release))}
                   >
                     Reconstruir este commit
@@ -104,6 +102,11 @@ function TargetReleases({
                   "Disponível"
                 )}
               </span>
+              {rebuild.isError && rebuild.variables === releaseRevision(release) && (
+                <small className="field-error" role="alert">
+                  {userFacingError(rebuild.error)}
+                </small>
+              )}
             </div>
           ))}
         </div>

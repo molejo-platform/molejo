@@ -45,6 +45,18 @@ const violationFields: Record<string, string> = {
   "/workloadKind": "setup-workload",
 };
 
+const draftErrorFields: Partial<Record<keyof ApplicationSetupDraft, string>> = {
+  appId: "setup-app",
+  name: "setup-name",
+  branch: "setup-branch",
+  clusterId: "setup-cluster",
+  workloadKind: "setup-workload",
+  storageProfileId: "setup-storage-profile",
+  sizeGiB: "setup-size",
+  mountPath: "setup-mount-path",
+  variables: "setup-variables",
+};
+
 export function ApplicationSetupFlow({
   workspaceId,
   projectId,
@@ -89,6 +101,7 @@ export function ApplicationSetupFlow({
   const storageProfiles = useQuery({
     queryKey: runtimeConfigurationKeys.storageProfiles(workspaceId),
     queryFn: () => listStorageProfiles(workspaceId),
+    enabled: draft.workloadKind === "Stateful",
   });
   const placements = useQuery({
     queryKey: clusterPlacementKeys.workspace(workspaceId),
@@ -148,7 +161,14 @@ export function ApplicationSetupFlow({
 
   function set<K extends keyof ApplicationSetupDraft>(key: K, value: ApplicationSetupDraft[K]) {
     setDraft((current) => ({ ...current, [key]: value }));
-    setErrors({});
+    const field = draftErrorFields[key];
+    if (field)
+      setErrors((current) => {
+        if (!(field in current)) return current;
+        const next = { ...current };
+        delete next[field];
+        return next;
+      });
     if (create.isError) {
       idempotencyKey.current = createIdempotencyKey();
       create.reset();
@@ -180,6 +200,10 @@ export function ApplicationSetupFlow({
     message: violationMessage(violation.code),
   }));
   const formErrors = [...Object.entries(errors).map(([fieldId, message]) => ({ fieldId, message })), ...serverErrors];
+  const runtimeDependenciesPending =
+    placements.isPending || (draft.workloadKind === "Stateful" && storageProfiles.isPending);
+  const runtimeDependenciesFailed =
+    placements.isError || (draft.workloadKind === "Stateful" && storageProfiles.isError);
 
   return (
     <form className="panel stack setup-flow" onSubmit={submit} noValidate>
@@ -280,6 +304,11 @@ export function ApplicationSetupFlow({
             ))}
           </SelectField>
           {placements.error && <Alert>{userFacingError(placements.error)}</Alert>}
+          {placements.isPending && (
+            <p className="muted" role="status">
+              Carregando clusters disponíveis…
+            </p>
+          )}
           {placements.isSuccess && !readyClusters.length && (
             <Alert tone="warning">Este Workspace ainda não possui um cluster pronto para executar Apps.</Alert>
           )}
@@ -296,7 +325,14 @@ export function ApplicationSetupFlow({
                 configuration:
                   workloadKind === "Stateful" ? { ...current.configuration, replicas: 1 } : current.configuration,
               }));
-              setErrors({});
+              setErrors((current) => {
+                const next = { ...current };
+                delete next["setup-workload"];
+                delete next["setup-storage-profile"];
+                delete next["setup-size"];
+                delete next["setup-mount-path"];
+                return next;
+              });
               if (create.isError) {
                 idempotencyKey.current = createIdempotencyKey();
                 create.reset();
@@ -309,6 +345,15 @@ export function ApplicationSetupFlow({
           </SelectField>
           {draft.workloadKind === "Stateful" && (
             <section className="review stack" aria-label="Armazenamento persistente">
+              {storageProfiles.isPending && (
+                <p className="muted" role="status">
+                  Carregando perfis de armazenamento…
+                </p>
+              )}
+              {storageProfiles.isError && <Alert>{userFacingError(storageProfiles.error)}</Alert>}
+              {storageProfiles.isSuccess && !storageProfiles.data.items.length && (
+                <Alert tone="warning">Nenhum perfil de armazenamento está disponível neste Workspace.</Alert>
+              )}
               <SelectField
                 id="setup-storage-profile"
                 label="Perfil de armazenamento"
@@ -384,7 +429,11 @@ export function ApplicationSetupFlow({
             Voltar
           </Button>
         )}
-        <Button type="submit" loading={create.isPending} disabled={step === 2 && !readyClusters.length}>
+        <Button
+          type="submit"
+          loading={create.isPending}
+          disabled={step === 2 && (runtimeDependenciesPending || runtimeDependenciesFailed || !readyClusters.length)}
+        >
           {step === 3 ? "Criar App no Environment" : "Continuar"}
         </Button>
       </div>

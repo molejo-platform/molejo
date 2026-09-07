@@ -81,7 +81,12 @@ export function EnvironmentAppsPage() {
             <p className="muted">Somente Apps configurados neste Environment aparecem aqui.</p>
           </div>
           {canMutate && (
-            <Button type="button" onClick={() => setShowAdd((value) => !value)}>
+            <Button
+              type="button"
+              onClick={() => setShowAdd((value) => !value)}
+              disabled={apps.isPending || apps.isError}
+              loading={apps.isPending}
+            >
               {showAdd ? "Fechar" : "Adicionar App"}
             </Button>
           )}
@@ -153,7 +158,12 @@ export function EnvironmentAppsPage() {
             description="Adicione um App existente ou crie um novo App já configurado para este Environment."
             action={
               canMutate && !showAdd ? (
-                <Button type="button" onClick={() => setShowAdd(true)}>
+                <Button
+                  type="button"
+                  onClick={() => setShowAdd(true)}
+                  disabled={apps.isPending || apps.isError}
+                  loading={apps.isPending}
+                >
                   Adicionar App
                 </Button>
               ) : undefined

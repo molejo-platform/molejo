@@ -25,12 +25,18 @@ describe("shared design-system primitives", () => {
     render(
       <>
         <Alert tone="info">Orientação persistente</Alert>
+        <Alert tone="warning" live>
+          Atualização degradada
+        </Alert>
         <Alert tone="success">Alteração concluída</Alert>
         <Alert>Falha ao salvar</Alert>
       </>,
     );
     expect(screen.getByText("Orientação persistente").getAttribute("role")).toBeNull();
-    expect(screen.getByRole("status").textContent).toContain("Alteração concluída");
+    expect(screen.getAllByRole("status").map((element) => element.textContent)).toEqual([
+      "Atualização degradada",
+      "Alteração concluída",
+    ]);
     expect(screen.getByRole("alert").textContent).toContain("Falha ao salvar");
   });
 
