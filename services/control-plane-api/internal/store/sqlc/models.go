@@ -633,6 +633,18 @@ type User struct {
 	PrincipalID int64              `json:"principal_id"`
 }
 
+type UserInvitation struct {
+	ID              int64              `json:"id"`
+	PublicID        string             `json:"public_id"`
+	UserID          int64              `json:"user_id"`
+	TokenHash       []byte             `json:"token_hash"`
+	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
+	AcceptedAt      pgtype.Timestamptz `json:"accepted_at"`
+	RevokedAt       pgtype.Timestamptz `json:"revoked_at"`
+	CreatedByUserID int64              `json:"created_by_user_id"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
 type WebauthnCredential struct {
 	ID             int64              `json:"id"`
 	PublicID       string             `json:"public_id"`

@@ -38,6 +38,16 @@ generate:
     go tool controller-gen rbac:roleName=platform-operator paths=./services/platform-operator/... output:rbac:artifacts:config=deploy/operator/rbac
     go tool oapi-codegen -config services/control-plane-api/oapi-codegen.yaml contracts/openapi/control-plane-v1.yaml
     go tool sqlc generate -f services/control-plane-api/sqlc.yaml
+    corepack pnpm --filter @molejo-platform/console-web generate:api-types
+
+frontend-check:
+    corepack pnpm --filter @molejo-platform/console-web check
+
+frontend-test:
+    corepack pnpm --filter @molejo-platform/console-web test
+
+frontend-build:
+    corepack pnpm --filter @molejo-platform/console-web build
 
 operator-test:
     KUBEBUILDER_ASSETS="$(go tool setup-envtest use -p path {{ envtest_version }})" go test ./packages/kubernetes-api/... ./services/platform-operator/...
@@ -56,7 +66,7 @@ control-plane-build:
 
 distribution-build:
     go build -o /tmp/molejoctl ./apps/molejoctl
-    go build -o /tmp/molejo-console-web ./apps/console-web
+    corepack pnpm --filter @molejo-platform/console-web build
     go -C tools build -o /tmp/molejo-release ./cmd/release
 
 distribution-test:
@@ -67,14 +77,14 @@ script-check:
     bash -n tools/testing/*.sh
 
 # Run the fast automated suite without Docker.
-test: operator-test cluster-agent-test control-plane-test contract-test distribution-test script-check
+test: operator-test cluster-agent-test control-plane-test contract-test distribution-test frontend-test script-check
 
 # Run PostgreSQL integration tests with Testcontainers.
 integration-test:
     MOLEJO_TESTCONTAINERS=1 go test -count=1 ./services/control-plane-api/internal/api ./services/control-plane-api/internal/store
 
 # Run every local quality, test, and build gate.
-verify: mod-check generate fmt-check lint test integration-test control-plane-build distribution-build
+verify: mod-check generate fmt-check lint frontend-check test integration-test control-plane-build distribution-build
 
 # Run the clean-worktree gate used by CI.
 ci: verify

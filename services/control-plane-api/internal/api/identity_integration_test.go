@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,7 +13,6 @@ import (
 	"github.com/pquerna/otp/totp"
 
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/auth"
-	"github.com/molejo-platform/molejo/services/control-plane-api/internal/identity"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/store"
 )
 
@@ -20,12 +20,33 @@ func TestIdentityAPICreatesIndependentUserMembershipAndGroup(t *testing.T) {
 	storage, workspace, server, owner := newHierarchyAPITestFixture(t)
 	server.passwordResetKey = []byte("01234567890123456789012345678901")
 
-	response := hierarchyRequest(t, server, owner, http.MethodPost, "/api/v1/admin/users", `{"username":"new.user","displayName":"New User","password":"correct horse battery staple","installationAdministrator":false}`, nil)
+	response := hierarchyRequest(t, server, owner, http.MethodPost, "/api/v1/admin/users", `{"username":"new.user","displayName":"New User","installationAdministrator":false}`, nil)
 	if response.Code != http.StatusCreated {
 		t.Fatalf("create user status=%d body=%s", response.Code, response.Body.String())
 	}
-	var user identity.User
-	decodeResponse(t, response, &user)
+	var invitation struct {
+		User  store.InstallationUser `json:"user"`
+		Token string                 `json:"token"`
+	}
+	decodeResponse(t, response, &invitation)
+	user := invitation.User.User
+
+	response = hierarchyRequest(t, server, owner, http.MethodPost, "/api/v1/workspaces/"+workspace.PublicID+"/members", `{"username":"new.user","role":"Viewer","status":"Active"}`, nil)
+	if response.Code != http.StatusConflict {
+		t.Fatalf("invited user membership status=%d body=%s", response.Code, response.Body.String())
+	}
+	response = unauthenticatedRequest(t, server, http.MethodPut, "/api/v1/user-invitations/accept", map[string]string{"token": invitation.Token, "password": "correct horse battery staple"})
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("accept invitation status=%d body=%s", response.Code, response.Body.String())
+	}
+	installationUser, err := storage.FindInstallationUser(t.Context(), user.PublicID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response = hierarchyRequest(t, server, owner, http.MethodPut, "/api/v1/admin/users/"+user.PublicID+"/installation-role", `{"administrator":true}`, map[string]string{"If-Match": fmt.Sprint(installationUser.Version)})
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"installationAdministrator":true`) {
+		t.Fatalf("update installation role status=%d body=%s", response.Code, response.Body.String())
+	}
 
 	response = hierarchyRequest(t, server, owner, http.MethodPost, "/api/v1/workspaces/"+workspace.PublicID+"/members", `{"username":"new.user","role":"Viewer","status":"Active"}`, nil)
 	if response.Code != http.StatusCreated {
@@ -68,6 +89,10 @@ func TestIdentityAPICreatesIndependentUserMembershipAndGroup(t *testing.T) {
 		t.Fatal(err)
 	}
 	viewer := createAPISession(t, storage, created.ID, "identity-viewer-session", "identity-viewer-csrf")
+	response = hierarchyRequest(t, server, viewer, http.MethodGet, "/api/v1/workspaces/"+workspace.PublicID+"/authorization/capabilities?resourceType=Workspace&resourceId="+workspace.PublicID, "", nil)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"readWorkspace":true`) || !strings.Contains(response.Body.String(), `"manageMembers":false`) {
+		t.Fatalf("effective capabilities status=%d body=%s", response.Code, response.Body.String())
+	}
 	response = hierarchyRequest(t, server, viewer, http.MethodPost, "/api/v1/workspaces/"+workspace.PublicID+"/groups", `{"name":"Forbidden"}`, nil)
 	if response.Code != http.StatusForbidden {
 		t.Fatalf("viewer created group status=%d body=%s", response.Code, response.Body.String())
@@ -75,6 +100,14 @@ func TestIdentityAPICreatesIndependentUserMembershipAndGroup(t *testing.T) {
 	response = hierarchyRequest(t, server, owner, http.MethodDelete, "/api/v1/workspaces/"+workspace.PublicID+"/access-grants/"+grant.PublicID, "", nil)
 	if response.Code != http.StatusNoContent {
 		t.Fatalf("delete access grant status=%d body=%s", response.Code, response.Body.String())
+	}
+	var ownerPublicID string
+	if err = storage.Pool.QueryRow(t.Context(), `SELECT u.public_id FROM workspace_memberships wm JOIN users u ON u.id=wm.user_id WHERE wm.workspace_id=$1 AND wm.role='Owner'`, workspace.ID).Scan(&ownerPublicID); err != nil {
+		t.Fatal(err)
+	}
+	response = hierarchyRequest(t, server, owner, http.MethodDelete, "/api/v1/workspaces/"+workspace.PublicID+"/members/"+ownerPublicID, "", nil)
+	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), `"governance_invariant"`) {
+		t.Fatalf("delete final Owner status=%d body=%s", response.Code, response.Body.String())
 	}
 
 	response = hierarchyRequest(t, server, owner, http.MethodGet, "/api/v1/workspaces/"+workspace.PublicID+"/audit-events", "", nil)
@@ -87,6 +120,10 @@ func TestIdentityAPICreatesIndependentUserMembershipAndGroup(t *testing.T) {
 	decodeResponse(t, response, &audit)
 	if len(audit.Items) < 3 {
 		t.Fatalf("audit items=%d", len(audit.Items))
+	}
+	response = hierarchyRequest(t, server, owner, http.MethodGet, "/api/v1/admin/audit-events", "", nil)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"identity.user.create"`) {
+		t.Fatalf("installation audit status=%d body=%s", response.Code, response.Body.String())
 	}
 }
 
@@ -139,6 +176,7 @@ func TestTOTPAPIRequiresTheSecondFactorAndIssuesAAL2Session(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	server.config.TOTPEnabled = false
 	completed := unauthenticatedRequest(t, server, http.MethodPost, "/api/v1/session/mfa/totp", map[string]string{"challengeToken": challenge.ChallengeToken, "code": code})
 	if completed.Code != http.StatusOK {
 		t.Fatalf("TOTP stage status=%d body=%s", completed.Code, completed.Body.String())
@@ -149,6 +187,32 @@ func TestTOTPAPIRequiresTheSecondFactorAndIssuesAAL2Session(t *testing.T) {
 	decodeResponse(t, completed, &session)
 	if session.AssuranceLevel != "AAL2" || completed.Header().Get("Set-Cookie") == "" {
 		t.Fatalf("session assurance=%q cookie=%q", session.AssuranceLevel, completed.Header().Get("Set-Cookie"))
+	}
+}
+
+func TestCurrentPasswordFailureIsAValidationError(t *testing.T) {
+	_, _, server, owner := newHierarchyAPITestFixture(t)
+	server.config.TOTPEnabled = true
+	server.passwordResetKey = []byte("01234567890123456789012345678901")
+
+	tests := []struct {
+		name   string
+		method string
+		path   string
+		body   string
+	}{
+		{name: "change password", method: http.MethodPut, path: "/api/v1/users/me/password", body: `{"currentPassword":"wrong","newPassword":"a sufficiently long password"}`},
+		{name: "begin TOTP", method: http.MethodPost, path: "/api/v1/users/me/mfa/totp/enrollment", body: `{"password":"wrong"}`},
+		{name: "disable TOTP", method: http.MethodDelete, path: "/api/v1/users/me/mfa/totp/enrollment", body: `{"password":"wrong"}`},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			response := hierarchyRequest(t, server, owner, test.method, test.path, test.body, nil)
+			if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), `"current_password_invalid"`) {
+				t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+			}
+		})
 	}
 }
 

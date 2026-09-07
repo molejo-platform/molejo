@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -11,6 +12,127 @@ import (
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/authorization"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/identity"
 )
+
+func TestInvitationCreatesCredentialOnlyWhenAccepted(t *testing.T) {
+	ctx := context.Background()
+	storage, workspaceID, administratorID := newIntegrationFixture(t)
+	invitationToken := "a-high-entropy-invitation-token"
+	invitation := UserInvitation{PublicID: newID(t, "uin"), TokenHash: auth.HashToken(invitationToken), ExpiresAt: time.Now().Add(time.Hour)}
+	created, err := storage.CreateInvitedUser(ctx, identity.User{PublicID: newID(t, "usr"), Username: "invited.user", DisplayName: "Invited User"}, false, invitation, administratorID, identityAudit(t, administratorID, workspaceID, "identity.user.create"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.Status != identity.StatusInvited || created.InstallationAdministrator {
+		t.Fatalf("unexpected invited user: %+v", created)
+	}
+	if _, _, err = storage.AuthenticateUser(ctx, created.Username); err == nil {
+		t.Fatal("invited user already had a password credential")
+	}
+	passwordHash, err := auth.HashPassword("a durable invitation password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	activated, err := storage.AcceptUserInvitation(ctx, invitation.TokenHash, passwordHash, identityAudit(t, administratorID, workspaceID, "identity.user.invitation.accept"))
+	if err != nil || activated.Status != identity.StatusActive {
+		t.Fatalf("activated=%+v err=%v", activated, err)
+	}
+	if _, hash, authenticateErr := storage.AuthenticateUser(ctx, created.Username); authenticateErr != nil || !auth.VerifyPassword("a durable invitation password", hash) {
+		t.Fatalf("accepted credential is invalid: %v", authenticateErr)
+	}
+	if _, err = storage.AcceptUserInvitation(ctx, invitation.TokenHash, passwordHash, identityAudit(t, administratorID, workspaceID, "identity.user.invitation.accept")); !errors.Is(err, ErrInvitationInvalid) {
+		t.Fatalf("accepted invitation was reusable: %v", err)
+	}
+}
+
+func TestConcurrentUserDeactivationPreservesActiveGovernance(t *testing.T) {
+	ctx := context.Background()
+	storage, workspaceID, firstID := newIntegrationFixture(t)
+	first, err := storage.User(ctx, firstID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	passwordHash, err := auth.HashPassword("correct horse battery staple")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := storage.CreateUser(ctx, identity.User{PublicID: newID(t, "usr"), Username: "second.owner", DisplayName: "Second Owner"}, passwordHash, true, identityAudit(t, firstID, workspaceID, "identity.user.create"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = storage.PutWorkspaceMembership(ctx, workspaceID, second.PublicID, authorization.RoleOwner, "Active", nil, identityAudit(t, firstID, workspaceID, "authorization.membership.put")); err != nil {
+		t.Fatal(err)
+	}
+
+	start := make(chan struct{})
+	errorsByUser := make(chan error, 2)
+	events := map[int64]audit.Event{
+		first.ID:  identityAudit(t, first.ID, workspaceID, "identity.user.status.update"),
+		second.ID: identityAudit(t, second.ID, workspaceID, "identity.user.status.update"),
+	}
+	var wait sync.WaitGroup
+	for _, user := range []identity.User{first, second} {
+		user := user
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			<-start
+			errorsByUser <- func() error {
+				_, updateErr := storage.SetUserStatus(ctx, user.PublicID, identity.StatusDisabled, user.Version, events[user.ID])
+				return updateErr
+			}()
+		}()
+	}
+	close(start)
+	wait.Wait()
+	close(errorsByUser)
+	succeeded, protected := 0, 0
+	for updateErr := range errorsByUser {
+		switch {
+		case updateErr == nil:
+			succeeded++
+		case errors.Is(updateErr, ErrGovernanceInvariant):
+			protected++
+		default:
+			t.Fatalf("unexpected concurrent update error: %v", updateErr)
+		}
+	}
+	if succeeded != 1 || protected != 1 {
+		t.Fatalf("succeeded=%d protected=%d", succeeded, protected)
+	}
+	var administrators, owners int
+	if err = storage.Pool.QueryRow(ctx, `SELECT count(*) FROM installation_role_assignments r JOIN users u ON u.id=r.user_id WHERE r.role='Administrator' AND u.status='Active'`).Scan(&administrators); err != nil {
+		t.Fatal(err)
+	}
+	if err = storage.Pool.QueryRow(ctx, `SELECT count(*) FROM workspace_memberships wm JOIN users u ON u.id=wm.user_id WHERE wm.workspace_id=$1 AND wm.role='Owner' AND wm.status='Active' AND u.status='Active'`, workspaceID).Scan(&owners); err != nil {
+		t.Fatal(err)
+	}
+	if administrators != 1 || owners != 1 {
+		t.Fatalf("administrators=%d owners=%d", administrators, owners)
+	}
+}
+
+func TestFinalAdministratorAndWorkspaceOwnerCannotBeRemoved(t *testing.T) {
+	ctx := context.Background()
+	storage, workspaceID, administratorID := newIntegrationFixture(t)
+	administrator, err := storage.User(ctx, administratorID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = storage.SetInstallationAdministrator(ctx, administrator.PublicID, false, administrator.Version, identityAudit(t, administratorID, workspaceID, "authorization.installation_role.update")); !errors.Is(err, ErrGovernanceInvariant) {
+		t.Fatalf("final installation administrator was removable: %v", err)
+	}
+
+	var membershipVersion int64
+	if err = storage.Pool.QueryRow(ctx, `SELECT version FROM workspace_memberships WHERE workspace_id=$1 AND user_id=$2`, workspaceID, administratorID).Scan(&membershipVersion); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = storage.PutWorkspaceMembership(ctx, workspaceID, administrator.PublicID, authorization.RoleMember, "Active", &membershipVersion, identityAudit(t, administratorID, workspaceID, "authorization.membership.put")); !errors.Is(err, ErrGovernanceInvariant) {
+		t.Fatalf("final workspace Owner was demotable: %v", err)
+	}
+	if err = storage.DeleteWorkspaceMembership(ctx, workspaceID, administrator.PublicID, identityAudit(t, administratorID, workspaceID, "authorization.membership.delete")); !errors.Is(err, ErrGovernanceInvariant) {
+		t.Fatalf("final workspace Owner was removable: %v", err)
+	}
+}
 
 func TestBootstrapCreatesInstallationAdministratorAndWorkspaceOwner(t *testing.T) {
 	ctx := context.Background()

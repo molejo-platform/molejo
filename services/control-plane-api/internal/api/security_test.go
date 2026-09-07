@@ -202,6 +202,26 @@ func TestSessionEndpointsRejectInvalidOriginAndDisableCaching(t *testing.T) {
 	}
 }
 
+func TestTOTPLoginCompletionRejectsInvalidOrigin(t *testing.T) {
+	server := NewServer(Config{
+		CookieName:    "molejo_session",
+		AllowedOrigin: "https://console.example",
+		AllowedHosts:  []string{"console.example"},
+		TOTPEnabled:   true,
+	}, Dependencies{PasswordResetKey: []byte("01234567890123456789012345678901")})
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/session/mfa/totp", strings.NewReader(`{"challengeToken":"challenge","code":"123456"}`))
+	request.Host = "console.example"
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Origin", "https://invalid.example")
+	recorder := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusForbidden || !strings.Contains(recorder.Body.String(), `"origin_forbidden"`) {
+		t.Fatalf("invalid TOTP origin status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+}
+
 func TestClusterEnrollmentEndpointsDisableCaching(t *testing.T) {
 	server := NewServer(Config{AllowedHosts: []string{"console.example"}}, Dependencies{})
 	for _, path := range []string{
@@ -228,9 +248,11 @@ func TestRequiresNoStore(t *testing.T) {
 		{path: "/api/v1/session", want: true},
 		{path: "/api/v1/users/usr-1", want: true},
 		{path: "/api/v1/admin/users", want: true},
+		{path: "/api/v1/admin/audit-events", want: true},
 		{path: "/api/v1/admin/clusters", want: true},
 		{path: "/api/v1/admin/agent-installations", want: true},
 		{path: "/api/v1/password-resets/token", want: true},
+		{path: "/api/v1/user-invitations/accept", want: true},
 		{path: "/api/v1/workspaces/ws-1/service-accounts", want: true},
 		{path: "/agent/v1/operations", want: true},
 		{path: "/api/v1/workspaces", want: false},

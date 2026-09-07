@@ -31,7 +31,7 @@ func (h *generatedHandler) GetOwnMFA(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, status)
 }
 
-func (h *generatedHandler) BeginTOTPEnrollment(w http.ResponseWriter, r *http.Request) {
+func (h *generatedHandler) BeginTOTPEnrollment(w http.ResponseWriter, r *http.Request, _ generated.BeginTOTPEnrollmentParams) {
 	user, ok := h.authorizeUser(w, r, true)
 	if !ok {
 		return
@@ -47,7 +47,7 @@ func (h *generatedHandler) BeginTOTPEnrollment(w http.ResponseWriter, r *http.Re
 	}
 	_, passwordHash, err := h.server.store.AuthenticateUser(r.Context(), user.Username)
 	if err != nil || !auth.VerifyPassword(*input.Password, passwordHash) {
-		writeError(w, http.StatusUnauthorized, "current_password_invalid", "current password is invalid", r)
+		writeError(w, http.StatusBadRequest, "current_password_invalid", "current password is invalid", r)
 		return
 	}
 	status, err := h.server.store.UserMFAStatus(r.Context(), user.ID)
@@ -91,7 +91,7 @@ func (h *generatedHandler) BeginTOTPEnrollment(w http.ResponseWriter, r *http.Re
 	writeJSON(w, http.StatusCreated, map[string]string{"challengeToken": challengeToken, "secret": key.Secret(), "otpAuthUrl": key.URL()})
 }
 
-func (h *generatedHandler) ConfirmTOTPEnrollment(w http.ResponseWriter, r *http.Request) {
+func (h *generatedHandler) ConfirmTOTPEnrollment(w http.ResponseWriter, r *http.Request, _ generated.ConfirmTOTPEnrollmentParams) {
 	user, ok := h.authorizeUser(w, r, true)
 	if !ok {
 		return
@@ -140,8 +140,12 @@ func (h *generatedHandler) ConfirmTOTPEnrollment(w http.ResponseWriter, r *http.
 	writeJSON(w, http.StatusOK, map[string]any{"recoveryCodes": recoveryCodes})
 }
 
-func (h *generatedHandler) CompleteTOTPLogin(w http.ResponseWriter, r *http.Request) {
-	if !h.server.config.TOTPEnabled || len(h.server.passwordResetKey) < 32 {
+func (h *generatedHandler) CompleteTOTPLogin(w http.ResponseWriter, r *http.Request, _ generated.CompleteTOTPLoginParams) {
+	if !h.server.originAllowed(r) {
+		writeError(w, http.StatusForbidden, "origin_forbidden", "request origin is not allowed", r)
+		return
+	}
+	if len(h.server.passwordResetKey) < 32 {
 		writeError(w, http.StatusServiceUnavailable, "totp_unavailable", "TOTP is not configured", r)
 		return
 	}
@@ -186,7 +190,7 @@ func (h *generatedHandler) CompleteTOTPLogin(w http.ResponseWriter, r *http.Requ
 	h.server.issueSession(w, r, challenge.User, "AAL2")
 }
 
-func (h *generatedHandler) DisableOwnTOTP(w http.ResponseWriter, r *http.Request) {
+func (h *generatedHandler) DisableOwnTOTP(w http.ResponseWriter, r *http.Request, _ generated.DisableOwnTOTPParams) {
 	user, ok := h.authorizeUser(w, r, true)
 	if !ok {
 		return
@@ -198,7 +202,7 @@ func (h *generatedHandler) DisableOwnTOTP(w http.ResponseWriter, r *http.Request
 	}
 	_, passwordHash, err := h.server.store.AuthenticateUser(r.Context(), user.Username)
 	if err != nil || !auth.VerifyPassword(*input.Password, passwordHash) {
-		writeError(w, http.StatusUnauthorized, "current_password_invalid", "current password is invalid", r)
+		writeError(w, http.StatusBadRequest, "current_password_invalid", "current password is invalid", r)
 		return
 	}
 	event := h.server.auditEvent(r, "authentication.totp.disable", "User", user.PublicID, audit.Succeeded)

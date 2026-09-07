@@ -2,6 +2,25 @@ package identity
 
 import "testing"
 
+func TestAdministrativeStatusTransitions(t *testing.T) {
+	tests := []struct {
+		current string
+		next    string
+		allowed bool
+	}{
+		{current: StatusActive, next: StatusLocked, allowed: true},
+		{current: StatusLocked, next: StatusActive, allowed: true},
+		{current: StatusDisabled, next: StatusActive, allowed: true},
+		{current: StatusInvited, next: StatusActive, allowed: false},
+		{current: StatusActive, next: StatusInvited, allowed: false},
+	}
+	for _, test := range tests {
+		if got := CanAdministrativelyTransition(test.current, test.next); got != test.allowed {
+			t.Fatalf("CanAdministrativelyTransition(%q, %q) = %t, want %t", test.current, test.next, got, test.allowed)
+		}
+	}
+}
+
 func TestNormalizeUsername(t *testing.T) {
 	tests := []struct {
 		input string

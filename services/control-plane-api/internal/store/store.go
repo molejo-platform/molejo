@@ -472,6 +472,10 @@ var ErrSessionInvalid = errors.New("session is no longer valid")
 
 var ErrResetCodeInvalid = errors.New("password reset code is invalid")
 
+var ErrInvitationInvalid = errors.New("user invitation is invalid")
+
+var ErrGovernanceInvariant = fmt.Errorf("governance invariant: %w", ErrConflict)
+
 var ErrPublicIDCollision = errors.New("public ID collision")
 
 var ErrNoRows = pgx.ErrNoRows

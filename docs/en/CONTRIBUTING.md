@@ -3,11 +3,13 @@
 ## Prerequisites
 
 - Go 1.26.6, the version used by CI.
+- Node.js 24 or newer with Corepack enabled.
 - `just` 1.57 or newer.
 - Docker for PostgreSQL integration tests.
 - `kubectl` only for acceptance checks against a real cluster.
 
 The first test run downloads Go modules and the Kubernetes `envtest` binaries.
+Install the Console dependencies with `corepack pnpm install --frozen-lockfile`.
 Use `just --list` to discover the maintained commands.
 
 ## Tests
@@ -33,6 +35,14 @@ MOLEJO_TEST_DATABASE_URL='postgres://user:password@host/database?sslmode=disable
 ```
 
 `just verify` runs both suites and all repository quality gates.
+
+The Console can also be checked independently:
+
+```bash
+just frontend-check
+just frontend-test
+just frontend-build
+```
 
 ## K3s acceptance checks
 

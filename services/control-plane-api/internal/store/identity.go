@@ -230,8 +230,46 @@ func (s *Store) SetUserStatus(ctx context.Context, publicID, status string, vers
 		return identity.User{}, err
 	}
 	defer tx.Rollback(ctx)
+	if err = lockIdentityGovernance(ctx, tx); err != nil {
+		return identity.User{}, err
+	}
+	var userID int64
+	var currentStatus string
+	err = tx.QueryRow(ctx, `SELECT id,status FROM users WHERE public_id=$1 AND version=$2 FOR UPDATE`, publicID, version).Scan(&userID, &currentStatus)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return identity.User{}, ErrVersionConflict
+	}
+	if err != nil {
+		return identity.User{}, err
+	}
+	if !identity.CanAdministrativelyTransition(currentStatus, status) {
+		return identity.User{}, ErrConflict
+	}
+	if currentStatus == identity.StatusActive && status != identity.StatusActive {
+		var administrator bool
+		checkErr := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM installation_role_assignments WHERE user_id=$1 AND role='Administrator')`, userID).Scan(&administrator)
+		if checkErr != nil {
+			return identity.User{}, checkErr
+		}
+		if administrator {
+			hasAnother, anotherErr := hasAnotherActiveAdministrator(ctx, tx, userID)
+			if anotherErr != nil {
+				return identity.User{}, anotherErr
+			}
+			if !hasAnother {
+				return identity.User{}, ErrGovernanceInvariant
+			}
+		}
+		orphaned, orphanErr := wouldOrphanOwnedWorkspace(ctx, tx, userID)
+		if orphanErr != nil {
+			return identity.User{}, orphanErr
+		}
+		if orphaned {
+			return identity.User{}, ErrGovernanceInvariant
+		}
+	}
 	user, err := scanUser(tx.QueryRow(ctx, `UPDATE users SET status=$2,version=version+1,auth_version=auth_version+1,updated_at=now()
-		WHERE public_id=$1 AND version=$3 RETURNING `+userColumns, publicID, status, version))
+		WHERE id=$1 RETURNING `+userColumns, userID, status))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return identity.User{}, ErrVersionConflict
 	}
@@ -331,16 +369,39 @@ func (s *Store) PutWorkspaceMembership(ctx context.Context, workspaceID int64, u
 		return Membership{}, err
 	}
 	defer tx.Rollback(ctx)
+	if err = lockIdentityGovernance(ctx, tx); err != nil {
+		return Membership{}, err
+	}
 	var userID int64
-	if err = tx.QueryRow(ctx, `SELECT id FROM users WHERE public_id=$1 AND status<>'Disabled'`, userPublicID).Scan(&userID); errors.Is(err, pgx.ErrNoRows) {
+	var userStatus string
+	if err = tx.QueryRow(ctx, `SELECT id,status FROM users WHERE public_id=$1`, userPublicID).Scan(&userID, &userStatus); errors.Is(err, pgx.ErrNoRows) {
 		return Membership{}, ErrNotFound
 	}
 	if err != nil {
 		return Membership{}, err
 	}
 	if expectedVersion == nil {
+		if userStatus != identity.StatusActive {
+			return Membership{}, ErrConflict
+		}
 		_, err = tx.Exec(ctx, `INSERT INTO workspace_memberships(workspace_id,user_id,role,status) VALUES($1,$2,$3,$4)`, workspaceID, userID, role, status)
 	} else {
+		var currentRole, currentStatus string
+		if err = tx.QueryRow(ctx, `SELECT role,status FROM workspace_memberships WHERE workspace_id=$1 AND user_id=$2 AND version=$3 FOR UPDATE`, workspaceID, userID, *expectedVersion).Scan(&currentRole, &currentStatus); errors.Is(err, pgx.ErrNoRows) {
+			return Membership{}, ErrVersionConflict
+		}
+		if err != nil {
+			return Membership{}, err
+		}
+		if currentRole == authorization.RoleOwner && currentStatus == "Active" && (role != authorization.RoleOwner || status != "Active") {
+			hasAnother, ownerErr := hasAnotherActiveWorkspaceOwner(ctx, tx, workspaceID, userID)
+			if ownerErr != nil {
+				return Membership{}, ownerErr
+			}
+			if !hasAnother {
+				return Membership{}, ErrGovernanceInvariant
+			}
+		}
 		var affected int64
 		result, updateErr := tx.Exec(ctx, `UPDATE workspace_memberships SET role=$3,status=$4,version=version+1,updated_at=now() WHERE workspace_id=$1 AND user_id=$2 AND version=$5`, workspaceID, userID, role, status, *expectedVersion)
 		err = updateErr
@@ -374,6 +435,28 @@ func (s *Store) DeleteWorkspaceMembership(ctx context.Context, workspaceID int64
 		return err
 	}
 	defer tx.Rollback(ctx)
+	if err = lockIdentityGovernance(ctx, tx); err != nil {
+		return err
+	}
+	var userID int64
+	var role, status string
+	err = tx.QueryRow(ctx, `SELECT wm.user_id,wm.role,wm.status FROM workspace_memberships wm JOIN users u ON u.id=wm.user_id
+		WHERE wm.workspace_id=$1 AND u.public_id=$2 FOR UPDATE OF wm`, workspaceID, userPublicID).Scan(&userID, &role, &status)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if role == authorization.RoleOwner && status == "Active" {
+		hasAnother, ownerErr := hasAnotherActiveWorkspaceOwner(ctx, tx, workspaceID, userID)
+		if ownerErr != nil {
+			return ownerErr
+		}
+		if !hasAnother {
+			return ErrGovernanceInvariant
+		}
+	}
 	result, err := tx.Exec(ctx, `DELETE FROM workspace_memberships wm USING users u WHERE wm.workspace_id=$1 AND wm.user_id=u.id AND u.public_id=$2`, workspaceID, userPublicID)
 	if err != nil {
 		return err
@@ -554,6 +637,15 @@ func workspaceResourceExists(ctx context.Context, tx pgx.Tx, workspaceID int64, 
 	var exists bool
 	err := tx.QueryRow(ctx, query, workspaceID, publicID).Scan(&exists)
 	return exists, err
+}
+
+func (s *Store) WorkspaceResourceExists(ctx context.Context, workspaceID int64, resourceType, publicID string) (bool, error) {
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback(ctx)
+	return workspaceResourceExists(ctx, tx, workspaceID, resourceType, publicID)
 }
 
 func (s *Store) AddWorkspaceGroupMember(ctx context.Context, workspaceID int64, groupPublicID, userPublicID string, event audit.Event) error {
@@ -816,7 +908,7 @@ func (s *Store) CompletePasswordReset(ctx context.Context, username, grantPublic
 	if _, err = tx.Exec(ctx, `UPDATE password_credentials SET password_hash=$2,changed_at=now() WHERE user_id=$1`, userID, passwordHash); err != nil {
 		return err
 	}
-	if _, err = tx.Exec(ctx, `UPDATE users SET auth_version=auth_version+1,status='Active',updated_at=now() WHERE id=$1`, userID); err != nil {
+	if _, err = tx.Exec(ctx, `UPDATE users SET auth_version=auth_version+1,updated_at=now() WHERE id=$1`, userID); err != nil {
 		return err
 	}
 	if _, err = tx.Exec(ctx, `UPDATE sessions SET revoked_at=now() WHERE user_id=$1 AND revoked_at IS NULL`, userID); err != nil {

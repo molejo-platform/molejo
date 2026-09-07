@@ -91,9 +91,13 @@ func (p *Pipeline) Check(ctx context.Context) error {
 func (p *Pipeline) requiredPaths() []string {
 	paths := []string{
 		"LICENSE",
+		"package.json",
+		"pnpm-lock.yaml",
+		"pnpm-workspace.yaml",
 		"apps/molejoctl/main.go",
 		"apps/console-web/Dockerfile",
-		"apps/console-web/static/index.html",
+		"apps/console-web/package.json",
+		"apps/console-web/src/main.tsx",
 		"deploy/crds",
 		"deploy/operator/kustomization.yaml",
 		"deploy/cluster-agent/kustomization.yaml",

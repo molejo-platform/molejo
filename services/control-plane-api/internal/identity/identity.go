@@ -12,6 +12,7 @@ import (
 var usernamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{2,63}$`)
 
 const (
+	StatusInvited  = "Invited"
 	StatusActive   = "Active"
 	StatusDisabled = "Disabled"
 	StatusLocked   = "Locked"
@@ -46,5 +47,16 @@ func NormalizeDisplayName(value string) (string, error) {
 }
 
 func ValidStatus(status string) bool {
+	return status == StatusInvited || status == StatusActive || status == StatusDisabled || status == StatusLocked
+}
+
+func ValidAdministrativeStatus(status string) bool {
 	return status == StatusActive || status == StatusDisabled || status == StatusLocked
+}
+
+func CanAdministrativelyTransition(current, next string) bool {
+	if !ValidStatus(current) || !ValidAdministrativeStatus(next) {
+		return false
+	}
+	return current != StatusInvited
 }

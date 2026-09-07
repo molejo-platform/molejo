@@ -1,8 +1,12 @@
 package api
 
-import "net/http"
+import (
+	"net/http"
 
-func (h *generatedHandler) Login(w http.ResponseWriter, r *http.Request) {
+	"github.com/molejo-platform/molejo/services/control-plane-api/internal/api/generated"
+)
+
+func (h *generatedHandler) Login(w http.ResponseWriter, r *http.Request, _ generated.LoginParams) {
 	h.server.login(w, r)
 }
 
@@ -15,7 +19,7 @@ func (h *generatedHandler) GetSession(w http.ResponseWriter, r *http.Request) {
 	h.server.sessionInfo(w, r, principal.UserID, principal.AssuranceLevel)
 }
 
-func (h *generatedHandler) Logout(w http.ResponseWriter, r *http.Request) {
+func (h *generatedHandler) Logout(w http.ResponseWriter, r *http.Request, _ generated.LogoutParams) {
 	_, csrf, ok := h.server.session(r)
 	if !ok {
 		writeError(w, http.StatusUnauthorized, "unauthenticated", "authentication required", r)

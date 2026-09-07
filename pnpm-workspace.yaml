@@ -1,0 +1,4 @@
+packages:
+  - apps/console-web
+allowBuilds:
+  esbuild: true

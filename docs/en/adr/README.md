@@ -8,3 +8,4 @@
 - [ADR-0014: External CI Release and Deployment Boundary](0014-external-ci-release-and-deployment-boundary.md)
 - [ADR-0015: Capability Ownership](0015-capability-ownership.md)
 - [ADR-0016: Alpha Lifecycle Policy](0016-alpha-lifecycle-policy.md)
+- [ADR-0017: Human Identity Boundary](0017-human-identity-boundary.md)

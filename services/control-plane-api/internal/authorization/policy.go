@@ -37,6 +37,30 @@ type Context struct {
 	Relations                 []Relation
 }
 
+type Capabilities struct {
+	ReadWorkspace    bool
+	ManageWorkspace  bool
+	ManageMembers    bool
+	ManageGroups     bool
+	ReadAudit        bool
+	ManageAutomation bool
+	EditResources    bool
+	Deploy           bool
+}
+
+func EffectiveCapabilities(context Context) Capabilities {
+	return Capabilities{
+		ReadWorkspace:    Allowed(context, ReadWorkspace),
+		ManageWorkspace:  Allowed(context, ManageWorkspace),
+		ManageMembers:    Allowed(context, ManageMembers),
+		ManageGroups:     Allowed(context, ManageGroups),
+		ReadAudit:        Allowed(context, ReadAudit),
+		ManageAutomation: Allowed(context, ManageAutomation),
+		EditResources:    Allowed(context, EditResources),
+		Deploy:           Allowed(context, Deploy),
+	}
+}
+
 func Allowed(context Context, permission Permission) bool {
 	if permission == CreateWorkspace || permission == ManageUsers || permission == ManageAgents {
 		return context.InstallationAdministrator

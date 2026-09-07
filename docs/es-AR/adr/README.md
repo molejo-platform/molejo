@@ -7,3 +7,4 @@
 - [ADR-0014: límite de Release y deploy con CI externa](0014-limite-de-release-y-deploy-con-ci-externa.md)
 - [ADR-0015: ownership de capacidades](0015-ownership-de-capacidades.md)
 - [ADR-0016: política de ciclo de vida alfa](0016-politica-de-ciclo-de-vida-alfa.md)
+- [ADR-0017: límite de identidad humana](0017-limite-de-identidad-humana.md)

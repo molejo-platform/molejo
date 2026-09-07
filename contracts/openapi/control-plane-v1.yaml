@@ -9,6 +9,8 @@ paths:
   /api/v1/session:
     post:
       operationId: login
+      security: []
+      parameters: [{ $ref: '#/components/parameters/Origin' }]
       requestBody:
         required: true
         content:
@@ -26,8 +28,14 @@ paths:
         '202':
           description: A second factor is required
           content: { application/json: { schema: { $ref: '#/components/schemas/MFAChallenge' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/Unavailable' }
     get:
       operationId: getSession
+      security: [{ sessionCookie: [] }]
       responses:
         '200':
           description: Current session
@@ -36,13 +44,22 @@ paths:
               schema:
                 $ref: '#/components/schemas/Session'
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/InternalError' }
     delete:
       operationId: logout
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Origin' }
+        - { $ref: '#/components/parameters/CSRFToken' }
       responses:
         '204': { description: Session revoked }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
   /api/v1/auth/capabilities:
     get:
       operationId: getAuthenticationCapabilities
+      security: []
       responses:
         '200':
           description: Authentication methods enabled for this installation
@@ -50,12 +67,17 @@ paths:
   /api/v1/session/mfa/totp:
     post:
       operationId: completeTOTPLogin
+      security: []
+      parameters: [{ $ref: '#/components/parameters/Origin' }]
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/TOTPChallengeInput' } } }
       responses:
         '200': { description: Authenticated session at AAL2, content: { application/json: { schema: { $ref: '#/components/schemas/Session' } } } }
         '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/Unavailable' }
   /api/v1/users/me:
     get:
       operationId: getOwnProfile
@@ -77,6 +99,7 @@ paths:
     put:
       operationId: changeOwnPassword
       security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: '#/components/parameters/CSRFToken' }]
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/PasswordChangeInput' } } }
@@ -115,30 +138,45 @@ paths:
     post:
       operationId: beginTOTPEnrollment
       security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: '#/components/parameters/CSRFToken' }]
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/PasswordConfirmation' } } }
       responses:
         '201': { description: Enrollment secret shown once, content: { application/json: { schema: { $ref: '#/components/schemas/TOTPEnrollment' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
         '503': { $ref: '#/components/responses/Unavailable' }
     put:
       operationId: confirmTOTPEnrollment
       security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: '#/components/parameters/CSRFToken' }]
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/TOTPEnrollmentConfirmation' } } }
       responses:
         '200': { description: TOTP enabled and recovery codes shown once, content: { application/json: { schema: { $ref: '#/components/schemas/MFARecoveryCodes' } } } }
         '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/Unavailable' }
     delete:
       operationId: disableOwnTOTP
       security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: '#/components/parameters/CSRFToken' }]
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/PasswordConfirmation' } } }
       responses:
         '204': { description: TOTP disabled }
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
   /api/v1/password-resets/request:
     post:
       operationId: requestPasswordReset
@@ -167,6 +205,18 @@ paths:
       responses:
         '204': { description: Password replaced and sessions revoked }
         '400': { $ref: '#/components/responses/BadRequest' }
+  /api/v1/user-invitations/accept:
+    put:
+      operationId: acceptUserInvitation
+      security: []
+      parameters: [{ $ref: '#/components/parameters/Origin' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/UserInvitationAcceptance' } } }
+      responses:
+        '204': { description: Invitation accepted and local password created }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
   /api/v1/admin/users:
     get:
       operationId: listUsers
@@ -183,7 +233,7 @@ paths:
                 type: object
                 required: [items]
                 properties:
-                  items: { type: array, items: { $ref: '#/components/schemas/User' } }
+                  items: { type: array, items: { $ref: '#/components/schemas/InstallationUser' } }
                   nextCursor: { type: [string, 'null'] }
         '403': { $ref: '#/components/responses/Forbidden' }
     post:
@@ -193,7 +243,7 @@ paths:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/UserCreateInput' } } }
       responses:
-        '201': { description: User created, content: { application/json: { schema: { $ref: '#/components/schemas/User' } } } }
+        '201': { description: Invited user and one-time activation credential, content: { application/json: { schema: { $ref: '#/components/schemas/UserInvitation' } } } }
         '403': { $ref: '#/components/responses/Forbidden' }
         '409': { $ref: '#/components/responses/Conflict' }
   /api/v1/admin/users/{userId}:
@@ -206,7 +256,7 @@ paths:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/UserStatusInput' } } }
       responses:
-        '200': { description: User updated, content: { application/json: { schema: { $ref: '#/components/schemas/User' } } } }
+        '200': { description: User updated, content: { application/json: { schema: { $ref: '#/components/schemas/InstallationUser' } } } }
         '403': { $ref: '#/components/responses/Forbidden' }
         '409': { $ref: '#/components/responses/Conflict' }
   /api/v1/admin/users/{userId}/password-reset:
@@ -220,6 +270,47 @@ paths:
           content: { application/json: { schema: { $ref: '#/components/schemas/PasswordResetGrant' } } }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/admin/users/{userId}/installation-role:
+    parameters: [{ $ref: '#/components/parameters/UserId' }]
+    put:
+      operationId: updateUserInstallationRole
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: '#/components/parameters/IfMatch' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/InstallationRoleInput' } } }
+      responses:
+        '200': { description: Installation role updated, content: { application/json: { schema: { $ref: '#/components/schemas/InstallationUser' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/admin/users/{userId}/invitation:
+    parameters: [{ $ref: '#/components/parameters/UserId' }]
+    post:
+      operationId: createUserInvitation
+      security: [{ sessionCookie: [] }]
+      responses:
+        '201': { description: Replacement one-time activation credential, content: { application/json: { schema: { $ref: '#/components/schemas/UserInvitationCredential' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/admin/audit-events:
+    get:
+      operationId: listInstallationAuditEvents
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Append-only installation audit trail
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/AuditEvent' } }
+                  nextCursor: { type: [string, 'null'] }
+        '403': { $ref: '#/components/responses/Forbidden' }
   /api/v1/admin/clusters:
     get:
       operationId: listClusters
@@ -443,6 +534,24 @@ paths:
       security: [{ sessionCookie: [] }]
       responses:
         '204': { description: Relation revoked }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/workspaces/{workspaceId}/authorization/capabilities:
+    parameters: [{ $ref: '#/components/parameters/WorkspaceId' }]
+    get:
+      operationId: getEffectiveCapabilities
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: resourceType
+          in: query
+          required: true
+          schema: { type: string, enum: [Workspace, Project, App, AppEnvironment] }
+        - name: resourceId
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 64 }
+      responses:
+        '200': { description: Effective capabilities for the current user and resource, content: { application/json: { schema: { $ref: '#/components/schemas/EffectiveCapabilities' } } } }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
   /api/v1/workspaces/current:
@@ -1733,6 +1842,16 @@ components:
       in: header
       required: true
       schema: { type: integer, minimum: 0 }
+    Origin:
+      name: Origin
+      in: header
+      required: true
+      schema: { type: string, format: uri }
+    CSRFToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      schema: { type: string, minLength: 1 }
   responses:
     Unauthorized:
       description: Authentication required
@@ -1754,6 +1873,9 @@ components:
       content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
     TooManyRequests:
       description: Concurrent request limit reached
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    InternalError:
+      description: Request failed unexpectedly
       content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
     MutationAccepted:
       description: Mutation accepted for asynchronous execution
@@ -1780,7 +1902,7 @@ components:
       properties:
         user: { $ref: '#/components/schemas/User' }
         assuranceLevel: { type: string, enum: [AAL1, AAL2] }
-        csrfToken: { type: string, writeOnly: true }
+        csrfToken: { type: string, readOnly: true }
         installationCapabilities:
           type: object
           required: [manageUsers, createWorkspace, publicTCP]
@@ -1836,7 +1958,7 @@ components:
       properties:
         mfaRequired: { type: boolean, const: true }
         method: { type: string, enum: [TOTP] }
-        challengeToken: { type: string, writeOnly: true }
+        challengeToken: { type: string, readOnly: true }
     TOTPChallengeInput:
       type: object
       required: [challengeToken, code]
@@ -1856,9 +1978,9 @@ components:
       required: [challengeToken, secret, otpAuthUrl]
       additionalProperties: false
       properties:
-        challengeToken: { type: string, writeOnly: true }
-        secret: { type: string, writeOnly: true }
-        otpAuthUrl: { type: string, writeOnly: true }
+        challengeToken: { type: string, readOnly: true }
+        secret: { type: string, readOnly: true }
+        otpAuthUrl: { type: string, readOnly: true }
     TOTPEnrollmentConfirmation:
       type: object
       required: [challengeToken, code]
@@ -1871,7 +1993,7 @@ components:
       required: [recoveryCodes]
       additionalProperties: false
       properties:
-        recoveryCodes: { type: array, minItems: 8, maxItems: 10, items: { type: string, writeOnly: true } }
+        recoveryCodes: { type: array, minItems: 8, maxItems: 10, readOnly: true, items: { type: string } }
     PasswordConfirmation:
       type: object
       required: [password]
@@ -1886,7 +2008,7 @@ components:
         id: { type: string, pattern: '^usr-[a-z2-7]{20}$' }
         username: { type: string, minLength: 3, maxLength: 64 }
         displayName: { type: string, minLength: 1, maxLength: 120 }
-        status: { type: string, enum: [Active, Disabled, Locked] }
+        status: { type: string, enum: [Invited, Active, Disabled, Locked] }
         version: { type: integer, minimum: 1 }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
@@ -1939,13 +2061,47 @@ components:
         expiresAt: { type: string, format: date-time }
     UserCreateInput:
       type: object
-      required: [username, displayName, password]
+      required: [username, displayName]
       additionalProperties: false
       properties:
         username: { type: string, minLength: 3, maxLength: 64 }
         displayName: { type: string, minLength: 1, maxLength: 120 }
-        password: { type: string, minLength: 15, maxLength: 1024, writeOnly: true }
         installationAdministrator: { type: boolean, default: false }
+    InstallationUser:
+      allOf:
+        - { $ref: '#/components/schemas/User' }
+        - type: object
+          required: [installationAdministrator]
+          properties:
+            installationAdministrator: { type: boolean }
+    InstallationRoleInput:
+      type: object
+      required: [administrator]
+      additionalProperties: false
+      properties:
+        administrator: { type: boolean }
+    UserInvitationCredential:
+      type: object
+      required: [token, expiresAt]
+      additionalProperties: false
+      properties:
+        token: { type: string, minLength: 43, maxLength: 64, writeOnly: true }
+        expiresAt: { type: string, format: date-time }
+    UserInvitation:
+      type: object
+      required: [user, token, expiresAt]
+      additionalProperties: false
+      properties:
+        user: { $ref: '#/components/schemas/InstallationUser' }
+        token: { type: string, minLength: 43, maxLength: 64, writeOnly: true }
+        expiresAt: { type: string, format: date-time }
+    UserInvitationAcceptance:
+      type: object
+      required: [token, password]
+      additionalProperties: false
+      properties:
+        token: { type: string, minLength: 43, maxLength: 64, writeOnly: true }
+        password: { type: string, minLength: 15, maxLength: 1024, writeOnly: true }
     AgentInstallationCreateInput:
       type: object
       required: [name]
@@ -2096,6 +2252,19 @@ components:
         resourceType: { type: string, enum: [Workspace, Project, App, AppEnvironment] }
         resourceId: { type: string }
         relation: { type: string, enum: [Viewer, Editor, Deployer, Manager] }
+    EffectiveCapabilities:
+      type: object
+      required: [readWorkspace, manageWorkspace, manageMembers, manageGroups, readAudit, manageAutomation, editResources, deploy]
+      additionalProperties: false
+      properties:
+        readWorkspace: { type: boolean }
+        manageWorkspace: { type: boolean }
+        manageMembers: { type: boolean }
+        manageGroups: { type: boolean }
+        readAudit: { type: boolean }
+        manageAutomation: { type: boolean }
+        editResources: { type: boolean }
+        deploy: { type: boolean }
     AuditEvent:
       type: object
       required: [id, occurredAt, action, targetType, outcome, metadata]

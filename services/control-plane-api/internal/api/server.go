@@ -415,9 +415,11 @@ func requiresNoStore(path string) bool {
 	return strings.HasPrefix(path, "/api/v1/session") ||
 		strings.HasPrefix(path, "/api/v1/users") ||
 		strings.HasPrefix(path, "/api/v1/admin/users") ||
+		strings.HasPrefix(path, "/api/v1/admin/audit-events") ||
 		strings.HasPrefix(path, "/api/v1/admin/clusters") ||
 		strings.HasPrefix(path, "/api/v1/admin/agent-installations") ||
 		strings.HasPrefix(path, "/api/v1/password-resets") ||
+		strings.HasPrefix(path, "/api/v1/user-invitations") ||
 		strings.Contains(path, "/service-accounts") ||
 		strings.HasPrefix(path, "/agent/")
 }

@@ -110,10 +110,6 @@ spec:
         - name: console
           image: ghcr.io/molejo-platform/console-web@sha256:0000000000000000000000000000000000000000000000000000000000000000
           imagePullPolicy: IfNotPresent
-          env:
-            - { name: MOLEJO_API_URL, value: "https://control-plane-api.molejo-control-plane.svc.cluster.local:8444" }
-            - { name: MOLEJO_API_CA_FILE, value: "/var/run/secrets/molejo/api-ca/ca.crt" }
-            - { name: MOLEJO_API_SERVER_NAME, value: "control-plane-api.molejo-control-plane.svc.cluster.local" }
           ports:
             - { name: http, containerPort: 8080, protocol: TCP }
           readinessProbe:

@@ -1,22 +1,25 @@
-FROM golang:1.26.7-alpine@sha256:28d89ee9cc0ff9fec75c82ca201e6bf7fdf9a679d4b7b24dfa04f2bb766bb468 AS build
+# syntax=docker/dockerfile:1.20
 
-WORKDIR /src
-COPY go.mod go.sum ./
-RUN go mod download
-COPY apps/console-web apps/console-web
+FROM docker.io/library/node:24.19.0-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43 AS build
 
-ARG TARGETOS=linux
-ARG TARGETARCH
-ARG VERSION=devel
-ARG COMMIT=unknown
-RUN CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
-    go build -buildvcs=false -trimpath \
-    -ldflags="-s -w" \
-    -o /out/console-web ./apps/console-web
+RUN corepack enable \
+    && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
+WORKDIR /workspace
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/console-web/package.json apps/console-web/package.json
+RUN pnpm install --frozen-lockfile --ignore-scripts --filter @molejo-platform/console-web
+COPY apps/console-web/ apps/console-web/
+RUN pnpm --filter @molejo-platform/console-web build
 
-FROM scratch
+FROM docker.io/library/nginx:1.30.4-alpine-slim@sha256:ddde39c6e51f02fde7410c2e9c234cf2d0a4c7bdbbe176aeb37d8ad7ab4eb58c
+
+COPY apps/console-web/nginx.conf /etc/nginx/nginx.conf
+COPY apps/console-web/default.conf /etc/nginx/conf.d/default.conf
+RUN find /usr/share/nginx/html -mindepth 1 -delete
+COPY --from=build --chown=65532:65532 /workspace/apps/console-web/dist/ /usr/share/nginx/html/
 
 USER 65532:65532
-COPY --from=build /out/console-web /console-web
 EXPOSE 8080
-ENTRYPOINT ["/console-web"]
+STOPSIGNAL SIGQUIT
+ENTRYPOINT ["nginx"]
+CMD ["-g", "daemon off;"]

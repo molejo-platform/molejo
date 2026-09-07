@@ -28,3 +28,10 @@ func TestWorkspacePolicy(t *testing.T) {
 		})
 	}
 }
+
+func TestEffectiveCapabilitiesUseTheSamePolicy(t *testing.T) {
+	capabilities := EffectiveCapabilities(Context{MembershipRole: RoleViewer, Relations: []Relation{RelationDeployer}})
+	if !capabilities.ReadWorkspace || !capabilities.Deploy || capabilities.EditResources || capabilities.ManageMembers {
+		t.Fatalf("unexpected capabilities: %+v", capabilities)
+	}
+}
