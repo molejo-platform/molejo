@@ -3,10 +3,31 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { getCsrfToken, setCsrfToken } from "../api/http-client";
 import type { Session } from "../api/types";
-import { applySessionState, clearSessionState, publishSessionChanged, publishSessionCleared, sessionQueryKey, subscribeSessionEvents } from "./session-state";
+import {
+  applySessionState,
+  clearSessionState,
+  publishSessionChanged,
+  publishSessionCleared,
+  sessionQueryKey,
+  subscribeSessionEvents,
+} from "./session-state";
 
 function session(id: string, csrfToken: string): Session {
-  return { user: { id, username: id, displayName: id, status: "Active", version: 1, createdAt: "2026-08-29T00:00:00Z", updatedAt: "2026-08-29T00:00:00Z" }, assuranceLevel: "AAL1", csrfToken, installationCapabilities: { manageUsers: false, createWorkspace: false, publicTCP: { enabled: false } }, workspaceMemberships: [] };
+  return {
+    user: {
+      id,
+      username: id,
+      displayName: id,
+      status: "Active",
+      version: 1,
+      createdAt: "2026-08-29T00:00:00Z",
+      updatedAt: "2026-08-29T00:00:00Z",
+    },
+    assuranceLevel: "AAL1",
+    csrfToken,
+    installationCapabilities: { manageUsers: false, createWorkspace: false, publicTCP: { enabled: false } },
+    workspaceMemberships: [],
+  };
 }
 const owner = session("usr-aaaaaaaaaaaaaaaaaaaa", "owner-csrf");
 const tester = session("usr-bbbbbbbbbbbbbbbbbbbb", "tester-csrf");
@@ -53,7 +74,9 @@ describe("session state", () => {
 
   it("removes cached mutation variables when the session is cleared", async () => {
     const queryClient = new QueryClient();
-    const mutation = queryClient.getMutationCache().build(queryClient, { mutationFn: async (password: string) => password });
+    const mutation = queryClient
+      .getMutationCache()
+      .build(queryClient, { mutationFn: async (password: string) => password });
     await mutation.execute("secret-password");
 
     clearSessionState(queryClient, false);
@@ -65,7 +88,9 @@ describe("session state", () => {
     const messages: unknown[] = [];
     class Channel {
       onmessage: ((event: MessageEvent<unknown>) => void) | null = null;
-      postMessage(value: unknown) { messages.push(value); }
+      postMessage(value: unknown) {
+        messages.push(value);
+      }
       close() {}
     }
     vi.stubGlobal("BroadcastChannel", Channel);
@@ -85,7 +110,9 @@ describe("session state", () => {
     let channel: { onmessage: ((event: MessageEvent<unknown>) => void) | null } | undefined;
     class Channel {
       onmessage: ((event: MessageEvent<unknown>) => void) | null = null;
-      constructor() { channel = this; }
+      constructor() {
+        channel = this;
+      }
       postMessage() {}
       close() {}
     }

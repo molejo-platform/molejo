@@ -35,10 +35,13 @@ export async function request<T>(path: string, init: RequestInit = {}, retryCSRF
     } catch {
       details = undefined;
     }
-    const sessionCanRecover = response.status === 401 && details?.code === "unauthenticated" && path !== "/api/v1/session";
+    const sessionCanRecover =
+      response.status === 401 && details?.code === "unauthenticated" && path !== "/api/v1/session";
     const csrfCanRecover = response.status === 403 && details?.code === "csrf_failed";
     if (retryCSRF && csrfRecovery && (sessionCanRecover || csrfCanRecover)) {
-      recovery ??= csrfRecovery().finally(() => { recovery = undefined; });
+      recovery ??= csrfRecovery().finally(() => {
+        recovery = undefined;
+      });
       await recovery;
       return request<T>(path, init, false);
     }

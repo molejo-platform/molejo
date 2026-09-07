@@ -41,6 +41,9 @@ generate:
     corepack pnpm --filter @molejo-platform/console-web generate:api-types
 
 frontend-check:
+    corepack pnpm --filter @molejo-platform/console-web format:check
+    corepack pnpm --filter @molejo-platform/console-web lint
+    corepack pnpm --filter @molejo-platform/console-web architecture:check
     corepack pnpm --filter @molejo-platform/console-web check
 
 frontend-test:

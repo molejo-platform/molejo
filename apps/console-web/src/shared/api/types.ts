@@ -1,4 +1,4 @@
-import type { components } from "./generated/control-plane";
+import type { components, operations } from "./generated/control-plane";
 
 export type Session = components["schemas"]["Session"];
 export type AuthenticationCapabilities = components["schemas"]["AuthenticationCapabilities"];
@@ -15,6 +15,7 @@ export type AuditEvent = components["schemas"]["AuditEvent"];
 export type AccessGrant = components["schemas"]["AccessGrant"];
 export type EffectiveCapabilities = components["schemas"]["EffectiveCapabilities"];
 export type Workspace = components["schemas"]["Workspace"];
+export type WorkspaceList = operations["listWorkspaces"]["responses"][200]["content"]["application/json"];
 export type HierarchyInput = components["schemas"]["HierarchyInput"];
 export type Project = components["schemas"]["Project"];
 export type Environment = components["schemas"]["Environment"];
@@ -56,5 +57,5 @@ export type RuntimeMetricSnapshot = components["schemas"]["RuntimeMetricSnapshot
 export type RuntimeEvent = components["schemas"]["RuntimeEvent"];
 export type RuntimeEvents = components["schemas"]["RuntimeEvents"];
 export type ApiError = components["schemas"]["Error"];
-export type WorkspaceMutationAccepted = { workspace: Workspace; operation: Operation };
+export type WorkspaceMutationAccepted = operations["createWorkspace"]["responses"][202]["content"]["application/json"];
 export type DeploymentMutationAccepted = { deployment: Deployment; operation: Operation };

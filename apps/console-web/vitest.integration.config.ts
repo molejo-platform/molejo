@@ -7,6 +7,7 @@ export default defineConfig({
     name: "integration",
     environment: "jsdom",
     include: ["src/**/*.integration.test.tsx"],
+    setupFiles: ["./src/test/setup.ts"],
     clearMocks: true,
     restoreMocks: true,
   },

@@ -1,0 +1,68 @@
+import { useQuery } from "@tanstack/react-query";
+import { Link, useNavigate, useParams } from "@tanstack/react-router";
+import { useEffect } from "react";
+
+import { userFacingError } from "../../shared/api/errors";
+import { Alert } from "../../shared/ui/Alert";
+import { EmptyState, PageHeader } from "../../shared/ui/Page";
+import { environmentKeys, listEnvironments } from "../environments/public";
+import { getProject } from "./api";
+import { projectKeys } from "./queries";
+
+export function ProjectEntryPage() {
+  const { workspaceId, projectId } = useParams({
+    from: "/protected/workspaces/$workspaceId/projects/$projectId",
+  });
+  const navigate = useNavigate();
+  const project = useQuery({
+    queryKey: projectKeys.detail(workspaceId, projectId),
+    queryFn: () => getProject(workspaceId, projectId),
+  });
+  const environments = useQuery({
+    queryKey: environmentKeys.list(workspaceId, projectId),
+    queryFn: () => listEnvironments(workspaceId, projectId),
+  });
+  const firstEnvironmentId = environments.data?.items[0]?.id;
+  useEffect(() => {
+    if (firstEnvironmentId)
+      void navigate({
+        to: "/workspaces/$workspaceId/projects/$projectId/environments/$environmentId",
+        params: { workspaceId, projectId, environmentId: firstEnvironmentId },
+        replace: true,
+      });
+  }, [firstEnvironmentId, navigate, projectId, workspaceId]);
+  const error = project.error ?? environments.error;
+  if (error) return <Alert>{userFacingError(error)}</Alert>;
+  if (project.isPending || environments.isPending || firstEnvironmentId)
+    return (
+      <p className="muted" role="status">
+        Abrindo Project…
+      </p>
+    );
+  return (
+    <div className="stack">
+      <PageHeader
+        eyebrow="Project"
+        title={project.data?.name ?? "Project"}
+        description="Escolha um Environment para organizar os Apps em execução."
+        breadcrumbs={[
+          { label: "Projects", to: "/workspaces/$workspaceId/projects", params: { workspaceId } },
+          { label: project.data?.name ?? "Project" },
+        ]}
+      />
+      <EmptyState
+        title="Crie o primeiro Environment"
+        description="Apps são configurados e operados dentro de um Environment."
+        action={
+          <Link
+            className="button-link primary"
+            to="/workspaces/$workspaceId/projects/$projectId/settings/environments"
+            params={{ workspaceId, projectId }}
+          >
+            Configurar Environments
+          </Link>
+        }
+      />
+    </div>
+  );
+}

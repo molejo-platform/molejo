@@ -8,3 +8,9 @@
 - Keep Playwright limited to isolated critical journeys; do not repeat edge-case matrices there.
 - When Playwright finds a logic bug, add the smallest lower-level regression test that proves it.
 - Run the smallest relevant suite first and reserve browser acceptance for affected high-risk flows.
+
+# Architecture
+- Follow `ARCHITECTURE.md` for source ownership and dependency rules.
+- Keep features vertical and domain-named; do not organize product code by navigation position.
+- Export cross-feature contracts through `public.ts` and keep `shared` domain-neutral.
+- Run `pnpm architecture:check`, `pnpm lint`, and `pnpm format:check` with the existing typecheck and tests.

@@ -4,10 +4,14 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "architecture:check": "node scripts/check-architecture.mjs",
     "build": "tsc --noEmit && vite build",
     "check": "tsc --noEmit",
     "dev": "vite --host",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
     "generate:api-types": "openapi-typescript ../../contracts/openapi/control-plane-v1.yaml -o src/shared/api/generated/control-plane.ts",
+    "lint": "biome lint .",
     "e2e": "playwright test",
     "test": "corepack pnpm test:unit && corepack pnpm test:integration",
     "test:unit": "vitest run --config vitest.unit.config.ts",
@@ -25,15 +29,16 @@
     "react-dom": "19.2.8"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.12",
+    "@playwright/test": "1.63.0",
     "@testing-library/react": "16.3.3",
     "@testing-library/user-event": "14.6.7",
+    "@types/node": "24.13.3",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.7",
     "@vitejs/plugin-react": "6.1.1",
     "jsdom": "30.0.1",
     "openapi-typescript": "7.13.0",
-    "@playwright/test": "1.63.0",
-    "@types/node": "24.13.3",
     "typescript": "5.9.3",
     "vite": "8.2.2",
     "vitest": "5.0.0"

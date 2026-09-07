@@ -1,7 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
-
-import type { Session } from "../api/types";
 import { setCsrfToken } from "../api/http-client";
+import type { Session } from "../api/types";
 
 export const sessionQueryKey = ["session"] as const;
 const channelName = "molejo.session";
@@ -55,5 +54,8 @@ export function subscribeSessionEvents(listener: (event: SessionEvent) => void) 
 function isSessionEvent(value: unknown): value is { version: 1; type: SessionEvent } {
   if (!value || typeof value !== "object") return false;
   const candidate = value as { version?: unknown; type?: unknown };
-  return candidate.version === sessionEventVersion && (candidate.type === "session-changed" || candidate.type === "session-cleared");
+  return (
+    candidate.version === sessionEventVersion &&
+    (candidate.type === "session-changed" || candidate.type === "session-cleared")
+  );
 }

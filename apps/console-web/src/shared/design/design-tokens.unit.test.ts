@@ -9,10 +9,12 @@ const themePath = resolve(sourceRoot, "shared/design/theme-molejo.css");
 
 async function collectCSS(directory: string): Promise<string[]> {
   const entries = await readdir(directory, { withFileTypes: true });
-  const paths = await Promise.all(entries.map((entry) => {
-    const path = resolve(directory, entry.name);
-    return entry.isDirectory() ? collectCSS(path) : [path];
-  }));
+  const paths = await Promise.all(
+    entries.map((entry) => {
+      const path = resolve(directory, entry.name);
+      return entry.isDirectory() ? collectCSS(path) : [path];
+    }),
+  );
   return paths.flat().filter((path) => extname(path) === ".css");
 }
 
@@ -31,13 +33,17 @@ function resolveColor(tokens: Map<string, string>, name: string, visited = new S
 
 function relativeLuminance(hex: string) {
   const channels = [1, 3, 5].map((index) => Number.parseInt(hex.slice(index, index + 2), 16) / 255);
-  const [red, green, blue] = channels.map((channel) => channel <= .04045 ? channel / 12.92 : ((channel + .055) / 1.055) ** 2.4);
-  return .2126 * red + .7152 * green + .0722 * blue;
+  const [red, green, blue] = channels.map((channel) =>
+    channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4,
+  );
+  return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
 }
 
 function contrast(foreground: string, background: string) {
-  const [lighter, darker] = [relativeLuminance(foreground), relativeLuminance(background)].sort((left, right) => right - left);
-  return (lighter + .05) / (darker + .05);
+  const [lighter, darker] = [relativeLuminance(foreground), relativeLuminance(background)].sort(
+    (left, right) => right - left,
+  );
+  return (lighter + 0.05) / (darker + 0.05);
 }
 
 describe("Molejo Console design tokens", () => {
@@ -64,10 +70,24 @@ describe("Molejo Console design tokens", () => {
   it("declares the minimum semantic theme contract", async () => {
     const tokens = declarations(await readFile(themePath, "utf8"));
     const required = [
-      "--ui-canvas", "--ui-surface", "--ui-text", "--ui-text-muted", "--ui-heading", "--ui-border",
-      "--ui-control-border", "--ui-action-primary", "--ui-on-action-primary", "--ui-focus-ring",
-      "--ui-danger", "--ui-success", "--ui-warning", "--ui-info", "--font-family-heading",
-      "--font-family-body", "--font-family-mono", "--control-min-size",
+      "--ui-canvas",
+      "--ui-surface",
+      "--ui-text",
+      "--ui-text-muted",
+      "--ui-heading",
+      "--ui-border",
+      "--ui-control-border",
+      "--ui-action-primary",
+      "--ui-on-action-primary",
+      "--ui-focus-ring",
+      "--ui-danger",
+      "--ui-success",
+      "--ui-warning",
+      "--ui-info",
+      "--font-family-heading",
+      "--font-family-body",
+      "--font-family-mono",
+      "--control-min-size",
     ];
     expect(required.filter((token) => !tokens.has(token))).toEqual([]);
   });
@@ -86,7 +106,10 @@ describe("Molejo Console design tokens", () => {
       ["--ui-focus-ring", "--ui-surface", 3],
     ] as const;
     for (const [foreground, background, minimum] of pairs) {
-      expect(contrast(resolveColor(tokens, foreground), resolveColor(tokens, background)), `${foreground} on ${background}`).toBeGreaterThanOrEqual(minimum);
+      expect(
+        contrast(resolveColor(tokens, foreground), resolveColor(tokens, background)),
+        `${foreground} on ${background}`,
+      ).toBeGreaterThanOrEqual(minimum);
     }
   });
 });

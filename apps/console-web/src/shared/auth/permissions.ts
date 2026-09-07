@@ -6,7 +6,9 @@ export function canEditWorkspace(session: Session | null | undefined, workspaceI
 }
 
 export function canManageWorkspace(session: Session | null | undefined, workspaceId: string) {
-  return session?.workspaceMemberships?.some((item) => item.workspaceId === workspaceId && item.role === "Owner") === true;
+  return (
+    session?.workspaceMemberships?.some((item) => item.workspaceId === workspaceId && item.role === "Owner") === true
+  );
 }
 
 export function canCreateWorkspace(session: Session | null | undefined) {

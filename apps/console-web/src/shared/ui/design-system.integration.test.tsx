@@ -22,7 +22,13 @@ describe("shared design-system primitives", () => {
   });
 
   it("announces outcomes without turning persistent guidance into a live region", () => {
-    render(<><Alert tone="info">Orientação persistente</Alert><Alert tone="success">Alteração concluída</Alert><Alert>Falha ao salvar</Alert></>);
+    render(
+      <>
+        <Alert tone="info">Orientação persistente</Alert>
+        <Alert tone="success">Alteração concluída</Alert>
+        <Alert>Falha ao salvar</Alert>
+      </>,
+    );
     expect(screen.getByText("Orientação persistente").getAttribute("role")).toBeNull();
     expect(screen.getByRole("status").textContent).toContain("Alteração concluída");
     expect(screen.getByRole("alert").textContent).toContain("Falha ao salvar");
@@ -30,6 +36,8 @@ describe("shared design-system primitives", () => {
 
   it("uses an official brand asset with a stable accessible name", () => {
     render(<BrandLogo surface="light" />);
-    expect(screen.getByRole("img", { name: "Molejo" }).getAttribute("src")).toBe("/brand/molejo-horizontal-on-light.webp");
+    expect(screen.getByRole("img", { name: "Molejo" }).getAttribute("src")).toBe(
+      "/brand/molejo-horizontal-on-light.webp",
+    );
   });
 });

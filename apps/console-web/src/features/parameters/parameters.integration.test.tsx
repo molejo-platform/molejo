@@ -10,7 +10,11 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@tanstack/react-router", () => ({ useParams: () => ({ workspaceId: "ws-aaaaaaaaaaaaaaaaaaaa" }) }));
-vi.mock("../auth/model", () => ({ useSessionQuery: () => ({ data: { workspaceMemberships: [{ workspaceId: "ws-aaaaaaaaaaaaaaaaaaaa", role: mocks.role }] } }) }));
+vi.mock("../authentication/public", () => ({
+  useSessionQuery: () => ({
+    data: { workspaceMemberships: [{ workspaceId: "ws-aaaaaaaaaaaaaaaaaaaa", role: mocks.role }] },
+  }),
+}));
 vi.mock("./api", () => ({
   listParameters: mocks.listParameters,
   createParameter: mocks.createParameter,
@@ -18,8 +22,8 @@ vi.mock("./api", () => ({
   archiveParameter: vi.fn(),
 }));
 
-import { ParametersPage } from "./ParametersPage";
 import { renderWithQueryClient } from "../../test/render";
+import { ParametersPage } from "./ParametersPage";
 
 afterEach(() => {
   cleanup();
@@ -32,9 +36,19 @@ afterEach(() => {
 describe("Parameters page", () => {
   it("creates a write-only Secret without trying to display its value", async () => {
     mocks.listParameters.mockResolvedValue({ items: [], nextCursor: null });
-    mocks.createParameter.mockResolvedValue({ id: "par-aaaaaaaaaaaaaaaaaaaa", path: "/shared/token", type: "Secret", description: "", currentVersion: 1, version: 1, configured: true, createdAt: "2026-08-28T00:00:00Z", updatedAt: "2026-08-28T00:00:00Z" });
+    mocks.createParameter.mockResolvedValue({
+      id: "par-aaaaaaaaaaaaaaaaaaaa",
+      path: "/shared/token",
+      type: "Secret",
+      description: "",
+      currentVersion: 1,
+      version: 1,
+      configured: true,
+      createdAt: "2026-08-28T00:00:00Z",
+      updatedAt: "2026-08-28T00:00:00Z",
+    });
     const user = userEvent.setup();
-    renderWithQueryClient(<ParametersPage/>);
+    renderWithQueryClient(<ParametersPage />);
 
     await screen.findByText("Nenhum Parameter");
     await user.click(screen.getAllByRole("button", { name: "Novo Parameter" })[0]);
@@ -45,16 +59,33 @@ describe("Parameters page", () => {
     await user.type(secret, "private-value");
     await user.click(screen.getByRole("button", { name: "Criar Parameter" }));
 
-    await waitFor(() => expect(mocks.createParameter).toHaveBeenCalledWith("ws-aaaaaaaaaaaaaaaaaaaa", { path: "/shared/token", type: "Secret", description: "", value: "private-value" }));
+    await waitFor(() =>
+      expect(mocks.createParameter).toHaveBeenCalledWith("ws-aaaaaaaaaaaaaaaaaaaa", {
+        path: "/shared/token",
+        type: "Secret",
+        description: "",
+        value: "private-value",
+      }),
+    );
     expect(screen.queryByDisplayValue("private-value")).toBeNull();
   });
 
   it("replaces a Secret with a blank write-only field", async () => {
-    const parameter = { id: "par-aaaaaaaaaaaaaaaaaaaa", path: "/shared/token", type: "Secret" as const, description: "Token", currentVersion: 2, version: 2, configured: true, createdAt: "2026-08-28T00:00:00Z", updatedAt: "2026-08-28T00:00:00Z" };
+    const parameter = {
+      id: "par-aaaaaaaaaaaaaaaaaaaa",
+      path: "/shared/token",
+      type: "Secret" as const,
+      description: "Token",
+      currentVersion: 2,
+      version: 2,
+      configured: true,
+      createdAt: "2026-08-28T00:00:00Z",
+      updatedAt: "2026-08-28T00:00:00Z",
+    };
     mocks.listParameters.mockResolvedValue({ items: [parameter], nextCursor: null });
     mocks.replaceParameter.mockResolvedValue({ ...parameter, currentVersion: 3, version: 3 });
     const user = userEvent.setup();
-    renderWithQueryClient(<ParametersPage/>);
+    renderWithQueryClient(<ParametersPage />);
 
     await screen.findByText(/Secret · valor protegido/);
     await user.click(screen.getByRole("button", { name: "Substituir" }));
@@ -63,13 +94,20 @@ describe("Parameters page", () => {
     await user.type(value, "rotated-value");
     await user.click(screen.getByRole("button", { name: "Substituir segredo" }));
 
-    await waitFor(() => expect(mocks.replaceParameter).toHaveBeenCalledWith("ws-aaaaaaaaaaaaaaaaaaaa", parameter, { path: "/shared/token", type: "Secret", description: "Token", value: "rotated-value" }));
+    await waitFor(() =>
+      expect(mocks.replaceParameter).toHaveBeenCalledWith("ws-aaaaaaaaaaaaaaaaaaaa", parameter, {
+        path: "/shared/token",
+        type: "Secret",
+        description: "Token",
+        value: "rotated-value",
+      }),
+    );
   });
 
   it("keeps testers read-only", async () => {
     mocks.role = "Viewer";
     mocks.listParameters.mockResolvedValue({ items: [], nextCursor: null });
-    renderWithQueryClient(<ParametersPage/>);
+    renderWithQueryClient(<ParametersPage />);
     await screen.findByText("Nenhum Parameter");
     expect(screen.queryByRole("button", { name: "Novo Parameter" })).toBeNull();
     expect(screen.getByText(/Apenas o owner/).textContent).toContain("Apenas o owner");

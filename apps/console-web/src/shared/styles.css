@@ -3,4 +3,4 @@
 @import "./design/theme-molejo.css" layer(tokens);
 @import "./design/base.css" layer(base);
 @import "./design/components.css" layer(components);
-@import "../features/environments/observability.css" layer(features);
+@import "../features/observability/observability.css" layer(features);

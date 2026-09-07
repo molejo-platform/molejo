@@ -21,9 +21,11 @@ export function userFacingError(error: unknown) {
     if (error.details?.code === "invalid_credentials") return "Credenciais inválidas.";
     if (error.details?.code === "current_password_invalid") return "A senha atual está incorreta.";
     if (isUnauthenticatedError(error)) return "Sua sessão expirou. Entre novamente.";
-    if (error.details?.code === "version_conflict") return "O recurso mudou. Recarregue os dados antes de tentar novamente.";
+    if (error.details?.code === "version_conflict")
+      return "O recurso mudou. Recarregue os dados antes de tentar novamente.";
     if (error.details?.code === "name_conflict") return "Já existe um recurso ativo com esse nome.";
-    if (error.details?.code === "dependency_conflict") return "O recurso possui dependências ativas e não pode ser arquivado.";
+    if (error.details?.code === "dependency_conflict")
+      return "O recurso possui dependências ativas e não pode ser arquivado.";
     if (error.status === 409) return "O deployment mudou. Recarregue os dados antes de tentar novamente.";
     return error.message;
   }
