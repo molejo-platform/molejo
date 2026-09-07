@@ -2,6 +2,11 @@
 
 FROM docker.io/library/node:24.19.0-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43 AS build
 
+ARG VERSION=devel
+ARG COMMIT=unknown
+ENV VITE_APP_VERSION=${VERSION}
+ENV VITE_APP_COMMIT=${COMMIT}
+
 RUN corepack enable \
     && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 WORKDIR /workspace

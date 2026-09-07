@@ -40,6 +40,12 @@ afterEach(() => {
 });
 
 describe("WorkspaceHeader", () => {
+  it("identifies local builds discreetly in the sidebar", () => {
+    render(<WorkspaceHeader />);
+
+    expect(screen.getByText("Console dev").getAttribute("title")).toBe("Console dev");
+  });
+
   it("keeps the current session visible when logout fails", async () => {
     mocks.logout.mutateAsync.mockRejectedValue(new Error("offline"));
     const user = userEvent.setup();

@@ -111,6 +111,15 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.console-build {
+  color: var(--ui-inverse-text-subtle);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-xs);
+  opacity: 0.72;
+  overflow-wrap: anywhere;
+  padding: 0 var(--space-3);
+  text-align: center;
+}
 .sidebar .button[data-variant="ghost"] {
   color: var(--ui-inverse-text);
   justify-content: flex-start;

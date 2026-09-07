@@ -2,6 +2,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { userFacingError } from "../../shared/api/errors";
 import { canCreateWorkspace } from "../../shared/auth/permissions";
+import { consoleBuildInfo } from "../../shared/build-info";
 import { Alert } from "../../shared/ui/Alert";
 import { BrandLogo } from "../../shared/ui/BrandLogo";
 import { Button } from "../../shared/ui/Button";
@@ -32,6 +33,10 @@ export function WorkspaceHeader() {
   }
 
   const workspaceId = workspace?.id ?? "";
+  const shortCommit = consoleBuildInfo.commit?.slice(0, 7);
+  const buildTitle = consoleBuildInfo.commit
+    ? `Console ${consoleBuildInfo.version} · commit ${consoleBuildInfo.commit}`
+    : `Console ${consoleBuildInfo.version}`;
   const navItems = [
     { label: "Visão geral", to: "/workspaces/$workspaceId/overview" },
     { label: "Projects", to: "/workspaces/$workspaceId/projects" },
@@ -133,6 +138,10 @@ export function WorkspaceHeader() {
           <Button variant="ghost" onClick={signOut} loading={logout.isPending}>
             Sair
           </Button>
+          <small className="console-build" title={buildTitle}>
+            Console {consoleBuildInfo.version}
+            {shortCommit ? ` · ${shortCommit}` : ""}
+          </small>
         </div>
       </aside>
       {menuOpen && (
