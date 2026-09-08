@@ -2,6 +2,7 @@ package contracts
 
 import (
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -75,12 +76,19 @@ func TestClusterAgentObserverRBACIsReadOnlyAndExcludesInteractiveAccess(t *testi
 		if yaml.Unmarshal([]byte(document), &role) != nil || role.Name != "molejo-cluster-agent-observer" {
 			continue
 		}
+		hasReplicaSets := false
 		for _, rule := range role.Rules {
+			if slices.Contains(rule.APIGroups, "apps") && slices.Contains(rule.Resources, "replicasets") {
+				hasReplicaSets = true
+			}
 			for _, verb := range rule.Verbs {
 				if verb != "get" && verb != "list" && !(verb == "create" && strings.Join(rule.Resources, ",") == "selfsubjectaccessreviews") {
 					t.Fatalf("observer role contains mutating verb %q in %+v", verb, rule)
 				}
 			}
+		}
+		if !hasReplicaSets {
+			t.Fatal("observer ClusterRole cannot validate Deployment Pod ownership without ReplicaSets")
 		}
 		return
 	}
