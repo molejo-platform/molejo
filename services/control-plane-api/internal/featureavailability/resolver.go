@@ -59,7 +59,7 @@ func resolveProvider(now time.Time, feature Feature, facts Facts) Feature {
 	}
 	if observation, ok := latestObservation(now, feature.ID, facts.Observations); ok {
 		feature.ObservedAt = timePointer(observation.SampledAt)
-		feature.Limitations = append([]string(nil), observation.Limitations...)
+		feature.Limitations = append([]string{}, observation.Limitations...)
 		switch {
 		case observation.Support == capabilitycontract.SupportUnsupported:
 			feature.State, feature.ReasonCode = Unsupported, observation.ReasonCode

@@ -55,6 +55,27 @@ func TestResolveProviderAndCopiesInputs(t *testing.T) {
 	}
 }
 
+func TestResolveObservationAlwaysReturnsLimitationsArray(t *testing.T) {
+	now := time.Now().UTC()
+	facts := Facts{
+		AgentConnected: true,
+		Observations: []capabilitycontract.Observation{{
+			ID:              capabilitycontract.StorageRWO,
+			ContractVersion: capabilitycontract.ContractVersion,
+			Support:         capabilitycontract.SupportSupported,
+			Health:          capabilitycontract.HealthUnavailable,
+			SampledAt:       now,
+			ReceivedAt:      now,
+			ExpiresAt:       now.Add(time.Minute),
+		}},
+	}
+
+	feature := featureByID(Resolve(now, Target{}, facts), capabilitycontract.StorageRWO)
+	if feature.Limitations == nil {
+		t.Fatal("observation-backed feature returned nil limitations")
+	}
+}
+
 func featureByID(features []Feature, id capabilitycontract.ID) Feature {
 	for _, feature := range features {
 		if feature.ID == id {
