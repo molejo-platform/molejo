@@ -18,6 +18,8 @@ spec:
         app.kubernetes.io/part-of: molejo-platform
     spec:
       serviceAccountName: platform-operator
+      imagePullSecrets:
+        - name: registry-molejo
       securityContext:
         runAsNonRoot: true
         seccompProfile:
