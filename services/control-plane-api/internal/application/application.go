@@ -23,6 +23,7 @@ import (
 	"google.golang.org/grpc/credentials"
 
 	clusteragentv1alpha1 "github.com/molejo-platform/molejo/contracts/molejo/clusteragent/v1alpha1"
+	"github.com/molejo-platform/molejo/packages/capabilitycontract"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/api"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/auth"
 	controlbuild "github.com/molejo-platform/molejo/services/control-plane-api/internal/build"
@@ -33,6 +34,7 @@ import (
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/observability"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/operationworker"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/parameters"
+	"github.com/molejo-platform/molejo/services/control-plane-api/internal/providerbinding"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/store"
 )
 
@@ -121,6 +123,7 @@ func Run(version string, args []string) error {
 		PasswordResetKey:      passwordResetKey,
 		AuthenticationSecrets: parameterSecrets,
 		Observability:         observabilityBackend,
+		ProviderInventory:     configuredProviderInventory(github, parameterSecrets),
 		AgentSigner:           agentSigner,
 		AgentServerCAPEM:      agentServerCAPEM,
 		AgentTrustBundleID:    agentTrustBundleID,
@@ -164,6 +167,30 @@ func Run(version string, args []string) error {
 		gracefulStopGRPC(grpcServer, 5*time.Second)
 	}
 	return serveErr
+}
+
+func configuredProviderInventory(github githubapp.Service, secretStore parameters.SecretValueStore) providerbinding.Inventory {
+	bindings := make([]providerbinding.Binding, 0, 6)
+	configured := func(id capabilitycontract.ID) {
+		bindings = append(bindings, providerbinding.Binding{Capability: id, Configured: true, Health: providerbinding.HealthUnknown})
+	}
+	if github != nil {
+		configured(capabilitycontract.SourceGitHub)
+	}
+	if strings.TrimSpace(os.Getenv("MOLEJO_BUILDKIT_ADDRESS")) != "" && strings.TrimSpace(os.Getenv("MOLEJO_BUILD_IMAGE_REPOSITORY")) != "" {
+		configured(capabilitycontract.BuildManaged)
+	}
+	if _, unavailable := secretStore.(parameters.UnavailableStore); !unavailable {
+		configured(capabilitycontract.ParametersSecretStatic)
+	}
+	if strings.TrimSpace(os.Getenv("MOLEJO_CLICKHOUSE_URL")) != "" {
+		configured(capabilitycontract.TelemetryLogsHistorical)
+		configured(capabilitycontract.TelemetryEventsHistorical)
+	}
+	if strings.TrimSpace(os.Getenv("MOLEJO_VICTORIAMETRICS_URL")) != "" {
+		configured(capabilitycontract.TelemetryMetricsHistorical)
+	}
+	return providerbinding.New(bindings...)
 }
 
 func gracefulStopGRPC(server *grpc.Server, timeout time.Duration) {

@@ -539,6 +539,57 @@ func (e DeploymentPreviewChanges) Valid() bool {
 	}
 }
 
+// Defines values for FeatureAvailabilityState.
+const (
+	FeatureAvailabilityStateAvailable     FeatureAvailabilityState = "Available"
+	FeatureAvailabilityStateLimited       FeatureAvailabilityState = "Limited"
+	FeatureAvailabilityStateNotConfigured FeatureAvailabilityState = "NotConfigured"
+	FeatureAvailabilityStateUnavailable   FeatureAvailabilityState = "Unavailable"
+	FeatureAvailabilityStateUnknown       FeatureAvailabilityState = "Unknown"
+	FeatureAvailabilityStateUnsupported   FeatureAvailabilityState = "Unsupported"
+)
+
+// Valid indicates whether the value is a known member of the FeatureAvailabilityState enum.
+func (e FeatureAvailabilityState) Valid() bool {
+	switch e {
+	case FeatureAvailabilityStateAvailable:
+		return true
+	case FeatureAvailabilityStateLimited:
+		return true
+	case FeatureAvailabilityStateNotConfigured:
+		return true
+	case FeatureAvailabilityStateUnavailable:
+		return true
+	case FeatureAvailabilityStateUnknown:
+		return true
+	case FeatureAvailabilityStateUnsupported:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for FeatureAvailabilityResponseScopeType.
+const (
+	FeatureAvailabilityResponseScopeTypeApp            FeatureAvailabilityResponseScopeType = "App"
+	FeatureAvailabilityResponseScopeTypeAppEnvironment FeatureAvailabilityResponseScopeType = "AppEnvironment"
+	FeatureAvailabilityResponseScopeTypeWorkspace      FeatureAvailabilityResponseScopeType = "Workspace"
+)
+
+// Valid indicates whether the value is a known member of the FeatureAvailabilityResponseScopeType enum.
+func (e FeatureAvailabilityResponseScopeType) Valid() bool {
+	switch e {
+	case FeatureAvailabilityResponseScopeTypeApp:
+		return true
+	case FeatureAvailabilityResponseScopeTypeAppEnvironment:
+		return true
+	case FeatureAvailabilityResponseScopeTypeWorkspace:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for GitHubInstallationAccountType.
 const (
 	GitHubInstallationAccountTypeEnterprise   GitHubInstallationAccountType = "Enterprise"
@@ -1415,6 +1466,27 @@ func (e GetEffectiveCapabilitiesParamsResourceType) Valid() bool {
 	}
 }
 
+// Defines values for GetFeatureAvailabilityParamsScopeType.
+const (
+	GetFeatureAvailabilityParamsScopeTypeApp            GetFeatureAvailabilityParamsScopeType = "App"
+	GetFeatureAvailabilityParamsScopeTypeAppEnvironment GetFeatureAvailabilityParamsScopeType = "AppEnvironment"
+	GetFeatureAvailabilityParamsScopeTypeWorkspace      GetFeatureAvailabilityParamsScopeType = "Workspace"
+)
+
+// Valid indicates whether the value is a known member of the GetFeatureAvailabilityParamsScopeType enum.
+func (e GetFeatureAvailabilityParamsScopeType) Valid() bool {
+	switch e {
+	case GetFeatureAvailabilityParamsScopeTypeApp:
+		return true
+	case GetFeatureAvailabilityParamsScopeTypeAppEnvironment:
+		return true
+	case GetFeatureAvailabilityParamsScopeTypeWorkspace:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ListWorkspaceOperationsParamsStatus.
 const (
 	ListWorkspaceOperationsParamsStatusFailed    ListWorkspaceOperationsParamsStatus = "Failed"
@@ -1903,6 +1975,29 @@ type Error struct {
 		Message string `json:"message"`
 	} `json:"violations,omitempty"`
 }
+
+// FeatureAvailability defines model for FeatureAvailability.
+type FeatureAvailability struct {
+	ContractVersion string                   `json:"contractVersion"`
+	Id              string                   `json:"id"`
+	Limitations     []string                 `json:"limitations"`
+	ObservedAt      *time.Time               `json:"observedAt,omitempty"`
+	ReasonCode      *string                  `json:"reasonCode,omitempty"`
+	State           FeatureAvailabilityState `json:"state"`
+}
+
+// FeatureAvailabilityState defines model for FeatureAvailability.State.
+type FeatureAvailabilityState string
+
+// FeatureAvailabilityResponse defines model for FeatureAvailabilityResponse.
+type FeatureAvailabilityResponse struct {
+	Features  []FeatureAvailability                `json:"features"`
+	ScopeId   string                               `json:"scopeId"`
+	ScopeType FeatureAvailabilityResponseScopeType `json:"scopeType"`
+}
+
+// FeatureAvailabilityResponseScopeType defines model for FeatureAvailabilityResponse.ScopeType.
+type FeatureAvailabilityResponseScopeType string
 
 // GitHubInstallation defines model for GitHubInstallation.
 type GitHubInstallation struct {
@@ -2871,6 +2966,15 @@ type AttachWorkspaceClusterParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
+// GetFeatureAvailabilityParams defines parameters for GetFeatureAvailability.
+type GetFeatureAvailabilityParams struct {
+	ScopeType GetFeatureAvailabilityParamsScopeType `form:"scopeType" json:"scopeType"`
+	ScopeId   string                                `form:"scopeId" json:"scopeId"`
+}
+
+// GetFeatureAvailabilityParamsScopeType defines parameters for GetFeatureAvailability.
+type GetFeatureAvailabilityParamsScopeType string
+
 // PutWorkspaceMemberParams defines parameters for PutWorkspaceMember.
 type PutWorkspaceMemberParams struct {
 	IfMatch *OptionalIfMatch `json:"If-Match,omitempty"`
@@ -3368,6 +3472,9 @@ type ServerInterface interface {
 	// (POST /api/v1/workspaces/{workspaceId}/clusters)
 	AttachWorkspaceCluster(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, params AttachWorkspaceClusterParams)
 
+	// (GET /api/v1/workspaces/{workspaceId}/feature-availability)
+	GetFeatureAvailability(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, params GetFeatureAvailabilityParams)
+
 	// (GET /api/v1/workspaces/{workspaceId}/github/installations)
 	ListGitHubInstallations(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId)
 
@@ -3831,6 +3938,11 @@ func (_ Unimplemented) ListWorkspaceClusters(w http.ResponseWriter, r *http.Requ
 
 // (POST /api/v1/workspaces/{workspaceId}/clusters)
 func (_ Unimplemented) AttachWorkspaceCluster(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, params AttachWorkspaceClusterParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /api/v1/workspaces/{workspaceId}/feature-availability)
+func (_ Unimplemented) GetFeatureAvailability(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, params GetFeatureAvailabilityParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -5759,6 +5871,61 @@ func (siw *ServerInterfaceWrapper) AttachWorkspaceCluster(w http.ResponseWriter,
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.AttachWorkspaceCluster(w, r, workspaceId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetFeatureAvailability operation middleware
+func (siw *ServerInterfaceWrapper) GetFeatureAvailability(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId WorkspaceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetFeatureAvailabilityParams
+
+	// ------------- Required query parameter "scopeType" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "scopeType", r.URL.Query(), &params.ScopeType, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "scopeType"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "scopeType", Err: err})
+		}
+		return
+	}
+
+	// ------------- Required query parameter "scopeId" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "scopeId", r.URL.Query(), &params.ScopeId, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "scopeId"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "scopeId", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetFeatureAvailability(w, r, workspaceId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -10292,6 +10459,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/authorization/capabilities", wrapper.GetEffectiveCapabilities)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/feature-availability", wrapper.GetFeatureAvailability)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/workspaces/current", wrapper.GetCurrentWorkspace)
 	})
 	r.Group(func(r chi.Router) {
@@ -13033,6 +13203,57 @@ func (response AttachWorkspaceCluster409JSONResponse) VisitAttachWorkspaceCluste
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetFeatureAvailabilityRequestObject struct {
+	WorkspaceId WorkspaceId `json:"workspaceId"`
+	Params      GetFeatureAvailabilityParams
+}
+
+type GetFeatureAvailabilityResponseObject interface {
+	VisitGetFeatureAvailabilityResponse(w http.ResponseWriter) error
+}
+
+type GetFeatureAvailability200JSONResponse FeatureAvailabilityResponse
+
+func (response GetFeatureAvailability200JSONResponse) VisitGetFeatureAvailabilityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetFeatureAvailability403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response GetFeatureAvailability403JSONResponse) VisitGetFeatureAvailabilityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetFeatureAvailability404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response GetFeatureAvailability404JSONResponse) VisitGetFeatureAvailabilityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -17588,6 +17809,9 @@ type StrictServerInterface interface {
 	// (POST /api/v1/workspaces/{workspaceId}/clusters)
 	AttachWorkspaceCluster(ctx context.Context, request AttachWorkspaceClusterRequestObject) (AttachWorkspaceClusterResponseObject, error)
 
+	// (GET /api/v1/workspaces/{workspaceId}/feature-availability)
+	GetFeatureAvailability(ctx context.Context, request GetFeatureAvailabilityRequestObject) (GetFeatureAvailabilityResponseObject, error)
+
 	// (GET /api/v1/workspaces/{workspaceId}/github/installations)
 	ListGitHubInstallations(ctx context.Context, request ListGitHubInstallationsRequestObject) (ListGitHubInstallationsResponseObject, error)
 
@@ -19219,6 +19443,33 @@ func (sh *strictHandler) AttachWorkspaceCluster(w http.ResponseWriter, r *http.R
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(AttachWorkspaceClusterResponseObject); ok {
 		if err := validResponse.VisitAttachWorkspaceClusterResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetFeatureAvailability operation middleware
+func (sh *strictHandler) GetFeatureAvailability(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, params GetFeatureAvailabilityParams) {
+	var request GetFeatureAvailabilityRequestObject
+
+	request.WorkspaceId = workspaceId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetFeatureAvailability(ctx, request.(GetFeatureAvailabilityRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetFeatureAvailability")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetFeatureAvailabilityResponseObject); ok {
+		if err := validResponse.VisitGetFeatureAvailabilityResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

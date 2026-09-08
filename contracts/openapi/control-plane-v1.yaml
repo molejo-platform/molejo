@@ -554,6 +554,26 @@ paths:
         '200': { description: Effective capabilities for the current user and resource, content: { application/json: { schema: { $ref: '#/components/schemas/EffectiveCapabilities' } } } }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/workspaces/{workspaceId}/feature-availability:
+    parameters: [{ $ref: '#/components/parameters/WorkspaceId' }]
+    get:
+      operationId: getFeatureAvailability
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: scopeType
+          in: query
+          required: true
+          schema: { type: string, enum: [Workspace, App, AppEnvironment] }
+        - name: scopeId
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 64 }
+      responses:
+        '200':
+          description: Structural feature availability for the selected scope
+          content: { application/json: { schema: { $ref: '#/components/schemas/FeatureAvailabilityResponse' } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /api/v1/workspaces/current:
     get:
       operationId: getCurrentWorkspace
@@ -2331,6 +2351,30 @@ components:
         manageAutomation: { type: boolean }
         editResources: { type: boolean }
         deploy: { type: boolean }
+    FeatureAvailability:
+      type: object
+      required: [id, contractVersion, state, limitations]
+      additionalProperties: false
+      properties:
+        id: { type: string, minLength: 1, maxLength: 128 }
+        contractVersion: { type: string, minLength: 1, maxLength: 32 }
+        state: { type: string, enum: [Available, Limited, NotConfigured, Unavailable, Unsupported, Unknown] }
+        reasonCode: { type: string, maxLength: 128 }
+        limitations:
+          type: array
+          maxItems: 16
+          items: { type: string, maxLength: 128 }
+        observedAt: { type: string, format: date-time }
+    FeatureAvailabilityResponse:
+      type: object
+      required: [scopeType, scopeId, features]
+      additionalProperties: false
+      properties:
+        scopeType: { type: string, enum: [Workspace, App, AppEnvironment] }
+        scopeId: { type: string }
+        features:
+          type: array
+          items: { $ref: '#/components/schemas/FeatureAvailability' }
     AuditEvent:
       type: object
       required: [id, occurredAt, action, targetType, outcome, metadata]

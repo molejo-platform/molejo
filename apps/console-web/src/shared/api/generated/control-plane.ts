@@ -570,6 +570,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspaceId}/feature-availability": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        get: operations["getFeatureAvailability"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/current": {
         parameters: {
             query?: never;
@@ -1757,6 +1775,22 @@ export interface components {
             manageAutomation: boolean;
             editResources: boolean;
             deploy: boolean;
+        };
+        FeatureAvailability: {
+            id: string;
+            contractVersion: string;
+            /** @enum {string} */
+            state: "Available" | "Limited" | "NotConfigured" | "Unavailable" | "Unsupported" | "Unknown";
+            reasonCode?: string;
+            limitations: string[];
+            /** Format: date-time */
+            observedAt?: string;
+        };
+        FeatureAvailabilityResponse: {
+            /** @enum {string} */
+            scopeType: "Workspace" | "App" | "AppEnvironment";
+            scopeId: string;
+            features: components["schemas"]["FeatureAvailability"][];
         };
         AuditEvent: {
             id: string;
@@ -3695,6 +3729,33 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EffectiveCapabilities"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getFeatureAvailability: {
+        parameters: {
+            query: {
+                scopeType: "Workspace" | "App" | "AppEnvironment";
+                scopeId: string;
+            };
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Structural feature availability for the selected scope */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeatureAvailabilityResponse"];
                 };
             };
             403: components["responses"]["Forbidden"];

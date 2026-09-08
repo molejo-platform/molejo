@@ -25,6 +25,7 @@ import (
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/identity"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/observability"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/parameters"
+	"github.com/molejo-platform/molejo/services/control-plane-api/internal/providerbinding"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/store"
 )
 
@@ -86,6 +87,7 @@ type Server struct {
 	passwordResetKey      []byte
 	authenticationSecrets parameters.SecretValueStore
 	observability         observability.Reader
+	providerInventory     providerbinding.Inventory
 	agentSigner           AgentCertificateSigner
 	agentServerCAPEM      []byte
 	agentTrustBundleID    string
@@ -115,6 +117,7 @@ type Dependencies struct {
 	PasswordResetKey      []byte
 	AuthenticationSecrets parameters.SecretValueStore
 	Observability         observability.Reader
+	ProviderInventory     providerbinding.Inventory
 	AgentSigner           AgentCertificateSigner
 	AgentServerCAPEM      []byte
 	AgentTrustBundleID    string
@@ -145,7 +148,7 @@ func NewServer(cfg Config, dependencies Dependencies) *Server {
 	if dependencies.Observability == nil {
 		dependencies.Observability = observability.UnavailableReader{}
 	}
-	return &Server{store: dependencies.Store, config: cfg, log: logger, tracer: dependencies.Tracer, github: dependencies.GitHub, githubWebhookSecret: dependencies.GitHubWebhookSecret, parameterSecrets: dependencies.ParameterSecrets, secretFingerprintKey: dependencies.SecretFingerprintKey, passwordResetKey: dependencies.PasswordResetKey, authenticationSecrets: dependencies.AuthenticationSecrets, observability: dependencies.Observability, agentSigner: dependencies.AgentSigner, agentServerCAPEM: append([]byte(nil), dependencies.AgentServerCAPEM...), agentTrustBundleID: dependencies.AgentTrustBundleID, logLiveLimiter: &concurrencyLimiter{active: map[int64]int{}}, metricsLiveLimiter: &concurrencyLimiter{active: map[int64]int{}}, metricSnapshots: newMetricSnapshotCache(cfg.ObservabilityMetricsLivePoll), token: randomToken, deploymentID: func() (string, error) { return domain.NewPublicID("dpl") }, parameterID: func() (string, error) { return domain.NewPublicID("par") }, dummyPasswordHash: dummyHash}
+	return &Server{store: dependencies.Store, config: cfg, log: logger, tracer: dependencies.Tracer, github: dependencies.GitHub, githubWebhookSecret: dependencies.GitHubWebhookSecret, parameterSecrets: dependencies.ParameterSecrets, secretFingerprintKey: dependencies.SecretFingerprintKey, passwordResetKey: dependencies.PasswordResetKey, authenticationSecrets: dependencies.AuthenticationSecrets, observability: dependencies.Observability, providerInventory: dependencies.ProviderInventory, agentSigner: dependencies.AgentSigner, agentServerCAPEM: append([]byte(nil), dependencies.AgentServerCAPEM...), agentTrustBundleID: dependencies.AgentTrustBundleID, logLiveLimiter: &concurrencyLimiter{active: map[int64]int{}}, metricsLiveLimiter: &concurrencyLimiter{active: map[int64]int{}}, metricSnapshots: newMetricSnapshotCache(cfg.ObservabilityMetricsLivePoll), token: randomToken, deploymentID: func() (string, error) { return domain.NewPublicID("dpl") }, parameterID: func() (string, error) { return domain.NewPublicID("par") }, dummyPasswordHash: dummyHash}
 }
 
 func (s *Server) Handler() http.Handler {
