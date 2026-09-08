@@ -109,7 +109,8 @@ func Run(version string, args []string) error {
 		Store: s, Publication: s.PublicationPolicy(), ParameterSecrets: parameterSecrets,
 		OperationLease: cfg.OperationLease, CommandTimeout: operationworker.DefaultCommandTimeout, Logger: slog.Default(),
 	}
-	agentSigner, agentServerCAPEM, agentTrustBundleID, grpcServer, grpcListener, err := configureAgentPairing(s, dispatcher)
+	runtimeQueryBroker := controlagent.NewRuntimeQueryBroker(s)
+	agentSigner, agentServerCAPEM, agentTrustBundleID, grpcServer, grpcListener, err := configureAgentPairing(s, dispatcher, runtimeQueryBroker)
 	if err != nil {
 		return err
 	}
@@ -209,7 +210,7 @@ func gracefulStopGRPC(server *grpc.Server, timeout time.Duration) {
 	}
 }
 
-func configureAgentPairing(registry *store.Store, dispatcher controlagent.RuntimeDispatcher) (api.AgentCertificateSigner, []byte, string, *grpc.Server, net.Listener, error) {
+func configureAgentPairing(registry *store.Store, dispatcher controlagent.RuntimeDispatcher, runtimeQueries *controlagent.RuntimeQueryBroker) (api.AgentCertificateSigner, []byte, string, *grpc.Server, net.Listener, error) {
 	caCertificatePath := strings.TrimSpace(os.Getenv("MOLEJO_AGENT_CA_CERT_FILE"))
 	caKeyPath := strings.TrimSpace(os.Getenv("MOLEJO_AGENT_CA_KEY_FILE"))
 	serverCertificatePath := strings.TrimSpace(os.Getenv("MOLEJO_AGENT_SERVER_CERT_FILE"))
@@ -273,6 +274,7 @@ func configureAgentPairing(registry *store.Store, dispatcher controlagent.Runtim
 	grpcServer := grpc.NewServer(grpc.Creds(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS13, Certificates: []tls.Certificate{serverCertificate}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: clientRoots})))
 	service := controlagent.NewGRPCService(registry, dispatcher, 5*time.Second)
 	service.ConfigureCertificateRenewal(signer, serverCAPEM, trustBundleID)
+	service.ConfigureRuntimeQueries(runtimeQueries)
 	clusteragentv1alpha1.RegisterClusterAgentServiceServer(grpcServer, service)
 	return signer, serverCAPEM, trustBundleID, grpcServer, listener, nil
 }

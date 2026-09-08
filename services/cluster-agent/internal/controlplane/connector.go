@@ -25,6 +25,7 @@ type GRPCConnector struct {
 	executor        RuntimeExecutor
 	observer        RuntimeObserver
 	capabilities    CapabilitySnapshotProvider
+	runtimeQueries  RuntimeQueryHandler
 	responseTimeout time.Duration
 }
 
@@ -63,6 +64,10 @@ func (c *GRPCConnector) ConfigureCapabilityObservations(provider CapabilitySnaps
 	c.capabilities = provider
 }
 
+func (c *GRPCConnector) ConfigureRuntimeQueries(handler RuntimeQueryHandler) {
+	c.runtimeQueries = handler
+}
+
 func (c *GRPCConnector) Connect(ctx context.Context, identity agentidentity.StoredIdentity, paired func()) error {
 	connection, err := c.connection(identity)
 	if err != nil {
@@ -71,11 +76,43 @@ func (c *GRPCConnector) Connect(ctx context.Context, identity agentidentity.Stor
 	defer connection.Close()
 	streamContext, cancel := context.WithCancel(ctx)
 	defer cancel()
-	stream, err := clusteragentv1alpha1.NewClusterAgentServiceClient(connection).Connect(streamContext)
+	client := clusteragentv1alpha1.NewClusterAgentServiceClient(connection)
+	stream, err := client.Connect(streamContext)
 	if err != nil {
 		return fmt.Errorf("open Agent gRPC stream: %w", err)
 	}
-	return runControlChannel(streamContext, stream, identity.InstallationID, identity.TrustBundleID, c.version, c.metadata, c.executor, c.observer, c.capabilities, paired, c.responseTimeout)
+	if c.runtimeQueries == nil {
+		return runControlChannel(streamContext, stream, identity.InstallationID, identity.TrustBundleID, c.version, c.metadata, c.executor, c.observer, c.capabilities, paired, nil, c.responseTimeout)
+	}
+	sessionReady := make(chan string, 1)
+	controlErrors := make(chan error, 1)
+	go func() {
+		controlErrors <- runControlChannel(streamContext, stream, identity.InstallationID, identity.TrustBundleID, c.version, c.metadata, c.executor, c.observer, c.capabilities, paired, func(sessionID string) { sessionReady <- sessionID }, c.responseTimeout)
+	}()
+	var sessionID string
+	select {
+	case err = <-controlErrors:
+		return err
+	case sessionID = <-sessionReady:
+	case <-streamContext.Done():
+		return streamContext.Err()
+	}
+	queryStream, err := client.OpenRuntimeQueryChannel(streamContext)
+	if err != nil {
+		return fmt.Errorf("open runtime query stream: %w", err)
+	}
+	queryErrors := make(chan error, 1)
+	go func() {
+		queryErrors <- runRuntimeQueryChannel(streamContext, queryStream, identity.InstallationID, sessionID, c.runtimeQueries)
+	}()
+	select {
+	case err = <-controlErrors:
+	case err = <-queryErrors:
+	case <-streamContext.Done():
+		err = streamContext.Err()
+	}
+	cancel()
+	return err
 }
 
 func (c *GRPCConnector) Renew(ctx context.Context, identity agentidentity.StoredIdentity, request agent.RenewalRequest) (agentidentity.Certificate, error) {
@@ -128,7 +165,7 @@ type agentControlStream interface {
 	Recv() (*clusteragentv1alpha1.ConnectResponse, error)
 }
 
-func runControlChannel(ctx context.Context, stream agentControlStream, installationID, trustBundleID string, version string, metadata AgentMetadata, executor RuntimeExecutor, observer RuntimeObserver, capabilities CapabilitySnapshotProvider, paired func(), responseTimeout time.Duration) error {
+func runControlChannel(ctx context.Context, stream agentControlStream, installationID, trustBundleID string, version string, metadata AgentMetadata, executor RuntimeExecutor, observer RuntimeObserver, capabilities CapabilitySnapshotProvider, paired func(), sessionReady func(string), responseTimeout time.Duration) error {
 	hello := &clusteragentv1alpha1.AgentHello{InstallationId: installationID, AgentVersion: version, ClusterUid: metadata.ClusterUID, KubernetesVersion: metadata.KubernetesVersion, Capabilities: metadata.Capabilities, SupportedProtocolVersions: []string{"v1alpha1"}, TrustBundleId: trustBundleID}
 	if err := stream.Send(&clusteragentv1alpha1.ConnectRequest{Payload: &clusteragentv1alpha1.ConnectRequest_Hello{Hello: hello}}); err != nil {
 		return fmt.Errorf("send Agent hello: %w", err)
@@ -147,6 +184,9 @@ func runControlChannel(ctx context.Context, stream agentControlStream, installat
 	localHelloTimeUnix := time.Now().Unix()
 	if paired != nil {
 		paired()
+	}
+	if sessionReady != nil {
+		sessionReady(controlPlaneHello.GetSessionId())
 	}
 	ticker := time.NewTicker(time.Duration(controlPlaneHello.GetHeartbeatIntervalSeconds()) * time.Second)
 	defer ticker.Stop()

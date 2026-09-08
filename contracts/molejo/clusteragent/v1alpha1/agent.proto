@@ -6,6 +6,7 @@ option go_package = "github.com/molejo-platform/molejo/contracts/molejo/clustera
 
 service ClusterAgentService {
   rpc Connect(stream ConnectRequest) returns (stream ConnectResponse);
+  rpc OpenRuntimeQueryChannel(stream OpenRuntimeQueryChannelRequest) returns (stream OpenRuntimeQueryChannelResponse);
   rpc RenewCertificate(RenewCertificateRequest) returns (RenewCertificateResponse);
 }
 
@@ -109,6 +110,122 @@ message RuntimeResult {
   bool retryable = 10;
   int64 desired_version = 11;
   string spec_hash = 12;
+}
+
+message OpenRuntimeQueryChannelRequest {
+  oneof payload {
+    RuntimeQueryHello hello = 1;
+    RuntimeQueryChunk chunk = 2;
+    RuntimeQueryComplete complete = 3;
+  }
+}
+
+message OpenRuntimeQueryChannelResponse {
+  oneof payload {
+    RuntimeQueryHello hello = 1;
+    RuntimeQueryRequest request = 2;
+    RuntimeQueryCancel cancel = 3;
+  }
+}
+
+message RuntimeQueryHello {
+  string installation_id = 1;
+  string session_id = 2;
+  string protocol_version = 3;
+}
+
+message RuntimeQueryRequest {
+  string request_id = 1;
+  int64 deadline_unix_milli = 2;
+  string app_environment_id = 3;
+  oneof query {
+    PodLogsQuery pod_logs = 4;
+    CurrentPodMetricsQuery current_pod_metrics = 5;
+    KubernetesEventsQuery kubernetes_events = 6;
+  }
+}
+
+message PodLogsQuery {
+  string namespace = 1;
+  string runtime_name = 2;
+  string container = 3;
+  int64 since_unix_nano = 4;
+  int32 tail_lines = 5;
+  int64 limit_bytes = 6;
+  bool previous = 7;
+}
+
+message CurrentPodMetricsQuery {
+  string namespace = 1;
+  string runtime_name = 2;
+}
+
+message KubernetesEventsQuery {
+  string namespace = 1;
+  string runtime_name = 2;
+  int64 since_unix_nano = 3;
+  int32 limit = 4;
+}
+
+message RuntimeQueryCancel {
+  string request_id = 1;
+}
+
+message RuntimeQueryChunk {
+  string request_id = 1;
+  uint32 sequence = 2;
+  oneof payload {
+    PodLogsResult pod_logs = 3;
+    CurrentPodMetricsResult current_pod_metrics = 4;
+    KubernetesEventsResult kubernetes_events = 5;
+  }
+}
+
+message PodLogsResult {
+  repeated RuntimeLogEntry items = 1;
+  bool truncated = 2;
+}
+
+message RuntimeLogEntry {
+  string id = 1;
+  int64 timestamp_unix_nano = 2;
+  string body = 3;
+  string severity = 4;
+}
+
+message CurrentPodMetricsResult {
+  int64 observed_at_unix_nano = 1;
+  bool partial = 2;
+  repeated string unavailable = 3;
+  repeated RuntimeMetricSample samples = 4;
+}
+
+message RuntimeMetricSample {
+  string name = 1;
+  string unit = 2;
+  int64 timestamp_unix_nano = 3;
+  double value = 4;
+}
+
+message KubernetesEventsResult {
+  repeated RuntimeEvent items = 1;
+  bool partial = 2;
+  repeated string unavailable = 3;
+}
+
+message RuntimeEvent {
+  int64 timestamp_unix_nano = 1;
+  string type = 2;
+  string reason = 3;
+  string message = 4;
+}
+
+message RuntimeQueryComplete {
+  string request_id = 1;
+  string state = 2;
+  string error_code = 3;
+  string sanitized_message = 4;
+  bool retryable = 5;
 }
 
 message RenewCertificateRequest {

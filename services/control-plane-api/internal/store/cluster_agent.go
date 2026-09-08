@@ -458,6 +458,17 @@ func (s *Store) FindCluster(ctx context.Context, publicID string) (AgentInstalla
 	return value, err
 }
 
+// ValidateAgentSession proves that an outbound auxiliary channel belongs to the
+// currently active control session for an installation.
+func (s *Store) ValidateAgentSession(ctx context.Context, publicID, sessionID string) error {
+	var activeSessionID *string
+	err := s.Pool.QueryRow(ctx, `SELECT control_session_id FROM agent_installations WHERE public_id=$1 AND status='Active'`, publicID).Scan(&activeSessionID)
+	if errors.Is(err, pgx.ErrNoRows) || activeSessionID == nil || *activeSessionID != sessionID {
+		return ErrAgentIdentityMismatch
+	}
+	return err
+}
+
 type clusterScanner interface{ Scan(...any) error }
 
 func scanCluster(row clusterScanner) (AgentInstallation, error) {

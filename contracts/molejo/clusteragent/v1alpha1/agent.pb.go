@@ -1001,6 +1001,1214 @@ func (x *RuntimeResult) GetSpecHash() string {
 	return ""
 }
 
+type OpenRuntimeQueryChannelRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Payload:
+	//
+	//	*OpenRuntimeQueryChannelRequest_Hello
+	//	*OpenRuntimeQueryChannelRequest_Chunk
+	//	*OpenRuntimeQueryChannelRequest_Complete
+	Payload       isOpenRuntimeQueryChannelRequest_Payload `protobuf_oneof:"payload"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OpenRuntimeQueryChannelRequest) Reset() {
+	*x = OpenRuntimeQueryChannelRequest{}
+	mi := &file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OpenRuntimeQueryChannelRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OpenRuntimeQueryChannelRequest) ProtoMessage() {}
+
+func (x *OpenRuntimeQueryChannelRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OpenRuntimeQueryChannelRequest.ProtoReflect.Descriptor instead.
+func (*OpenRuntimeQueryChannelRequest) Descriptor() ([]byte, []int) {
+	return file_molejo_clusteragent_v1alpha1_agent_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *OpenRuntimeQueryChannelRequest) GetPayload() isOpenRuntimeQueryChannelRequest_Payload {
+	if x != nil {
+		return x.Payload
+	}
+	return nil
+}
+
+func (x *OpenRuntimeQueryChannelRequest) GetHello() *RuntimeQueryHello {
+	if x != nil {
+		if x, ok := x.Payload.(*OpenRuntimeQueryChannelRequest_Hello); ok {
+			return x.Hello
+		}
+	}
+	return nil
+}
+
+func (x *OpenRuntimeQueryChannelRequest) GetChunk() *RuntimeQueryChunk {
+	if x != nil {
+		if x, ok := x.Payload.(*OpenRuntimeQueryChannelRequest_Chunk); ok {
+			return x.Chunk
+		}
+	}
+	return nil
+}
+
+func (x *OpenRuntimeQueryChannelRequest) GetComplete() *RuntimeQueryComplete {
+	if x != nil {
+		if x, ok := x.Payload.(*OpenRuntimeQueryChannelRequest_Complete); ok {
+			return x.Complete
+		}
+	}
+	return nil
+}
+
+type isOpenRuntimeQueryChannelRequest_Payload interface {
+	isOpenRuntimeQueryChannelRequest_Payload()
+}
+
+type OpenRuntimeQueryChannelRequest_Hello struct {
+	Hello *RuntimeQueryHello `protobuf:"bytes,1,opt,name=hello,proto3,oneof"`
+}
+
+type OpenRuntimeQueryChannelRequest_Chunk struct {
+	Chunk *RuntimeQueryChunk `protobuf:"bytes,2,opt,name=chunk,proto3,oneof"`
+}
+
+type OpenRuntimeQueryChannelRequest_Complete struct {
+	Complete *RuntimeQueryComplete `protobuf:"bytes,3,opt,name=complete,proto3,oneof"`
+}
+
+func (*OpenRuntimeQueryChannelRequest_Hello) isOpenRuntimeQueryChannelRequest_Payload() {}
+
+func (*OpenRuntimeQueryChannelRequest_Chunk) isOpenRuntimeQueryChannelRequest_Payload() {}
+
+func (*OpenRuntimeQueryChannelRequest_Complete) isOpenRuntimeQueryChannelRequest_Payload() {}
+
+type OpenRuntimeQueryChannelResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Payload:
+	//
+	//	*OpenRuntimeQueryChannelResponse_Hello
+	//	*OpenRuntimeQueryChannelResponse_Request
+	//	*OpenRuntimeQueryChannelResponse_Cancel
+	Payload       isOpenRuntimeQueryChannelResponse_Payload `protobuf_oneof:"payload"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OpenRuntimeQueryChannelResponse) Reset() {
+	*x = OpenRuntimeQueryChannelResponse{}
+	mi := &file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OpenRuntimeQueryChannelResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OpenRuntimeQueryChannelResponse) ProtoMessage() {}
+
+func (x *OpenRuntimeQueryChannelResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OpenRuntimeQueryChannelResponse.ProtoReflect.Descriptor instead.
+func (*OpenRuntimeQueryChannelResponse) Descriptor() ([]byte, []int) {
+	return file_molejo_clusteragent_v1alpha1_agent_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *OpenRuntimeQueryChannelResponse) GetPayload() isOpenRuntimeQueryChannelResponse_Payload {
+	if x != nil {
+		return x.Payload
+	}
+	return nil
+}
+
+func (x *OpenRuntimeQueryChannelResponse) GetHello() *RuntimeQueryHello {
+	if x != nil {
+		if x, ok := x.Payload.(*OpenRuntimeQueryChannelResponse_Hello); ok {
+			return x.Hello
+		}
+	}
+	return nil
+}
+
+func (x *OpenRuntimeQueryChannelResponse) GetRequest() *RuntimeQueryRequest {
+	if x != nil {
+		if x, ok := x.Payload.(*OpenRuntimeQueryChannelResponse_Request); ok {
+			return x.Request
+		}
+	}
+	return nil
+}
+
+func (x *OpenRuntimeQueryChannelResponse) GetCancel() *RuntimeQueryCancel {
+	if x != nil {
+		if x, ok := x.Payload.(*OpenRuntimeQueryChannelResponse_Cancel); ok {
+			return x.Cancel
+		}
+	}
+	return nil
+}
+
+type isOpenRuntimeQueryChannelResponse_Payload interface {
+	isOpenRuntimeQueryChannelResponse_Payload()
+}
+
+type OpenRuntimeQueryChannelResponse_Hello struct {
+	Hello *RuntimeQueryHello `protobuf:"bytes,1,opt,name=hello,proto3,oneof"`
+}
+
+type OpenRuntimeQueryChannelResponse_Request struct {
+	Request *RuntimeQueryRequest `protobuf:"bytes,2,opt,name=request,proto3,oneof"`
+}
+
+type OpenRuntimeQueryChannelResponse_Cancel struct {
+	Cancel *RuntimeQueryCancel `protobuf:"bytes,3,opt,name=cancel,proto3,oneof"`
+}
+
+func (*OpenRuntimeQueryChannelResponse_Hello) isOpenRuntimeQueryChannelResponse_Payload() {}
+
+func (*OpenRuntimeQueryChannelResponse_Request) isOpenRuntimeQueryChannelResponse_Payload() {}
+
+func (*OpenRuntimeQueryChannelResponse_Cancel) isOpenRuntimeQueryChannelResponse_Payload() {}
+
+type RuntimeQueryHello struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	InstallationId  string                 `protobuf:"bytes,1,opt,name=installation_id,json=installationId,proto3" json:"installation_id,omitempty"`
+	SessionId       string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	ProtocolVersion string                 `protobuf:"bytes,3,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *RuntimeQueryHello) Reset() {
+	*x = RuntimeQueryHello{}
+	mi := &file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RuntimeQueryHello) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RuntimeQueryHello) ProtoMessage() {}
+
+func (x *RuntimeQueryHello) ProtoReflect() protoreflect.Message {
+	mi := &file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RuntimeQueryHello.ProtoReflect.Descriptor instead.
+func (*RuntimeQueryHello) Descriptor() ([]byte, []int) {
+	return file_molejo_clusteragent_v1alpha1_agent_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *RuntimeQueryHello) GetInstallationId() string {
+	if x != nil {
+		return x.InstallationId
+	}
+	return ""
+}
+
+func (x *RuntimeQueryHello) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *RuntimeQueryHello) GetProtocolVersion() string {
+	if x != nil {
+		return x.ProtocolVersion
+	}
+	return ""
+}
+
+type RuntimeQueryRequest struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	RequestId         string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	DeadlineUnixMilli int64                  `protobuf:"varint,2,opt,name=deadline_unix_milli,json=deadlineUnixMilli,proto3" json:"deadline_unix_milli,omitempty"`
+	AppEnvironmentId  string                 `protobuf:"bytes,3,opt,name=app_environment_id,json=appEnvironmentId,proto3" json:"app_environment_id,omitempty"`
+	// Types that are valid to be assigned to Query:
+	//
+	//	*RuntimeQueryRequest_PodLogs
+	//	*RuntimeQueryRequest_CurrentPodMetrics
+	//	*RuntimeQueryRequest_KubernetesEvents
+	Query         isRuntimeQueryRequest_Query `protobuf_oneof:"query"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RuntimeQueryRequest) Reset() {
+	*x = RuntimeQueryRequest{}
+	mi := &file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RuntimeQueryRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RuntimeQueryRequest) ProtoMessage() {}
+
+func (x *RuntimeQueryRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RuntimeQueryRequest.ProtoReflect.Descriptor instead.
+func (*RuntimeQueryRequest) Descriptor() ([]byte, []int) {
+	return file_molejo_clusteragent_v1alpha1_agent_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *RuntimeQueryRequest) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+func (x *RuntimeQueryRequest) GetDeadlineUnixMilli() int64 {
+	if x != nil {
+		return x.DeadlineUnixMilli
+	}
+	return 0
+}
+
+func (x *RuntimeQueryRequest) GetAppEnvironmentId() string {
+	if x != nil {
+		return x.AppEnvironmentId
+	}
+	return ""
+}
+
+func (x *RuntimeQueryRequest) GetQuery() isRuntimeQueryRequest_Query {
+	if x != nil {
+		return x.Query
+	}
+	return nil
+}
+
+func (x *RuntimeQueryRequest) GetPodLogs() *PodLogsQuery {
+	if x != nil {
+		if x, ok := x.Query.(*RuntimeQueryRequest_PodLogs); ok {
+			return x.PodLogs
+		}
+	}
+	return nil
+}
+
+func (x *RuntimeQueryRequest) GetCurrentPodMetrics() *CurrentPodMetricsQuery {
+	if x != nil {
+		if x, ok := x.Query.(*RuntimeQueryRequest_CurrentPodMetrics); ok {
+			return x.CurrentPodMetrics
+		}
+	}
+	return nil
+}
+
+func (x *RuntimeQueryRequest) GetKubernetesEvents() *KubernetesEventsQuery {
+	if x != nil {
+		if x, ok := x.Query.(*RuntimeQueryRequest_KubernetesEvents); ok {
+			return x.KubernetesEvents
+		}
+	}
+	return nil
+}
+
+type isRuntimeQueryRequest_Query interface {
+	isRuntimeQueryRequest_Query()
+}
+
+type RuntimeQueryRequest_PodLogs struct {
+	PodLogs *PodLogsQuery `protobuf:"bytes,4,opt,name=pod_logs,json=podLogs,proto3,oneof"`
+}
+
+type RuntimeQueryRequest_CurrentPodMetrics struct {
+	CurrentPodMetrics *CurrentPodMetricsQuery `protobuf:"bytes,5,opt,name=current_pod_metrics,json=currentPodMetrics,proto3,oneof"`
+}
+
+type RuntimeQueryRequest_KubernetesEvents struct {
+	KubernetesEvents *KubernetesEventsQuery `protobuf:"bytes,6,opt,name=kubernetes_events,json=kubernetesEvents,proto3,oneof"`
+}
+
+func (*RuntimeQueryRequest_PodLogs) isRuntimeQueryRequest_Query() {}
+
+func (*RuntimeQueryRequest_CurrentPodMetrics) isRuntimeQueryRequest_Query() {}
+
+func (*RuntimeQueryRequest_KubernetesEvents) isRuntimeQueryRequest_Query() {}
+
+type PodLogsQuery struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	RuntimeName   string                 `protobuf:"bytes,2,opt,name=runtime_name,json=runtimeName,proto3" json:"runtime_name,omitempty"`
+	Container     string                 `protobuf:"bytes,3,opt,name=container,proto3" json:"container,omitempty"`
+	SinceUnixNano int64                  `protobuf:"varint,4,opt,name=since_unix_nano,json=sinceUnixNano,proto3" json:"since_unix_nano,omitempty"`
+	TailLines     int32                  `protobuf:"varint,5,opt,name=tail_lines,json=tailLines,proto3" json:"tail_lines,omitempty"`
+	LimitBytes    int64                  `protobuf:"varint,6,opt,name=limit_bytes,json=limitBytes,proto3" json:"limit_bytes,omitempty"`
+	Previous      bool                   `protobuf:"varint,7,opt,name=previous,proto3" json:"previous,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PodLogsQuery) Reset() {
+	*x = PodLogsQuery{}
+	mi := &file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PodLogsQuery) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PodLogsQuery) ProtoMessage() {}
+
+func (x *PodLogsQuery) ProtoReflect() protoreflect.Message {
+	mi := &file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PodLogsQuery.ProtoReflect.Descriptor instead.
+func (*PodLogsQuery) Descriptor() ([]byte, []int) {
+	return file_molejo_clusteragent_v1alpha1_agent_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *PodLogsQuery) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
+func (x *PodLogsQuery) GetRuntimeName() string {
+	if x != nil {
+		return x.RuntimeName
+	}
+	return ""
+}
+
+func (x *PodLogsQuery) GetContainer() string {
+	if x != nil {
+		return x.Container
+	}
+	return ""
+}
+
+func (x *PodLogsQuery) GetSinceUnixNano() int64 {
+	if x != nil {
+		return x.SinceUnixNano
+	}
+	return 0
+}
+
+func (x *PodLogsQuery) GetTailLines() int32 {
+	if x != nil {
+		return x.TailLines
+	}
+	return 0
+}
+
+func (x *PodLogsQuery) GetLimitBytes() int64 {
+	if x != nil {
+		return x.LimitBytes
+	}
+	return 0
+}
+
+func (x *PodLogsQuery) GetPrevious() bool {
+	if x != nil {
+		return x.Previous
+	}
+	return false
+}
+
+type CurrentPodMetricsQuery struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	RuntimeName   string                 `protobuf:"bytes,2,opt,name=runtime_name,json=runtimeName,proto3" json:"runtime_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CurrentPodMetricsQuery) Reset() {
+	*x = CurrentPodMetricsQuery{}
+	mi := &file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CurrentPodMetricsQuery) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CurrentPodMetricsQuery) ProtoMessage() {}
+
+func (x *CurrentPodMetricsQuery) ProtoReflect() protoreflect.Message {
+	mi := &file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CurrentPodMetricsQuery.ProtoReflect.Descriptor instead.
+func (*CurrentPodMetricsQuery) Descriptor() ([]byte, []int) {
+	return file_molejo_clusteragent_v1alpha1_agent_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *CurrentPodMetricsQuery) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
+func (x *CurrentPodMetricsQuery) GetRuntimeName() string {
+	if x != nil {
+		return x.RuntimeName
+	}
+	return ""
+}
+
+type KubernetesEventsQuery struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	RuntimeName   string                 `protobuf:"bytes,2,opt,name=runtime_name,json=runtimeName,proto3" json:"runtime_name,omitempty"`
+	SinceUnixNano int64                  `protobuf:"varint,3,opt,name=since_unix_nano,json=sinceUnixNano,proto3" json:"since_unix_nano,omitempty"`
+	Limit         int32                  `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *KubernetesEventsQuery) Reset() {
+	*x = KubernetesEventsQuery{}
+	mi := &file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *KubernetesEventsQuery) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*KubernetesEventsQuery) ProtoMessage() {}
+
+func (x *KubernetesEventsQuery) ProtoReflect() protoreflect.Message {
+	mi := &file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use KubernetesEventsQuery.ProtoReflect.Descriptor instead.
+func (*KubernetesEventsQuery) Descriptor() ([]byte, []int) {
+	return file_molejo_clusteragent_v1alpha1_agent_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *KubernetesEventsQuery) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
+func (x *KubernetesEventsQuery) GetRuntimeName() string {
+	if x != nil {
+		return x.RuntimeName
+	}
+	return ""
+}
+
+func (x *KubernetesEventsQuery) GetSinceUnixNano() int64 {
+	if x != nil {
+		return x.SinceUnixNano
+	}
+	return 0
+}
+
+func (x *KubernetesEventsQuery) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+type RuntimeQueryCancel struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RequestId     string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RuntimeQueryCancel) Reset() {
+	*x = RuntimeQueryCancel{}
+	mi := &file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RuntimeQueryCancel) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RuntimeQueryCancel) ProtoMessage() {}
+
+func (x *RuntimeQueryCancel) ProtoReflect() protoreflect.Message {
+	mi := &file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RuntimeQueryCancel.ProtoReflect.Descriptor instead.
+func (*RuntimeQueryCancel) Descriptor() ([]byte, []int) {
+	return file_molejo_clusteragent_v1alpha1_agent_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *RuntimeQueryCancel) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+type RuntimeQueryChunk struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	RequestId string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	Sequence  uint32                 `protobuf:"varint,2,opt,name=sequence,proto3" json:"sequence,omitempty"`
+	// Types that are valid to be assigned to Payload:
+	//
+	//	*RuntimeQueryChunk_PodLogs
+	//	*RuntimeQueryChunk_CurrentPodMetrics
+	//	*RuntimeQueryChunk_KubernetesEvents
+	Payload       isRuntimeQueryChunk_Payload `protobuf_oneof:"payload"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RuntimeQueryChunk) Reset() {
+	*x = RuntimeQueryChunk{}
+	mi := &file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RuntimeQueryChunk) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RuntimeQueryChunk) ProtoMessage() {}
+
+func (x *RuntimeQueryChunk) ProtoReflect() protoreflect.Message {
+	mi := &file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RuntimeQueryChunk.ProtoReflect.Descriptor instead.
+func (*RuntimeQueryChunk) Descriptor() ([]byte, []int) {
+	return file_molejo_clusteragent_v1alpha1_agent_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *RuntimeQueryChunk) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+func (x *RuntimeQueryChunk) GetSequence() uint32 {
+	if x != nil {
+		return x.Sequence
+	}
+	return 0
+}
+
+func (x *RuntimeQueryChunk) GetPayload() isRuntimeQueryChunk_Payload {
+	if x != nil {
+		return x.Payload
+	}
+	return nil
+}
+
+func (x *RuntimeQueryChunk) GetPodLogs() *PodLogsResult {
+	if x != nil {
+		if x, ok := x.Payload.(*RuntimeQueryChunk_PodLogs); ok {
+			return x.PodLogs
+		}
+	}
+	return nil
+}
+
+func (x *RuntimeQueryChunk) GetCurrentPodMetrics() *CurrentPodMetricsResult {
+	if x != nil {
+		if x, ok := x.Payload.(*RuntimeQueryChunk_CurrentPodMetrics); ok {
+			return x.CurrentPodMetrics
+		}
+	}
+	return nil
+}
+
+func (x *RuntimeQueryChunk) GetKubernetesEvents() *KubernetesEventsResult {
+	if x != nil {
+		if x, ok := x.Payload.(*RuntimeQueryChunk_KubernetesEvents); ok {
+			return x.KubernetesEvents
+		}
+	}
+	return nil
+}
+
+type isRuntimeQueryChunk_Payload interface {
+	isRuntimeQueryChunk_Payload()
+}
+
+type RuntimeQueryChunk_PodLogs struct {
+	PodLogs *PodLogsResult `protobuf:"bytes,3,opt,name=pod_logs,json=podLogs,proto3,oneof"`
+}
+
+type RuntimeQueryChunk_CurrentPodMetrics struct {
+	CurrentPodMetrics *CurrentPodMetricsResult `protobuf:"bytes,4,opt,name=current_pod_metrics,json=currentPodMetrics,proto3,oneof"`
+}
+
+type RuntimeQueryChunk_KubernetesEvents struct {
+	KubernetesEvents *KubernetesEventsResult `protobuf:"bytes,5,opt,name=kubernetes_events,json=kubernetesEvents,proto3,oneof"`
+}
+
+func (*RuntimeQueryChunk_PodLogs) isRuntimeQueryChunk_Payload() {}
+
+func (*RuntimeQueryChunk_CurrentPodMetrics) isRuntimeQueryChunk_Payload() {}
+
+func (*RuntimeQueryChunk_KubernetesEvents) isRuntimeQueryChunk_Payload() {}
+
+type PodLogsResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Items         []*RuntimeLogEntry     `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
+	Truncated     bool                   `protobuf:"varint,2,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PodLogsResult) Reset() {
+	*x = PodLogsResult{}
+	mi := &file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PodLogsResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PodLogsResult) ProtoMessage() {}
+
+func (x *PodLogsResult) ProtoReflect() protoreflect.Message {
+	mi := &file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PodLogsResult.ProtoReflect.Descriptor instead.
+func (*PodLogsResult) Descriptor() ([]byte, []int) {
+	return file_molejo_clusteragent_v1alpha1_agent_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *PodLogsResult) GetItems() []*RuntimeLogEntry {
+	if x != nil {
+		return x.Items
+	}
+	return nil
+}
+
+func (x *PodLogsResult) GetTruncated() bool {
+	if x != nil {
+		return x.Truncated
+	}
+	return false
+}
+
+type RuntimeLogEntry struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	Id                string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	TimestampUnixNano int64                  `protobuf:"varint,2,opt,name=timestamp_unix_nano,json=timestampUnixNano,proto3" json:"timestamp_unix_nano,omitempty"`
+	Body              string                 `protobuf:"bytes,3,opt,name=body,proto3" json:"body,omitempty"`
+	Severity          string                 `protobuf:"bytes,4,opt,name=severity,proto3" json:"severity,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *RuntimeLogEntry) Reset() {
+	*x = RuntimeLogEntry{}
+	mi := &file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RuntimeLogEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RuntimeLogEntry) ProtoMessage() {}
+
+func (x *RuntimeLogEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RuntimeLogEntry.ProtoReflect.Descriptor instead.
+func (*RuntimeLogEntry) Descriptor() ([]byte, []int) {
+	return file_molejo_clusteragent_v1alpha1_agent_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *RuntimeLogEntry) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *RuntimeLogEntry) GetTimestampUnixNano() int64 {
+	if x != nil {
+		return x.TimestampUnixNano
+	}
+	return 0
+}
+
+func (x *RuntimeLogEntry) GetBody() string {
+	if x != nil {
+		return x.Body
+	}
+	return ""
+}
+
+func (x *RuntimeLogEntry) GetSeverity() string {
+	if x != nil {
+		return x.Severity
+	}
+	return ""
+}
+
+type CurrentPodMetricsResult struct {
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	ObservedAtUnixNano int64                  `protobuf:"varint,1,opt,name=observed_at_unix_nano,json=observedAtUnixNano,proto3" json:"observed_at_unix_nano,omitempty"`
+	Partial            bool                   `protobuf:"varint,2,opt,name=partial,proto3" json:"partial,omitempty"`
+	Unavailable        []string               `protobuf:"bytes,3,rep,name=unavailable,proto3" json:"unavailable,omitempty"`
+	Samples            []*RuntimeMetricSample `protobuf:"bytes,4,rep,name=samples,proto3" json:"samples,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *CurrentPodMetricsResult) Reset() {
+	*x = CurrentPodMetricsResult{}
+	mi := &file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CurrentPodMetricsResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CurrentPodMetricsResult) ProtoMessage() {}
+
+func (x *CurrentPodMetricsResult) ProtoReflect() protoreflect.Message {
+	mi := &file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CurrentPodMetricsResult.ProtoReflect.Descriptor instead.
+func (*CurrentPodMetricsResult) Descriptor() ([]byte, []int) {
+	return file_molejo_clusteragent_v1alpha1_agent_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *CurrentPodMetricsResult) GetObservedAtUnixNano() int64 {
+	if x != nil {
+		return x.ObservedAtUnixNano
+	}
+	return 0
+}
+
+func (x *CurrentPodMetricsResult) GetPartial() bool {
+	if x != nil {
+		return x.Partial
+	}
+	return false
+}
+
+func (x *CurrentPodMetricsResult) GetUnavailable() []string {
+	if x != nil {
+		return x.Unavailable
+	}
+	return nil
+}
+
+func (x *CurrentPodMetricsResult) GetSamples() []*RuntimeMetricSample {
+	if x != nil {
+		return x.Samples
+	}
+	return nil
+}
+
+type RuntimeMetricSample struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	Name              string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Unit              string                 `protobuf:"bytes,2,opt,name=unit,proto3" json:"unit,omitempty"`
+	TimestampUnixNano int64                  `protobuf:"varint,3,opt,name=timestamp_unix_nano,json=timestampUnixNano,proto3" json:"timestamp_unix_nano,omitempty"`
+	Value             float64                `protobuf:"fixed64,4,opt,name=value,proto3" json:"value,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *RuntimeMetricSample) Reset() {
+	*x = RuntimeMetricSample{}
+	mi := &file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RuntimeMetricSample) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RuntimeMetricSample) ProtoMessage() {}
+
+func (x *RuntimeMetricSample) ProtoReflect() protoreflect.Message {
+	mi := &file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RuntimeMetricSample.ProtoReflect.Descriptor instead.
+func (*RuntimeMetricSample) Descriptor() ([]byte, []int) {
+	return file_molejo_clusteragent_v1alpha1_agent_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *RuntimeMetricSample) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *RuntimeMetricSample) GetUnit() string {
+	if x != nil {
+		return x.Unit
+	}
+	return ""
+}
+
+func (x *RuntimeMetricSample) GetTimestampUnixNano() int64 {
+	if x != nil {
+		return x.TimestampUnixNano
+	}
+	return 0
+}
+
+func (x *RuntimeMetricSample) GetValue() float64 {
+	if x != nil {
+		return x.Value
+	}
+	return 0
+}
+
+type KubernetesEventsResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Items         []*RuntimeEvent        `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
+	Partial       bool                   `protobuf:"varint,2,opt,name=partial,proto3" json:"partial,omitempty"`
+	Unavailable   []string               `protobuf:"bytes,3,rep,name=unavailable,proto3" json:"unavailable,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *KubernetesEventsResult) Reset() {
+	*x = KubernetesEventsResult{}
+	mi := &file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *KubernetesEventsResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*KubernetesEventsResult) ProtoMessage() {}
+
+func (x *KubernetesEventsResult) ProtoReflect() protoreflect.Message {
+	mi := &file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use KubernetesEventsResult.ProtoReflect.Descriptor instead.
+func (*KubernetesEventsResult) Descriptor() ([]byte, []int) {
+	return file_molejo_clusteragent_v1alpha1_agent_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *KubernetesEventsResult) GetItems() []*RuntimeEvent {
+	if x != nil {
+		return x.Items
+	}
+	return nil
+}
+
+func (x *KubernetesEventsResult) GetPartial() bool {
+	if x != nil {
+		return x.Partial
+	}
+	return false
+}
+
+func (x *KubernetesEventsResult) GetUnavailable() []string {
+	if x != nil {
+		return x.Unavailable
+	}
+	return nil
+}
+
+type RuntimeEvent struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	TimestampUnixNano int64                  `protobuf:"varint,1,opt,name=timestamp_unix_nano,json=timestampUnixNano,proto3" json:"timestamp_unix_nano,omitempty"`
+	Type              string                 `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
+	Reason            string                 `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	Message           string                 `protobuf:"bytes,4,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *RuntimeEvent) Reset() {
+	*x = RuntimeEvent{}
+	mi := &file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RuntimeEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RuntimeEvent) ProtoMessage() {}
+
+func (x *RuntimeEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RuntimeEvent.ProtoReflect.Descriptor instead.
+func (*RuntimeEvent) Descriptor() ([]byte, []int) {
+	return file_molejo_clusteragent_v1alpha1_agent_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *RuntimeEvent) GetTimestampUnixNano() int64 {
+	if x != nil {
+		return x.TimestampUnixNano
+	}
+	return 0
+}
+
+func (x *RuntimeEvent) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *RuntimeEvent) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *RuntimeEvent) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+type RuntimeQueryComplete struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	RequestId        string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	State            string                 `protobuf:"bytes,2,opt,name=state,proto3" json:"state,omitempty"`
+	ErrorCode        string                 `protobuf:"bytes,3,opt,name=error_code,json=errorCode,proto3" json:"error_code,omitempty"`
+	SanitizedMessage string                 `protobuf:"bytes,4,opt,name=sanitized_message,json=sanitizedMessage,proto3" json:"sanitized_message,omitempty"`
+	Retryable        bool                   `protobuf:"varint,5,opt,name=retryable,proto3" json:"retryable,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *RuntimeQueryComplete) Reset() {
+	*x = RuntimeQueryComplete{}
+	mi := &file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RuntimeQueryComplete) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RuntimeQueryComplete) ProtoMessage() {}
+
+func (x *RuntimeQueryComplete) ProtoReflect() protoreflect.Message {
+	mi := &file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RuntimeQueryComplete.ProtoReflect.Descriptor instead.
+func (*RuntimeQueryComplete) Descriptor() ([]byte, []int) {
+	return file_molejo_clusteragent_v1alpha1_agent_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *RuntimeQueryComplete) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+func (x *RuntimeQueryComplete) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+func (x *RuntimeQueryComplete) GetErrorCode() string {
+	if x != nil {
+		return x.ErrorCode
+	}
+	return ""
+}
+
+func (x *RuntimeQueryComplete) GetSanitizedMessage() string {
+	if x != nil {
+		return x.SanitizedMessage
+	}
+	return ""
+}
+
+func (x *RuntimeQueryComplete) GetRetryable() bool {
+	if x != nil {
+		return x.Retryable
+	}
+	return false
+}
+
 type RenewCertificateRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	InstallationId string                 `protobuf:"bytes,1,opt,name=installation_id,json=installationId,proto3" json:"installation_id,omitempty"`
@@ -1012,7 +2220,7 @@ type RenewCertificateRequest struct {
 
 func (x *RenewCertificateRequest) Reset() {
 	*x = RenewCertificateRequest{}
-	mi := &file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[10]
+	mi := &file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1024,7 +2232,7 @@ func (x *RenewCertificateRequest) String() string {
 func (*RenewCertificateRequest) ProtoMessage() {}
 
 func (x *RenewCertificateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[10]
+	mi := &file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1037,7 +2245,7 @@ func (x *RenewCertificateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RenewCertificateRequest.ProtoReflect.Descriptor instead.
 func (*RenewCertificateRequest) Descriptor() ([]byte, []int) {
-	return file_molejo_clusteragent_v1alpha1_agent_proto_rawDescGZIP(), []int{10}
+	return file_molejo_clusteragent_v1alpha1_agent_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *RenewCertificateRequest) GetInstallationId() string {
@@ -1075,7 +2283,7 @@ type RenewCertificateResponse struct {
 
 func (x *RenewCertificateResponse) Reset() {
 	*x = RenewCertificateResponse{}
-	mi := &file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[11]
+	mi := &file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1087,7 +2295,7 @@ func (x *RenewCertificateResponse) String() string {
 func (*RenewCertificateResponse) ProtoMessage() {}
 
 func (x *RenewCertificateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[11]
+	mi := &file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1100,7 +2308,7 @@ func (x *RenewCertificateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RenewCertificateResponse.ProtoReflect.Descriptor instead.
 func (*RenewCertificateResponse) Descriptor() ([]byte, []int) {
-	return file_molejo_clusteragent_v1alpha1_agent_proto_rawDescGZIP(), []int{11}
+	return file_molejo_clusteragent_v1alpha1_agent_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *RenewCertificateResponse) GetInstallationId() string {
@@ -1242,7 +2450,95 @@ const file_molejo_clusteragent_v1alpha1_agent_proto_rawDesc = "" +
 	"\tretryable\x18\n" +
 	" \x01(\bR\tretryable\x12'\n" +
 	"\x0fdesired_version\x18\v \x01(\x03R\x0edesiredVersion\x12\x1b\n" +
-	"\tspec_hash\x18\f \x01(\tR\bspecHash\"z\n" +
+	"\tspec_hash\x18\f \x01(\tR\bspecHash\"\x8f\x02\n" +
+	"\x1eOpenRuntimeQueryChannelRequest\x12G\n" +
+	"\x05hello\x18\x01 \x01(\v2/.molejo.clusteragent.v1alpha1.RuntimeQueryHelloH\x00R\x05hello\x12G\n" +
+	"\x05chunk\x18\x02 \x01(\v2/.molejo.clusteragent.v1alpha1.RuntimeQueryChunkH\x00R\x05chunk\x12P\n" +
+	"\bcomplete\x18\x03 \x01(\v22.molejo.clusteragent.v1alpha1.RuntimeQueryCompleteH\x00R\bcompleteB\t\n" +
+	"\apayload\"\x90\x02\n" +
+	"\x1fOpenRuntimeQueryChannelResponse\x12G\n" +
+	"\x05hello\x18\x01 \x01(\v2/.molejo.clusteragent.v1alpha1.RuntimeQueryHelloH\x00R\x05hello\x12M\n" +
+	"\arequest\x18\x02 \x01(\v21.molejo.clusteragent.v1alpha1.RuntimeQueryRequestH\x00R\arequest\x12J\n" +
+	"\x06cancel\x18\x03 \x01(\v20.molejo.clusteragent.v1alpha1.RuntimeQueryCancelH\x00R\x06cancelB\t\n" +
+	"\apayload\"\x86\x01\n" +
+	"\x11RuntimeQueryHello\x12'\n" +
+	"\x0finstallation_id\x18\x01 \x01(\tR\x0einstallationId\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x02 \x01(\tR\tsessionId\x12)\n" +
+	"\x10protocol_version\x18\x03 \x01(\tR\x0fprotocolVersion\"\xb0\x03\n" +
+	"\x13RuntimeQueryRequest\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\tR\trequestId\x12.\n" +
+	"\x13deadline_unix_milli\x18\x02 \x01(\x03R\x11deadlineUnixMilli\x12,\n" +
+	"\x12app_environment_id\x18\x03 \x01(\tR\x10appEnvironmentId\x12G\n" +
+	"\bpod_logs\x18\x04 \x01(\v2*.molejo.clusteragent.v1alpha1.PodLogsQueryH\x00R\apodLogs\x12f\n" +
+	"\x13current_pod_metrics\x18\x05 \x01(\v24.molejo.clusteragent.v1alpha1.CurrentPodMetricsQueryH\x00R\x11currentPodMetrics\x12b\n" +
+	"\x11kubernetes_events\x18\x06 \x01(\v23.molejo.clusteragent.v1alpha1.KubernetesEventsQueryH\x00R\x10kubernetesEventsB\a\n" +
+	"\x05query\"\xf1\x01\n" +
+	"\fPodLogsQuery\x12\x1c\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12!\n" +
+	"\fruntime_name\x18\x02 \x01(\tR\vruntimeName\x12\x1c\n" +
+	"\tcontainer\x18\x03 \x01(\tR\tcontainer\x12&\n" +
+	"\x0fsince_unix_nano\x18\x04 \x01(\x03R\rsinceUnixNano\x12\x1d\n" +
+	"\n" +
+	"tail_lines\x18\x05 \x01(\x05R\ttailLines\x12\x1f\n" +
+	"\vlimit_bytes\x18\x06 \x01(\x03R\n" +
+	"limitBytes\x12\x1a\n" +
+	"\bprevious\x18\a \x01(\bR\bprevious\"Y\n" +
+	"\x16CurrentPodMetricsQuery\x12\x1c\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12!\n" +
+	"\fruntime_name\x18\x02 \x01(\tR\vruntimeName\"\x96\x01\n" +
+	"\x15KubernetesEventsQuery\x12\x1c\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12!\n" +
+	"\fruntime_name\x18\x02 \x01(\tR\vruntimeName\x12&\n" +
+	"\x0fsince_unix_nano\x18\x03 \x01(\x03R\rsinceUnixNano\x12\x14\n" +
+	"\x05limit\x18\x04 \x01(\x05R\x05limit\"3\n" +
+	"\x12RuntimeQueryCancel\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\tR\trequestId\"\xf1\x02\n" +
+	"\x11RuntimeQueryChunk\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\tR\trequestId\x12\x1a\n" +
+	"\bsequence\x18\x02 \x01(\rR\bsequence\x12H\n" +
+	"\bpod_logs\x18\x03 \x01(\v2+.molejo.clusteragent.v1alpha1.PodLogsResultH\x00R\apodLogs\x12g\n" +
+	"\x13current_pod_metrics\x18\x04 \x01(\v25.molejo.clusteragent.v1alpha1.CurrentPodMetricsResultH\x00R\x11currentPodMetrics\x12c\n" +
+	"\x11kubernetes_events\x18\x05 \x01(\v24.molejo.clusteragent.v1alpha1.KubernetesEventsResultH\x00R\x10kubernetesEventsB\t\n" +
+	"\apayload\"r\n" +
+	"\rPodLogsResult\x12C\n" +
+	"\x05items\x18\x01 \x03(\v2-.molejo.clusteragent.v1alpha1.RuntimeLogEntryR\x05items\x12\x1c\n" +
+	"\ttruncated\x18\x02 \x01(\bR\ttruncated\"\x81\x01\n" +
+	"\x0fRuntimeLogEntry\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12.\n" +
+	"\x13timestamp_unix_nano\x18\x02 \x01(\x03R\x11timestampUnixNano\x12\x12\n" +
+	"\x04body\x18\x03 \x01(\tR\x04body\x12\x1a\n" +
+	"\bseverity\x18\x04 \x01(\tR\bseverity\"\xd5\x01\n" +
+	"\x17CurrentPodMetricsResult\x121\n" +
+	"\x15observed_at_unix_nano\x18\x01 \x01(\x03R\x12observedAtUnixNano\x12\x18\n" +
+	"\apartial\x18\x02 \x01(\bR\apartial\x12 \n" +
+	"\vunavailable\x18\x03 \x03(\tR\vunavailable\x12K\n" +
+	"\asamples\x18\x04 \x03(\v21.molejo.clusteragent.v1alpha1.RuntimeMetricSampleR\asamples\"\x83\x01\n" +
+	"\x13RuntimeMetricSample\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
+	"\x04unit\x18\x02 \x01(\tR\x04unit\x12.\n" +
+	"\x13timestamp_unix_nano\x18\x03 \x01(\x03R\x11timestampUnixNano\x12\x14\n" +
+	"\x05value\x18\x04 \x01(\x01R\x05value\"\x96\x01\n" +
+	"\x16KubernetesEventsResult\x12@\n" +
+	"\x05items\x18\x01 \x03(\v2*.molejo.clusteragent.v1alpha1.RuntimeEventR\x05items\x12\x18\n" +
+	"\apartial\x18\x02 \x01(\bR\apartial\x12 \n" +
+	"\vunavailable\x18\x03 \x03(\tR\vunavailable\"\x84\x01\n" +
+	"\fRuntimeEvent\x12.\n" +
+	"\x13timestamp_unix_nano\x18\x01 \x01(\x03R\x11timestampUnixNano\x12\x12\n" +
+	"\x04type\x18\x02 \x01(\tR\x04type\x12\x16\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\x12\x18\n" +
+	"\amessage\x18\x04 \x01(\tR\amessage\"\xb5\x01\n" +
+	"\x14RuntimeQueryComplete\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\tR\trequestId\x12\x14\n" +
+	"\x05state\x18\x02 \x01(\tR\x05state\x12\x1d\n" +
+	"\n" +
+	"error_code\x18\x03 \x01(\tR\terrorCode\x12+\n" +
+	"\x11sanitized_message\x18\x04 \x01(\tR\x10sanitizedMessage\x12\x1c\n" +
+	"\tretryable\x18\x05 \x01(\bR\tretryable\"z\n" +
 	"\x17RenewCertificateRequest\x12'\n" +
 	"\x0finstallation_id\x18\x01 \x01(\tR\x0einstallationId\x12\x1d\n" +
 	"\n" +
@@ -1254,9 +2550,10 @@ const file_molejo_clusteragent_v1alpha1_agent_proto_rawDesc = "" +
 	"\x12ca_certificate_pem\x18\x03 \x01(\fR\x10caCertificatePem\x12&\n" +
 	"\x0fexpires_at_unix\x18\x04 \x01(\x03R\rexpiresAtUnix\x129\n" +
 	"\x19server_ca_certificate_pem\x18\x05 \x01(\fR\x16serverCaCertificatePem\x12&\n" +
-	"\x0ftrust_bundle_id\x18\x06 \x01(\tR\rtrustBundleId2\x85\x02\n" +
+	"\x0ftrust_bundle_id\x18\x06 \x01(\tR\rtrustBundleId2\xa2\x03\n" +
 	"\x13ClusterAgentService\x12j\n" +
-	"\aConnect\x12,.molejo.clusteragent.v1alpha1.ConnectRequest\x1a-.molejo.clusteragent.v1alpha1.ConnectResponse(\x010\x01\x12\x81\x01\n" +
+	"\aConnect\x12,.molejo.clusteragent.v1alpha1.ConnectRequest\x1a-.molejo.clusteragent.v1alpha1.ConnectResponse(\x010\x01\x12\x9a\x01\n" +
+	"\x17OpenRuntimeQueryChannel\x12<.molejo.clusteragent.v1alpha1.OpenRuntimeQueryChannelRequest\x1a=.molejo.clusteragent.v1alpha1.OpenRuntimeQueryChannelResponse(\x010\x01\x12\x81\x01\n" +
 	"\x10RenewCertificate\x125.molejo.clusteragent.v1alpha1.RenewCertificateRequest\x1a6.molejo.clusteragent.v1alpha1.RenewCertificateResponseB_Z]github.com/molejo-platform/molejo/contracts/molejo/clusteragent/v1alpha1;clusteragentv1alpha1b\x06proto3"
 
 var (
@@ -1271,20 +2568,36 @@ func file_molejo_clusteragent_v1alpha1_agent_proto_rawDescGZIP() []byte {
 	return file_molejo_clusteragent_v1alpha1_agent_proto_rawDescData
 }
 
-var file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
 var file_molejo_clusteragent_v1alpha1_agent_proto_goTypes = []any{
-	(*ConnectRequest)(nil),           // 0: molejo.clusteragent.v1alpha1.ConnectRequest
-	(*ConnectResponse)(nil),          // 1: molejo.clusteragent.v1alpha1.ConnectResponse
-	(*AgentHello)(nil),               // 2: molejo.clusteragent.v1alpha1.AgentHello
-	(*ControlPlaneHello)(nil),        // 3: molejo.clusteragent.v1alpha1.ControlPlaneHello
-	(*Heartbeat)(nil),                // 4: molejo.clusteragent.v1alpha1.Heartbeat
-	(*CapabilityObservation)(nil),    // 5: molejo.clusteragent.v1alpha1.CapabilityObservation
-	(*RuntimeObservation)(nil),       // 6: molejo.clusteragent.v1alpha1.RuntimeObservation
-	(*HeartbeatAck)(nil),             // 7: molejo.clusteragent.v1alpha1.HeartbeatAck
-	(*RuntimeCommand)(nil),           // 8: molejo.clusteragent.v1alpha1.RuntimeCommand
-	(*RuntimeResult)(nil),            // 9: molejo.clusteragent.v1alpha1.RuntimeResult
-	(*RenewCertificateRequest)(nil),  // 10: molejo.clusteragent.v1alpha1.RenewCertificateRequest
-	(*RenewCertificateResponse)(nil), // 11: molejo.clusteragent.v1alpha1.RenewCertificateResponse
+	(*ConnectRequest)(nil),                  // 0: molejo.clusteragent.v1alpha1.ConnectRequest
+	(*ConnectResponse)(nil),                 // 1: molejo.clusteragent.v1alpha1.ConnectResponse
+	(*AgentHello)(nil),                      // 2: molejo.clusteragent.v1alpha1.AgentHello
+	(*ControlPlaneHello)(nil),               // 3: molejo.clusteragent.v1alpha1.ControlPlaneHello
+	(*Heartbeat)(nil),                       // 4: molejo.clusteragent.v1alpha1.Heartbeat
+	(*CapabilityObservation)(nil),           // 5: molejo.clusteragent.v1alpha1.CapabilityObservation
+	(*RuntimeObservation)(nil),              // 6: molejo.clusteragent.v1alpha1.RuntimeObservation
+	(*HeartbeatAck)(nil),                    // 7: molejo.clusteragent.v1alpha1.HeartbeatAck
+	(*RuntimeCommand)(nil),                  // 8: molejo.clusteragent.v1alpha1.RuntimeCommand
+	(*RuntimeResult)(nil),                   // 9: molejo.clusteragent.v1alpha1.RuntimeResult
+	(*OpenRuntimeQueryChannelRequest)(nil),  // 10: molejo.clusteragent.v1alpha1.OpenRuntimeQueryChannelRequest
+	(*OpenRuntimeQueryChannelResponse)(nil), // 11: molejo.clusteragent.v1alpha1.OpenRuntimeQueryChannelResponse
+	(*RuntimeQueryHello)(nil),               // 12: molejo.clusteragent.v1alpha1.RuntimeQueryHello
+	(*RuntimeQueryRequest)(nil),             // 13: molejo.clusteragent.v1alpha1.RuntimeQueryRequest
+	(*PodLogsQuery)(nil),                    // 14: molejo.clusteragent.v1alpha1.PodLogsQuery
+	(*CurrentPodMetricsQuery)(nil),          // 15: molejo.clusteragent.v1alpha1.CurrentPodMetricsQuery
+	(*KubernetesEventsQuery)(nil),           // 16: molejo.clusteragent.v1alpha1.KubernetesEventsQuery
+	(*RuntimeQueryCancel)(nil),              // 17: molejo.clusteragent.v1alpha1.RuntimeQueryCancel
+	(*RuntimeQueryChunk)(nil),               // 18: molejo.clusteragent.v1alpha1.RuntimeQueryChunk
+	(*PodLogsResult)(nil),                   // 19: molejo.clusteragent.v1alpha1.PodLogsResult
+	(*RuntimeLogEntry)(nil),                 // 20: molejo.clusteragent.v1alpha1.RuntimeLogEntry
+	(*CurrentPodMetricsResult)(nil),         // 21: molejo.clusteragent.v1alpha1.CurrentPodMetricsResult
+	(*RuntimeMetricSample)(nil),             // 22: molejo.clusteragent.v1alpha1.RuntimeMetricSample
+	(*KubernetesEventsResult)(nil),          // 23: molejo.clusteragent.v1alpha1.KubernetesEventsResult
+	(*RuntimeEvent)(nil),                    // 24: molejo.clusteragent.v1alpha1.RuntimeEvent
+	(*RuntimeQueryComplete)(nil),            // 25: molejo.clusteragent.v1alpha1.RuntimeQueryComplete
+	(*RenewCertificateRequest)(nil),         // 26: molejo.clusteragent.v1alpha1.RenewCertificateRequest
+	(*RenewCertificateResponse)(nil),        // 27: molejo.clusteragent.v1alpha1.RenewCertificateResponse
 }
 var file_molejo_clusteragent_v1alpha1_agent_proto_depIdxs = []int32{
 	2,  // 0: molejo.clusteragent.v1alpha1.ConnectRequest.hello:type_name -> molejo.clusteragent.v1alpha1.AgentHello
@@ -1295,15 +2608,32 @@ var file_molejo_clusteragent_v1alpha1_agent_proto_depIdxs = []int32{
 	8,  // 5: molejo.clusteragent.v1alpha1.ConnectResponse.runtime_command:type_name -> molejo.clusteragent.v1alpha1.RuntimeCommand
 	6,  // 6: molejo.clusteragent.v1alpha1.Heartbeat.observations:type_name -> molejo.clusteragent.v1alpha1.RuntimeObservation
 	5,  // 7: molejo.clusteragent.v1alpha1.Heartbeat.capability_observations:type_name -> molejo.clusteragent.v1alpha1.CapabilityObservation
-	0,  // 8: molejo.clusteragent.v1alpha1.ClusterAgentService.Connect:input_type -> molejo.clusteragent.v1alpha1.ConnectRequest
-	10, // 9: molejo.clusteragent.v1alpha1.ClusterAgentService.RenewCertificate:input_type -> molejo.clusteragent.v1alpha1.RenewCertificateRequest
-	1,  // 10: molejo.clusteragent.v1alpha1.ClusterAgentService.Connect:output_type -> molejo.clusteragent.v1alpha1.ConnectResponse
-	11, // 11: molejo.clusteragent.v1alpha1.ClusterAgentService.RenewCertificate:output_type -> molejo.clusteragent.v1alpha1.RenewCertificateResponse
-	10, // [10:12] is the sub-list for method output_type
-	8,  // [8:10] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	12, // 8: molejo.clusteragent.v1alpha1.OpenRuntimeQueryChannelRequest.hello:type_name -> molejo.clusteragent.v1alpha1.RuntimeQueryHello
+	18, // 9: molejo.clusteragent.v1alpha1.OpenRuntimeQueryChannelRequest.chunk:type_name -> molejo.clusteragent.v1alpha1.RuntimeQueryChunk
+	25, // 10: molejo.clusteragent.v1alpha1.OpenRuntimeQueryChannelRequest.complete:type_name -> molejo.clusteragent.v1alpha1.RuntimeQueryComplete
+	12, // 11: molejo.clusteragent.v1alpha1.OpenRuntimeQueryChannelResponse.hello:type_name -> molejo.clusteragent.v1alpha1.RuntimeQueryHello
+	13, // 12: molejo.clusteragent.v1alpha1.OpenRuntimeQueryChannelResponse.request:type_name -> molejo.clusteragent.v1alpha1.RuntimeQueryRequest
+	17, // 13: molejo.clusteragent.v1alpha1.OpenRuntimeQueryChannelResponse.cancel:type_name -> molejo.clusteragent.v1alpha1.RuntimeQueryCancel
+	14, // 14: molejo.clusteragent.v1alpha1.RuntimeQueryRequest.pod_logs:type_name -> molejo.clusteragent.v1alpha1.PodLogsQuery
+	15, // 15: molejo.clusteragent.v1alpha1.RuntimeQueryRequest.current_pod_metrics:type_name -> molejo.clusteragent.v1alpha1.CurrentPodMetricsQuery
+	16, // 16: molejo.clusteragent.v1alpha1.RuntimeQueryRequest.kubernetes_events:type_name -> molejo.clusteragent.v1alpha1.KubernetesEventsQuery
+	19, // 17: molejo.clusteragent.v1alpha1.RuntimeQueryChunk.pod_logs:type_name -> molejo.clusteragent.v1alpha1.PodLogsResult
+	21, // 18: molejo.clusteragent.v1alpha1.RuntimeQueryChunk.current_pod_metrics:type_name -> molejo.clusteragent.v1alpha1.CurrentPodMetricsResult
+	23, // 19: molejo.clusteragent.v1alpha1.RuntimeQueryChunk.kubernetes_events:type_name -> molejo.clusteragent.v1alpha1.KubernetesEventsResult
+	20, // 20: molejo.clusteragent.v1alpha1.PodLogsResult.items:type_name -> molejo.clusteragent.v1alpha1.RuntimeLogEntry
+	22, // 21: molejo.clusteragent.v1alpha1.CurrentPodMetricsResult.samples:type_name -> molejo.clusteragent.v1alpha1.RuntimeMetricSample
+	24, // 22: molejo.clusteragent.v1alpha1.KubernetesEventsResult.items:type_name -> molejo.clusteragent.v1alpha1.RuntimeEvent
+	0,  // 23: molejo.clusteragent.v1alpha1.ClusterAgentService.Connect:input_type -> molejo.clusteragent.v1alpha1.ConnectRequest
+	10, // 24: molejo.clusteragent.v1alpha1.ClusterAgentService.OpenRuntimeQueryChannel:input_type -> molejo.clusteragent.v1alpha1.OpenRuntimeQueryChannelRequest
+	26, // 25: molejo.clusteragent.v1alpha1.ClusterAgentService.RenewCertificate:input_type -> molejo.clusteragent.v1alpha1.RenewCertificateRequest
+	1,  // 26: molejo.clusteragent.v1alpha1.ClusterAgentService.Connect:output_type -> molejo.clusteragent.v1alpha1.ConnectResponse
+	11, // 27: molejo.clusteragent.v1alpha1.ClusterAgentService.OpenRuntimeQueryChannel:output_type -> molejo.clusteragent.v1alpha1.OpenRuntimeQueryChannelResponse
+	27, // 28: molejo.clusteragent.v1alpha1.ClusterAgentService.RenewCertificate:output_type -> molejo.clusteragent.v1alpha1.RenewCertificateResponse
+	26, // [26:29] is the sub-list for method output_type
+	23, // [23:26] is the sub-list for method input_type
+	23, // [23:23] is the sub-list for extension type_name
+	23, // [23:23] is the sub-list for extension extendee
+	0,  // [0:23] is the sub-list for field type_name
 }
 
 func init() { file_molejo_clusteragent_v1alpha1_agent_proto_init() }
@@ -1321,13 +2651,33 @@ func file_molejo_clusteragent_v1alpha1_agent_proto_init() {
 		(*ConnectResponse_HeartbeatAck)(nil),
 		(*ConnectResponse_RuntimeCommand)(nil),
 	}
+	file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[10].OneofWrappers = []any{
+		(*OpenRuntimeQueryChannelRequest_Hello)(nil),
+		(*OpenRuntimeQueryChannelRequest_Chunk)(nil),
+		(*OpenRuntimeQueryChannelRequest_Complete)(nil),
+	}
+	file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[11].OneofWrappers = []any{
+		(*OpenRuntimeQueryChannelResponse_Hello)(nil),
+		(*OpenRuntimeQueryChannelResponse_Request)(nil),
+		(*OpenRuntimeQueryChannelResponse_Cancel)(nil),
+	}
+	file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[13].OneofWrappers = []any{
+		(*RuntimeQueryRequest_PodLogs)(nil),
+		(*RuntimeQueryRequest_CurrentPodMetrics)(nil),
+		(*RuntimeQueryRequest_KubernetesEvents)(nil),
+	}
+	file_molejo_clusteragent_v1alpha1_agent_proto_msgTypes[18].OneofWrappers = []any{
+		(*RuntimeQueryChunk_PodLogs)(nil),
+		(*RuntimeQueryChunk_CurrentPodMetrics)(nil),
+		(*RuntimeQueryChunk_KubernetesEvents)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_molejo_clusteragent_v1alpha1_agent_proto_rawDesc), len(file_molejo_clusteragent_v1alpha1_agent_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   28,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

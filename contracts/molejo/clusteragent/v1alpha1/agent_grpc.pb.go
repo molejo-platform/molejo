@@ -19,8 +19,9 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	ClusterAgentService_Connect_FullMethodName          = "/molejo.clusteragent.v1alpha1.ClusterAgentService/Connect"
-	ClusterAgentService_RenewCertificate_FullMethodName = "/molejo.clusteragent.v1alpha1.ClusterAgentService/RenewCertificate"
+	ClusterAgentService_Connect_FullMethodName                 = "/molejo.clusteragent.v1alpha1.ClusterAgentService/Connect"
+	ClusterAgentService_OpenRuntimeQueryChannel_FullMethodName = "/molejo.clusteragent.v1alpha1.ClusterAgentService/OpenRuntimeQueryChannel"
+	ClusterAgentService_RenewCertificate_FullMethodName        = "/molejo.clusteragent.v1alpha1.ClusterAgentService/RenewCertificate"
 )
 
 // ClusterAgentServiceClient is the client API for ClusterAgentService service.
@@ -28,6 +29,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ClusterAgentServiceClient interface {
 	Connect(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[ConnectRequest, ConnectResponse], error)
+	OpenRuntimeQueryChannel(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[OpenRuntimeQueryChannelRequest, OpenRuntimeQueryChannelResponse], error)
 	RenewCertificate(ctx context.Context, in *RenewCertificateRequest, opts ...grpc.CallOption) (*RenewCertificateResponse, error)
 }
 
@@ -52,6 +54,19 @@ func (c *clusterAgentServiceClient) Connect(ctx context.Context, opts ...grpc.Ca
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type ClusterAgentService_ConnectClient = grpc.BidiStreamingClient[ConnectRequest, ConnectResponse]
 
+func (c *clusterAgentServiceClient) OpenRuntimeQueryChannel(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[OpenRuntimeQueryChannelRequest, OpenRuntimeQueryChannelResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &ClusterAgentService_ServiceDesc.Streams[1], ClusterAgentService_OpenRuntimeQueryChannel_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[OpenRuntimeQueryChannelRequest, OpenRuntimeQueryChannelResponse]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type ClusterAgentService_OpenRuntimeQueryChannelClient = grpc.BidiStreamingClient[OpenRuntimeQueryChannelRequest, OpenRuntimeQueryChannelResponse]
+
 func (c *clusterAgentServiceClient) RenewCertificate(ctx context.Context, in *RenewCertificateRequest, opts ...grpc.CallOption) (*RenewCertificateResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(RenewCertificateResponse)
@@ -67,6 +82,7 @@ func (c *clusterAgentServiceClient) RenewCertificate(ctx context.Context, in *Re
 // for forward compatibility.
 type ClusterAgentServiceServer interface {
 	Connect(grpc.BidiStreamingServer[ConnectRequest, ConnectResponse]) error
+	OpenRuntimeQueryChannel(grpc.BidiStreamingServer[OpenRuntimeQueryChannelRequest, OpenRuntimeQueryChannelResponse]) error
 	RenewCertificate(context.Context, *RenewCertificateRequest) (*RenewCertificateResponse, error)
 	mustEmbedUnimplementedClusterAgentServiceServer()
 }
@@ -80,6 +96,9 @@ type UnimplementedClusterAgentServiceServer struct{}
 
 func (UnimplementedClusterAgentServiceServer) Connect(grpc.BidiStreamingServer[ConnectRequest, ConnectResponse]) error {
 	return status.Error(codes.Unimplemented, "method Connect not implemented")
+}
+func (UnimplementedClusterAgentServiceServer) OpenRuntimeQueryChannel(grpc.BidiStreamingServer[OpenRuntimeQueryChannelRequest, OpenRuntimeQueryChannelResponse]) error {
+	return status.Error(codes.Unimplemented, "method OpenRuntimeQueryChannel not implemented")
 }
 func (UnimplementedClusterAgentServiceServer) RenewCertificate(context.Context, *RenewCertificateRequest) (*RenewCertificateResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RenewCertificate not implemented")
@@ -111,6 +130,13 @@ func _ClusterAgentService_Connect_Handler(srv interface{}, stream grpc.ServerStr
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type ClusterAgentService_ConnectServer = grpc.BidiStreamingServer[ConnectRequest, ConnectResponse]
+
+func _ClusterAgentService_OpenRuntimeQueryChannel_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(ClusterAgentServiceServer).OpenRuntimeQueryChannel(&grpc.GenericServerStream[OpenRuntimeQueryChannelRequest, OpenRuntimeQueryChannelResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type ClusterAgentService_OpenRuntimeQueryChannelServer = grpc.BidiStreamingServer[OpenRuntimeQueryChannelRequest, OpenRuntimeQueryChannelResponse]
 
 func _ClusterAgentService_RenewCertificate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(RenewCertificateRequest)
@@ -146,6 +172,12 @@ var ClusterAgentService_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "Connect",
 			Handler:       _ClusterAgentService_Connect_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "OpenRuntimeQueryChannel",
+			Handler:       _ClusterAgentService_OpenRuntimeQueryChannel_Handler,
 			ServerStreams: true,
 			ClientStreams: true,
 		},
