@@ -63,14 +63,10 @@ func (s *GRPCService) OpenRuntimeQueryChannel(stream grpc.BidiStreamingServer[cl
 			switch {
 			case message.GetChunk() != nil:
 				chunk := message.GetChunk()
-				if !session.deliver(chunk.GetRequestId(), runtimeQueryDelivery{chunk: chunk}) {
-					return status.Error(codes.InvalidArgument, "runtime query chunk was not expected")
-				}
+				session.deliver(chunk.GetRequestId(), runtimeQueryDelivery{chunk: chunk})
 			case message.GetComplete() != nil:
 				complete := message.GetComplete()
-				if !session.deliver(complete.GetRequestId(), runtimeQueryDelivery{complete: complete}) {
-					return status.Error(codes.InvalidArgument, "runtime query completion was not expected")
-				}
+				session.deliver(complete.GetRequestId(), runtimeQueryDelivery{complete: complete})
 			default:
 				return status.Error(codes.InvalidArgument, "runtime query response was expected")
 			}

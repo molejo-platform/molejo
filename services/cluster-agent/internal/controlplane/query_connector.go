@@ -82,7 +82,7 @@ func runRuntimeQueryChannel(ctx context.Context, stream runtimeQueryStream, inst
 		queryContext, cancel := context.WithDeadline(ctx, time.UnixMilli(request.GetDeadlineUnixMilli()))
 		queries.add(request.GetRequestId(), cancel)
 		go func(request *clusteragentv1alpha1.RuntimeQueryRequest) {
-			defer func() { <-semaphore; queries.remove(request.GetRequestId()) }()
+			defer func() { cancel(); <-semaphore; queries.remove(request.GetRequestId()) }()
 			chunk, queryErr := handler.Query(queryContext, request)
 			if queryErr == nil && chunk != nil {
 				chunk.RequestId, chunk.Sequence = request.GetRequestId(), 1

@@ -114,6 +114,7 @@ func (b *RuntimeQueryBroker) Query(ctx context.Context, installationID string, r
 
 	response := RuntimeQueryResponse{Chunks: []*clusteragentv1alpha1.RuntimeQueryChunk{}}
 	bytesReceived := 0
+	expectedSequence := uint32(1)
 	for {
 		select {
 		case <-session.done:
@@ -129,6 +130,10 @@ func (b *RuntimeQueryBroker) Query(ctx context.Context, installationID string, r
 				return RuntimeQueryResponse{}, delivery.err
 			}
 			if delivery.chunk != nil {
+				if delivery.chunk.GetRequestId() != request.GetRequestId() || delivery.chunk.GetSequence() != expectedSequence {
+					return RuntimeQueryResponse{}, fmt.Errorf("%w: invalid chunk sequence", ErrRuntimeQueryRejected)
+				}
+				expectedSequence++
 				bytesReceived += proto.Size(delivery.chunk)
 				if len(response.Chunks) >= maxRuntimeQueryChunks || bytesReceived > maxRuntimeQueryBytes {
 					return RuntimeQueryResponse{}, fmt.Errorf("%w: response limit exceeded", ErrRuntimeQueryRejected)
