@@ -15,6 +15,11 @@ Runbooks use local versioned input, show a plan before mutation, label only thei
 owned resources, refuse unsafe adoption, and provide read-only verification. Their
 documents are not CRDs and are not persisted as product state.
 
+Authenticated Cluster Agent observations are runtime facts, not Foundation
+state or capability runbooks. The Control Plane may combine fresh observations
+with typed provider bindings to derive Feature Availability, as defined by ADR
+0018, but that projection does not transfer lifecycle ownership to Molejo.
+
 ## Consequences
 
 Operators can compose EKS, GKE, K3s, cloud-managed services, or OSS components

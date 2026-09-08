@@ -26,3 +26,14 @@ The current release is alpha. Contracts and command paths may break between alph
 releases. The supported transition is a clean experimental reinstall, not an
 in-place upgrade. Ownership checks still prevent Molejo from adopting or
 overwriting foreign resources.
+
+Runtime facts collected by the Cluster Agent are Capability Observations, not
+Foundation state. The Control Plane combines fresh observations, protocol
+negotiation, product state, and typed provider bindings into a read-only Feature
+Availability projection. This projection never mutates desired application
+state.
+
+Current telemetry and historical telemetry are separate capabilities. Current
+cluster data is bounded and ephemeral; historical data depends on a configured
+provider and its retention guarantees. One is never presented as a transparent
+fallback for the other.

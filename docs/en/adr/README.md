@@ -9,3 +9,4 @@
 - [ADR-0015: Capability Ownership](0015-capability-ownership.md)
 - [ADR-0016: Alpha Lifecycle Policy](0016-alpha-lifecycle-policy.md)
 - [ADR-0017: Human Identity Boundary](0017-human-identity-boundary.md)
+- [ADR-0018: Capability Observation and Feature Availability](0018-capability-observation-and-feature-availability.md)
