@@ -32,8 +32,10 @@ var (
 )
 
 type Scope struct {
-	Namespace   string
-	RuntimeName string
+	ClusterID        string
+	AppEnvironmentID string
+	Namespace        string
+	RuntimeName      string
 }
 
 type LogQuery struct {
@@ -162,6 +164,26 @@ type Reader interface {
 	LogReader
 	MetricReader
 	EventReader
+}
+
+type CurrentReader interface {
+	CurrentLogs(context.Context, Scope, time.Time, string, int) (LogBatch, error)
+	CurrentMetrics(context.Context, Scope, time.Time) (MetricSnapshot, error)
+	CurrentEvents(context.Context, Scope, EventQuery) ([]Event, bool, []string, error)
+}
+
+type UnavailableCurrentReader struct{}
+
+func (UnavailableCurrentReader) CurrentLogs(context.Context, Scope, time.Time, string, int) (LogBatch, error) {
+	return LogBatch{}, ErrUnavailable
+}
+
+func (UnavailableCurrentReader) CurrentMetrics(context.Context, Scope, time.Time) (MetricSnapshot, error) {
+	return MetricSnapshot{}, ErrUnavailable
+}
+
+func (UnavailableCurrentReader) CurrentEvents(context.Context, Scope, EventQuery) ([]Event, bool, []string, error) {
+	return nil, true, []string{"kubernetes"}, ErrUnavailable
 }
 
 type UnavailableReader struct{}

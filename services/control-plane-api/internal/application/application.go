@@ -124,6 +124,7 @@ func Run(version string, args []string) error {
 		PasswordResetKey:      passwordResetKey,
 		AuthenticationSecrets: parameterSecrets,
 		Observability:         observabilityBackend,
+		CurrentObservability:  controlagent.NewRuntimeObservability(runtimeQueryBroker),
 		ProviderInventory:     configuredProviderInventory(github, parameterSecrets),
 		AgentSigner:           agentSigner,
 		AgentServerCAPEM:      agentServerCAPEM,

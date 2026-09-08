@@ -2403,6 +2403,8 @@ export interface components {
             from: string;
             /** Format: date-time */
             to: string;
+            partial: boolean;
+            unavailable: "kubernetes"[];
             items: components["schemas"]["RuntimeEvent"][];
         };
         Error: {

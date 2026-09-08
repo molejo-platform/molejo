@@ -60,3 +60,29 @@ func TestClusterAgentDeploymentUsesBoundedNonRootRuntime(t *testing.T) {
 		t.Fatalf("probes are incomplete: %+v", container)
 	}
 }
+
+func TestClusterAgentObserverRBACIsReadOnlyAndExcludesInteractiveAccess(t *testing.T) {
+	contents, err := os.ReadFile("../../deploy/cluster-agent/rbac.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(contents), "pods/exec") || strings.Contains(string(contents), "pods/attach") || strings.Contains(string(contents), "pods/portforward") || strings.Contains(string(contents), "nodes/proxy") || strings.Contains(string(contents), "impersonate") {
+		t.Fatal("observer RBAC grants interactive or impersonation access")
+	}
+	documents := strings.Split(string(contents), "---")
+	for _, document := range documents {
+		var role rbacv1.ClusterRole
+		if yaml.Unmarshal([]byte(document), &role) != nil || role.Name != "molejo-cluster-agent-observer" {
+			continue
+		}
+		for _, rule := range role.Rules {
+			for _, verb := range rule.Verbs {
+				if verb != "get" && verb != "list" && !(verb == "create" && strings.Join(rule.Resources, ",") == "selfsubjectaccessreviews") {
+					t.Fatalf("observer role contains mutating verb %q in %+v", verb, rule)
+				}
+			}
+		}
+		return
+	}
+	t.Fatal("observer ClusterRole was not found")
+}

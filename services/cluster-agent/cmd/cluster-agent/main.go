@@ -84,7 +84,7 @@ func run() error {
 		metadata := controlplane.AgentMetadata{
 			ClusterUID:        string(systemNamespace.UID),
 			KubernetesVersion: serverVersion.GitVersion,
-			Capabilities:      []string{"runtime.v1alpha1", "runtime-observation.v1alpha1", "certificate-renewal.v1alpha1", "capability-observation.v1alpha1"},
+			Capabilities:      []string{"runtime.v1alpha1", "runtime-observation.v1alpha1", "runtime-query.v1alpha1", "certificate-renewal.v1alpha1", "capability-observation.v1alpha1"},
 		}
 		grpcConnector, connectorErr := controlplane.NewGRPCConnector(configuration.GRPCAddress, configuration.GRPCServerName, version, metadata, executor)
 		err = connectorErr
@@ -92,6 +92,7 @@ func run() error {
 			return err
 		}
 		grpcConnector.ConfigureObservations(runtimeClient)
+		grpcConnector.ConfigureRuntimeQueries(agentruntime.NewQueryReader(client, dynamicClient))
 		capabilityCollector := agentcapability.NewCollector(client, client.Discovery(), dynamicClient)
 		go capabilityCollector.Run(ctx, 30*time.Second)
 		grpcConnector.ConfigureCapabilityObservations(capabilityCollector)

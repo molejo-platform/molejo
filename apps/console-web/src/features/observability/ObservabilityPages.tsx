@@ -222,9 +222,14 @@ export function RuntimeLogsPage({ target, params }: { target: AppEnvironment; pa
     enabled: historicalUsable,
   });
   const liveCursor = logs.data?.pages[0]?.liveCursor;
-  const streamURL = liveCursor
-    ? runtimeLogStreamURL(params.workspaceId, params.projectId, target.appId, target.id, filters, liveCursor)
-    : undefined;
+  const streamURL = runtimeLogStreamURL(
+    params.workspaceId,
+    params.projectId,
+    target.appId,
+    target.id,
+    filters,
+    liveCursor,
+  );
 
   useEffect(() => () => store.dispose(), [store]);
   useEffect(() => {
@@ -233,7 +238,7 @@ export function RuntimeLogsPage({ target, params }: { target: AppEnvironment; pa
   }, [logs.data?.pages, store]);
 
   useEffect(() => {
-    if (!liveUsable || !live || !streamURL) return;
+    if (!liveUsable || !live) return;
     setLiveState("connecting");
     const source = new EventSource(streamURL);
     let reconnectNotice: number | undefined;
@@ -304,7 +309,7 @@ export function RuntimeLogsPage({ target, params }: { target: AppEnvironment; pa
         <Button
           type="button"
           variant={live ? "danger" : "secondary"}
-          disabled={!liveUsable || !liveCursor}
+          disabled={!liveUsable}
           onClick={() => {
             setLiveState(live ? "idle" : "connecting");
             setLive((value) => !value);
@@ -677,6 +682,9 @@ export function RuntimeEventsPage({ target, params }: { target: AppEnvironment; 
           Aplicar período
         </Button>
       </div>
+      {events.data?.partial && (
+        <Alert>Eventos parciais: fontes temporariamente indisponíveis: {events.data.unavailable.join(", ")}.</Alert>
+      )}
       {!eventsUsable ? null : events.isError ? (
         <Alert>{userFacingError(events.error)}</Alert>
       ) : events.isPending ? (

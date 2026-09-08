@@ -913,16 +913,31 @@ func (e ReleaseRegistrationInputArtifactKind) Valid() bool {
 
 // Defines values for RuntimeEventSource.
 const (
-	ControlPlane RuntimeEventSource = "control-plane"
-	Kubernetes   RuntimeEventSource = "kubernetes"
+	RuntimeEventSourceControlPlane RuntimeEventSource = "control-plane"
+	RuntimeEventSourceKubernetes   RuntimeEventSource = "kubernetes"
 )
 
 // Valid indicates whether the value is a known member of the RuntimeEventSource enum.
 func (e RuntimeEventSource) Valid() bool {
 	switch e {
-	case ControlPlane:
+	case RuntimeEventSourceControlPlane:
 		return true
-	case Kubernetes:
+	case RuntimeEventSourceKubernetes:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RuntimeEventsUnavailable.
+const (
+	RuntimeEventsUnavailableKubernetes RuntimeEventsUnavailable = "kubernetes"
+)
+
+// Valid indicates whether the value is a known member of the RuntimeEventsUnavailable enum.
+func (e RuntimeEventsUnavailable) Valid() bool {
+	switch e {
+	case RuntimeEventsUnavailableKubernetes:
 		return true
 	default:
 		return false
@@ -2336,10 +2351,15 @@ type RuntimeEventSource string
 
 // RuntimeEvents defines model for RuntimeEvents.
 type RuntimeEvents struct {
-	From  time.Time      `json:"from"`
-	Items []RuntimeEvent `json:"items"`
-	To    time.Time      `json:"to"`
+	From        time.Time                  `json:"from"`
+	Items       []RuntimeEvent             `json:"items"`
+	Partial     bool                       `json:"partial"`
+	To          time.Time                  `json:"to"`
+	Unavailable []RuntimeEventsUnavailable `json:"unavailable"`
 }
+
+// RuntimeEventsUnavailable defines model for RuntimeEvents.Unavailable.
+type RuntimeEventsUnavailable string
 
 // RuntimeLog defines model for RuntimeLog.
 type RuntimeLog struct {

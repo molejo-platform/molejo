@@ -61,6 +61,10 @@ func (r *recordingObservabilityReader) LiveLogs(_ context.Context, scope observa
 	return observability.LogBatch{Items: []observability.LogEntry{}, Cursor: query.After}, nil
 }
 
+func (r *recordingObservabilityReader) CurrentLogs(ctx context.Context, scope observability.Scope, since time.Time, search string, limit int) (observability.LogBatch, error) {
+	return r.LiveLogs(ctx, scope, observability.LiveLogQuery{After: observability.LogCursor{IngestedAt: since}, Search: search, Limit: limit})
+}
+
 func (r *recordingObservabilityReader) Metrics(_ context.Context, scope observability.Scope, query observability.MetricQuery) (observability.Metrics, error) {
 	r.scope = scope
 	return observability.Metrics{From: query.From, To: query.To, Step: query.Step.String(), Series: []observability.MetricSeries{}}, nil
@@ -69,6 +73,11 @@ func (r *recordingObservabilityReader) Metrics(_ context.Context, scope observab
 func (r *recordingObservabilityReader) CurrentMetrics(_ context.Context, scope observability.Scope, at time.Time) (observability.MetricSnapshot, error) {
 	r.scope = scope
 	return observability.MetricSnapshot{ObservedAt: at, Samples: []observability.MetricSample{{Name: "available", Unit: "replicas", Timestamp: at, Value: 1}}}, nil
+}
+
+func (r *recordingObservabilityReader) CurrentEvents(ctx context.Context, scope observability.Scope, query observability.EventQuery) ([]observability.Event, bool, []string, error) {
+	items, err := r.Events(ctx, scope, query)
+	return items, false, []string{}, err
 }
 
 func (r *recordingObservabilityReader) Events(context.Context, observability.Scope, observability.EventQuery) ([]observability.Event, error) {
@@ -159,6 +168,7 @@ func TestObservabilityAPIResolvesScopeOnlyAfterFullAncestryAuthorization(t *test
 	storage, workspace, server, owner := newHierarchyAPITestFixture(t)
 	reader := &recordingObservabilityReader{}
 	server.observability = reader
+	server.currentObservability = reader
 
 	projectResponse := hierarchyRequest(t, server, owner, http.MethodPost, "/api/v1/workspaces/"+workspace.PublicID+"/projects", `{"name":"Observability"}`, nil)
 	var project domain.Project

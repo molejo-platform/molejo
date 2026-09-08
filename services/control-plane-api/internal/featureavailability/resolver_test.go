@@ -55,6 +55,29 @@ func TestResolveProviderAndCopiesInputs(t *testing.T) {
 	}
 }
 
+func TestResolveCurrentRuntimeRequiresQueryProtocolAndFreshObservation(t *testing.T) {
+	now := time.Now().UTC()
+	observation := capabilitycontract.Observation{ID: capabilitycontract.RuntimeLogsCurrent, ContractVersion: capabilitycontract.ContractVersion, Support: capabilitycontract.SupportSupported, Health: capabilitycontract.HealthHealthy, SampledAt: now, ReceivedAt: now, ExpiresAt: now.Add(time.Minute)}
+	tests := []struct {
+		name   string
+		facts  Facts
+		want   State
+		reason string
+	}{
+		{name: "old Agent", facts: Facts{ClusterAttached: true, AgentConnected: true}, want: Unsupported, reason: ReasonRuntimeQueryUnsupported},
+		{name: "missing observation", facts: Facts{ClusterAttached: true, AgentConnected: true, ProtocolCapabilities: []string{"runtime-query.v1alpha1"}}, want: Unknown, reason: ReasonClusterObservationStale},
+		{name: "available", facts: Facts{ClusterAttached: true, AgentConnected: true, ProtocolCapabilities: []string{"runtime-query.v1alpha1"}, Observations: []capabilitycontract.Observation{observation}}, want: Available},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := featureByID(Resolve(now, Target{}, test.facts), capabilitycontract.RuntimeLogsCurrent)
+			if got.State != test.want || got.ReasonCode != test.reason {
+				t.Fatalf("got %s/%s, want %s/%s", got.State, got.ReasonCode, test.want, test.reason)
+			}
+		})
+	}
+}
+
 func TestResolveObservationAlwaysReturnsLimitationsArray(t *testing.T) {
 	now := time.Now().UTC()
 	facts := Facts{

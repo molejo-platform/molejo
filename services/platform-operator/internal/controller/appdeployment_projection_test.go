@@ -40,8 +40,8 @@ func TestWorkloadProjectionSharesThePodRuntimeContract(t *testing.T) {
 	if deployment.Spec.Template.Labels[managedByLabel] != managedByValue {
 		t.Fatal("Deployment Pod template must retain its managed-by label")
 	}
-	if _, found := statefulTemplate.Labels[managedByLabel]; found {
-		t.Fatal("StatefulSet Pod template must retain its existing label contract")
+	if statefulTemplate.Labels[managedByLabel] != managedByValue {
+		t.Fatal("StatefulSet Pod template must retain its managed-by label")
 	}
 }
 

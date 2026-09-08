@@ -9,10 +9,11 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	platformv1alpha1 "github.com/molejo-platform/molejo/packages/kubernetes-api/apis/platform/v1alpha1"
+	kubemetadata "github.com/molejo-platform/molejo/packages/kubernetes-api/metadata"
 )
 
 const (
-	containerName = "app"
+	containerName = kubemetadata.ApplicationContainer
 	httpPortName  = "http"
 )
 
@@ -101,7 +102,10 @@ func configureDeploymentPodTemplate(
 
 func desiredPodTemplate(appDeployment *platformv1alpha1.AppDeployment) corev1.PodTemplateSpec {
 	template := corev1.PodTemplateSpec{
-		ObjectMeta: metav1.ObjectMeta{Labels: desiredSelectorLabels(appDeployment)},
+		ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{
+			appDeploymentLabel: appDeployment.Name,
+			managedByLabel:     managedByValue,
+		}},
 	}
 	configurePodSpec(&template.Spec, appDeployment)
 	return template

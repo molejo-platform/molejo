@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	authorizationv1 "k8s.io/api/authorization/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -99,10 +100,10 @@ func (c *Collector) podLogsObservation(ctx context.Context, now time.Time) capab
 		base.Support, base.Health, base.ReasonCode = capabilitycontract.SupportUnsupported, capabilitycontract.HealthUnavailable, capabilitycontract.ReasonAPIMissing
 		return base
 	}
-	_, err := c.kubernetes.CoreV1().Pods(metav1.NamespaceAll).List(ctx, metav1.ListOptions{Limit: 1})
+	review, err := c.kubernetes.AuthorizationV1().SelfSubjectAccessReviews().Create(ctx, &authorizationv1.SelfSubjectAccessReview{Spec: authorizationv1.SelfSubjectAccessReviewSpec{ResourceAttributes: &authorizationv1.ResourceAttributes{Verb: "get", Group: "", Resource: "pods", Subresource: "log"}}}, metav1.CreateOptions{})
 	base = outcome(base, err)
-	if err == nil {
-		base.Health, base.ReasonCode = capabilitycontract.HealthUnknown, capabilitycontract.ReasonReadabilityNotVerified
+	if err == nil && !review.Status.Allowed {
+		base.Health, base.ReasonCode = capabilitycontract.HealthUnavailable, capabilitycontract.ReasonAccessDenied
 	}
 	return base
 }

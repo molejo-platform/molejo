@@ -124,9 +124,10 @@ func (h *generatedHandler) ListAppEnvironmentRuntimeEvents(w http.ResponseWriter
 		return
 	}
 	items := operationEvents(operations)
-	kubernetesEvents, backendErr := h.server.observability.Events(r.Context(), runtimeScope(workspace, appEnvironment), observability.EventQuery{From: from, To: to, Limit: limit})
+	kubernetesEvents, partial, unavailable, backendErr := h.server.currentObservability.CurrentEvents(r.Context(), runtimeScope(workspace, appEnvironment), observability.EventQuery{From: from, To: to, Limit: limit})
 	if backendErr != nil {
 		h.server.logger().Warn("runtime event backend unavailable", "request_id", requestID(r), "app_environment_id", appEnvironment.PublicID)
+		partial, unavailable = true, []string{"kubernetes"}
 	} else {
 		items = append(items, kubernetesEvents...)
 	}
@@ -134,7 +135,7 @@ func (h *generatedHandler) ListAppEnvironmentRuntimeEvents(w http.ResponseWriter
 	if len(items) > limit {
 		items = items[:limit]
 	}
-	writeJSON(w, http.StatusOK, observabilityEventsResponse{From: from, To: to, Items: items})
+	writeJSON(w, http.StatusOK, observabilityEventsResponse{From: from, To: to, Partial: partial, Unavailable: unavailable, Items: items})
 }
 
 func (h *generatedHandler) StreamAppEnvironmentRuntimeLogs(w http.ResponseWriter, r *http.Request, workspaceID generated.WorkspaceId, projectID generated.ProjectId, appID generated.AppId, appEnvironmentID generated.AppEnvironmentId, params generated.StreamAppEnvironmentRuntimeLogsParams) {
@@ -158,7 +159,7 @@ func (h *generatedHandler) StreamAppEnvironmentRuntimeLogs(w http.ResponseWriter
 	var cursor observability.LogCursor
 	var err error
 	if encodedCursor == "" {
-		cursor, err = h.server.observability.LogWatermark(r.Context())
+		cursor = observability.LogCursor{IngestedAt: time.Now().UTC().Add(-5 * time.Minute), ID: "ffffffff-ffff-ffff-ffff-ffffffffffff"}
 	} else {
 		cursor, err = decodeLiveLogCursor(encodedCursor)
 	}
@@ -227,7 +228,7 @@ func (h *generatedHandler) drainLiveLogs(ctx context.Context, w http.ResponseWri
 		maximumPages = 20
 	)
 	for page := 0; page < maximumPages; page++ {
-		batch, err := h.server.observability.LiveLogs(ctx, scope, observability.LiveLogQuery{After: cursor, Search: search, Limit: batchSize})
+		batch, err := h.server.currentObservability.CurrentLogs(ctx, scope, cursor.IngestedAt.Add(time.Nanosecond), search, batchSize)
 		if err != nil {
 			_ = writeSSE(w, flusher, "event: telemetry-error\ndata: {\"code\":\"observability_unavailable\"}\n\n")
 			return cursor, false
@@ -337,9 +338,11 @@ type observabilityLogsResponse struct {
 }
 
 type observabilityEventsResponse struct {
-	From  time.Time             `json:"from"`
-	To    time.Time             `json:"to"`
-	Items []observability.Event `json:"items"`
+	From        time.Time             `json:"from"`
+	To          time.Time             `json:"to"`
+	Partial     bool                  `json:"partial"`
+	Unavailable []string              `json:"unavailable"`
+	Items       []observability.Event `json:"items"`
 }
 
 func (h *generatedHandler) observabilityScope(w http.ResponseWriter, r *http.Request, workspaceID generated.WorkspaceId, projectID generated.ProjectId, appID generated.AppId, appEnvironmentID generated.AppEnvironmentId) (identity.User, domain.Workspace, domain.AppEnvironment, bool) {
@@ -352,7 +355,7 @@ func (h *generatedHandler) observabilityScope(w http.ResponseWriter, r *http.Req
 }
 
 func runtimeScope(workspace domain.Workspace, appEnvironment domain.AppEnvironment) observability.Scope {
-	return observability.Scope{Namespace: workspace.Namespace, RuntimeName: appEnvironment.RuntimeName}
+	return observability.Scope{ClusterID: appEnvironment.ClusterPublicID, AppEnvironmentID: appEnvironment.PublicID, Namespace: workspace.Namespace, RuntimeName: appEnvironment.RuntimeName}
 }
 
 func observabilityRange(w http.ResponseWriter, r *http.Request, fromParam, toParam *time.Time, maximum time.Duration) (time.Time, time.Time, bool) {

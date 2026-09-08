@@ -20,12 +20,13 @@ import (
 
 	clusteragentv1alpha1 "github.com/molejo-platform/molejo/contracts/molejo/clusteragent/v1alpha1"
 	platformv1alpha1 "github.com/molejo-platform/molejo/packages/kubernetes-api/apis/platform/v1alpha1"
+	kubemetadata "github.com/molejo-platform/molejo/packages/kubernetes-api/metadata"
 	"github.com/molejo-platform/molejo/packages/runtimecontract"
 )
 
 const (
-	controlPlaneOwnerAnnotation = "platform.molejo.dev/control-plane-owner"
-	workspaceOwnerValue         = "molejo-control-plane"
+	controlPlaneOwnerAnnotation = kubemetadata.ControlPlaneOwnerAnnotation
+	workspaceOwnerValue         = kubemetadata.ControlPlaneOwner
 	managedByLabel              = "app.kubernetes.io/managed-by"
 	configurationVersionLabel   = "platform.molejo.dev/configuration-version"
 	desiredVersionAnnotation    = "platform.molejo.dev/desired-version"

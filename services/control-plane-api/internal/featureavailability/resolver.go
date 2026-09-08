@@ -18,7 +18,7 @@ func Resolve(now time.Time, target Target, facts Facts) []Feature {
 		case capabilitycontract.RuntimeWorkloadApply, capabilitycontract.RuntimeWorkloadObserve:
 			feature = resolveRuntime(feature, facts)
 		case capabilitycontract.RuntimeLogsCurrent, capabilitycontract.RuntimeMetricsCurrent, capabilitycontract.RuntimeEventsCurrent:
-			feature.State, feature.ReasonCode = Unsupported, ReasonRuntimeQueryUnsupported
+			feature = resolveRuntimeQuery(now, feature, facts)
 		default:
 			feature = resolveProvider(now, feature, facts)
 		}
@@ -26,6 +26,26 @@ func Resolve(now time.Time, target Target, facts Facts) []Feature {
 	}
 	sort.Slice(features, func(i, j int) bool { return features[i].ID < features[j].ID })
 	return features
+}
+
+func resolveRuntimeQuery(now time.Time, feature Feature, facts Facts) Feature {
+	if !facts.ClusterAttached {
+		feature.State, feature.ReasonCode = NotConfigured, ReasonClusterNotAttached
+		return feature
+	}
+	if !facts.AgentConnected {
+		feature.State, feature.ReasonCode = Unknown, ReasonClusterAgentOffline
+		return feature
+	}
+	if !contains(facts.ProtocolCapabilities, "runtime-query.v1alpha1") {
+		feature.State, feature.ReasonCode = Unsupported, ReasonRuntimeQueryUnsupported
+		return feature
+	}
+	if _, ok := latestObservationRegardlessFreshness(feature.ID, facts.Observations); !ok {
+		feature.State, feature.ReasonCode = Unknown, ReasonClusterObservationStale
+		return feature
+	}
+	return resolveProvider(now, feature, facts)
 }
 
 func resolveRuntime(feature Feature, facts Facts) Feature {
