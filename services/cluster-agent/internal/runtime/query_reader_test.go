@@ -43,16 +43,17 @@ func TestQueryReaderRejectsForeignPodOwnership(t *testing.T) {
 func ownedQueryReader(t *testing.T, validPodOwner bool) *QueryReader {
 	t.Helper()
 	controller := true
-	appUID, deploymentUID := types.UID("app-uid"), types.UID("deployment-uid")
+	appUID, deploymentUID, replicaSetUID := types.UID("app-uid"), types.UID("deployment-uid"), types.UID("replicaset-uid")
 	namespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "workspace-test", Annotations: map[string]string{kubemetadata.ControlPlaneOwnerAnnotation: kubemetadata.ControlPlaneOwner}}}
 	deployment := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "runtime-test", Namespace: namespace.Name, UID: deploymentUID, OwnerReferences: []metav1.OwnerReference{{UID: appUID, Controller: &controller}}}}
-	podOwner := deploymentUID
+	replicaSet := &appsv1.ReplicaSet{ObjectMeta: metav1.ObjectMeta{Name: "runtime-test-rs", Namespace: namespace.Name, UID: replicaSetUID, Labels: map[string]string{kubemetadata.AppDeploymentLabel: "runtime-test"}, OwnerReferences: []metav1.OwnerReference{{UID: deploymentUID, Controller: &controller}}}}
+	podOwner := replicaSetUID
 	if !validPodOwner {
 		podOwner = "foreign-uid"
 	}
 	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "runtime-test-pod", Namespace: namespace.Name, UID: "pod-uid", Labels: map[string]string{kubemetadata.AppDeploymentLabel: "runtime-test"}, OwnerReferences: []metav1.OwnerReference{{UID: podOwner, Controller: &controller}}}, Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: kubemetadata.ApplicationContainer}}}}
 	appDeployment := &unstructured.Unstructured{Object: map[string]any{"apiVersion": "platform.molejo.dev/v1alpha1", "kind": "AppDeployment", "metadata": map[string]any{"name": "runtime-test", "namespace": namespace.Name, "uid": string(appUID), "annotations": map[string]any{kubemetadata.ControlPlaneOwnerAnnotation: "runtime-test"}}}}
-	client := kubefake.NewSimpleClientset(namespace, deployment, pod)
+	client := kubefake.NewSimpleClientset(namespace, deployment, replicaSet, pod)
 	dynamicClient := dynamicfake.NewSimpleDynamicClient(k8sruntime.NewScheme(), appDeployment)
 	reader := NewQueryReader(client, dynamicClient)
 	reader.now = func() time.Time { return time.Date(2026, 9, 8, 12, 0, 0, 0, time.UTC) }

@@ -88,16 +88,30 @@ func (r *QueryReader) target(ctx context.Context, namespace, runtimeName string)
 	}
 	target := queryTarget{namespace: namespace, runtime: runtimeName, uids: map[types.UID]struct{}{appDeployment.GetUID(): {}}}
 	workloadUID := types.UID("")
+	podOwnerUIDs := make(map[types.UID]struct{})
 	if deployment, getErr := r.kubernetes.AppsV1().Deployments(namespace).Get(ctx, runtimeName, metav1.GetOptions{}); getErr == nil {
 		if !controlledBy(deployment.OwnerReferences, appDeployment.GetUID()) {
 			return queryTarget{}, errors.New("Deployment ownership is invalid")
 		}
 		workloadUID, target.desired, target.available = deployment.UID, valueOrZero(deployment.Spec.Replicas), deployment.Status.AvailableReplicas
+		selector := labels.Set{kubemetadata.AppDeploymentLabel: runtimeName}.AsSelector().String()
+		replicaSets, listErr := r.kubernetes.AppsV1().ReplicaSets(namespace).List(ctx, metav1.ListOptions{LabelSelector: selector, Limit: 100})
+		if listErr != nil {
+			return queryTarget{}, fmt.Errorf("list runtime ReplicaSets: %w", listErr)
+		}
+		for _, replicaSet := range replicaSets.Items {
+			if !controlledBy(replicaSet.OwnerReferences, deployment.UID) {
+				return queryTarget{}, errors.New("ReplicaSet ownership is invalid")
+			}
+			podOwnerUIDs[replicaSet.UID] = struct{}{}
+			target.uids[replicaSet.UID] = struct{}{}
+		}
 	} else if statefulSet, statefulErr := r.kubernetes.AppsV1().StatefulSets(namespace).Get(ctx, runtimeName, metav1.GetOptions{}); statefulErr == nil {
 		if !controlledBy(statefulSet.OwnerReferences, appDeployment.GetUID()) {
 			return queryTarget{}, errors.New("StatefulSet ownership is invalid")
 		}
 		workloadUID, target.desired, target.available = statefulSet.UID, valueOrZero(statefulSet.Spec.Replicas), statefulSet.Status.AvailableReplicas
+		podOwnerUIDs[statefulSet.UID] = struct{}{}
 	} else {
 		return queryTarget{}, errors.New("Molejo workload was not found")
 	}
@@ -108,7 +122,7 @@ func (r *QueryReader) target(ctx context.Context, namespace, runtimeName string)
 		return queryTarget{}, fmt.Errorf("list runtime Pods: %w", err)
 	}
 	for _, pod := range pods.Items {
-		if pod.Labels[kubemetadata.AppDeploymentLabel] != runtimeName || !controlledBy(pod.OwnerReferences, workloadUID) || !hasApplicationContainer(pod.Spec.Containers) {
+		if pod.Labels[kubemetadata.AppDeploymentLabel] != runtimeName || !controlledByAny(pod.OwnerReferences, podOwnerUIDs) || !hasApplicationContainer(pod.Spec.Containers) {
 			return queryTarget{}, errors.New("runtime Pod ownership is invalid")
 		}
 		target.uids[pod.UID] = struct{}{}
@@ -298,6 +312,15 @@ func (r *QueryReader) events(ctx context.Context, query *clusteragentv1alpha1.Ku
 func controlledBy(references []metav1.OwnerReference, uid types.UID) bool {
 	for _, reference := range references {
 		if reference.UID == uid && reference.Controller != nil && *reference.Controller {
+			return true
+		}
+	}
+	return false
+}
+
+func controlledByAny(references []metav1.OwnerReference, uids map[types.UID]struct{}) bool {
+	for uid := range uids {
+		if controlledBy(references, uid) {
 			return true
 		}
 	}
