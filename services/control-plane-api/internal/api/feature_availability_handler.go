@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/molejo-platform/molejo/packages/capabilitycontract"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/api/generated"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/authorization"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/featureavailability"
@@ -29,10 +30,19 @@ func (h *generatedHandler) GetFeatureAvailability(w http.ResponseWriter, r *http
 		return
 	}
 	now := time.Now().UTC()
+	observations := []capabilitycontract.Observation{}
+	if facts.Attached {
+		observations, err = h.server.store.CapabilityObservations(r.Context(), facts.ClusterID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "storage_failed", "feature availability could not be loaded", r)
+			return
+		}
+	}
 	resolved := featureavailability.Resolve(now, featureavailability.Target{ScopeType: featureavailability.ScopeType(scopeType), ScopeID: params.ScopeId, ClusterID: facts.ClusterID}, featureavailability.Facts{
 		ClusterAttached:      facts.Attached,
 		AgentConnected:       facts.LastSeenAt != nil && facts.LastSeenAt.After(now.Add(-agentFreshness)),
 		ProtocolCapabilities: facts.Capabilities,
+		Observations:         observations,
 		Providers:            h.server.providerInventory,
 	})
 	features := make([]generated.FeatureAvailability, 0, len(resolved))

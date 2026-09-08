@@ -270,6 +270,23 @@ type BuildLog struct {
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
+type ClusterCapabilityObservation struct {
+	ClusterID         int64              `json:"cluster_id"`
+	CapabilityID      string             `json:"capability_id"`
+	ContractVersion   string             `json:"contract_version"`
+	Support           string             `json:"support"`
+	Health            string             `json:"health"`
+	ProviderKind      string             `json:"provider_kind"`
+	ReasonCode        string             `json:"reason_code"`
+	SanitizedMessage  string             `json:"sanitized_message"`
+	LimitationsJson   []byte             `json:"limitations_json"`
+	SampledAt         pgtype.Timestamptz `json:"sampled_at"`
+	ReceivedAt        pgtype.Timestamptz `json:"received_at"`
+	ExpiresAt         pgtype.Timestamptz `json:"expires_at"`
+	ObservedSessionID string             `json:"observed_session_id"`
+	SnapshotSequence  int64              `json:"snapshot_sequence"`
+}
+
 type DeliveryTarget struct {
 	ID                int64              `json:"id"`
 	PublicID          string             `json:"public_id"`

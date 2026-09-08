@@ -50,6 +50,20 @@ message Heartbeat {
   repeated RuntimeObservation observations = 3;
   bool observation_snapshot_complete = 4;
   string session_id = 5;
+  repeated CapabilityObservation capability_observations = 6;
+  bool capability_snapshot_complete = 7;
+}
+
+message CapabilityObservation {
+  string capability_id = 1;
+  string contract_version = 2;
+  string support = 3;
+  string health = 4;
+  string provider_kind = 5;
+  string reason_code = 6;
+  string sanitized_message = 7;
+  repeated string limitations = 8;
+  int64 sampled_at_unix = 9;
 }
 
 message RuntimeObservation {

@@ -58,7 +58,7 @@ func (s *Store) validateAvailabilityScope(ctx context.Context, workspaceID int64
 	case "Workspace":
 		err = s.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM workspaces WHERE id=$1 AND public_id=$2)`, workspaceID, scopeID).Scan(&exists)
 	case "App":
-		err = s.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM apps WHERE workspace_id=$1 AND public_id=$2 AND archived_at IS NULL)`, workspaceID, scopeID).Scan(&exists)
+		err = s.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM apps a JOIN projects p ON p.id=a.project_id WHERE p.workspace_id=$1 AND a.public_id=$2 AND a.archived_at IS NULL)`, workspaceID, scopeID).Scan(&exists)
 	case "AppEnvironment":
 		err = s.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM app_environments WHERE workspace_id=$1 AND public_id=$2 AND archived_at IS NULL)`, workspaceID, scopeID).Scan(&exists)
 	default:

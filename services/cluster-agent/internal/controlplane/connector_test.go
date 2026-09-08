@@ -31,7 +31,7 @@ func TestControlChannelHelloHasBoundedWait(t *testing.T) {
 	stream := &blockingAgentStream{ctx: ctx, helloSent: true}
 	defer cancel()
 
-	err := runControlChannel(ctx, stream, "agi-abcdefghijklmnopqrst", "trust-v1", "test", AgentMetadata{}, nil, nil, nil, 20*time.Millisecond)
+	err := runControlChannel(ctx, stream, "agi-abcdefghijklmnopqrst", "trust-v1", "test", AgentMetadata{}, nil, nil, nil, nil, 20*time.Millisecond)
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("error=%v, want deadline exceeded", err)
 	}
@@ -43,7 +43,7 @@ func TestControlChannelHeartbeatHasBoundedWait(t *testing.T) {
 	defer cancel()
 	paired := false
 
-	err := runControlChannel(ctx, stream, "agi-abcdefghijklmnopqrst", "trust-v1", "test", AgentMetadata{}, nil, nil, func() { paired = true }, 20*time.Millisecond)
+	err := runControlChannel(ctx, stream, "agi-abcdefghijklmnopqrst", "trust-v1", "test", AgentMetadata{}, nil, nil, nil, func() { paired = true }, 20*time.Millisecond)
 	if !paired || !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("paired=%v error=%v, want paired heartbeat deadline", paired, err)
 	}
@@ -53,7 +53,7 @@ func TestControlChannelRequestsTrustBundleRenewalBeforeHeartbeat(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	stream := &blockingAgentStream{ctx: ctx}
-	if err := runControlChannel(ctx, stream, "agi-abcdefghijklmnopqrst", "trust-old", "test", AgentMetadata{}, nil, nil, nil, 20*time.Millisecond); !errors.Is(err, agentidentity.ErrTrustBundleUpdateRequired) {
+	if err := runControlChannel(ctx, stream, "agi-abcdefghijklmnopqrst", "trust-old", "test", AgentMetadata{}, nil, nil, nil, nil, 20*time.Millisecond); !errors.Is(err, agentidentity.ErrTrustBundleUpdateRequired) {
 		t.Fatalf("error=%v, want trust bundle renewal", err)
 	}
 }

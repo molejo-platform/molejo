@@ -46,6 +46,17 @@ func resolveRuntime(feature Feature, facts Facts) Feature {
 }
 
 func resolveProvider(now time.Time, feature Feature, facts Facts) Feature {
+	if observation, ok := latestObservationRegardlessFreshness(feature.ID, facts.Observations); ok {
+		if !facts.AgentConnected {
+			feature.State, feature.ReasonCode = Unknown, ReasonClusterAgentOffline
+			return feature
+		}
+		if !observation.ExpiresAt.IsZero() && !observation.ExpiresAt.After(now) {
+			feature.State, feature.ReasonCode = Unknown, ReasonClusterObservationStale
+			feature.ObservedAt = timePointer(observation.SampledAt)
+			return feature
+		}
+	}
 	if observation, ok := latestObservation(now, feature.ID, facts.Observations); ok {
 		feature.ObservedAt = timePointer(observation.SampledAt)
 		feature.Limitations = append([]string(nil), observation.Limitations...)
@@ -81,6 +92,20 @@ func resolveProvider(now time.Time, feature Feature, facts Facts) Feature {
 		feature.State, feature.ReasonCode = Unknown, first(binding.ReasonCode, ReasonProviderHealthUnknown)
 	}
 	return feature
+}
+
+func latestObservationRegardlessFreshness(id capabilitycontract.ID, observations []capabilitycontract.Observation) (capabilitycontract.Observation, bool) {
+	var latest capabilitycontract.Observation
+	found := false
+	for _, observation := range observations {
+		if observation.ID != id || observation.ContractVersion != capabilitycontract.ContractVersion {
+			continue
+		}
+		if !found || observation.ReceivedAt.After(latest.ReceivedAt) {
+			latest, found = observation, true
+		}
+	}
+	return latest, found
 }
 
 func latestObservation(now time.Time, id capabilitycontract.ID, observations []capabilitycontract.Observation) (capabilitycontract.Observation, bool) {

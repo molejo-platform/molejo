@@ -15,6 +15,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	clusteragentv1alpha1 "github.com/molejo-platform/molejo/contracts/molejo/clusteragent/v1alpha1"
+	"github.com/molejo-platform/molejo/packages/capabilitycontract"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/audit"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/domain"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/store"
@@ -27,6 +28,7 @@ type AgentRegistry interface {
 	TouchAgent(context.Context, string, []byte, string, uint64, time.Time) error
 	RenewAgent(context.Context, string, []byte, string, []byte, time.Time, func(string) (store.AgentCertificate, error), audit.Event) (store.AgentCertificate, error)
 	ReconcileAgentObservations(context.Context, string, string, uint64, []store.RuntimeObservation, bool) error
+	ReconcileCapabilityObservations(context.Context, string, string, uint64, []capabilitycontract.Observation, bool, time.Time) error
 }
 
 type CertificateSigner interface {
@@ -98,7 +100,8 @@ func (s *GRPCService) Connect(stream grpc.BidiStreamingServer[clusteragentv1alph
 	if err != nil {
 		return status.Error(codes.PermissionDenied, "Agent identity was rejected")
 	}
-	if err = stream.Send(&clusteragentv1alpha1.ConnectResponse{Payload: &clusteragentv1alpha1.ConnectResponse_Hello{Hello: &clusteragentv1alpha1.ControlPlaneHello{ProtocolVersion: "v1alpha1", HeartbeatIntervalSeconds: int32(s.heartbeatInterval / time.Second), ServerTimeUnix: now.Unix(), Capabilities: []string{"runtime.v1alpha1", "runtime-observation.v1alpha1", "certificate-renewal.v1alpha1"}, SessionId: sessionID, TrustBundleId: s.trustBundleID}}}); err != nil {
+	capabilityObservationsEnabled := hasCapability(hello.GetCapabilities(), "capability-observation.v1alpha1")
+	if err = stream.Send(&clusteragentv1alpha1.ConnectResponse{Payload: &clusteragentv1alpha1.ConnectResponse_Hello{Hello: &clusteragentv1alpha1.ControlPlaneHello{ProtocolVersion: "v1alpha1", HeartbeatIntervalSeconds: int32(s.heartbeatInterval / time.Second), ServerTimeUnix: now.Unix(), Capabilities: []string{"runtime.v1alpha1", "runtime-observation.v1alpha1", "certificate-renewal.v1alpha1", "capability-observation.v1alpha1"}, SessionId: sessionID, TrustBundleId: s.trustBundleID}}}); err != nil {
 		return err
 	}
 	for {
@@ -136,6 +139,31 @@ func (s *GRPCService) Connect(stream grpc.BidiStreamingServer[clusteragentv1alph
 					return status.Error(codes.PermissionDenied, "Agent identity was rejected")
 				}
 				return status.Error(codes.InvalidArgument, "runtime observations were rejected")
+			}
+		}
+		if len(heartbeat.GetCapabilityObservations()) > 0 || heartbeat.GetCapabilitySnapshotComplete() {
+			if !capabilityObservationsEnabled {
+				return status.Error(codes.InvalidArgument, "capability observations were not negotiated")
+			}
+			observations := make([]capabilitycontract.Observation, 0, len(heartbeat.GetCapabilityObservations()))
+			for _, observation := range heartbeat.GetCapabilityObservations() {
+				observations = append(observations, capabilitycontract.Observation{
+					ID:              capabilitycontract.ID(observation.GetCapabilityId()),
+					ContractVersion: observation.GetContractVersion(),
+					Support:         capabilitycontract.Support(observation.GetSupport()),
+					Health:          capabilitycontract.Health(observation.GetHealth()),
+					ProviderKind:    observation.GetProviderKind(),
+					ReasonCode:      observation.GetReasonCode(),
+					Message:         observation.GetSanitizedMessage(),
+					Limitations:     append([]string(nil), observation.GetLimitations()...),
+					SampledAt:       time.Unix(observation.GetSampledAtUnix(), 0).UTC(),
+				})
+			}
+			if err = s.registry.ReconcileCapabilityObservations(stream.Context(), installationID, sessionID, heartbeat.GetSequence(), observations, heartbeat.GetCapabilitySnapshotComplete(), now); err != nil {
+				if errors.Is(err, store.ErrAgentIdentityMismatch) {
+					return status.Error(codes.PermissionDenied, "Agent identity was rejected")
+				}
+				return status.Error(codes.InvalidArgument, "capability observations were rejected")
 			}
 		}
 		if s.dispatcher != nil {
@@ -202,6 +230,15 @@ func (s *GRPCService) RenewCertificate(ctx context.Context, request *clusteragen
 func hasRuntimeCapability(capabilities []string) bool {
 	for _, capability := range capabilities {
 		if capability == "runtime.v1alpha1" {
+			return true
+		}
+	}
+	return false
+}
+
+func hasCapability(capabilities []string, expected string) bool {
+	for _, capability := range capabilities {
+		if capability == expected {
 			return true
 		}
 	}

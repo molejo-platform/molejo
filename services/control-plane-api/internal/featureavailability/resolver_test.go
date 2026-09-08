@@ -35,7 +35,7 @@ func TestResolveRuntimePrecedence(t *testing.T) {
 func TestResolveProviderAndCopiesInputs(t *testing.T) {
 	now := time.Now().UTC()
 	limitations := []string{"single replica"}
-	facts := Facts{Providers: providerbinding.New(providerbinding.Binding{Capability: capabilitycontract.SourceGitHub, Configured: true}), Observations: []capabilitycontract.Observation{{ID: capabilitycontract.StorageRWO, ContractVersion: capabilitycontract.ContractVersion, Support: capabilitycontract.SupportSupported, Health: capabilitycontract.HealthHealthy, Limitations: limitations, SampledAt: now, ReceivedAt: now, ExpiresAt: now.Add(time.Minute)}}}
+	facts := Facts{AgentConnected: true, Providers: providerbinding.New(providerbinding.Binding{Capability: capabilitycontract.SourceGitHub, Configured: true}), Observations: []capabilitycontract.Observation{{ID: capabilitycontract.StorageRWO, ContractVersion: capabilitycontract.ContractVersion, Support: capabilitycontract.SupportSupported, Health: capabilitycontract.HealthHealthy, Limitations: limitations, SampledAt: now, ReceivedAt: now, ExpiresAt: now.Add(time.Minute)}}}
 	got := Resolve(now, Target{}, facts)
 	if featureByID(got, capabilitycontract.SourceGitHub).State != Unknown {
 		t.Fatal("configured provider without health proof must be Unknown")

@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc/credentials"
 
 	clusteragentv1alpha1 "github.com/molejo-platform/molejo/contracts/molejo/clusteragent/v1alpha1"
+	"github.com/molejo-platform/molejo/packages/capabilitycontract"
 	"github.com/molejo-platform/molejo/services/cluster-agent/internal/agent"
 	agentidentity "github.com/molejo-platform/molejo/services/cluster-agent/internal/identity"
 )
@@ -23,6 +24,7 @@ type GRPCConnector struct {
 	metadata        AgentMetadata
 	executor        RuntimeExecutor
 	observer        RuntimeObserver
+	capabilities    CapabilitySnapshotProvider
 	responseTimeout time.Duration
 }
 
@@ -40,6 +42,10 @@ type RuntimeObserver interface {
 	RuntimeObservations(context.Context) ([]*clusteragentv1alpha1.RuntimeObservation, error)
 }
 
+type CapabilitySnapshotProvider interface {
+	Snapshot() ([]capabilitycontract.Observation, bool)
+}
+
 const controlChannelResponseTimeout = 10 * time.Second
 
 func NewGRPCConnector(address, serverName, version string, metadata AgentMetadata, executor RuntimeExecutor) (*GRPCConnector, error) {
@@ -51,6 +57,10 @@ func NewGRPCConnector(address, serverName, version string, metadata AgentMetadat
 
 func (c *GRPCConnector) ConfigureObservations(observer RuntimeObserver) {
 	c.observer = observer
+}
+
+func (c *GRPCConnector) ConfigureCapabilityObservations(provider CapabilitySnapshotProvider) {
+	c.capabilities = provider
 }
 
 func (c *GRPCConnector) Connect(ctx context.Context, identity agentidentity.StoredIdentity, paired func()) error {
@@ -65,7 +75,7 @@ func (c *GRPCConnector) Connect(ctx context.Context, identity agentidentity.Stor
 	if err != nil {
 		return fmt.Errorf("open Agent gRPC stream: %w", err)
 	}
-	return runControlChannel(streamContext, stream, identity.InstallationID, identity.TrustBundleID, c.version, c.metadata, c.executor, c.observer, paired, c.responseTimeout)
+	return runControlChannel(streamContext, stream, identity.InstallationID, identity.TrustBundleID, c.version, c.metadata, c.executor, c.observer, c.capabilities, paired, c.responseTimeout)
 }
 
 func (c *GRPCConnector) Renew(ctx context.Context, identity agentidentity.StoredIdentity, request agent.RenewalRequest) (agentidentity.Certificate, error) {
@@ -118,7 +128,7 @@ type agentControlStream interface {
 	Recv() (*clusteragentv1alpha1.ConnectResponse, error)
 }
 
-func runControlChannel(ctx context.Context, stream agentControlStream, installationID, trustBundleID string, version string, metadata AgentMetadata, executor RuntimeExecutor, observer RuntimeObserver, paired func(), responseTimeout time.Duration) error {
+func runControlChannel(ctx context.Context, stream agentControlStream, installationID, trustBundleID string, version string, metadata AgentMetadata, executor RuntimeExecutor, observer RuntimeObserver, capabilities CapabilitySnapshotProvider, paired func(), responseTimeout time.Duration) error {
 	hello := &clusteragentv1alpha1.AgentHello{InstallationId: installationID, AgentVersion: version, ClusterUid: metadata.ClusterUID, KubernetesVersion: metadata.KubernetesVersion, Capabilities: metadata.Capabilities, SupportedProtocolVersions: []string{"v1alpha1"}, TrustBundleId: trustBundleID}
 	if err := stream.Send(&clusteragentv1alpha1.ConnectRequest{Payload: &clusteragentv1alpha1.ConnectRequest_Hello{Hello: hello}}); err != nil {
 		return fmt.Errorf("send Agent hello: %w", err)
@@ -156,6 +166,19 @@ func runControlChannel(ctx context.Context, stream agentControlStream, installat
 					return fmt.Errorf("collect runtime observations: %w", err)
 				}
 				heartbeat.ObservationSnapshotComplete = true
+			}
+			if capabilities != nil && hasCapability(metadata.Capabilities, "capability-observation.v1alpha1") && hasCapability(controlPlaneHello.GetCapabilities(), "capability-observation.v1alpha1") {
+				observations, complete := capabilities.Snapshot()
+				heartbeat.CapabilityObservations = make([]*clusteragentv1alpha1.CapabilityObservation, 0, len(observations))
+				for _, observation := range observations {
+					heartbeat.CapabilityObservations = append(heartbeat.CapabilityObservations, &clusteragentv1alpha1.CapabilityObservation{
+						CapabilityId: string(observation.ID), ContractVersion: observation.ContractVersion,
+						Support: string(observation.Support), Health: string(observation.Health), ProviderKind: observation.ProviderKind,
+						ReasonCode: observation.ReasonCode, SanitizedMessage: observation.Message,
+						Limitations: append([]string(nil), observation.Limitations...), SampledAtUnix: observation.SampledAt.Unix(),
+					})
+				}
+				heartbeat.CapabilitySnapshotComplete = complete
 			}
 			if err = stream.Send(&clusteragentv1alpha1.ConnectRequest{Payload: &clusteragentv1alpha1.ConnectRequest_Heartbeat{Heartbeat: heartbeat}}); err != nil {
 				return fmt.Errorf("send Agent heartbeat: %w", err)

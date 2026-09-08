@@ -13,10 +13,12 @@ import (
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 
 	"github.com/molejo-platform/molejo/services/cluster-agent/internal/agent"
+	agentcapability "github.com/molejo-platform/molejo/services/cluster-agent/internal/capability"
 	"github.com/molejo-platform/molejo/services/cluster-agent/internal/controlplane"
 	agentkube "github.com/molejo-platform/molejo/services/cluster-agent/internal/kube"
 	agentruntime "github.com/molejo-platform/molejo/services/cluster-agent/internal/runtime"
@@ -45,6 +47,10 @@ func run() error {
 	client, err := kubernetes.NewForConfig(kubernetesConfig)
 	if err != nil {
 		return fmt.Errorf("create Kubernetes client: %w", err)
+	}
+	dynamicClient, err := dynamic.NewForConfig(kubernetesConfig)
+	if err != nil {
+		return fmt.Errorf("create Kubernetes dynamic client: %w", err)
 	}
 	store := agentkube.NewSecretStore(client.CoreV1(), configuration.Namespace, configuration.IdentitySecret, configuration.EnrollmentSecret)
 	systemNamespace, err := client.CoreV1().Namespaces().Get(ctx, metav1.NamespaceSystem, metav1.GetOptions{})
@@ -78,7 +84,7 @@ func run() error {
 		metadata := controlplane.AgentMetadata{
 			ClusterUID:        string(systemNamespace.UID),
 			KubernetesVersion: serverVersion.GitVersion,
-			Capabilities:      []string{"runtime.v1alpha1", "runtime-observation.v1alpha1", "certificate-renewal.v1alpha1"},
+			Capabilities:      []string{"runtime.v1alpha1", "runtime-observation.v1alpha1", "certificate-renewal.v1alpha1", "capability-observation.v1alpha1"},
 		}
 		grpcConnector, connectorErr := controlplane.NewGRPCConnector(configuration.GRPCAddress, configuration.GRPCServerName, version, metadata, executor)
 		err = connectorErr
@@ -86,6 +92,9 @@ func run() error {
 			return err
 		}
 		grpcConnector.ConfigureObservations(runtimeClient)
+		capabilityCollector := agentcapability.NewCollector(client, client.Discovery(), dynamicClient)
+		go capabilityCollector.Run(ctx, 30*time.Second)
+		grpcConnector.ConfigureCapabilityObservations(capabilityCollector)
 		connector, renewer = grpcConnector, grpcConnector
 	}
 	runner := agent.NewRunner(store, enroller, connector, status)

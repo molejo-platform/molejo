@@ -21,22 +21,22 @@ const (
 )
 
 const (
-	ReasonClusterNotAttached            = "cluster_not_attached"
-	ReasonClusterAgentOffline           = "cluster_agent_offline"
-	ReasonClusterObservationStale       = "cluster_observation_stale"
+	ReasonClusterNotAttached            = capabilitycontract.ReasonClusterNotAttached
+	ReasonClusterAgentOffline           = capabilitycontract.ReasonClusterAgentOffline
+	ReasonClusterObservationStale       = capabilitycontract.ReasonClusterObservationStale
 	ReasonClusterCapabilityMissing      = "cluster_capability_missing"
-	ReasonClusterCapabilityIncompatible = "cluster_capability_incompatible"
-	ReasonProviderNotConfigured         = "provider_not_configured"
-	ReasonProviderHealthUnknown         = "provider_health_unknown"
-	ReasonProviderUnreachable           = "provider_unreachable"
+	ReasonClusterCapabilityIncompatible = capabilitycontract.ReasonCapabilityIncompatible
+	ReasonProviderNotConfigured         = capabilitycontract.ReasonProviderNotConfigured
+	ReasonProviderHealthUnknown         = capabilitycontract.ReasonProviderHealthUnknown
+	ReasonProviderUnreachable           = capabilitycontract.ReasonProviderUnreachable
 	ReasonBindingMissing                = "binding_missing"
-	ReasonBindingDegraded               = "binding_degraded"
+	ReasonBindingDegraded               = capabilitycontract.ReasonBindingDegraded
 	ReasonMetricsAPIMissing             = "metrics_api_missing"
 	ReasonRuntimeNotDeployed            = "runtime_not_deployed"
 	ReasonAppSourceMissing              = "app_source_missing"
-	ReasonHistoricalBackendMissing      = "historical_backend_missing"
-	ReasonSecretBackendMissing          = "secret_backend_missing"
-	ReasonRuntimeQueryUnsupported       = "runtime_query_unsupported"
+	ReasonHistoricalBackendMissing      = capabilitycontract.ReasonHistoricalBackendMissing
+	ReasonSecretBackendMissing          = capabilitycontract.ReasonSecretBackendMissing
+	ReasonRuntimeQueryUnsupported       = capabilitycontract.ReasonRuntimeQueryUnsupported
 )
 
 type ScopeType string

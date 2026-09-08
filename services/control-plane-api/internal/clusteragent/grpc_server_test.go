@@ -22,19 +22,22 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 
 	clusteragentv1alpha1 "github.com/molejo-platform/molejo/contracts/molejo/clusteragent/v1alpha1"
+	"github.com/molejo-platform/molejo/packages/capabilitycontract"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/audit"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/store"
 )
 
 type recordingAgentRegistry struct {
-	activatedID string
-	touchedID   string
-	sessionID   string
-	sequence    uint64
-	fingerprint []byte
-	activateErr error
-	observed    []store.RuntimeObservation
-	complete    bool
+	activatedID        string
+	touchedID          string
+	sessionID          string
+	sequence           uint64
+	fingerprint        []byte
+	activateErr        error
+	observed           []store.RuntimeObservation
+	complete           bool
+	capabilities       []capabilitycontract.Observation
+	capabilityComplete bool
 }
 
 func (r *recordingAgentRegistry) ActivateAgent(_ context.Context, publicID string, fingerprint []byte, _, _, _ string, _ []string, _, sessionID string, _ time.Time, _ audit.Event) (bool, error) {
@@ -53,6 +56,11 @@ func (r *recordingAgentRegistry) RenewAgent(_ context.Context, publicID string, 
 
 func (r *recordingAgentRegistry) ReconcileAgentObservations(_ context.Context, _, _ string, _ uint64, observations []store.RuntimeObservation, complete bool) error {
 	r.observed, r.complete = observations, complete
+	return nil
+}
+
+func (r *recordingAgentRegistry) ReconcileCapabilityObservations(_ context.Context, _, _ string, _ uint64, observations []capabilitycontract.Observation, complete bool, _ time.Time) error {
+	r.capabilities, r.capabilityComplete = observations, complete
 	return nil
 }
 
@@ -172,6 +180,31 @@ func TestGRPCServiceAuthenticatesHelloAndAcknowledgesHeartbeat(t *testing.T) {
 	ack, err := stream.Recv()
 	if err != nil || ack.GetHeartbeatAck().GetSequence() != 7 || registry.activatedID != installationID || registry.touchedID != installationID || registry.sequence != 7 || !registry.complete || len(registry.observed) != 1 {
 		t.Fatalf("ack=%+v activated=%q touched=%q err=%v", ack, registry.activatedID, registry.touchedID, err)
+	}
+}
+
+func TestGRPCServiceAcceptsNegotiatedCapabilitySnapshot(t *testing.T) {
+	const installationID = "agi-abcdefghijklmnopqrst"
+	registry := &recordingAgentRegistry{}
+	stream := authenticatedTestStream(t, registry, installationID)
+	hello := testAgentHello(installationID)
+	hello.Capabilities = append(hello.Capabilities, "capability-observation.v1alpha1")
+	if err := stream.Send(&clusteragentv1alpha1.ConnectRequest{Payload: &clusteragentv1alpha1.ConnectRequest_Hello{Hello: hello}}); err != nil {
+		t.Fatal(err)
+	}
+	response, err := stream.Recv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	heartbeat := &clusteragentv1alpha1.Heartbeat{Sequence: 1, SentAtUnix: time.Now().Unix(), SessionId: response.GetHello().GetSessionId(), CapabilitySnapshotComplete: true, CapabilityObservations: []*clusteragentv1alpha1.CapabilityObservation{{CapabilityId: string(capabilitycontract.StorageRWO), ContractVersion: capabilitycontract.ContractVersion, Support: string(capabilitycontract.SupportSupported), Health: string(capabilitycontract.HealthHealthy), ProviderKind: "kubernetes", SampledAtUnix: time.Now().Unix()}}}
+	if err = stream.Send(&clusteragentv1alpha1.ConnectRequest{Payload: &clusteragentv1alpha1.ConnectRequest_Heartbeat{Heartbeat: heartbeat}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = stream.Recv(); err != nil {
+		t.Fatal(err)
+	}
+	if !registry.capabilityComplete || len(registry.capabilities) != 1 || registry.capabilities[0].ID != capabilitycontract.StorageRWO {
+		t.Fatalf("capability snapshot=%+v complete=%v", registry.capabilities, registry.capabilityComplete)
 	}
 }
 
