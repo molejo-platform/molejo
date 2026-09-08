@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
@@ -40,10 +42,26 @@ describe("shared design-system primitives", () => {
     expect(screen.getByRole("alert").textContent).toContain("Falha ao salvar");
   });
 
-  it("uses an official brand asset with a stable accessible name", () => {
-    render(<BrandLogo surface="light" />);
-    expect(screen.getByRole("img", { name: "Molejo" }).getAttribute("src")).toBe(
-      "/brand/molejo-horizontal-on-light.webp",
+  it("uses packaged official brand assets with a stable accessible name", () => {
+    render(
+      <>
+        <BrandLogo surface="light" />
+        <BrandLogo surface="dark" />
+        <BrandLogo compact surface="light" />
+        <BrandLogo compact surface="dark" />
+      </>,
     );
+    const sources = screen.getAllByRole("img", { name: "Molejo" }).map((image) => image.getAttribute("src") ?? "");
+    expect(sources).toEqual([
+      "/brand/molejo-horizontal-on-light.webp",
+      "/brand/molejo-horizontal-on-dark.webp",
+      "/brand/molejo-symbol-on-light.webp",
+      "/brand/molejo-symbol-on-dark.webp",
+    ]);
+    for (const source of sources) {
+      const asset = readFileSync(resolve(process.cwd(), "public", source.slice(1)));
+      expect(asset.subarray(0, 4).toString()).toBe("RIFF");
+      expect(asset.subarray(8, 12).toString()).toBe("WEBP");
+    }
   });
 });
