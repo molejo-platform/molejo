@@ -21,6 +21,26 @@ vi.mock("../workspace-access/public", () => ({
     isSuccess: true,
   }),
 }));
+vi.mock("../feature-availability/public", async (importOriginal) => {
+  const original = await importOriginal<typeof import("../feature-availability/public")>();
+  return {
+    ...original,
+    useFeatureAvailability: () => ({
+      data: {
+        scopeType: "Workspace",
+        scopeId: "ws-aaaaaaaaaaaaaaaaaaaa",
+        features: Object.values(original.featureIds).map((id) => ({
+          id,
+          contractVersion: "v1alpha1",
+          state: "Available",
+          limitations: [],
+        })),
+      },
+      isPending: false,
+      isError: false,
+    }),
+  };
+});
 vi.mock("./api", () => ({
   listParameters: mocks.listParameters,
   createParameter: mocks.createParameter,

@@ -32,7 +32,7 @@ const (
 	ReasonBindingMissing                = "binding_missing"
 	ReasonBindingDegraded               = capabilitycontract.ReasonBindingDegraded
 	ReasonMetricsAPIMissing             = "metrics_api_missing"
-	ReasonRuntimeNotDeployed            = "runtime_not_deployed"
+	ReasonRuntimeNotDeployed            = capabilitycontract.ReasonRuntimeNotDeployed
 	ReasonAppSourceMissing              = "app_source_missing"
 	ReasonHistoricalBackendMissing      = capabilitycontract.ReasonHistoricalBackendMissing
 	ReasonSecretBackendMissing          = capabilitycontract.ReasonSecretBackendMissing

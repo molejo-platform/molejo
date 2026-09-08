@@ -1,6 +1,8 @@
 // Package capability defines the common language used by cluster capability runbooks.
 package capability
 
+import "github.com/molejo-platform/molejo/packages/capabilitycontract"
+
 // Ownership describes who is responsible for the lifecycle of a capability.
 type Ownership string
 
@@ -23,9 +25,12 @@ const (
 
 // Observation is a read-only capability fact reported by Molejo.
 type Observation struct {
-	Name      string
-	Status    Status
-	Ownership Ownership
-	Provider  string
-	Detail    string
+	ID              capabilitycontract.ID
+	ContractVersion string
+	Name            string
+	Status          Status
+	Ownership       Ownership
+	Provider        string
+	ReasonCode      string
+	Detail          string
 }

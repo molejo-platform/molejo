@@ -20,6 +20,13 @@ import { Icon } from "../../shared/ui/Icon";
 import { EmptyState, TabNav } from "../../shared/ui/Page";
 import { EnvironmentAppLayout, type EnvironmentParams } from "../app-environments/public";
 import {
+  canUseFeature,
+  FeatureAvailabilityNotice,
+  featureIds,
+  findFeature,
+  useFeatureAvailability,
+} from "../feature-availability/public";
+import {
   getRuntimeMetrics,
   listRuntimeEvents,
   listRuntimeLogs,
@@ -98,16 +105,21 @@ export function EnvironmentAppObservabilityPage() {
 
 function ObservabilityOverview({ target, params }: { target: AppEnvironment; params: EnvironmentParams }) {
   const [range] = useState(() => createRange(1));
+  const availability = useFeatureAvailability(params.workspaceId, "AppEnvironment", target.id);
+  const historicalLogs = findFeature(availability.data, featureIds.telemetryLogsHistorical);
+  const operationalEvents = findFeature(availability.data, featureIds.controlPlaneEvents);
   const logs = useQuery({
     queryKey: observabilityKeys.logs(params.workspaceId, params.projectId, target.appId, target.id, range),
     queryFn: () =>
       listRuntimeLogs(params.workspaceId, params.projectId, target.appId, target.id, { ...range, limit: 20 }),
+    enabled: canUseFeature(historicalLogs),
   });
   const metrics = useRuntimeMetrics();
   const events = useQuery({
     queryKey: observabilityKeys.events(params.workspaceId, params.projectId, target.appId, target.id, range),
     queryFn: () =>
       listRuntimeEvents(params.workspaceId, params.projectId, target.appId, target.id, { ...range, limit: 20 }),
+    enabled: canUseFeature(operationalEvents),
   });
   const errors = [logs.error, events.error].filter(Boolean);
   const latestAvailability = latestSample(metrics.snapshot?.samples ?? [], "available");
@@ -127,6 +139,13 @@ function ObservabilityOverview({ target, params }: { target: AppEnvironment; par
         <Alert tone="warning">
           Parte da telemetria está temporariamente indisponível. As áreas saudáveis continuam consultáveis.
         </Alert>
+      )}
+      {!canUseFeature(historicalLogs) && !canUseFeature(operationalEvents) && (
+        <FeatureAvailabilityNotice
+          feature={historicalLogs}
+          pending={availability.isPending}
+          title="Histórico de telemetria não configurado"
+        />
       )}
       <div className="summary-grid">
         <Link className="summary-card" {...links.logs}>
@@ -189,12 +208,18 @@ export function RuntimeLogsPage({ target, params }: { target: AppEnvironment; pa
   const [liveState, setLiveState] = useState<"idle" | "connecting" | "connected" | "reconnecting" | "error">("idle");
   const store = useMemo(() => new RuntimeLogStore(), [filters, target.id]);
   const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
+  const availability = useFeatureAvailability(params.workspaceId, "AppEnvironment", target.id);
+  const historicalLogs = findFeature(availability.data, featureIds.telemetryLogsHistorical);
+  const currentLogs = findFeature(availability.data, featureIds.runtimeLogsCurrent);
+  const historicalUsable = canUseFeature(historicalLogs);
+  const liveUsable = canUseFeature(currentLogs);
   const logs = useInfiniteQuery({
     queryKey: observabilityKeys.logs(params.workspaceId, params.projectId, target.appId, target.id, filters),
     queryFn: ({ pageParam }) =>
       listRuntimeLogs(params.workspaceId, params.projectId, target.appId, target.id, { ...filters, cursor: pageParam }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    enabled: historicalUsable,
   });
   const liveCursor = logs.data?.pages[0]?.liveCursor;
   const streamURL = liveCursor
@@ -208,7 +233,7 @@ export function RuntimeLogsPage({ target, params }: { target: AppEnvironment; pa
   }, [logs.data?.pages, store]);
 
   useEffect(() => {
-    if (!live || !streamURL) return;
+    if (!liveUsable || !live || !streamURL) return;
     setLiveState("connecting");
     const source = new EventSource(streamURL);
     let reconnectNotice: number | undefined;
@@ -256,7 +281,7 @@ export function RuntimeLogsPage({ target, params }: { target: AppEnvironment; pa
       source.removeEventListener("end", end);
       source.close();
     };
-  }, [live, store, streamURL]);
+  }, [live, liveUsable, store, streamURL]);
 
   function applyFilters(event: FormEvent) {
     event.preventDefault();
@@ -279,7 +304,7 @@ export function RuntimeLogsPage({ target, params }: { target: AppEnvironment; pa
         <Button
           type="button"
           variant={live ? "danger" : "secondary"}
-          disabled={!liveCursor}
+          disabled={!liveUsable || !liveCursor}
           onClick={() => {
             setLiveState(live ? "idle" : "connecting");
             setLive((value) => !value);
@@ -306,6 +331,14 @@ export function RuntimeLogsPage({ target, params }: { target: AppEnvironment; pa
           Aplicar filtros
         </Button>
       </form>
+      {!historicalUsable && (
+        <FeatureAvailabilityNotice
+          feature={historicalLogs}
+          pending={availability.isPending}
+          title="Histórico de logs indisponível"
+        />
+      )}
+      {!liveUsable && <FeatureAvailabilityNotice feature={currentLogs} title="Logs atuais indisponíveis" />}
       {liveState === "connecting" && (
         <p className="live-status pending" role="status">
           <span aria-hidden="true" />
@@ -325,7 +358,7 @@ export function RuntimeLogsPage({ target, params }: { target: AppEnvironment; pa
         </p>
       )}
       {liveState === "error" && <Alert>O fluxo ao vivo foi encerrado. A consulta histórica continua disponível.</Alert>}
-      {logs.isError ? (
+      {!historicalUsable ? null : logs.isError ? (
         <Alert>{userFacingError(logs.error)}</Alert>
       ) : logs.isPending ? (
         <p className="muted" role="status">
@@ -447,15 +480,21 @@ export function EnvironmentAppMetricsPage() {
 export function RuntimeMetricsPage({ target, params }: { target: AppEnvironment; params: EnvironmentParams }) {
   const [hours, setHours] = useState("1");
   const [range, setRange] = useState(() => createRange(1));
+  const availability = useFeatureAvailability(params.workspaceId, "AppEnvironment", target.id);
+  const historicalMetrics = findFeature(availability.data, featureIds.telemetryMetricsHistorical);
+  const operationEvents = findFeature(availability.data, featureIds.controlPlaneEvents);
+  const metricsUsable = canUseFeature(historicalMetrics);
   const metrics = useQuery({
     queryKey: observabilityKeys.metrics(params.workspaceId, params.projectId, target.appId, target.id, range),
     queryFn: () => getRuntimeMetrics(params.workspaceId, params.projectId, target.appId, target.id, range),
+    enabled: metricsUsable,
   });
   const markerRange = boundedRange(range, 168);
   const events = useQuery({
     queryKey: observabilityKeys.events(params.workspaceId, params.projectId, target.appId, target.id, markerRange),
     queryFn: () =>
       listRuntimeEvents(params.workspaceId, params.projectId, target.appId, target.id, { ...markerRange, limit: 100 }),
+    enabled: canUseFeature(operationEvents),
   });
   const series = metrics.data?.series ?? [];
   const deploymentMarkers =
@@ -481,6 +520,13 @@ export function RuntimeMetricsPage({ target, params }: { target: AppEnvironment;
           <Icon name="refresh" />
         </Button>
       </div>
+      {!metricsUsable && (
+        <FeatureAvailabilityNotice
+          feature={historicalMetrics}
+          pending={availability.isPending}
+          title="Histórico de métricas indisponível"
+        />
+      )}
       <div className="panel observability-toolbar">
         <SelectField label="Período" value={hours} onChange={(event) => setHours(event.target.value)}>
           {metricRanges.map((item) => (
@@ -508,7 +554,7 @@ export function RuntimeMetricsPage({ target, params }: { target: AppEnvironment;
           Os marcadores de implantação estão temporariamente indisponíveis; as métricas continuam consultáveis.
         </Alert>
       )}
-      {metrics.isError ? (
+      {!metricsUsable ? null : metrics.isError ? (
         <Alert>{userFacingError(metrics.error)}</Alert>
       ) : metrics.isPending ? (
         <p className="muted" role="status">
@@ -595,10 +641,14 @@ export function EnvironmentAppEventsPage() {
 export function RuntimeEventsPage({ target, params }: { target: AppEnvironment; params: EnvironmentParams }) {
   const [hours, setHours] = useState("6");
   const [range, setRange] = useState(() => createRange(6));
+  const availability = useFeatureAvailability(params.workspaceId, "AppEnvironment", target.id);
+  const operationEvents = findFeature(availability.data, featureIds.controlPlaneEvents);
+  const eventsUsable = canUseFeature(operationEvents);
   const events = useQuery({
     queryKey: observabilityKeys.events(params.workspaceId, params.projectId, target.appId, target.id, range),
     queryFn: () =>
       listRuntimeEvents(params.workspaceId, params.projectId, target.appId, target.id, { ...range, limit: 200 }),
+    enabled: eventsUsable,
   });
   return (
     <section className="stack">
@@ -608,6 +658,13 @@ export function RuntimeEventsPage({ target, params }: { target: AppEnvironment; 
         <h2>Eventos</h2>
         <p className="muted">Linha do tempo correlacionada do runtime e das operações duráveis do control plane.</p>
       </div>
+      {!eventsUsable && (
+        <FeatureAvailabilityNotice
+          feature={operationEvents}
+          pending={availability.isPending}
+          title="Eventos operacionais indisponíveis"
+        />
+      )}
       <div className="panel observability-toolbar">
         <SelectField label="Período" value={hours} onChange={(event) => setHours(event.target.value)}>
           {eventRanges.map((item) => (
@@ -620,7 +677,7 @@ export function RuntimeEventsPage({ target, params }: { target: AppEnvironment; 
           Aplicar período
         </Button>
       </div>
-      {events.isError ? (
+      {!eventsUsable ? null : events.isError ? (
         <Alert>{userFacingError(events.error)}</Alert>
       ) : events.isPending ? (
         <p className="muted" role="status">

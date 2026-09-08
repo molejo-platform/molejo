@@ -26,6 +26,13 @@ import {
   previewAppEnvironmentDeployment,
 } from "../delivery/public";
 import { environmentKeys, listEnvironmentApps } from "../environments/public";
+import {
+  canUseFeature,
+  FeatureAvailabilityNotice,
+  featureIds,
+  findFeature,
+  useFeatureAvailability,
+} from "../feature-availability/public";
 import { useOperationTracker } from "../operations/public";
 import { listAppEnvironmentConfigurationVersions, runtimeConfigurationKeys } from "../runtime-configuration/public";
 import { useEffectiveCapabilities } from "../workspace-access/public";
@@ -259,7 +266,9 @@ function TargetBuilds({
   queryClient: ReturnType<typeof useQueryClient>;
 }) {
   const capabilities = useEffectiveCapabilities(params.workspaceId, "AppEnvironment", target.id);
-  const canMutate = capabilities.data?.deploy === true;
+  const availability = useFeatureAvailability(params.workspaceId, "AppEnvironment", target.id);
+  const managedBuild = findFeature(availability.data, featureIds.buildManaged);
+  const canMutate = capabilities.data?.deploy === true && canUseFeature(managedBuild);
   const builds = useQuery({
     queryKey: deliveryKeys.builds(params.workspaceId, params.projectId, target.appId),
     queryFn: ({ signal }) => listAppBuilds(params.workspaceId, params.projectId, target.appId, signal),
@@ -280,7 +289,7 @@ function TargetBuilds({
         queryKey: deliveryKeys.builds(params.workspaceId, params.projectId, target.appId),
       }),
   });
-  const error = capabilities.error ?? builds.error ?? source.error ?? create.error;
+  const error = capabilities.error ?? availability.error ?? builds.error ?? source.error ?? create.error;
   if (builds.isError) return <Alert>{userFacingError(builds.error)}</Alert>;
   return (
     <section className="stack">
@@ -302,6 +311,13 @@ function TargetBuilds({
         )}
       </div>
       {error && <Alert>{userFacingError(error)}</Alert>}
+      {!canUseFeature(managedBuild) && (
+        <FeatureAvailabilityNotice
+          feature={managedBuild}
+          pending={availability.isPending}
+          title="Build gerenciado indisponível"
+        />
+      )}
       {!source.isPending && !source.data?.source && (
         <Alert tone="warning">
           Configure a fonte do App antes de iniciar um build.{" "}
@@ -487,7 +503,9 @@ function TargetDeployments({
   queryClient: ReturnType<typeof useQueryClient>;
 }) {
   const capabilities = useEffectiveCapabilities(params.workspaceId, "AppEnvironment", target.id);
-  const canMutate = capabilities.data?.deploy === true;
+  const availability = useFeatureAvailability(params.workspaceId, "AppEnvironment", target.id);
+  const runtimeApply = findFeature(availability.data, featureIds.runtimeWorkloadApply);
+  const canMutate = capabilities.data?.deploy === true && canUseFeature(runtimeApply);
   const deployments = useQuery({
     queryKey: deliveryKeys.deployments(params.workspaceId, params.projectId, target.appId, target.id),
     queryFn: ({ signal }) =>
@@ -561,6 +579,7 @@ function TargetDeployments({
   });
   const error =
     capabilities.error ??
+    availability.error ??
     deployments.error ??
     releases.error ??
     revisions.error ??
@@ -587,6 +606,13 @@ function TargetDeployments({
         <p className="muted">Revise a combinação exata de Release e configuração antes de alterar o runtime.</p>
       </div>
       {error && <Alert>{userFacingError(error)}</Alert>}
+      {!canUseFeature(runtimeApply) && (
+        <FeatureAvailabilityNotice
+          feature={runtimeApply}
+          pending={availability.isPending}
+          title="Implantação indisponível"
+        />
+      )}
       {canMutate && (
         <form
           className="panel stack"

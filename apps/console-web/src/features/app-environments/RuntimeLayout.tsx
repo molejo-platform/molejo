@@ -7,6 +7,7 @@ import { Alert } from "../../shared/ui/Alert";
 import { PageHeader, TabNav } from "../../shared/ui/Page";
 import { StatusBadge } from "../../shared/ui/StatusBadge";
 import { environmentKeys, listEnvironmentApps } from "../environments/public";
+import { canUseFeature, featureIds, findFeature, useFeatureAvailability } from "../feature-availability/public";
 import { RuntimeMetricsProvider, RuntimeStatusStrip } from "../observability/public";
 import { type EnvironmentParams, requireEnvironmentParams } from "./runtime-ref";
 
@@ -16,6 +17,7 @@ export function EnvironmentAppLayout({
   children: (target: AppEnvironment, params: EnvironmentParams) => ReactNode;
 }) {
   const params = requireEnvironmentParams(useParams({ strict: false }));
+  const availability = useFeatureAvailability(params.workspaceId, "AppEnvironment", params.appEnvironmentId);
   const targets = useQuery({
     queryKey: environmentKeys.applications(params.workspaceId, params.projectId, params.environmentId),
     queryFn: ({ signal }) => listEnvironmentApps(params.workspaceId, params.projectId, params.environmentId, signal),
@@ -61,9 +63,10 @@ export function EnvironmentAppLayout({
     `${settingsBase}/storage`,
     `${settingsBase}/versions`,
   ] as const;
+  const currentMetrics = findFeature(availability.data, featureIds.runtimeMetricsCurrent);
 
   return (
-    <RuntimeMetricsProvider target={target} params={params}>
+    <RuntimeMetricsProvider target={target} params={params} enabled={canUseFeature(currentMetrics)}>
       <div className="stack">
         <PageHeader
           eyebrow={target.environmentName}
@@ -83,6 +86,7 @@ export function EnvironmentAppLayout({
           ]}
           actions={<StatusBadge status={target.state} />}
         />
+        {availability.isError && <Alert>Não foi possível carregar a disponibilidade estrutural deste App.</Alert>}
         <RuntimeStatusStrip target={target} />
         <TabNav
           label="Áreas do App no Environment"

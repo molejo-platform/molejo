@@ -61,6 +61,9 @@ func newStatusCommand(runner doctorRunner) *cobra.Command {
 				status := "READY"
 				if !check.Healthy {
 					status = "NOT READY"
+					if check.Advisory {
+						status = "WARNING"
+					}
 				}
 				_, _ = fmt.Fprintf(command.OutOrStdout(), "%-10s %-22s %s\n", status, check.Name, check.Detail)
 			}

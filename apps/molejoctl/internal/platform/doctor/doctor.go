@@ -23,9 +23,10 @@ const (
 
 // Check is one diagnostic observation.
 type Check struct {
-	Name    string
-	Detail  string
-	Healthy bool
+	Name     string
+	Detail   string
+	Healthy  bool
+	Advisory bool
 }
 
 // Report contains every diagnostic observation for one context.
@@ -37,7 +38,7 @@ type Report struct {
 // Healthy reports whether all non-empty checks passed.
 func (r Report) Healthy() bool {
 	for _, check := range r.Checks {
-		if !check.Healthy {
+		if !check.Healthy && !check.Advisory {
 			return false
 		}
 	}
@@ -51,6 +52,9 @@ func (r Report) Render(writer io.Writer) {
 		status := "PASS"
 		if !check.Healthy {
 			status = "FAIL"
+			if check.Advisory {
+				status = "WARN"
+			}
 		}
 		_, _ = fmt.Fprintf(writer, "%-5s %-22s %s\n", status, check.Name, check.Detail)
 	}
@@ -118,7 +122,7 @@ func (d kubernetesDoctor) Run(parent context.Context, contextName string) Report
 		client.Resources("gateway.networking.k8s.io/v1beta1", "referencegrants"),
 		client.Resources("gateway.networking.k8s.io/v1alpha2", "tcproutes", "tlsroutes"),
 	)
-	report.Checks = append(report.Checks, resultCheck("Gateway API CRDs", "GatewayClass, Gateway, HTTPRoute, GRPCRoute, TCPRoute, TLSRoute", err))
+	report.Checks = append(report.Checks, advisoryResultCheck("Gateway API CRDs", "GatewayClass, Gateway, HTTPRoute, GRPCRoute, TCPRoute, TLSRoute", err))
 
 	report.Checks = append(report.Checks,
 		deploymentCheck(ctx, client, "Platform Operator", "platform-operator"),
@@ -132,6 +136,12 @@ func resultCheck(name, detail string, err error) Check {
 		return failedCheck(name, err)
 	}
 	return Check{Name: name, Detail: detail, Healthy: true}
+}
+
+func advisoryResultCheck(name, detail string, err error) Check {
+	check := resultCheck(name, detail, err)
+	check.Advisory = true
+	return check
 }
 
 func failedCheck(name string, err error) Check {

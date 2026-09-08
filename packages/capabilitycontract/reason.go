@@ -17,4 +17,5 @@ const (
 	ReasonHistoricalBackendMissing = "historical_backend_missing"
 	ReasonSecretBackendMissing     = "secret_backend_missing"
 	ReasonRuntimeQueryUnsupported  = "runtime_query_unsupported"
+	ReasonRuntimeNotDeployed       = "runtime_not_deployed"
 )

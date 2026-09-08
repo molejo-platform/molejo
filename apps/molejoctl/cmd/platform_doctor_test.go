@@ -28,3 +28,19 @@ func TestPlatformStatusFailsWhenRuntimeIsUnhealthy(t *testing.T) {
 		t.Fatalf("error=%v", err)
 	}
 }
+
+func TestPlatformStatusReportsAdvisoryWithoutFailing(t *testing.T) {
+	command := newStatusCommand(fakeDoctor{report: doctorReport{
+		ContextName: "molejo-k3s",
+		Checks:      []doctorCheck{{Name: "Gateway API CRDs", Detail: "API unavailable", Advisory: true}},
+	}})
+	output := &bytes.Buffer{}
+	command.SetOut(output)
+	command.SetArgs([]string{"--kube-context", "molejo-k3s"})
+	if err := command.Execute(); err != nil {
+		t.Fatalf("advisory check returned an error: %v", err)
+	}
+	if !strings.Contains(output.String(), "WARNING") {
+		t.Fatalf("output=%q", output.String())
+	}
+}

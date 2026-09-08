@@ -16,6 +16,13 @@ import {
   reconcileClusterSelection,
 } from "../cluster-placement/public";
 import { environmentKeys } from "../environments/public";
+import {
+  canUseFeature,
+  FeatureAvailabilityNotice,
+  featureIds,
+  findFeature,
+  useFeatureAvailability,
+} from "../feature-availability/public";
 import { listParameters, parameterKeys } from "../parameters/public";
 import { normalizeResourceName, validateResourceName } from "../projects/public";
 import {
@@ -94,6 +101,9 @@ export function ApplicationSetupFlow({
   const [step, setStep] = useState<SetupStep>(1);
   const [errors, setErrors] = useState<SetupErrors>({});
   const idempotencyKey = useRef(createIdempotencyKey());
+  const availability = useFeatureAvailability(workspaceId, "Workspace", workspaceId);
+  const storageFeature = findFeature(availability.data, featureIds.storageRWO);
+  const statefulAvailable = canUseFeature(storageFeature);
   const parameters = useQuery({
     queryKey: parameterKeys.list(workspaceId),
     queryFn: ({ signal }) => listParameters(workspaceId, signal),
@@ -101,7 +111,7 @@ export function ApplicationSetupFlow({
   const storageProfiles = useQuery({
     queryKey: runtimeConfigurationKeys.storageProfiles(workspaceId),
     queryFn: () => listStorageProfiles(workspaceId),
-    enabled: draft.workloadKind === "Stateful",
+    enabled: draft.workloadKind === "Stateful" && statefulAvailable,
   });
   const placements = useQuery({
     queryKey: clusterPlacementKeys.workspace(workspaceId),
@@ -201,9 +211,12 @@ export function ApplicationSetupFlow({
   }));
   const formErrors = [...Object.entries(errors).map(([fieldId, message]) => ({ fieldId, message })), ...serverErrors];
   const runtimeDependenciesPending =
-    placements.isPending || (draft.workloadKind === "Stateful" && storageProfiles.isPending);
+    placements.isPending ||
+    (draft.workloadKind === "Stateful" && (availability.isPending || storageProfiles.isPending));
   const runtimeDependenciesFailed =
-    placements.isError || (draft.workloadKind === "Stateful" && storageProfiles.isError);
+    placements.isError ||
+    (draft.workloadKind === "Stateful" &&
+      (availability.isError || (!availability.isPending && !statefulAvailable) || storageProfiles.isError));
 
   return (
     <form className="panel stack setup-flow" onSubmit={submit} noValidate>
@@ -341,10 +354,17 @@ export function ApplicationSetupFlow({
             required
           >
             <option value="Stateless">Stateless</option>
-            <option value="Stateful">Stateful</option>
+            <option value="Stateful" disabled={!statefulAvailable}>
+              Stateful
+            </option>
           </SelectField>
           {draft.workloadKind === "Stateful" && (
             <section className="review stack" aria-label="Armazenamento persistente">
+              <FeatureAvailabilityNotice
+                feature={storageFeature}
+                pending={availability.isPending}
+                title="Armazenamento persistente indisponível"
+              />
               {storageProfiles.isPending && (
                 <p className="muted" role="status">
                   Carregando perfis de armazenamento…

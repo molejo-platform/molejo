@@ -9,6 +9,13 @@ import { ConfirmAction } from "../../shared/ui/ConfirmAction";
 import { Field } from "../../shared/ui/Field";
 import { EmptyState } from "../../shared/ui/Page";
 import { EnvironmentAppLayout, type EnvironmentParams } from "../app-environments/public";
+import {
+  canUseFeature,
+  FeatureAvailabilityNotice,
+  featureIds,
+  findFeature,
+  useFeatureAvailability,
+} from "../feature-availability/public";
 import { useOperationTracker } from "../operations/public";
 import { useEffectiveCapabilities } from "../workspace-access/public";
 import {
@@ -35,6 +42,10 @@ export function EnvironmentStoragePage() {
 
 function StorageEditor({ target, params }: { target: AppEnvironment; params: EnvironmentParams }) {
   const capabilities = useEffectiveCapabilities(params.workspaceId, "AppEnvironment", target.id);
+  const availability = useFeatureAvailability(params.workspaceId, "AppEnvironment", target.id);
+  const storageFeature = findFeature(availability.data, featureIds.storageRWO);
+  const expansionFeature = findFeature(availability.data, featureIds.storageExpand);
+  const canExpand = canUseFeature(expansionFeature);
   const canMutate = capabilities.data?.editResources === true;
   const queryClient = useQueryClient();
   const key = runtimeConfigurationKeys.volume(params.workspaceId, params.projectId, target.appId, target.id);
@@ -129,6 +140,11 @@ function StorageEditor({ target, params }: { target: AppEnvironment; params: Env
           O volume pertence a este App no Environment e sobrevive a releases e recriações do runtime.
         </p>
       </div>
+      <FeatureAvailabilityNotice
+        feature={storageFeature}
+        pending={availability.isPending}
+        title="Armazenamento persistente indisponível"
+      />
       {expansionOperation.isActive && <Alert tone="info">Expansão em andamento no cluster.</Alert>}
       {expansionOperation.isSucceeded && (
         <Alert tone="success">Expansão concluída. A capacidade nunca é reduzida automaticamente.</Alert>
@@ -183,7 +199,12 @@ function StorageEditor({ target, params }: { target: AppEnvironment; params: Env
           Neste laboratório, a disponibilidade dos dados acompanha a máquina de armazenamento. Snapshot, backup e
           restauração gerenciados ainda não fazem parte do produto.
         </Alert>
-        {canMutate && profile?.expandable && (
+        <FeatureAvailabilityNotice
+          feature={expansionFeature}
+          pending={availability.isPending}
+          title="Expansão de volume indisponível"
+        />
+        {canMutate && canExpand && profile?.expandable && (
           <div className="form-row">
             <Field
               label="Nova capacidade (GiB)"

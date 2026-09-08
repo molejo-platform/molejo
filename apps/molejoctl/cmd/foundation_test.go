@@ -9,6 +9,7 @@ import (
 
 	"github.com/molejo-platform/molejo/apps/molejoctl/internal/capability"
 	"github.com/molejo-platform/molejo/apps/molejoctl/internal/foundation"
+	"github.com/molejo-platform/molejo/packages/capabilitycontract"
 )
 
 type fakeFoundationInspector struct {
@@ -29,7 +30,7 @@ func TestFoundationInspectRendersReadOnlyFacts(t *testing.T) {
 		Distribution:      "k3s",
 		Nodes:             []foundation.Node{{Name: "node-1", Architecture: "amd64"}},
 		Capabilities: []capability.Observation{{
-			Name: "Gateway API", Status: capability.StatusAvailable, Ownership: capability.OwnershipRunbookManaged, Detail: "gateways, httproutes",
+			ID: capabilitycontract.PublicationHTTP, ContractVersion: capabilitycontract.ContractVersion, Name: "Gateway API", Status: capability.StatusAvailable, Ownership: capability.OwnershipRunbookManaged, Detail: "gateways, httproutes",
 		}},
 	}}
 	command := newFoundationInspectCommand(inspector)
@@ -43,7 +44,7 @@ func TestFoundationInspectRendersReadOnlyFacts(t *testing.T) {
 	if inspector.contextName != "molejo-k3s" {
 		t.Fatalf("context=%q", inspector.contextName)
 	}
-	for _, expected := range []string{"v1.36.3+k3s1 (k3s)", "node-1 (amd64)", "AVAILABLE", "runbook-managed"} {
+	for _, expected := range []string{"v1.36.3+k3s1 (k3s)", "node-1 (amd64)", "AVAILABLE", "publication.http", "v1alpha1", "runbook-managed"} {
 		if !strings.Contains(output.String(), expected) {
 			t.Fatalf("output %q does not contain %q", output.String(), expected)
 		}

@@ -15,6 +15,7 @@ import (
 
 	"github.com/molejo-platform/molejo/apps/molejoctl/internal/capability"
 	"github.com/molejo-platform/molejo/apps/molejoctl/internal/kubecontext"
+	"github.com/molejo-platform/molejo/packages/capabilitycontract"
 )
 
 const inspectTimeout = 10 * time.Second
@@ -92,9 +93,9 @@ func (i inspector) Inspect(parent context.Context, contextName string) (Report, 
 	}
 	report.Capabilities = append(report.Capabilities,
 		storageObservation(storageClasses),
-		apiObservation(client, "Gateway API", capability.OwnershipRunbookManaged, "gateway.networking.k8s.io/v1", "gateways", "httproutes"),
-		deploymentObservation(ctx, client, "Molejo runtime", capability.OwnershipMolejoManaged, "molejo-system", "platform-operator", "cluster-agent"),
-		deploymentObservation(ctx, client, "Molejo control plane", capability.OwnershipMolejoManaged, "molejo-control-plane", "control-plane-api", "console-web"),
+		apiObservation(client, capabilitycontract.PublicationHTTP, "Gateway API", capability.OwnershipRunbookManaged, "gateway.networking.k8s.io/v1", "gateways", "httproutes"),
+		deploymentObservation(ctx, client, capabilitycontract.RuntimeWorkloadApply, "Molejo runtime", capability.OwnershipMolejoManaged, "molejo-system", "platform-operator", "cluster-agent"),
+		deploymentObservation(ctx, client, capabilitycontract.ControlPlaneOperationEvents, "Molejo control plane", capability.OwnershipMolejoManaged, "molejo-control-plane", "control-plane-api", "console-web"),
 	)
 	return report, nil
 }
@@ -114,9 +115,10 @@ func distribution(version string) string {
 }
 
 func storageObservation(classes []string) capability.Observation {
-	observation := capability.Observation{Name: "Default storage", Ownership: capability.OwnershipProviderManaged}
+	observation := capability.Observation{ID: capabilitycontract.StorageRWO, ContractVersion: capabilitycontract.ContractVersion, Name: "Default storage", Ownership: capability.OwnershipProviderManaged}
 	if len(classes) == 0 {
 		observation.Status = capability.StatusUnavailable
+		observation.ReasonCode = capabilitycontract.ReasonNoResource
 		observation.Detail = "no default StorageClass"
 		return observation
 	}
@@ -126,10 +128,11 @@ func storageObservation(classes []string) capability.Observation {
 	return observation
 }
 
-func apiObservation(client Client, name string, ownership capability.Ownership, groupVersion string, resources ...string) capability.Observation {
-	observation := capability.Observation{Name: name, Ownership: ownership, Provider: groupVersion}
+func apiObservation(client Client, id capabilitycontract.ID, name string, ownership capability.Ownership, groupVersion string, resources ...string) capability.Observation {
+	observation := capability.Observation{ID: id, ContractVersion: capabilitycontract.ContractVersion, Name: name, Ownership: ownership, Provider: groupVersion}
 	if err := client.Resources(groupVersion, resources...); err != nil {
 		observation.Status = capability.StatusUnavailable
+		observation.ReasonCode = capabilitycontract.ReasonAPIMissing
 		observation.Detail = err.Error()
 		return observation
 	}
@@ -138,17 +141,19 @@ func apiObservation(client Client, name string, ownership capability.Ownership, 
 	return observation
 }
 
-func deploymentObservation(ctx context.Context, client Client, name string, ownership capability.Ownership, namespace string, deployments ...string) capability.Observation {
-	observation := capability.Observation{Name: name, Ownership: ownership, Provider: namespace}
+func deploymentObservation(ctx context.Context, client Client, id capabilitycontract.ID, name string, ownership capability.Ownership, namespace string, deployments ...string) capability.Observation {
+	observation := capability.Observation{ID: id, ContractVersion: capabilitycontract.ContractVersion, Name: name, Ownership: ownership, Provider: namespace}
 	for _, deployment := range deployments {
 		available, err := client.DeploymentAvailable(ctx, namespace, deployment)
 		if err != nil {
 			observation.Status = capability.StatusUnknown
+			observation.ReasonCode = capabilitycontract.ReasonProbeFailed
 			observation.Detail = err.Error()
 			return observation
 		}
 		if !available {
 			observation.Status = capability.StatusUnavailable
+			observation.ReasonCode = capabilitycontract.ReasonRuntimeNotDeployed
 			observation.Detail = "not installed"
 			return observation
 		}

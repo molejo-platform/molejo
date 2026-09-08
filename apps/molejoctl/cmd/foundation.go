@@ -59,6 +59,10 @@ func writeFoundationReport(command *cobra.Command, report foundation.Report) {
 		if provider == "" {
 			provider = "-"
 		}
-		_, _ = fmt.Fprintf(writer, "%-12s %-22s %-17s %-34s %s\n", strings.ToUpper(string(observation.Status)), observation.Name, observation.Ownership, provider, observation.Detail)
+		reason := observation.ReasonCode
+		if reason == "" {
+			reason = "-"
+		}
+		_, _ = fmt.Fprintf(writer, "%-12s %-30s %-9s %-17s %-24s %-22s %s\n", strings.ToUpper(string(observation.Status)), observation.ID, observation.ContractVersion, observation.Ownership, provider, reason, observation.Detail)
 	}
 }

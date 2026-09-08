@@ -94,6 +94,26 @@ func TestDoctorUnavailableDeployment(t *testing.T) {
 	}
 }
 
+func TestDoctorTreatsMissingGatewayAPIAsAdvisory(t *testing.T) {
+	client := fakeDoctorClient{
+		version: "v1.36.3+k3s1",
+		resourceErr: map[string]error{
+			"gateway.networking.k8s.io/v1": errors.New("API unavailable"),
+		},
+		deployments: map[string][2]int32{
+			"platform-operator": {1, 1},
+			"cluster-agent":     {1, 1},
+		},
+	}
+	output, err := executeDoctor(t, client, nil)
+	if err != nil {
+		t.Fatalf("optional capability made doctor unhealthy: %v", err)
+	}
+	if !strings.Contains(output, "WARN  Gateway API CRDs") || !strings.Contains(output, "Result: healthy") {
+		t.Fatalf("unexpected output: %q", output)
+	}
+}
+
 func executeDoctor(t *testing.T, client Client, factoryErr error) (string, error) {
 	t.Helper()
 	runner := NewRunner(func(string) (Client, error) {

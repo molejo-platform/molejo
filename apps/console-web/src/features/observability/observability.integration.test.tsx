@@ -8,6 +8,26 @@ vi.mock("@tanstack/react-router", () => ({
   Link: ({ children }: { children: React.ReactNode }) => <a href="#target">{children}</a>,
   useMatchRoute: () => () => false,
 }));
+vi.mock("../feature-availability/public", async (importOriginal) => {
+  const original = await importOriginal<typeof import("../feature-availability/public")>();
+  return {
+    ...original,
+    useFeatureAvailability: () => ({
+      data: {
+        scopeType: "AppEnvironment",
+        scopeId: "aev-aaaaaaaaaaaaaaaaaaaa",
+        features: Object.values(original.featureIds).map((id) => ({
+          id,
+          contractVersion: "v1alpha1",
+          state: "Available",
+          limitations: [],
+        })),
+      },
+      isPending: false,
+      isError: false,
+    }),
+  };
+});
 vi.mock("./api", async (importOriginal) => {
   const original = await importOriginal<typeof import("./api")>();
   return { ...original, listRuntimeLogs: mocks.listRuntimeLogs };

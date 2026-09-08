@@ -9,6 +9,13 @@ import { ConfirmAction } from "../../shared/ui/ConfirmAction";
 import { SelectField } from "../../shared/ui/Field";
 import { EmptyState } from "../../shared/ui/Page";
 import { githubKeys, listGitHubInstallations, listGitHubRepositories } from "../integrations/github/public";
+import {
+  canUseFeature,
+  FeatureAvailabilityNotice,
+  featureIds,
+  findFeature,
+  useFeatureAvailability,
+} from "../feature-availability/public";
 import { useEffectiveCapabilities } from "../workspace-access/public";
 import { ApplicationLayout } from "./ApplicationLayout";
 import { clearAppSource, getAppSource, setAppSource } from "./api";
@@ -19,6 +26,9 @@ export function AppSourcePage() {
     from: "/protected/workspaces/$workspaceId/projects/$projectId/apps/$appId/source",
   });
   const capabilities = useEffectiveCapabilities(workspaceId, "App", appId);
+  const availability = useFeatureAvailability(workspaceId, "App", appId);
+  const github = findFeature(availability.data, featureIds.sourceGitHub);
+  const githubUsable = canUseFeature(github);
   const canMutate = capabilities.data?.editResources === true;
   const queryClient = useQueryClient();
   const [installationId, setInstallationId] = useState("");
@@ -26,6 +36,7 @@ export function AppSourcePage() {
   const installations = useQuery({
     queryKey: githubKeys.installations(workspaceId),
     queryFn: () => listGitHubInstallations(workspaceId),
+    enabled: githubUsable,
   });
   const source = useQuery({
     queryKey: applicationKeys.source(workspaceId, projectId, appId),
@@ -36,7 +47,7 @@ export function AppSourcePage() {
   const repositories = useQuery({
     queryKey: githubKeys.repositories(workspaceId, selectedInstallation?.id ?? ""),
     queryFn: () => listGitHubRepositories(workspaceId, selectedInstallation?.id ?? ""),
-    enabled: Boolean(selectedInstallation),
+    enabled: githubUsable && Boolean(selectedInstallation),
   });
   useEffect(() => {
     const preferred = source.data?.source?.installationId ?? installations.data?.items[0]?.id;
@@ -62,7 +73,13 @@ export function AppSourcePage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: applicationKeys.source(workspaceId, projectId, appId) }),
   });
   const error =
-    capabilities.error ?? installations.error ?? source.error ?? repositories.error ?? save.error ?? clear.error;
+    capabilities.error ??
+    availability.error ??
+    installations.error ??
+    source.error ??
+    repositories.error ??
+    save.error ??
+    clear.error;
   return (
     <ApplicationLayout workspaceId={workspaceId} projectId={projectId} appId={appId}>
       {(appName) => (
@@ -78,7 +95,13 @@ export function AppSourcePage() {
               Fonte atual: <strong>{source.data.source.repository.fullName}</strong>.
             </Alert>
           )}
-          {installations.isPending ? (
+          {!githubUsable ? (
+            <FeatureAvailabilityNotice
+              feature={github}
+              pending={availability.isPending}
+              title="Fonte GitHub indisponível"
+            />
+          ) : installations.isPending ? (
             <p className="muted" role="status">
               Carregando instalações…
             </p>

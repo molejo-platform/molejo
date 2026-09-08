@@ -9,6 +9,13 @@ import { Button } from "../../shared/ui/Button";
 import { ConfirmAction } from "../../shared/ui/ConfirmAction";
 import { Field, SelectField, TextareaField } from "../../shared/ui/Field";
 import { EmptyState, PageHeader } from "../../shared/ui/Page";
+import {
+  canUseFeature,
+  FeatureAvailabilityNotice,
+  featureIds,
+  findFeature,
+  useFeatureAvailability,
+} from "../feature-availability/public";
 import { useEffectiveCapabilities } from "../workspace-access/public";
 import { archiveParameter, createParameter, listParameters, replaceParameter } from "./api";
 import { parameterKeys } from "./queries";
@@ -18,6 +25,9 @@ const emptyInput: ParameterInput = { path: "", type: "PlainText", description: "
 export function ParametersPage() {
   const { workspaceId } = useParams({ from: "/protected/workspaces/$workspaceId/parameters" });
   const capabilities = useEffectiveCapabilities(workspaceId, "Workspace", workspaceId);
+  const availability = useFeatureAvailability(workspaceId, "Workspace", workspaceId);
+  const secretFeature = findFeature(availability.data, featureIds.parametersSecret);
+  const secretAvailable = canUseFeature(secretFeature);
   const canMutate = capabilities.data?.editResources === true;
   const queryClient = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
@@ -70,11 +80,17 @@ export function ParametersPage() {
       {capabilities.isSuccess && !canMutate && (
         <Alert tone="info">Sua identidade não possui a capacidade de alterar Parameters.</Alert>
       )}
+      <FeatureAvailabilityNotice
+        feature={secretFeature}
+        pending={availability.isPending}
+        title="Secrets estáticos indisponíveis"
+      />
       {showCreate && canMutate && (
         <ParameterForm
           submitLabel="Criar Parameter"
           onSubmit={(input) => create.mutate(input)}
           pending={create.isPending}
+          secretAvailable={secretAvailable}
         />
       )}
       <section className="panel stack">
@@ -125,12 +141,13 @@ export function ParametersPage() {
                     />
                   </div>
                 )}
-                {editing?.id === parameter.id && (
+                {editing?.id === parameter.id && (parameter.type !== "Secret" || secretAvailable) && (
                   <ParameterForm
                     parameter={parameter}
                     submitLabel={parameter.type === "Secret" ? "Substituir segredo" : "Salvar nova versão"}
                     onSubmit={(input) => replace.mutate({ parameter, input })}
                     pending={replace.isPending}
+                    secretAvailable={secretAvailable}
                   />
                 )}
               </div>
@@ -155,11 +172,13 @@ function ParameterForm({
   submitLabel,
   onSubmit,
   pending,
+  secretAvailable,
 }: {
   parameter?: Parameter;
   submitLabel: string;
   onSubmit: (input: ParameterInput) => void;
   pending: boolean;
+  secretAvailable: boolean;
 }) {
   const [input, setInput] = useState<ParameterInput>(() =>
     parameter
@@ -195,7 +214,9 @@ function ParameterForm({
           required
         >
           <option value="PlainText">PlainText</option>
-          <option value="Secret">Secret</option>
+          <option value="Secret" disabled={!secretAvailable}>
+            Secret
+          </option>
         </SelectField>
       </div>
       <TextareaField

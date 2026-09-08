@@ -6,15 +6,20 @@ import { RefreshStatus, RetryAlert, Skeleton, SkeletonRegion } from "../../share
 import { Icon } from "../../shared/ui/Icon";
 import { PageHeader } from "../../shared/ui/Page";
 import { githubKeys, listGitHubInstallations } from "../integrations/github/public";
+import { canUseFeature, featureIds, findFeature, useFeatureAvailability } from "../feature-availability/public";
 import { useSelectedWorkspace, useWorkspaceSummaryQuery } from "../workspaces/public";
 
 export function OverviewPage() {
   const { workspaceId } = useParams({ from: "/protected/workspaces/$workspaceId/overview" });
   const { workspace } = useSelectedWorkspace();
   const summary = useWorkspaceSummaryQuery(workspaceId);
+  const availability = useFeatureAvailability(workspaceId, "Workspace", workspaceId);
+  const github = findFeature(availability.data, featureIds.sourceGitHub);
+  const githubUsable = canUseFeature(github);
   const installations = useQuery({
     queryKey: githubKeys.installations(workspaceId),
     queryFn: () => listGitHubInstallations(workspaceId),
+    enabled: githubUsable,
   });
   const tasks = [
     {
@@ -26,7 +31,7 @@ export function OverviewPage() {
     {
       label: "Autorizar repositórios no GitHub",
       done: installations.data ? Boolean(installations.data.items.length) : undefined,
-      unavailable: installations.isError && !installations.data,
+      unavailable: (!availability.isPending && !githubUsable) || (installations.isError && !installations.data),
       optional: true,
       to: "/workspaces/$workspaceId/settings/github",
     },

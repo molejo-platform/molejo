@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  featureState: "Available" as "Available" | "NotConfigured",
   setAppSource: vi.fn(),
   getAppSource: vi.fn().mockResolvedValue({
     source: {
@@ -32,6 +33,27 @@ vi.mock("../authentication/public", () => ({
 vi.mock("../workspace-access/public", () => ({
   useEffectiveCapabilities: () => ({ data: { editResources: true }, isSuccess: true }),
 }));
+vi.mock("../feature-availability/public", async (importOriginal) => {
+  const original = await importOriginal<typeof import("../feature-availability/public")>();
+  return {
+    ...original,
+    useFeatureAvailability: () => ({
+      data: {
+        scopeType: "App",
+        scopeId: "app-aaaaaaaaaaaaaaaaaaaa",
+        features: Object.values(original.featureIds).map((id) => ({
+          id,
+          contractVersion: "v1alpha1",
+          state: id === original.featureIds.sourceGitHub ? mocks.featureState : "Available",
+          reasonCode: id === original.featureIds.sourceGitHub ? "provider_not_configured" : undefined,
+          limitations: [],
+        })),
+      },
+      isPending: false,
+      isError: false,
+    }),
+  };
+});
 vi.mock("./ApplicationLayout", () => ({
   ApplicationLayout: ({ children }: { children: (name: string) => React.ReactNode }) => <>{children("Platform")}</>,
 }));
@@ -51,6 +73,7 @@ import { AppSourcePage } from "./ApplicationSourcePage";
 
 afterEach(() => {
   cleanup();
+  mocks.featureState = "Available";
   mocks.setAppSource.mockReset();
   mocks.listGitHubInstallations.mockReset();
   mocks.listGitHubRepositories.mockReset();
@@ -115,5 +138,16 @@ describe("App source", () => {
       items: [{ id: "84", name: "testkit", fullName: "molejo-labs/testkit", private: true, defaultBranch: "main" }],
     });
     await waitFor(() => expect((screen.getByLabelText("Repositório") as HTMLSelectElement).value).toBe("84"));
+  });
+
+  it("does not query GitHub when the structural capability is not configured", async () => {
+    mocks.featureState = "NotConfigured";
+
+    renderWithQueryClient(<AppSourcePage />);
+
+    expect(await screen.findByText("Fonte GitHub indisponível")).toBeTruthy();
+    expect(screen.getByText(/Nenhum provider foi configurado/)).toBeTruthy();
+    expect(mocks.listGitHubInstallations).not.toHaveBeenCalled();
+    expect(mocks.listGitHubRepositories).not.toHaveBeenCalled();
   });
 });

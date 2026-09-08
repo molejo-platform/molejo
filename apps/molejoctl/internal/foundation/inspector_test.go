@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/molejo-platform/molejo/apps/molejoctl/internal/capability"
+	"github.com/molejo-platform/molejo/packages/capabilitycontract"
 )
 
 type fakeClient struct {
@@ -50,6 +51,12 @@ func TestInspectClassifiesK3sAndCapabilities(t *testing.T) {
 	if report.Capabilities[0].Status != capability.StatusAvailable || report.Capabilities[2].Status != capability.StatusAvailable || report.Capabilities[3].Status != capability.StatusUnavailable {
 		t.Fatalf("capabilities=%+v", report.Capabilities)
 	}
+	if report.Capabilities[0].ID != capabilitycontract.StorageRWO || report.Capabilities[0].ContractVersion != capabilitycontract.ContractVersion {
+		t.Fatalf("storage capability=%+v", report.Capabilities[0])
+	}
+	if report.Capabilities[3].ReasonCode != capabilitycontract.ReasonRuntimeNotDeployed {
+		t.Fatalf("control plane capability=%+v", report.Capabilities[3])
+	}
 }
 
 func TestInspectPreservesOptionalCapabilityFailureAsObservation(t *testing.T) {
@@ -60,5 +67,8 @@ func TestInspectPreservesOptionalCapabilityFailureAsObservation(t *testing.T) {
 	}
 	if report.Distribution != "kubernetes" || report.Capabilities[1].Status != capability.StatusUnavailable {
 		t.Fatalf("report=%+v", report)
+	}
+	if report.Capabilities[1].ID != capabilitycontract.PublicationHTTP || report.Capabilities[1].ReasonCode != capabilitycontract.ReasonAPIMissing {
+		t.Fatalf("gateway capability=%+v", report.Capabilities[1])
 	}
 }

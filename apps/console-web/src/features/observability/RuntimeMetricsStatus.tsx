@@ -22,17 +22,23 @@ export function useRuntimeMetrics() {
 export function RuntimeMetricsProvider({
   target,
   params,
+  enabled = true,
   children,
 }: {
   target: AppEnvironment;
   params: RuntimeTargetRef;
+  enabled?: boolean;
   children: ReactNode;
 }) {
-  const value = useRuntimeMetricsStream(target, params);
+  const value = useRuntimeMetricsStream(target, params, enabled);
   return <RuntimeMetricsContext.Provider value={value}>{children}</RuntimeMetricsContext.Provider>;
 }
 
-export function useRuntimeMetricsStream(target: AppEnvironment, params: RuntimeTargetRef): RuntimeMetricsValue {
+export function useRuntimeMetricsStream(
+  target: AppEnvironment,
+  params: RuntimeTargetRef,
+  enabled = true,
+): RuntimeMetricsValue {
   const [snapshot, setSnapshot] = useState<RuntimeMetricSnapshot>();
   const [state, setState] = useState<RuntimeMetricsStreamState>(() =>
     typeof EventSource === "undefined"
@@ -43,7 +49,7 @@ export function useRuntimeMetricsStream(target: AppEnvironment, params: RuntimeT
   );
 
   useEffect(() => {
-    if (typeof EventSource === "undefined") {
+    if (!enabled || typeof EventSource === "undefined") {
       setState("unavailable");
       return;
     }
@@ -118,7 +124,7 @@ export function useRuntimeMetricsStream(target: AppEnvironment, params: RuntimeT
       source?.removeEventListener("end", receiveEnd);
       source?.close();
     };
-  }, [params.projectId, params.workspaceId, target.appId, target.id]);
+  }, [enabled, params.projectId, params.workspaceId, target.appId, target.id]);
 
   return useMemo(() => ({ snapshot, state }), [snapshot, state]);
 }

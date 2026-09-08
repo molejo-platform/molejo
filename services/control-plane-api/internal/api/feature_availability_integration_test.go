@@ -31,7 +31,7 @@ func TestFeatureAvailabilityAPIEnforcesScopeAncestryAndReturnsSafeArrays(t *test
 	}
 	var availability generated.FeatureAvailabilityResponse
 	decodeResponse(t, response, &availability)
-	if availability.Features == nil || len(availability.Features) == 0 {
+	if len(availability.Features) == 0 {
 		t.Fatal("features must be a non-null populated array")
 	}
 	if strings.Contains(response.Body.String(), "endpoint") || strings.Contains(response.Body.String(), "credential") {
