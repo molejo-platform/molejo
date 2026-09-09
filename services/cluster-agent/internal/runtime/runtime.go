@@ -56,8 +56,13 @@ type VolumeObservation struct {
 	SpecHash        string
 }
 
+type PlacementObservation struct {
+	Ready   bool
+	Message string
+}
+
 type Client interface {
-	EnsureWorkspace(context.Context, string) error
+	EnsureWorkspacePlacement(context.Context, runtimecontract.WorkspacePlacementIntent) (PlacementObservation, error)
 	ApplyVolume(context.Context, string, string, int64, VolumeIntent) error
 	ObserveVolume(context.Context, string, string) (VolumeObservation, error)
 	ApplyDeployment(context.Context, string, string, int64, runtimecontract.DeploymentIntent) error
@@ -87,31 +92,45 @@ func NewKubernetesClient(config *rest.Config, fieldManager string, timeout time.
 	return &KubernetesClient{client: c, fieldManager: fieldManager, applyTimeout: timeout}, nil
 }
 
-func (k *KubernetesClient) EnsureWorkspace(ctx context.Context, namespace string) error {
+func (k *KubernetesClient) EnsureWorkspacePlacement(ctx context.Context, intent runtimecontract.WorkspacePlacementIntent) (PlacementObservation, error) {
 	workspaceCtx, cancel := context.WithTimeout(ctx, k.applyTimeout)
 	defer cancel()
-	var ns corev1.Namespace
-	err := k.client.Get(workspaceCtx, types.NamespacedName{Name: namespace}, &ns)
+	placement := &platformv1alpha1.WorkspacePlacement{}
+	err := k.client.Get(workspaceCtx, types.NamespacedName{Name: intent.WorkspaceID}, placement)
 	if apierrors.IsNotFound(err) {
-		ns = corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace, Annotations: map[string]string{controlPlaneOwnerAnnotation: workspaceOwnerValue}, Labels: map[string]string{"app.kubernetes.io/managed-by": workspaceOwnerValue}}}
-		if err = k.client.Create(workspaceCtx, &ns); err != nil && !apierrors.IsAlreadyExists(err) {
-			return fmt.Errorf("create workspace namespace: %w", err)
+		placement = &platformv1alpha1.WorkspacePlacement{TypeMeta: metav1.TypeMeta{APIVersion: "platform.molejo.dev/v1alpha1", Kind: "WorkspacePlacement"}, ObjectMeta: metav1.ObjectMeta{Name: intent.WorkspaceID, Annotations: map[string]string{controlPlaneOwnerAnnotation: workspaceOwnerValue}}, Spec: platformv1alpha1.WorkspacePlacementSpec{WorkspaceID: intent.WorkspaceID, NamespaceName: intent.NamespaceName, AccessProfile: intent.AccessProfile, LifecycleState: intent.LifecycleState}}
+		if err = k.client.Create(workspaceCtx, placement); err != nil && !apierrors.IsAlreadyExists(err) {
+			return PlacementObservation{}, fmt.Errorf("create WorkspacePlacement: %w", err)
 		}
 		if apierrors.IsAlreadyExists(err) {
-			if err = k.client.Get(workspaceCtx, types.NamespacedName{Name: namespace}, &ns); err != nil {
-				return fmt.Errorf("workspace namespace appeared during create: %w", err)
+			if err = k.client.Get(workspaceCtx, types.NamespacedName{Name: intent.WorkspaceID}, placement); err != nil {
+				return PlacementObservation{}, fmt.Errorf("WorkspacePlacement appeared during create: %w", err)
 			}
 		}
 		if err != nil {
-			return fmt.Errorf("workspace namespace appeared during create: %w", err)
+			return PlacementObservation{}, fmt.Errorf("WorkspacePlacement appeared during create: %w", err)
 		}
 	} else if err != nil {
-		return fmt.Errorf("workspace namespace: %w", err)
+		return PlacementObservation{}, fmt.Errorf("read WorkspacePlacement: %w", err)
 	}
-	if ns.Annotations[controlPlaneOwnerAnnotation] != workspaceOwnerValue {
-		return fmt.Errorf("%w: Namespace %s is not managed by the control plane", ErrOwnershipConflict, namespace)
+	expected := platformv1alpha1.WorkspacePlacementSpec{WorkspaceID: intent.WorkspaceID, NamespaceName: intent.NamespaceName, AccessProfile: intent.AccessProfile, LifecycleState: intent.LifecycleState}
+	if placement.Annotations[controlPlaneOwnerAnnotation] != workspaceOwnerValue || !reflect.DeepEqual(placement.Spec, expected) {
+		return PlacementObservation{}, fmt.Errorf("%w: WorkspacePlacement %s differs from the requested boundary", ErrOwnershipConflict, intent.WorkspaceID)
 	}
-	return nil
+	ready := placement.Status.ObservedGeneration == placement.Generation
+	for _, conditionType := range []string{platformv1alpha1.WorkspacePlacementConditionNamespaceReady, platformv1alpha1.WorkspacePlacementConditionAgentAccessReady, platformv1alpha1.WorkspacePlacementConditionOperatorAccessReady, platformv1alpha1.WorkspacePlacementConditionPolicyReady} {
+		conditionReady := false
+		for _, condition := range placement.Status.Conditions {
+			if condition.Type == conditionType && condition.Status == metav1.ConditionTrue && condition.ObservedGeneration == placement.Generation {
+				conditionReady = true
+			}
+		}
+		ready = ready && conditionReady
+	}
+	if !ready {
+		return PlacementObservation{Message: "workspace boundary reconciliation is pending"}, nil
+	}
+	return PlacementObservation{Ready: true, Message: "workspace boundary is ready"}, nil
 }
 
 func (k *KubernetesClient) ApplyDeployment(ctx context.Context, namespace, name string, desiredVersion int64, intent runtimecontract.DeploymentIntent) error {

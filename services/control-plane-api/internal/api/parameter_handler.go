@@ -242,10 +242,10 @@ func (h *generatedHandler) secretFingerprint(value string) []byte {
 }
 
 func (h *generatedHandler) completeSecretMutation(w http.ResponseWriter, r *http.Request, mutation domain.SecretMutation, value string) (domain.Parameter, bool) {
-	backendVersion, err := h.server.parameterSecrets.Put(r.Context(), mutation.Reference, value, mutation.ExpectedBackendVersion)
+	backendVersion, err := h.server.parameterSecrets.Put(r.Context(), string(mutation.Reference), value, int64(mutation.ExpectedBackendVersion))
 	if errors.Is(err, parameters.ErrConflict) {
-		currentVersion, inspectErr := h.server.parameterSecrets.CurrentVersion(r.Context(), mutation.Reference)
-		if inspectErr == nil && currentVersion == mutation.BackendVersion {
+		currentVersion, inspectErr := h.server.parameterSecrets.CurrentVersion(r.Context(), string(mutation.Reference))
+		if inspectErr == nil && domain.SecretBackendVersion(currentVersion) == mutation.BackendVersion {
 			backendVersion = currentVersion
 			err = nil
 		} else {

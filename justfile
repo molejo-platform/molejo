@@ -35,7 +35,8 @@ generate:
     BUF_CACHE_DIR="${BUF_CACHE_DIR:-/tmp/molejo-buf-cache}" go run github.com/bufbuild/buf/cmd/buf@v1.72.0 generate
     go tool controller-gen object paths=./packages/kubernetes-api/apis/...
     go tool controller-gen crd paths=./packages/kubernetes-api/apis/... output:crd:artifacts:config=deploy/crds
-    go tool controller-gen rbac:roleName=platform-operator paths=./services/platform-operator/... output:rbac:artifacts:config=deploy/operator/rbac
+    # RBAC is intentionally maintained as explicit boundary and runtime roles.
+    # Static contract tests guard its least-privilege invariants.
     go tool oapi-codegen -config services/control-plane-api/oapi-codegen.yaml contracts/openapi/control-plane-v1.yaml
     go tool sqlc generate -f services/control-plane-api/sqlc.yaml
     corepack pnpm --filter @molejo-platform/console-web generate:api-types

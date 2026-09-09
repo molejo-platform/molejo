@@ -34,6 +34,7 @@ message AgentHello {
   repeated string capabilities = 5;
   repeated string supported_protocol_versions = 6;
   string trust_bundle_id = 7;
+  string workspace_provisioning_mode = 8;
 }
 
 message ControlPlaneHello {

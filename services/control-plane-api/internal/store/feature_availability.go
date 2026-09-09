@@ -10,29 +10,30 @@ import (
 )
 
 type AvailabilityClusterFacts struct {
-	ClusterID    string
-	Attached     bool
-	LastSeenAt   *time.Time
-	Capabilities []string
+	ClusterID                 string
+	Attached                  bool
+	LastSeenAt                *time.Time
+	Capabilities              []string
+	WorkspaceProvisioningMode string
 }
 
 func (s *Store) FeatureAvailabilityClusterFacts(ctx context.Context, workspaceID int64, scopeType, scopeID string) (AvailabilityClusterFacts, error) {
 	if err := s.validateAvailabilityScope(ctx, workspaceID, scopeType, scopeID); err != nil {
 		return AvailabilityClusterFacts{}, err
 	}
-	query := `SELECT i.public_id,i.last_seen_at,i.capabilities_json
+	query := `SELECT i.public_id,i.last_seen_at,i.capabilities_json,i.workspace_provisioning_mode
 		FROM workspace_clusters wc JOIN agent_installations i ON i.id=wc.installation_id
 		WHERE wc.workspace_id=$1 AND i.status='Active' ORDER BY i.id LIMIT 1`
 	arguments := []any{workspaceID}
 	if scopeType == "AppEnvironment" {
-		query = `SELECT i.public_id,i.last_seen_at,i.capabilities_json
+		query = `SELECT i.public_id,i.last_seen_at,i.capabilities_json,i.workspace_provisioning_mode
 			FROM app_environments ae JOIN agent_installations i ON i.id=ae.cluster_id
 			WHERE ae.workspace_id=$1 AND ae.public_id=$2 AND ae.archived_at IS NULL AND i.status='Active'`
 		arguments = append(arguments, scopeID)
 	}
 	var facts AvailabilityClusterFacts
 	var capabilities []byte
-	err := s.Pool.QueryRow(ctx, query, arguments...).Scan(&facts.ClusterID, &facts.LastSeenAt, &capabilities)
+	err := s.Pool.QueryRow(ctx, query, arguments...).Scan(&facts.ClusterID, &facts.LastSeenAt, &capabilities, &facts.WorkspaceProvisioningMode)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return facts, nil
 	}

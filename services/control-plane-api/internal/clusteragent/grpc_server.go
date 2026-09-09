@@ -16,6 +16,7 @@ import (
 
 	clusteragentv1alpha1 "github.com/molejo-platform/molejo/contracts/molejo/clusteragent/v1alpha1"
 	"github.com/molejo-platform/molejo/packages/capabilitycontract"
+	"github.com/molejo-platform/molejo/packages/workspacecontract"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/audit"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/domain"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/store"
@@ -24,7 +25,7 @@ import (
 var ErrPeerIdentityMismatch = errors.New("agent peer identity does not match")
 
 type AgentRegistry interface {
-	ActivateAgent(context.Context, string, []byte, string, string, string, []string, string, string, time.Time, audit.Event) (bool, error)
+	ActivateAgent(context.Context, string, []byte, string, string, string, []string, workspacecontract.ProvisioningMode, string, string, time.Time, audit.Event) (bool, error)
 	TouchAgent(context.Context, string, []byte, string, uint64, time.Time) error
 	RenewAgent(context.Context, string, []byte, string, []byte, time.Time, func(string) (store.AgentCertificate, error), audit.Event) (store.AgentCertificate, error)
 	ReconcileAgentObservations(context.Context, string, string, uint64, []store.RuntimeObservation, bool) error
@@ -88,8 +89,9 @@ func (s *GRPCService) Connect(stream grpc.BidiStreamingServer[clusteragentv1alph
 		return err
 	}
 	hello := first.GetHello()
+	provisioningMode, provisioningModeValid := workspacecontract.ParseProvisioningMode(hello.GetWorkspaceProvisioningMode())
 	if hello == nil || hello.GetInstallationId() != installationID || strings.TrimSpace(hello.GetAgentVersion()) == "" || len(hello.GetAgentVersion()) > 64 ||
-		strings.TrimSpace(hello.GetClusterUid()) == "" || strings.TrimSpace(hello.GetKubernetesVersion()) == "" || !hasRuntimeCapability(hello.GetCapabilities()) || !supportsProtocol(hello.GetSupportedProtocolVersions()) {
+		strings.TrimSpace(hello.GetClusterUid()) == "" || strings.TrimSpace(hello.GetKubernetesVersion()) == "" || !hasRuntimeCapability(hello.GetCapabilities()) || !supportsProtocol(hello.GetSupportedProtocolVersions()) || !provisioningModeValid {
 		return status.Error(codes.PermissionDenied, "Agent identity does not match")
 	}
 	now := s.now()
@@ -101,7 +103,7 @@ func (s *GRPCService) Connect(stream grpc.BidiStreamingServer[clusteragentv1alph
 	if err != nil {
 		return status.Error(codes.Internal, "Agent session could not be created")
 	}
-	_, err = s.registry.ActivateAgent(stream.Context(), installationID, fingerprint, hello.GetClusterUid(), hello.GetAgentVersion(), hello.GetKubernetesVersion(), hello.GetCapabilities(), hello.GetTrustBundleId(), sessionID, now, audit.Event{PublicID: auditID, Action: "installation.agent.pair", TargetType: "Cluster", TargetPublicID: installationID, Outcome: audit.Succeeded})
+	_, err = s.registry.ActivateAgent(stream.Context(), installationID, fingerprint, hello.GetClusterUid(), hello.GetAgentVersion(), hello.GetKubernetesVersion(), hello.GetCapabilities(), provisioningMode, hello.GetTrustBundleId(), sessionID, now, audit.Event{PublicID: auditID, Action: "installation.agent.pair", TargetType: "Cluster", TargetPublicID: installationID, Outcome: audit.Succeeded})
 	if err != nil {
 		return status.Error(codes.PermissionDenied, "Agent identity was rejected")
 	}

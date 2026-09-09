@@ -99,6 +99,20 @@ func TestResolveObservationAlwaysReturnsLimitationsArray(t *testing.T) {
 	}
 }
 
+func TestResolveWorkspaceProvisioningKeepsConsentSeparateFromProtocolSupport(t *testing.T) {
+	now := time.Now().UTC()
+	base := Facts{ClusterAttached: true, AgentConnected: true, ProtocolCapabilities: []string{"runtime.v1alpha1", "workspace-provisioning.v1alpha1"}}
+	disabled := featureByID(Resolve(now, Target{}, base), capabilitycontract.WorkspaceProvisioning)
+	if disabled.State != NotConfigured || disabled.ReasonCode != ReasonWorkspaceProvisioningDisabled {
+		t.Fatalf("disabled provisioning=%+v", disabled)
+	}
+	base.WorkspaceProvisioningMode = "Namespaced"
+	available := featureByID(Resolve(now, Target{}, base), capabilitycontract.WorkspaceProvisioning)
+	if available.State != Available || available.ReasonCode != "" {
+		t.Fatalf("namespaced provisioning=%+v", available)
+	}
+}
+
 func featureByID(features []Feature, id capabilitycontract.ID) Feature {
 	for _, feature := range features {
 		if feature.ID == id {

@@ -79,6 +79,83 @@ func TestAgentCommandCompletesADeploymentWithoutControlPlaneKubernetesAccess(t *
 	}
 }
 
+func TestAgentCommandResolvesSecretJustInTimeWithoutPersistingPlaintext(t *testing.T) {
+	ctx := context.Background()
+	s, workspaceID, actorID, _ := newExecutorIntegrationFixture(t)
+	target, releaseID, _ := createExecutorTargetAndRelease(t, s, workspaceID, actorID)
+	backend := &recordingSecretStore{values: map[string]string{}, versions: map[string]int64{}}
+	secretValue := "super-secret-sentinel"
+	parameterID := mustAPIID(t, "par")
+	reference := secretReference(mustWorkspace(t, s, workspaceID).PublicID, parameterID)
+	mutation, _, err := s.BeginCreateSecretParameter(ctx, workspaceID, actorID, parameterID, "/runtime/api-token", "runtime token", reference, domain.SHA256([]byte(secretValue)), domain.SHA256([]byte("create-secret")), domain.SHA256([]byte("create-secret-payload")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	backendVersion, err := backend.Put(ctx, reference, secretValue, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parameter, err := s.CompleteSecretMutation(ctx, mutation, backendVersion)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	configuration := target.Configuration
+	configuration.Parameters = append(configuration.Parameters, domain.ParameterBinding{Name: "API_TOKEN", ParameterPublicID: parameter.PublicID, ParameterVersion: parameter.CurrentVersion})
+	target, err = s.UpdateAppEnvironment(ctx, workspaceID, actorID, target.PublicID, target.SourceBranch, configuration, target.Version)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, operation, _, err := s.CreateDeployment(ctx, actorID, domain.DeploymentRequest{
+		WorkspaceID: workspaceID, AppEnvironmentPublicID: target.PublicID,
+		DeploymentPublicID: mustAPIID(t, "dpl"), ReleasePublicID: releaseID,
+		ConfigurationVersion: target.ConfigurationVersion, ExpectedVersion: target.Version,
+		IdempotencyHash: domain.SHA256([]byte("secret-agent-apply")), PayloadHash: domain.SHA256([]byte("secret-agent-apply-payload")),
+	}, audit.Event{PublicID: mustAPIID(t, "aud"), Action: "deployment.create", TargetType: "Deployment", Outcome: audit.Succeeded})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	worker := operationworker.Worker{Store: s, Publication: s.PublicationPolicy(), ParameterSecrets: backend, OperationLease: time.Minute}
+	command, ok, err := worker.NextCommand(ctx, testAgentInstallationID)
+	if err != nil || !ok {
+		t.Fatalf("next command: ok=%v err=%v", ok, err)
+	}
+	if command.GetOperationId() != operation.PublicID {
+		t.Fatalf("operation=%q, want %q", command.GetOperationId(), operation.PublicID)
+	}
+	var payload runtimecontract.Payload
+	if err = json.Unmarshal(command.GetPayloadJson(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.Deployment == nil || len(payload.Deployment.SecretVariables) != 1 || payload.Deployment.SecretVariables[0].Name != "API_TOKEN" || payload.Deployment.SecretVariables[0].Value != secretValue {
+		t.Fatalf("secret delivery payload=%+v", payload.Deployment)
+	}
+
+	pattern := "%" + secretValue + "%"
+	var persisted bool
+	err = s.Pool.QueryRow(ctx, `SELECT
+		EXISTS(SELECT 1 FROM app_environments WHERE configuration_json::text LIKE $1)
+		OR EXISTS(SELECT 1 FROM app_environment_configuration_revisions WHERE configuration_json::text LIKE $1)
+		OR EXISTS(SELECT 1 FROM deployments WHERE configuration_json::text LIKE $1)
+		OR EXISTS(SELECT 1 FROM operations WHERE COALESCE(error_message,'') LIKE $1)`, pattern).Scan(&persisted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if persisted {
+		t.Fatal("secret plaintext was persisted in control-plane runtime records")
+	}
+}
+
+func mustWorkspace(t *testing.T, s *store.Store, workspaceID int64) domain.Workspace {
+	t.Helper()
+	workspace, err := s.Workspace(context.Background(), workspaceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return workspace
+}
+
 func TestSessionReadKeepsTheExistingSessionStable(t *testing.T) {
 	ctx := context.Background()
 	s, _, actorID, _ := newExecutorIntegrationFixture(t)
@@ -196,8 +273,8 @@ func newExecutorIntegrationFixture(t *testing.T) (*store.Store, int64, int64, st
 		t.Fatal(err)
 	}
 	var clusterID int64
-	if err = s.Pool.QueryRow(ctx, `INSERT INTO agent_installations(public_id,name,status,cluster_uid,agent_version,kubernetes_version,capabilities_json,created_by)
-		VALUES($1,'test-agent','Active','cluster-test-uid','test','v1.36.3','["runtime.v1alpha1"]',$2) RETURNING id`, testAgentInstallationID, actorID).Scan(&clusterID); err != nil {
+	if err = s.Pool.QueryRow(ctx, `INSERT INTO agent_installations(public_id,name,status,cluster_uid,agent_version,kubernetes_version,capabilities_json,workspace_provisioning_mode,created_by)
+		VALUES($1,'test-agent','Active','cluster-test-uid','test','v1.36.3','["runtime.v1alpha1","workspace-provisioning.v1alpha1"]','Namespaced',$2) RETURNING id`, testAgentInstallationID, actorID).Scan(&clusterID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = s.Pool.Exec(ctx, `INSERT INTO workspace_clusters(workspace_id,installation_id,namespace_name,state,observed_generation)

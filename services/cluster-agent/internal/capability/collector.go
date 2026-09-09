@@ -73,6 +73,7 @@ func (c *Collector) refresh(ctx context.Context) {
 func (c *Collector) collect(ctx context.Context) []capabilitycontract.Observation {
 	now := c.now()
 	items := []capabilitycontract.Observation{
+		c.dynamicObservation(ctx, now, capabilitycontract.WorkspaceProvisioning, schema.GroupVersionResource{Group: "platform.molejo.dev", Version: "v1alpha1", Resource: "workspaceplacements"}),
 		c.dynamicObservation(ctx, now, capabilitycontract.RuntimeWorkloadApply, schema.GroupVersionResource{Group: "platform.molejo.dev", Version: "v1alpha1", Resource: "appdeployments"}),
 		c.dynamicObservation(ctx, now, capabilitycontract.RuntimeWorkloadObserve, schema.GroupVersionResource{Group: "platform.molejo.dev", Version: "v1alpha1", Resource: "appdeployments"}),
 		c.podLogsObservation(ctx, now), c.eventsObservation(ctx, now), c.dynamicObservation(ctx, now, capabilitycontract.RuntimeMetricsCurrent, schema.GroupVersionResource{Group: "metrics.k8s.io", Version: "v1beta1", Resource: "pods"}),

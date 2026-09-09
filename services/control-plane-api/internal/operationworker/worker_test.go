@@ -45,3 +45,12 @@ func TestValidSpecHashAcceptsOnlyCanonicalSHA256(t *testing.T) {
 		}
 	}
 }
+
+func TestRuntimeFailureMessagesAreDerivedFromCodesOnly(t *testing.T) {
+	if got := sanitizedRuntimeFailure("runtime_error"); got != "runtime operation failed" {
+		t.Fatalf("message=%q", got)
+	}
+	if got := sanitizedRuntimeFailure("runtime_ownership_conflict"); got != "runtime object ownership conflict" {
+		t.Fatalf("message=%q", got)
+	}
+}

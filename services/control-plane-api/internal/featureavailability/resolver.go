@@ -17,6 +17,8 @@ func Resolve(now time.Time, target Target, facts Facts) []Feature {
 			feature.State = Available
 		case capabilitycontract.RuntimeWorkloadApply, capabilitycontract.RuntimeWorkloadObserve:
 			feature = resolveRuntime(feature, facts)
+		case capabilitycontract.WorkspaceProvisioning:
+			feature = resolveWorkspaceProvisioning(feature, facts)
 		case capabilitycontract.RuntimeLogsCurrent, capabilitycontract.RuntimeMetricsCurrent, capabilitycontract.RuntimeEventsCurrent:
 			feature = resolveRuntimeQuery(now, feature, facts)
 		default:
@@ -26,6 +28,21 @@ func Resolve(now time.Time, target Target, facts Facts) []Feature {
 	}
 	sort.Slice(features, func(i, j int) bool { return features[i].ID < features[j].ID })
 	return features
+}
+
+func resolveWorkspaceProvisioning(feature Feature, facts Facts) Feature {
+	feature = resolveRuntime(feature, facts)
+	if feature.State != Available {
+		return feature
+	}
+	if !contains(facts.ProtocolCapabilities, "workspace-provisioning.v1alpha1") {
+		feature.State, feature.ReasonCode = Unsupported, ReasonClusterCapabilityIncompatible
+		return feature
+	}
+	if facts.WorkspaceProvisioningMode != "Namespaced" {
+		feature.State, feature.ReasonCode = NotConfigured, ReasonWorkspaceProvisioningDisabled
+	}
+	return feature
 }
 
 func resolveRuntimeQuery(now time.Time, feature Feature, facts Facts) Feature {

@@ -49,30 +49,31 @@ type AgentEnrollmentToken struct {
 }
 
 type AgentInstallation struct {
-	ID                     int64              `json:"id"`
-	PublicID               string             `json:"public_id"`
-	Name                   string             `json:"name"`
-	Status                 string             `json:"status"`
-	EnrollmentAttemptID    pgtype.Text        `json:"enrollment_attempt_id"`
-	CsrFingerprint         []byte             `json:"csr_fingerprint"`
-	CertificatePem         []byte             `json:"certificate_pem"`
-	CaCertificatePem       []byte             `json:"ca_certificate_pem"`
-	CertificateSerial      pgtype.Text        `json:"certificate_serial"`
-	CertificateFingerprint []byte             `json:"certificate_fingerprint"`
-	CertificateNotAfter    pgtype.Timestamptz `json:"certificate_not_after"`
-	LastSeenAt             pgtype.Timestamptz `json:"last_seen_at"`
-	CreatedBy              int64              `json:"created_by"`
-	CreatedAt              pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
-	ClusterUid             pgtype.Text        `json:"cluster_uid"`
-	KubernetesVersion      string             `json:"kubernetes_version"`
-	CapabilitiesJson       []byte             `json:"capabilities_json"`
-	AgentVersion           string             `json:"agent_version"`
-	RevokedAt              pgtype.Timestamptz `json:"revoked_at"`
-	RevocationReason       string             `json:"revocation_reason"`
-	ControlSessionID       pgtype.Text        `json:"control_session_id"`
-	ControlSessionSequence int64              `json:"control_session_sequence"`
-	TrustBundleID          string             `json:"trust_bundle_id"`
+	ID                        int64              `json:"id"`
+	PublicID                  string             `json:"public_id"`
+	Name                      string             `json:"name"`
+	Status                    string             `json:"status"`
+	EnrollmentAttemptID       pgtype.Text        `json:"enrollment_attempt_id"`
+	CsrFingerprint            []byte             `json:"csr_fingerprint"`
+	CertificatePem            []byte             `json:"certificate_pem"`
+	CaCertificatePem          []byte             `json:"ca_certificate_pem"`
+	CertificateSerial         pgtype.Text        `json:"certificate_serial"`
+	CertificateFingerprint    []byte             `json:"certificate_fingerprint"`
+	CertificateNotAfter       pgtype.Timestamptz `json:"certificate_not_after"`
+	LastSeenAt                pgtype.Timestamptz `json:"last_seen_at"`
+	CreatedBy                 int64              `json:"created_by"`
+	CreatedAt                 pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                 pgtype.Timestamptz `json:"updated_at"`
+	ClusterUid                pgtype.Text        `json:"cluster_uid"`
+	KubernetesVersion         string             `json:"kubernetes_version"`
+	CapabilitiesJson          []byte             `json:"capabilities_json"`
+	AgentVersion              string             `json:"agent_version"`
+	RevokedAt                 pgtype.Timestamptz `json:"revoked_at"`
+	RevocationReason          string             `json:"revocation_reason"`
+	ControlSessionID          pgtype.Text        `json:"control_session_id"`
+	ControlSessionSequence    int64              `json:"control_session_sequence"`
+	TrustBundleID             string             `json:"trust_bundle_id"`
+	WorkspaceProvisioningMode string             `json:"workspace_provisioning_mode"`
 }
 
 type App struct {

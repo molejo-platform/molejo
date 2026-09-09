@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"math"
 	"time"
@@ -12,9 +13,44 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/molejo-platform/molejo/packages/workspacecontract"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/domain"
 	storesqlc "github.com/molejo-platform/molejo/services/control-plane-api/internal/store/sqlc"
 )
+
+type WorkspaceProvisioningFacts struct {
+	ClusterAttached     bool
+	CapabilityAvailable bool
+	Consent             workspacecontract.ProvisioningMode
+}
+
+func (s *Store) WorkspaceProvisioningFacts(ctx context.Context, clusterPublicID string) (WorkspaceProvisioningFacts, error) {
+	var capabilities []byte
+	var mode string
+	err := s.Pool.QueryRow(ctx, `SELECT capabilities_json,workspace_provisioning_mode FROM agent_installations WHERE public_id=$1 AND status='Active'`, clusterPublicID).Scan(&capabilities, &mode)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return WorkspaceProvisioningFacts{}, nil
+	}
+	if err != nil {
+		return WorkspaceProvisioningFacts{}, err
+	}
+	var protocolCapabilities []string
+	if err = json.Unmarshal(capabilities, &protocolCapabilities); err != nil {
+		return WorkspaceProvisioningFacts{}, err
+	}
+	consent, valid := workspacecontract.ParseProvisioningMode(mode)
+	if !valid {
+		return WorkspaceProvisioningFacts{}, errors.New("stored workspace provisioning mode is invalid")
+	}
+	facts := WorkspaceProvisioningFacts{ClusterAttached: true, Consent: consent}
+	for _, capability := range protocolCapabilities {
+		if capability == "workspace-provisioning.v1alpha1" {
+			facts.CapabilityAvailable = true
+			break
+		}
+	}
+	return facts, nil
+}
 
 func (s *Store) ListWorkspaces(ctx context.Context, userID, beforeID int64, limit int) ([]domain.Workspace, string, error) {
 	if beforeID == 0 {

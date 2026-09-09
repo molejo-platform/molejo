@@ -39,11 +39,12 @@ func (h *generatedHandler) GetFeatureAvailability(w http.ResponseWriter, r *http
 		}
 	}
 	resolved := featureavailability.Resolve(now, featureavailability.Target{ScopeType: featureavailability.ScopeType(scopeType), ScopeID: params.ScopeId, ClusterID: facts.ClusterID}, featureavailability.Facts{
-		ClusterAttached:      facts.Attached,
-		AgentConnected:       facts.LastSeenAt != nil && facts.LastSeenAt.After(now.Add(-agentFreshness)),
-		ProtocolCapabilities: facts.Capabilities,
-		Observations:         observations,
-		Providers:            h.server.providerInventory,
+		ClusterAttached:           facts.Attached,
+		AgentConnected:            facts.LastSeenAt != nil && facts.LastSeenAt.After(now.Add(-agentFreshness)),
+		ProtocolCapabilities:      facts.Capabilities,
+		WorkspaceProvisioningMode: facts.WorkspaceProvisioningMode,
+		Observations:              observations,
+		Providers:                 h.server.providerInventory,
 	})
 	features := make([]generated.FeatureAvailability, 0, len(resolved))
 	for _, value := range resolved {

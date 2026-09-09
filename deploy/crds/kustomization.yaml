@@ -3,3 +3,4 @@ kind: Kustomization
 resources:
   - platform.molejo.dev_appdeployments.yaml
   - platform.molejo.dev_appvolumes.yaml
+  - platform.molejo.dev_workspaceplacements.yaml

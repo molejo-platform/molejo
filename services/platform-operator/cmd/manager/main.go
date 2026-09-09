@@ -20,6 +20,7 @@ import (
 
 	platformv1alpha1 "github.com/molejo-platform/molejo/packages/kubernetes-api/apis/platform/v1alpha1"
 	"github.com/molejo-platform/molejo/services/platform-operator/internal/controller"
+	"github.com/molejo-platform/molejo/services/platform-operator/internal/workspaceboundary"
 )
 
 var (
@@ -59,10 +60,12 @@ func run(ctx context.Context) error {
 	var metricsAddress string
 	var probeAddress string
 	var leaderElection bool
+	var mode string
 
 	flag.StringVar(&metricsAddress, "metrics-bind-address", ":8443", "Address for the metrics endpoint.")
 	flag.StringVar(&probeAddress, "health-probe-bind-address", ":8081", "Address for health probes.")
 	flag.BoolVar(&leaderElection, "leader-elect", false, "Enable leader election.")
+	flag.StringVar(&mode, "mode", "runtime", "Controller mode: runtime or boundary.")
 	zapOptions := zap.Options{Development: false}
 	zapOptions.BindFlags(flag.CommandLine)
 	flag.Parse()
@@ -94,7 +97,13 @@ func run(ctx context.Context) error {
 		return fmt.Errorf("create manager: %w", err)
 	}
 
-	if err := (&controller.AppDeploymentReconciler{
+	if mode == "boundary" {
+		if err := (&workspaceboundary.Reconciler{Client: manager.GetClient()}).SetupWithManager(manager); err != nil {
+			return fmt.Errorf("register WorkspacePlacement boundary controller: %w", err)
+		}
+	} else if mode != "runtime" {
+		return fmt.Errorf("unsupported controller mode %q", mode)
+	} else if err := (&controller.AppDeploymentReconciler{
 		Client:              manager.GetClient(),
 		APIReader:           manager.GetAPIReader(),
 		Scheme:              manager.GetScheme(),
@@ -104,11 +113,13 @@ func run(ctx context.Context) error {
 	}).SetupWithManager(manager); err != nil {
 		return fmt.Errorf("register AppDeployment controller: %w", err)
 	}
-	if err := (&controller.AppVolumeReconciler{
-		Client: manager.GetClient(),
-		Scheme: manager.GetScheme(),
-	}).SetupWithManager(manager); err != nil {
-		return fmt.Errorf("register AppVolume controller: %w", err)
+	if mode == "runtime" {
+		if err := (&controller.AppVolumeReconciler{
+			Client: manager.GetClient(),
+			Scheme: manager.GetScheme(),
+		}).SetupWithManager(manager); err != nil {
+			return fmt.Errorf("register AppVolume controller: %w", err)
+		}
 	}
 
 	if err := manager.AddHealthzCheck("healthz", livenessChecker()); err != nil {
@@ -124,6 +135,7 @@ func run(ctx context.Context) error {
 		"goVersion", stdruntime.Version(),
 		"tracingEnabled", tracingEnabled(),
 		"statefulTolerations", len(statefulTolerations),
+		"mode", mode,
 	)
 	if err := manager.Start(ctx); err != nil {
 		return fmt.Errorf("run manager: %w", err)

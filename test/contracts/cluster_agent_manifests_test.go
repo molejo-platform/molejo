@@ -94,3 +94,78 @@ func TestClusterAgentObserverRBACIsReadOnlyAndExcludesInteractiveAccess(t *testi
 	}
 	t.Fatal("observer ClusterRole was not found")
 }
+
+func TestWorkspaceRuntimeRBACIsNamespacedAndSecretAccessCannotList(t *testing.T) {
+	contents, err := os.ReadFile("../../deploy/cluster-agent/rbac.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, document := range strings.Split(string(contents), "---") {
+		var metadata struct {
+			Kind     string `yaml:"kind"`
+			Metadata struct {
+				Name string `yaml:"name"`
+			} `yaml:"metadata"`
+		}
+		if yaml.Unmarshal([]byte(document), &metadata) != nil {
+			continue
+		}
+		if metadata.Kind == "ClusterRoleBinding" && (metadata.Metadata.Name == "molejo-cluster-agent-runtime" || metadata.Metadata.Name == "molejo-cluster-agent-observer") {
+			t.Fatalf("legacy cluster-wide runtime binding %q remains", metadata.Metadata.Name)
+		}
+		if metadata.Kind != "ClusterRole" || metadata.Metadata.Name != "molejo-cluster-agent-runtime" {
+			continue
+		}
+		var role rbacv1.ClusterRole
+		if err = yaml.Unmarshal([]byte(document), &role); err != nil {
+			t.Fatal(err)
+		}
+		for _, rule := range role.Rules {
+			if slices.Contains(rule.Resources, "secrets") && !slices.Equal(rule.Verbs, []string{"get", "create", "delete"}) {
+				t.Fatalf("Secret verbs=%v, want get/create/delete only", rule.Verbs)
+			}
+		}
+		return
+	}
+	t.Fatal("runtime ClusterRole was not found")
+}
+
+func TestBoundaryCredentialCannotReadSecretsOrManageWorkloads(t *testing.T) {
+	contents, err := os.ReadFile("../../deploy/operator/rbac/role.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, document := range strings.Split(string(contents), "---") {
+		var role rbacv1.ClusterRole
+		if yaml.Unmarshal([]byte(document), &role) != nil || role.Name != "molejo-workspace-boundary" {
+			continue
+		}
+		for _, rule := range role.Rules {
+			for _, forbidden := range []string{"secrets", "deployments", "statefulsets", "appdeployments", "appvolumes"} {
+				if slices.Contains(rule.Resources, forbidden) {
+					t.Fatalf("boundary role reaches forbidden resource %q", forbidden)
+				}
+			}
+		}
+		return
+	}
+	t.Fatal("boundary ClusterRole was not found")
+}
+
+func TestWorkspaceBoundaryDeploymentUsesDedicatedCredentialAndRegistrySecret(t *testing.T) {
+	contents, err := os.ReadFile("../../deploy/operator/manager/workspace-boundary-deployment.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var deployment appsv1.Deployment
+	if err = yaml.Unmarshal(contents, &deployment); err != nil {
+		t.Fatal(err)
+	}
+	pod := deployment.Spec.Template.Spec
+	if pod.ServiceAccountName != "workspace-boundary-controller" || pod.AutomountServiceAccountToken == nil || *pod.AutomountServiceAccountToken {
+		t.Fatalf("boundary Pod credential configuration=%+v", pod)
+	}
+	if len(pod.ImagePullSecrets) != 1 || pod.ImagePullSecrets[0].Name != "registry-molejo" {
+		t.Fatalf("boundary imagePullSecrets=%v", pod.ImagePullSecrets)
+	}
+}

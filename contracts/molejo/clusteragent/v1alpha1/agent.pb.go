@@ -226,6 +226,7 @@ type AgentHello struct {
 	Capabilities              []string               `protobuf:"bytes,5,rep,name=capabilities,proto3" json:"capabilities,omitempty"`
 	SupportedProtocolVersions []string               `protobuf:"bytes,6,rep,name=supported_protocol_versions,json=supportedProtocolVersions,proto3" json:"supported_protocol_versions,omitempty"`
 	TrustBundleId             string                 `protobuf:"bytes,7,opt,name=trust_bundle_id,json=trustBundleId,proto3" json:"trust_bundle_id,omitempty"`
+	WorkspaceProvisioningMode string                 `protobuf:"bytes,8,opt,name=workspace_provisioning_mode,json=workspaceProvisioningMode,proto3" json:"workspace_provisioning_mode,omitempty"`
 	unknownFields             protoimpl.UnknownFields
 	sizeCache                 protoimpl.SizeCache
 }
@@ -305,6 +306,13 @@ func (x *AgentHello) GetSupportedProtocolVersions() []string {
 func (x *AgentHello) GetTrustBundleId() string {
 	if x != nil {
 		return x.TrustBundleId
+	}
+	return ""
+}
+
+func (x *AgentHello) GetWorkspaceProvisioningMode() string {
+	if x != nil {
+		return x.WorkspaceProvisioningMode
 	}
 	return ""
 }
@@ -2367,7 +2375,7 @@ const file_molejo_clusteragent_v1alpha1_agent_proto_rawDesc = "" +
 	"\x05hello\x18\x01 \x01(\v2/.molejo.clusteragent.v1alpha1.ControlPlaneHelloH\x00R\x05hello\x12Q\n" +
 	"\rheartbeat_ack\x18\x02 \x01(\v2*.molejo.clusteragent.v1alpha1.HeartbeatAckH\x00R\fheartbeatAck\x12W\n" +
 	"\x0fruntime_command\x18\x03 \x01(\v2,.molejo.clusteragent.v1alpha1.RuntimeCommandH\x00R\x0eruntimeCommandB\t\n" +
-	"\apayload\"\xb6\x02\n" +
+	"\apayload\"\xf6\x02\n" +
 	"\n" +
 	"AgentHello\x12'\n" +
 	"\x0finstallation_id\x18\x01 \x01(\tR\x0einstallationId\x12#\n" +
@@ -2377,7 +2385,8 @@ const file_molejo_clusteragent_v1alpha1_agent_proto_rawDesc = "" +
 	"\x12kubernetes_version\x18\x04 \x01(\tR\x11kubernetesVersion\x12\"\n" +
 	"\fcapabilities\x18\x05 \x03(\tR\fcapabilities\x12>\n" +
 	"\x1bsupported_protocol_versions\x18\x06 \x03(\tR\x19supportedProtocolVersions\x12&\n" +
-	"\x0ftrust_bundle_id\x18\a \x01(\tR\rtrustBundleId\"\x91\x02\n" +
+	"\x0ftrust_bundle_id\x18\a \x01(\tR\rtrustBundleId\x12>\n" +
+	"\x1bworkspace_provisioning_mode\x18\b \x01(\tR\x19workspaceProvisioningMode\"\x91\x02\n" +
 	"\x11ControlPlaneHello\x12)\n" +
 	"\x10protocol_version\x18\x01 \x01(\tR\x0fprotocolVersion\x12<\n" +
 	"\x1aheartbeat_interval_seconds\x18\x02 \x01(\x05R\x18heartbeatIntervalSeconds\x12(\n" +

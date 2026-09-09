@@ -12,6 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/molejo-platform/molejo/packages/workspacecontract"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/audit"
 )
 
@@ -348,8 +349,8 @@ func validCredential(ctx context.Context, query rowQuerier, installationID int64
 	return status, nil
 }
 
-func (s *Store) ActivateAgent(ctx context.Context, publicID string, fingerprint []byte, clusterUID, agentVersion, kubernetesVersion string, capabilities []string, trustBundleID, sessionID string, now time.Time, event audit.Event) (bool, error) {
-	if strings.TrimSpace(clusterUID) == "" || strings.TrimSpace(agentVersion) == "" || strings.TrimSpace(kubernetesVersion) == "" || len(capabilities) == 0 || (trustBundleID != "" && !validTrustBundleID(trustBundleID)) || strings.TrimSpace(sessionID) == "" || len(sessionID) > 80 {
+func (s *Store) ActivateAgent(ctx context.Context, publicID string, fingerprint []byte, clusterUID, agentVersion, kubernetesVersion string, capabilities []string, provisioningMode workspacecontract.ProvisioningMode, trustBundleID, sessionID string, now time.Time, event audit.Event) (bool, error) {
+	if _, ok := workspacecontract.ParseProvisioningMode(string(provisioningMode)); !ok || strings.TrimSpace(clusterUID) == "" || strings.TrimSpace(agentVersion) == "" || strings.TrimSpace(kubernetesVersion) == "" || len(capabilities) == 0 || (trustBundleID != "" && !validTrustBundleID(trustBundleID)) || strings.TrimSpace(sessionID) == "" || len(sessionID) > 80 {
 		return false, ErrAgentIdentityMismatch
 	}
 	capabilitiesJSON, err := json.Marshal(capabilities)
@@ -382,7 +383,7 @@ func (s *Store) ActivateAgent(ctx context.Context, publicID string, fingerprint 
 	}
 	first := status == "Pending"
 	if _, err = tx.Exec(ctx, `UPDATE agent_installations SET status='Active',cluster_uid=$2,agent_version=$3,kubernetes_version=$4,
-		capabilities_json=$5,trust_bundle_id=$6,control_session_id=$7,control_session_sequence=0,last_seen_at=$8,updated_at=$8 WHERE id=$1`, installationID, clusterUID, agentVersion, kubernetesVersion, capabilitiesJSON, trustBundleID, sessionID, now); err != nil {
+		capabilities_json=$5,workspace_provisioning_mode=$6,trust_bundle_id=$7,control_session_id=$8,control_session_sequence=0,last_seen_at=$9,updated_at=$9 WHERE id=$1`, installationID, clusterUID, agentVersion, kubernetesVersion, capabilitiesJSON, provisioningMode, trustBundleID, sessionID, now); err != nil {
 		return false, err
 	}
 	if first {

@@ -3,12 +3,13 @@
 package runtimecontract
 
 const (
-	OperationEnsureWorkspace = "EnsureWorkspace"
-	OperationApplyDeployment = "ApplyDeployment"
-	OperationDeleteAppEnv    = "DeleteAppEnvironment"
-	OperationEnsureVolume    = "EnsureVolume"
-	OperationExpandVolume    = "ExpandVolume"
-	OperationDeleteVolume    = "DeleteVolume"
+	OperationEnsureWorkspace          = "EnsureWorkspace"
+	OperationEnsureWorkspacePlacement = "EnsureWorkspacePlacement"
+	OperationApplyDeployment          = "ApplyDeployment"
+	OperationDeleteAppEnv             = "DeleteAppEnvironment"
+	OperationEnsureVolume             = "EnsureVolume"
+	OperationExpandVolume             = "ExpandVolume"
+	OperationDeleteVolume             = "DeleteVolume"
 
 	ExposurePrivate = "Private"
 	ExposurePublic  = "Public"
@@ -33,10 +34,18 @@ const (
 
 // Payload contains exactly the fields required by one runtime operation.
 type Payload struct {
-	Namespace  string            `json:"namespace"`
-	Name       string            `json:"name,omitempty"`
-	Deployment *DeploymentIntent `json:"deployment,omitempty"`
-	Volume     *VolumeIntent     `json:"volume,omitempty"`
+	Namespace  string                    `json:"namespace"`
+	Name       string                    `json:"name,omitempty"`
+	Deployment *DeploymentIntent         `json:"deployment,omitempty"`
+	Volume     *VolumeIntent             `json:"volume,omitempty"`
+	Placement  *WorkspacePlacementIntent `json:"placement,omitempty"`
+}
+
+type WorkspacePlacementIntent struct {
+	WorkspaceID    string `json:"workspaceId"`
+	NamespaceName  string `json:"namespaceName"`
+	AccessProfile  string `json:"accessProfile"`
+	LifecycleState string `json:"lifecycleState"`
 }
 
 type DeploymentIntent struct {

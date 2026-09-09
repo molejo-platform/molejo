@@ -93,7 +93,7 @@ func (s *Store) BeginCreateSecretParameter(ctx context.Context, workspaceID, act
 	if err != nil {
 		return domain.SecretMutation{}, false, translateDBError(err)
 	}
-	mutation := domain.SecretMutation{ParameterID: parameterID, ParameterPublicID: publicID, WorkspaceID: workspaceID, ParameterVersion: 1, ResourceVersion: 1, Reference: reference, ExpectedBackendVersion: 0, BackendVersion: 1, State: "Pending", CreatedAt: time.Now()}
+	mutation := domain.SecretMutation{ParameterID: parameterID, ParameterPublicID: publicID, WorkspaceID: workspaceID, ParameterVersion: 1, ResourceVersion: 1, Reference: domain.SecretReference(reference), ExpectedBackendVersion: 0, BackendVersion: 1, State: "Pending", CreatedAt: time.Now()}
 	return mutation, false, tx.Commit(ctx)
 }
 
@@ -162,7 +162,7 @@ func (s *Store) BeginReplaceSecretParameter(ctx context.Context, workspaceID, ac
 	if _, err = tx.Exec(ctx, `INSERT INTO parameter_path_reservations(workspace_id,path,parameter_id,parameter_version) VALUES($1,$2,$3,$4)`, workspaceID, path, parameterID, nextVersion); err != nil {
 		return domain.SecretMutation{}, false, translateDBError(err)
 	}
-	mutation := domain.SecretMutation{ParameterID: parameterID, ParameterPublicID: publicID, WorkspaceID: workspaceID, ParameterVersion: nextVersion, ResourceVersion: resourceVersion, Reference: reference, ExpectedBackendVersion: backendVersion, BackendVersion: backendVersion + 1, State: "Pending", CreatedAt: time.Now()}
+	mutation := domain.SecretMutation{ParameterID: parameterID, ParameterPublicID: publicID, WorkspaceID: workspaceID, ParameterVersion: nextVersion, ResourceVersion: resourceVersion, Reference: domain.SecretReference(reference), ExpectedBackendVersion: domain.SecretBackendVersion(backendVersion), BackendVersion: domain.SecretBackendVersion(backendVersion + 1), State: "Pending", CreatedAt: time.Now()}
 	return mutation, false, tx.Commit(ctx)
 }
 
@@ -189,7 +189,7 @@ func findSecretMutation(ctx context.Context, tx pgx.Tx, workspaceID, actorID int
 }
 
 func (s *Store) CompleteSecretMutation(ctx context.Context, mutation domain.SecretMutation, backendVersion int64) (domain.Parameter, error) {
-	if backendVersion != mutation.BackendVersion {
+	if domain.SecretBackendVersion(backendVersion) != mutation.BackendVersion {
 		return domain.Parameter{}, ErrConflict
 	}
 	tx, err := s.Pool.Begin(ctx)

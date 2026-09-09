@@ -23,4 +23,18 @@ func TestLoadConfigRequiresNamespaceAndCompleteGRPCTarget(t *testing.T) {
 	if configuration.IdentitySecret != "molejo-agent-identity" || configuration.HealthAddress != ":8081" {
 		t.Fatalf("defaults = %+v", configuration)
 	}
+	if configuration.WorkspaceProvisioningMode != "Disabled" {
+		t.Fatalf("default provisioning mode = %q", configuration.WorkspaceProvisioningMode)
+	}
+
+	t.Setenv("MOLEJO_WORKSPACE_PROVISIONING_MODE", "Namespaced")
+	configuration, err = loadConfig()
+	if err != nil || configuration.WorkspaceProvisioningMode != "Namespaced" {
+		t.Fatalf("namespaced provisioning configuration=%+v err=%v", configuration, err)
+	}
+
+	t.Setenv("MOLEJO_WORKSPACE_PROVISIONING_MODE", "enabled")
+	if _, err = loadConfig(); err == nil {
+		t.Fatal("unknown provisioning mode was accepted")
+	}
 }

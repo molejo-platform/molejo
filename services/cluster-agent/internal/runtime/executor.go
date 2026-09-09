@@ -54,21 +54,31 @@ func (e *Executor) Execute(parent context.Context, command *clusteragentv1alpha1
 			return failResult(result, "runtime_timeout", "runtime command did not complete before its deadline", true)
 		}
 		if errors.Is(err, errUnsupportedOperation) {
-			return failResult(result, "command_unsupported", err.Error(), false)
+			return failResult(result, "command_unsupported", "runtime command kind is unsupported", false)
 		}
-		return failResult(result, "runtime_error", err.Error(), true)
+		if errors.Is(err, ErrOwnershipConflict) {
+			return failResult(result, "runtime_ownership_conflict", "runtime object ownership conflict", false)
+		}
+		return failResult(result, "runtime_error", "runtime operation failed", true)
 	}
 	return result
 }
 
 func (e *Executor) execute(ctx context.Context, kind string, desiredVersion int64, payload runtimecontract.Payload, result *clusteragentv1alpha1.RuntimeResult) error {
 	switch kind {
-	case runtimecontract.OperationEnsureWorkspace:
-		if err := e.client.EnsureWorkspace(ctx, payload.Namespace); err != nil {
+	case runtimecontract.OperationEnsureWorkspacePlacement:
+		if payload.Placement == nil {
+			return errors.New("workspace placement intent is missing")
+		}
+		observed, err := e.client.EnsureWorkspacePlacement(ctx, *payload.Placement)
+		if err != nil {
 			return err
 		}
+		if !observed.Ready {
+			return errors.New("workspace boundary has not reached the requested state")
+		}
 		result.State = runtimecontract.StateReady
-		result.Message = "workspace namespace is ready"
+		result.Message = observed.Message
 		return nil
 
 	case runtimecontract.OperationEnsureVolume, runtimecontract.OperationExpandVolume, runtimecontract.OperationDeleteVolume:

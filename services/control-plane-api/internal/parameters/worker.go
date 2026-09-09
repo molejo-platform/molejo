@@ -32,18 +32,18 @@ func (w Worker) RunOnce(ctx context.Context) (bool, error) {
 		return false, err
 	}
 	for _, mutation := range mutations {
-		currentVersion, inspectErr := w.Secrets.CurrentVersion(ctx, mutation.Reference)
+		currentVersion, inspectErr := w.Secrets.CurrentVersion(ctx, string(mutation.Reference))
 		if inspectErr != nil {
 			continue
 		}
 		switch {
-		case currentVersion == mutation.BackendVersion:
+		case domain.SecretBackendVersion(currentVersion) == mutation.BackendVersion:
 			if _, err = w.Store.CompleteSecretMutation(ctx, mutation, currentVersion); err != nil {
 				return true, err
 			}
 			w.logger().Info("parameter secret mutation recovered", "parameter_id", mutation.ParameterPublicID, "parameter_version", mutation.ParameterVersion)
 			return true, nil
-		case currentVersion == mutation.ExpectedBackendVersion && time.Since(mutation.CreatedAt) >= w.MutationTimeout:
+		case domain.SecretBackendVersion(currentVersion) == mutation.ExpectedBackendVersion && time.Since(mutation.CreatedAt) >= w.MutationTimeout:
 			if err = w.Store.AbandonSecretMutation(ctx, mutation); err != nil {
 				return true, err
 			}
@@ -61,7 +61,7 @@ func (w Worker) RunOnce(ctx context.Context) (bool, error) {
 			if candidate.SecretReference == "" {
 				return true, ErrUnavailable
 			}
-			if err = w.Secrets.Delete(ctx, candidate.SecretReference); err != nil {
+			if err = w.Secrets.Delete(ctx, string(candidate.SecretReference)); err != nil {
 				return true, err
 			}
 		}

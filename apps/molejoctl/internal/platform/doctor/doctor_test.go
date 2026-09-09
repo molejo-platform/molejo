@@ -9,10 +9,16 @@ import (
 )
 
 type fakeDoctorClient struct {
-	version      string
-	namespaceErr error
-	resourceErr  map[string]error
-	deployments  map[string][2]int32
+	version            string
+	namespaceErr       error
+	resourceErr        map[string]error
+	deployments        map[string][2]int32
+	encryptionEvidence string
+	encryptionErr      error
+}
+
+func (f fakeDoctorClient) EncryptionAtRestEvidence(context.Context) (string, error) {
+	return f.encryptionEvidence, f.encryptionErr
 }
 
 func (f fakeDoctorClient) ServerVersion() (string, error) {
@@ -44,9 +50,11 @@ func TestDoctorHealthy(t *testing.T) {
 		version:     "v1.36.3+k3s1",
 		resourceErr: map[string]error{},
 		deployments: map[string][2]int32{
-			"platform-operator": {1, 1},
-			"cluster-agent":     {1, 1},
+			"platform-operator":             {1, 1},
+			"workspace-boundary-controller": {1, 1},
+			"cluster-agent":                 {1, 1},
 		},
+		encryptionEvidence: "operator reports encryption at rest enabled",
 	}
 	output, err := executeDoctor(t, client, nil)
 	if err != nil {
@@ -66,6 +74,17 @@ func TestDoctorHealthy(t *testing.T) {
 	}
 }
 
+func TestDoctorTreatsMissingEncryptionEvidenceAsAdvisory(t *testing.T) {
+	client := fakeDoctorClient{version: "v1.36.3+k3s1", resourceErr: map[string]error{}, deployments: map[string][2]int32{"platform-operator": {1, 1}, "workspace-boundary-controller": {1, 1}, "cluster-agent": {1, 1}}, encryptionErr: errors.New("operator evidence not provided")}
+	output, err := executeDoctor(t, client, nil)
+	if err != nil {
+		t.Fatalf("missing evidence made doctor unhealthy: %v", err)
+	}
+	if !strings.Contains(output, "WARN  Encryption at rest") || !strings.Contains(output, "Result: healthy") {
+		t.Fatalf("unexpected output: %q", output)
+	}
+}
+
 func TestDoctorInvalidContext(t *testing.T) {
 	output, err := executeDoctor(t, fakeDoctorClient{}, errors.New(`context "molejo-k3s" not found`))
 	if err == nil {
@@ -81,8 +100,9 @@ func TestDoctorUnavailableDeployment(t *testing.T) {
 		version:     "v1.36.3+k3s1",
 		resourceErr: map[string]error{},
 		deployments: map[string][2]int32{
-			"platform-operator": {0, 1},
-			"cluster-agent":     {1, 1},
+			"platform-operator":             {0, 1},
+			"workspace-boundary-controller": {1, 1},
+			"cluster-agent":                 {1, 1},
 		},
 	}
 	output, err := executeDoctor(t, client, nil)
@@ -101,8 +121,9 @@ func TestDoctorTreatsMissingGatewayAPIAsAdvisory(t *testing.T) {
 			"gateway.networking.k8s.io/v1": errors.New("API unavailable"),
 		},
 		deployments: map[string][2]int32{
-			"platform-operator": {1, 1},
-			"cluster-agent":     {1, 1},
+			"platform-operator":             {1, 1},
+			"workspace-boundary-controller": {1, 1},
+			"cluster-agent":                 {1, 1},
 		},
 	}
 	output, err := executeDoctor(t, client, nil)

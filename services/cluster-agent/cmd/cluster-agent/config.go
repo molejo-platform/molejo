@@ -4,17 +4,20 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/molejo-platform/molejo/packages/workspacecontract"
 )
 
 type config struct {
-	Namespace        string
-	IdentitySecret   string
-	EnrollmentSecret string
-	EnrollmentURL    string
-	EnrollmentCAFile string
-	GRPCAddress      string
-	GRPCServerName   string
-	HealthAddress    string
+	Namespace                 string
+	IdentitySecret            string
+	EnrollmentSecret          string
+	EnrollmentURL             string
+	EnrollmentCAFile          string
+	GRPCAddress               string
+	GRPCServerName            string
+	HealthAddress             string
+	WorkspaceProvisioningMode workspacecontract.ProvisioningMode
 }
 
 func loadConfig() (config, error) {
@@ -34,6 +37,11 @@ func loadConfig() (config, error) {
 	if (configuration.GRPCAddress == "") != (configuration.GRPCServerName == "") {
 		return config{}, fmt.Errorf("Agent gRPC configuration is incomplete")
 	}
+	mode, ok := workspacecontract.ParseProvisioningMode(os.Getenv("MOLEJO_WORKSPACE_PROVISIONING_MODE"))
+	if !ok {
+		return config{}, fmt.Errorf("MOLEJO_WORKSPACE_PROVISIONING_MODE must be Disabled or Namespaced")
+	}
+	configuration.WorkspaceProvisioningMode = mode
 	return configuration, nil
 }
 

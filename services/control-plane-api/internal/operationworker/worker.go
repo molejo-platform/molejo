@@ -16,6 +16,7 @@ import (
 	"github.com/molejo-platform/molejo/packages/runtimecontract"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/domain"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/parameters"
+	"github.com/molejo-platform/molejo/services/control-plane-api/internal/secretdelivery"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/store"
 )
 
@@ -51,15 +52,23 @@ type PublicationResolver interface {
 }
 
 type Worker struct {
-	Store            Store
-	Publication      PublicationResolver
-	ParameterSecrets parameters.SecretValueStore
-	OperationLease   time.Duration
-	CommandTimeout   time.Duration
-	Logger           *slog.Logger
+	Store              Store
+	Publication        PublicationResolver
+	ParameterSecrets   parameters.SecretValueStore
+	OperationLease     time.Duration
+	CommandTimeout     time.Duration
+	Logger             *slog.Logger
+	SecretDeliveryMode secretdelivery.Mode
 }
 
 func (w *Worker) NextCommand(ctx context.Context, installationID string) (*clusteragentv1alpha1.RuntimeCommand, bool, error) {
+	mode := w.SecretDeliveryMode
+	if mode == "" {
+		mode = secretdelivery.MaterializedKubernetesSecret
+	}
+	if err := secretdelivery.Validate(mode); err != nil {
+		return nil, false, err
+	}
 	workerID := "agent:" + installationID
 	op, appEnvironment, deployment, ok, err := w.Store.ClaimNextForAgent(ctx, workerID, installationID, w.lease())
 	if err != nil || !ok {
@@ -86,6 +95,9 @@ func (w *Worker) NextCommand(ctx context.Context, installationID string) (*clust
 		CommandId: commandID, OperationId: op.PublicID, DesiredVersion: op.DesiredVersion,
 		FencingToken: op.FencingToken, DeadlineUnix: deadline.Unix(),
 		Kind: op.Kind, PayloadJson: raw, PayloadSchemaVersion: "runtime.v1alpha1",
+	}
+	if op.Kind == domain.OperationEnsureWorkspace {
+		command.Kind = runtimecontract.OperationEnsureWorkspacePlacement
 	}
 	w.logger().Info("runtime command dispatched", "operation_id", op.PublicID, "command_id", commandID, "installation_id", installationID, "operation_kind", op.Kind)
 	return command, true, nil
@@ -117,7 +129,7 @@ func (w *Worker) HandleResult(ctx context.Context, installationID string, result
 		return err
 	}
 	if result.GetErrorCode() != "" {
-		return w.Store.Fail(ctx, op, result.GetErrorCode(), result.GetMessage(), result.GetRetryable())
+		return w.Store.Fail(ctx, op, result.GetErrorCode(), sanitizedRuntimeFailure(result.GetErrorCode()), result.GetRetryable())
 	}
 	if result.GetState() != runtimecontract.StateReady {
 		return w.Store.Fail(ctx, op, "runtime_not_ready", "runtime has not reached the requested state", true)
@@ -142,6 +154,19 @@ func (w *Worker) HandleResult(ctx context.Context, installationID string, result
 		return w.Store.CompleteDeployment(ctx, op, result.GetMessage(), result.GetObservedRelease(), result.GetSpecHash())
 	default:
 		return w.Store.Fail(ctx, op, "command_invalid", "runtime operation is unsupported", false)
+	}
+}
+
+func sanitizedRuntimeFailure(code string) string {
+	switch code {
+	case "command_expired":
+		return "runtime command expired before completion"
+	case "command_invalid", "command_incompatible", "command_unsupported":
+		return "runtime command was rejected"
+	case "runtime_ownership_conflict":
+		return "runtime object ownership conflict"
+	default:
+		return "runtime operation failed"
 	}
 }
 
@@ -195,7 +220,12 @@ func (w *Worker) commandPayload(ctx context.Context, op domain.Operation, appEnv
 		return runtimecontract.Payload{}, err
 	}
 	payload := runtimecontract.Payload{Namespace: workspace.Namespace, Name: appEnvironment.RuntimeName}
-	if op.Kind == domain.OperationEnsureWorkspace || op.Kind == domain.OperationDeleteAppEnv {
+	if op.Kind == domain.OperationEnsureWorkspace {
+		payload.Name = workspace.PublicID
+		payload.Placement = &runtimecontract.WorkspacePlacementIntent{WorkspaceID: workspace.PublicID, NamespaceName: workspace.Namespace, AccessProfile: "NamespacedRuntime", LifecycleState: "Ready"}
+		return payload, nil
+	}
+	if op.Kind == domain.OperationDeleteAppEnv {
 		return payload, nil
 	}
 	if op.AppVolumeID != 0 {
@@ -235,7 +265,7 @@ func (w *Worker) commandPayload(ctx context.Context, op domain.Operation, appEnv
 		case domain.ParameterPlainText:
 			intent.Variables = append(intent.Variables, domain.Variable{Name: parameter.Binding.Name, Value: parameter.PlainTextValue})
 		case domain.ParameterSecret:
-			value, secretErr := w.ParameterSecrets.Get(ctx, parameter.SecretReference, parameter.SecretBackendVersion)
+			value, secretErr := w.ParameterSecrets.Get(ctx, string(parameter.SecretReference), int64(parameter.SecretBackendVersion))
 			if secretErr != nil {
 				return runtimecontract.Payload{}, secretErr
 			}

@@ -9,6 +9,7 @@ import (
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/authorization"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/domain"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/store"
+	"github.com/molejo-platform/molejo/services/control-plane-api/internal/workspaceprovisioning"
 )
 
 type hierarchyInput struct {
@@ -37,11 +38,8 @@ func (h *generatedHandler) CreateWorkspace(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
-	context, err := h.server.store.AuthorizationContext(r.Context(), user.ID, 0, "Installation", "default")
-	if err != nil || !authorization.Allowed(context, authorization.CreateWorkspace) {
-		writeError(w, http.StatusForbidden, "permission_denied", "installation administration is required", r)
-		return
-	}
+	authorizationContext, err := h.server.store.AuthorizationContext(r.Context(), user.ID, 0, "Installation", "default")
+	actorAuthorized := err == nil && authorization.Allowed(authorizationContext, authorization.CreateWorkspace)
 	idem, payload, ok := idempotency(r)
 	if !ok {
 		writeError(w, http.StatusBadRequest, "idempotency_required", "Idempotency-Key is required", r)
@@ -61,6 +59,11 @@ func (h *generatedHandler) CreateWorkspace(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusBadRequest, "invalid_name", err.Error(), r)
 		return
 	}
+	facts, err := h.server.store.WorkspaceProvisioningFacts(r.Context(), input.ClusterId)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "storage_failed", "cluster provisioning facts could not be loaded", r)
+		return
+	}
 	for range 3 {
 		workspaceID, err := domain.NewPublicID("ws")
 		if err != nil {
@@ -69,6 +72,16 @@ func (h *generatedHandler) CreateWorkspace(w http.ResponseWriter, r *http.Reques
 		operationID, err := domain.NewPublicID("op")
 		if err != nil {
 			break
+		}
+		decision := workspaceprovisioning.Decide(workspaceprovisioning.Input{
+			ActorAuthorized: actorAuthorized, ClusterAttached: facts.ClusterAttached,
+			CapabilityAvailable: facts.CapabilityAvailable, Consent: facts.Consent,
+			Namespace: workspaceID, IdempotencyPresent: idem != "",
+		})
+		if !decision.Accepted {
+			h.server.logger().Warn("workspace provisioning denied", "request_id", requestID(r), "cluster_id", input.ClusterId, "reason_code", decision.Reason)
+			writeWorkspaceProvisioningDenial(w, r, decision.Reason)
+			return
 		}
 		var workspace domain.Workspace
 		var operation domain.Operation
@@ -85,6 +98,17 @@ func (h *generatedHandler) CreateWorkspace(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	writeError(w, http.StatusServiceUnavailable, "id_generation_failed", "could not allocate resource identifiers", r)
+}
+
+func writeWorkspaceProvisioningDenial(w http.ResponseWriter, r *http.Request, reason workspaceprovisioning.Reason) {
+	status := http.StatusConflict
+	message := "workspace provisioning request was not admitted"
+	if reason == workspaceprovisioning.ReasonActorUnauthorized {
+		status, message = http.StatusForbidden, "installation administration is required"
+	} else if reason == workspaceprovisioning.ReasonClusterNotAttached {
+		status, message = http.StatusNotFound, "cluster is not attached"
+	}
+	writeError(w, status, string(reason), message, r)
 }
 
 func (h *generatedHandler) ListWorkspaceClusters(w http.ResponseWriter, r *http.Request, workspaceID generated.WorkspaceId) {

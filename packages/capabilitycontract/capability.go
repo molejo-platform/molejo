@@ -26,13 +26,14 @@ const (
 	ReleaseExternal             ID = "release.external"
 	ReleaseHistory              ID = "release.history"
 	ControlPlaneOperationEvents ID = "events.control-plane"
+	WorkspaceProvisioning       ID = "workspace.provisioning.namespaced"
 )
 
 var knownIDs = map[ID]struct{}{
 	RuntimeWorkloadApply: {}, RuntimeWorkloadObserve: {}, RuntimeLogsCurrent: {}, RuntimeMetricsCurrent: {}, RuntimeEventsCurrent: {},
 	TelemetryLogsHistorical: {}, TelemetryMetricsHistorical: {}, TelemetryEventsHistorical: {}, ParametersPlain: {}, ParametersSecretStatic: {},
 	PublicationHTTP: {}, PublicationTCP: {}, StorageRWO: {}, StorageExpand: {}, SourceGitHub: {}, BuildManaged: {}, ReleaseExternal: {},
-	ReleaseHistory: {}, ControlPlaneOperationEvents: {},
+	ReleaseHistory: {}, ControlPlaneOperationEvents: {}, WorkspaceProvisioning: {},
 }
 
 func Known(id ID) bool {

@@ -82,9 +82,10 @@ func run() error {
 	var renewer agent.Renewer
 	if configuration.GRPCAddress != "" {
 		metadata := controlplane.AgentMetadata{
-			ClusterUID:        string(systemNamespace.UID),
-			KubernetesVersion: serverVersion.GitVersion,
-			Capabilities:      []string{"runtime.v1alpha1", "runtime-observation.v1alpha1", "runtime-query.v1alpha1", "certificate-renewal.v1alpha1", "capability-observation.v1alpha1"},
+			ClusterUID:                string(systemNamespace.UID),
+			KubernetesVersion:         serverVersion.GitVersion,
+			Capabilities:              []string{"runtime.v1alpha1", "runtime-observation.v1alpha1", "runtime-query.v1alpha1", "certificate-renewal.v1alpha1", "capability-observation.v1alpha1", "workspace-provisioning.v1alpha1"},
+			WorkspaceProvisioningMode: string(configuration.WorkspaceProvisioningMode),
 		}
 		grpcConnector, connectorErr := controlplane.NewGRPCConnector(configuration.GRPCAddress, configuration.GRPCServerName, version, metadata, executor)
 		err = connectorErr

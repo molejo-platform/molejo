@@ -37,6 +37,7 @@ const (
 	ReasonHistoricalBackendMissing      = capabilitycontract.ReasonHistoricalBackendMissing
 	ReasonSecretBackendMissing          = capabilitycontract.ReasonSecretBackendMissing
 	ReasonRuntimeQueryUnsupported       = capabilitycontract.ReasonRuntimeQueryUnsupported
+	ReasonWorkspaceProvisioningDisabled = "workspace_provisioning_disabled"
 )
 
 type ScopeType string
@@ -54,11 +55,12 @@ type Target struct {
 }
 
 type Facts struct {
-	ClusterAttached      bool
-	AgentConnected       bool
-	ProtocolCapabilities []string
-	Observations         []capabilitycontract.Observation
-	Providers            providerbinding.Inventory
+	ClusterAttached           bool
+	AgentConnected            bool
+	ProtocolCapabilities      []string
+	Observations              []capabilitycontract.Observation
+	Providers                 providerbinding.Inventory
+	WorkspaceProvisioningMode string
 }
 
 type Feature struct {

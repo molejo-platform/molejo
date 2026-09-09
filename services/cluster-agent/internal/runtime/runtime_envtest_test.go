@@ -7,6 +7,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
@@ -46,25 +47,30 @@ func TestEnvtestEnsuresExactWorkspaceAndAppDeploymentIdempotently(t *testing.T) 
 	intent.Variables = []runtimecontract.Variable{{Name: "APP_MODE", Value: "test"}}
 	intent.ConfigurationVersion = 3
 	intent.SecretVariables = []runtimecontract.Variable{{Name: "API_TOKEN", Value: "runtime-only-secret"}}
+	workspaceNamespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "ws-abcdefghijklmnopqrst", Annotations: map[string]string{controlPlaneOwnerAnnotation: workspaceOwnerValue}}}
+	if err := runtimeClient.Create(ctx, workspaceNamespace); err != nil {
+		t.Fatal(err)
+	}
+	placementIntent := runtimecontract.WorkspacePlacementIntent{WorkspaceID: "ws-abcdefghijklmnopqrst", NamespaceName: "ws-abcdefghijklmnopqrst", AccessProfile: "NamespacedRuntime", LifecycleState: "Ready"}
 
 	for range 2 {
-		if err := adapter.EnsureWorkspace(ctx, "molejo-workspaces"); err != nil {
+		if _, err := adapter.EnsureWorkspacePlacement(ctx, placementIntent); err != nil {
 			t.Fatal(err)
 		}
-		if err := adapter.ApplyDeployment(ctx, "molejo-workspaces", "ap-aaaaaaaaaaaaaaaaaaaa", 1, intent); err != nil {
+		if err := adapter.ApplyDeployment(ctx, placementIntent.NamespaceName, "ap-aaaaaaaaaaaaaaaaaaaa", 1, intent); err != nil {
 			t.Fatal(err)
 		}
 	}
 
 	var namespace corev1.Namespace
-	if err := runtimeClient.Get(ctx, client.ObjectKey{Name: "molejo-workspaces"}, &namespace); err != nil {
+	if err := runtimeClient.Get(ctx, client.ObjectKey{Name: placementIntent.NamespaceName}, &namespace); err != nil {
 		t.Fatal(err)
 	}
 	if namespace.Annotations[controlPlaneOwnerAnnotation] != workspaceOwnerValue {
 		t.Fatalf("workspace owner marker = %q", namespace.Annotations[controlPlaneOwnerAnnotation])
 	}
 	var deployments platformv1alpha1.AppDeploymentList
-	if err := runtimeClient.List(ctx, &deployments, client.InNamespace("molejo-workspaces")); err != nil {
+	if err := runtimeClient.List(ctx, &deployments, client.InNamespace(placementIntent.NamespaceName)); err != nil {
 		t.Fatal(err)
 	}
 	if len(deployments.Items) != 1 || deployments.Items[0].Name != "ap-aaaaaaaaaaaaaaaaaaaa" {
@@ -75,11 +81,11 @@ func TestEnvtestEnsuresExactWorkspaceAndAppDeploymentIdempotently(t *testing.T) 
 		t.Fatalf("configuration references = %+v", deployment.Spec)
 	}
 	var configMap corev1.ConfigMap
-	if err := runtimeClient.Get(ctx, client.ObjectKey{Namespace: "molejo-workspaces", Name: deployment.Spec.ConfigMapRef}, &configMap); err != nil {
+	if err := runtimeClient.Get(ctx, client.ObjectKey{Namespace: placementIntent.NamespaceName, Name: deployment.Spec.ConfigMapRef}, &configMap); err != nil {
 		t.Fatal(err)
 	}
 	var secret corev1.Secret
-	if err := runtimeClient.Get(ctx, client.ObjectKey{Namespace: "molejo-workspaces", Name: deployment.Spec.SecretRef}, &secret); err != nil {
+	if err := runtimeClient.Get(ctx, client.ObjectKey{Namespace: placementIntent.NamespaceName, Name: deployment.Spec.SecretRef}, &secret); err != nil {
 		t.Fatal(err)
 	}
 	if configMap.Immutable == nil || !*configMap.Immutable || configMap.Data["APP_MODE"] != "test" || secret.Immutable == nil || !*secret.Immutable || string(secret.Data["API_TOKEN"]) != "runtime-only-secret" {

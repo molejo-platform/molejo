@@ -22,4 +22,5 @@ var catalog = []capabilitycontract.ID{
 	capabilitycontract.TelemetryEventsHistorical,
 	capabilitycontract.TelemetryLogsHistorical,
 	capabilitycontract.TelemetryMetricsHistorical,
+	capabilitycontract.WorkspaceProvisioning,
 }

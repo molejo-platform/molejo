@@ -164,9 +164,9 @@ type Parameter struct {
 
 type ParameterValue struct {
 	PlainTextValue       *string
-	SecretReference      string
-	SecretBackendVersion int64
-	Fingerprint          []byte
+	SecretReference      SecretReference
+	SecretBackendVersion SecretBackendVersion
+	Fingerprint          SecretFingerprint
 }
 
 type SecretMutation struct {
@@ -175,9 +175,9 @@ type SecretMutation struct {
 	WorkspaceID            int64
 	ParameterVersion       int64
 	ResourceVersion        int64
-	Reference              string
-	ExpectedBackendVersion int64
-	BackendVersion         int64
+	Reference              SecretReference
+	ExpectedBackendVersion SecretBackendVersion
+	BackendVersion         SecretBackendVersion
 	State                  string
 	CreatedAt              time.Time
 }
@@ -187,7 +187,7 @@ type ParameterPurgeCandidate struct {
 	ParameterPublicID string
 	WorkspaceID       int64
 	Kind              string
-	SecretReference   string
+	SecretReference   SecretReference
 }
 
 type ParameterBinding struct {
@@ -200,8 +200,8 @@ type ResolvedParameter struct {
 	Binding              ParameterBinding
 	Kind                 string
 	PlainTextValue       string
-	SecretReference      string
-	SecretBackendVersion int64
+	SecretReference      SecretReference
+	SecretBackendVersion SecretBackendVersion
 }
 
 type RuntimeConfig struct {

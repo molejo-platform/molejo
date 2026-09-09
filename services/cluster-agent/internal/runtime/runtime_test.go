@@ -318,9 +318,9 @@ func TestGarbageCollectConfigurationRemovesAllOwnedObjectsAfterRootDeletion(t *t
 	}
 }
 
-func TestEnsureWorkspaceCreatesAndReusesTheManagedNamespace(t *testing.T) {
+func TestEnsureWorkspacePlacementCreatesAndReusesTheTypedIntent(t *testing.T) {
 	scheme := runtime.NewScheme()
-	if err := corev1.AddToScheme(scheme); err != nil {
+	if err := platformv1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatal(err)
 	}
 	kubernetesClient := &KubernetesClient{
@@ -329,34 +329,35 @@ func TestEnsureWorkspaceCreatesAndReusesTheManagedNamespace(t *testing.T) {
 		applyTimeout: time.Second,
 	}
 
+	intent := runtimecontract.WorkspacePlacementIntent{WorkspaceID: "ws-abcdefghijklmnopqrst", NamespaceName: "ws-abcdefghijklmnopqrst", AccessProfile: "NamespacedRuntime", LifecycleState: "Ready"}
 	for range 2 {
-		if err := kubernetesClient.EnsureWorkspace(context.Background(), "molejo-workspaces"); err != nil {
+		if _, err := kubernetesClient.EnsureWorkspacePlacement(context.Background(), intent); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	current := &corev1.Namespace{}
-	if err := kubernetesClient.client.Get(context.Background(), client.ObjectKey{Name: "molejo-workspaces"}, current); err != nil {
+	current := &platformv1alpha1.WorkspacePlacement{}
+	if err := kubernetesClient.client.Get(context.Background(), client.ObjectKey{Name: intent.WorkspaceID}, current); err != nil {
 		t.Fatal(err)
 	}
 	if current.Annotations[controlPlaneOwnerAnnotation] != workspaceOwnerValue {
-		t.Fatalf("namespace owner marker = %q", current.Annotations[controlPlaneOwnerAnnotation])
+		t.Fatalf("placement owner marker = %q", current.Annotations[controlPlaneOwnerAnnotation])
 	}
 }
 
-func TestEnsureWorkspaceRejectsAnUnmanagedNamespace(t *testing.T) {
+func TestEnsureWorkspacePlacementRejectsAConflictingIntent(t *testing.T) {
 	scheme := runtime.NewScheme()
-	if err := corev1.AddToScheme(scheme); err != nil {
+	if err := platformv1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatal(err)
 	}
-	existing := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "molejo-workspaces"}}
+	existing := &platformv1alpha1.WorkspacePlacement{ObjectMeta: metav1.ObjectMeta{Name: "ws-abcdefghijklmnopqrst"}, Spec: platformv1alpha1.WorkspacePlacementSpec{WorkspaceID: "ws-abcdefghijklmnopqrst", NamespaceName: "foreign"}}
 	kubernetesClient := &KubernetesClient{
 		client:       fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build(),
 		fieldManager: "test-control-plane",
 		applyTimeout: time.Second,
 	}
 
-	err := kubernetesClient.EnsureWorkspace(context.Background(), "molejo-workspaces")
+	_, err := kubernetesClient.EnsureWorkspacePlacement(context.Background(), runtimecontract.WorkspacePlacementIntent{WorkspaceID: "ws-abcdefghijklmnopqrst", NamespaceName: "ws-abcdefghijklmnopqrst", AccessProfile: "NamespacedRuntime", LifecycleState: "Ready"})
 	if !errors.Is(err, ErrOwnershipConflict) {
 		t.Fatalf("expected ErrOwnershipConflict, got %v", err)
 	}

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/kubernetes"
@@ -76,6 +77,7 @@ type Client interface {
 	Namespace(context.Context, string) error
 	Resources(string, ...string) error
 	DeploymentAvailability(context.Context, string, string) (int32, int32, error)
+	EncryptionAtRestEvidence(context.Context) (string, error)
 }
 
 // ClientFactory resolves the selected Kubernetes context.
@@ -114,8 +116,8 @@ func (d kubernetesDoctor) Run(parent context.Context, contextName string) Report
 	err = client.Namespace(ctx, systemNamespace)
 	report.Checks = append(report.Checks, resultCheck("Namespace", systemNamespace, err))
 
-	err = client.Resources("platform.molejo.dev/v1alpha1", "appdeployments", "appvolumes")
-	report.Checks = append(report.Checks, resultCheck("Molejo CRDs", "AppDeployment, AppVolume", err))
+	err = client.Resources("platform.molejo.dev/v1alpha1", "appdeployments", "appvolumes", "workspaceplacements")
+	report.Checks = append(report.Checks, resultCheck("Molejo CRDs", "AppDeployment, AppVolume, WorkspacePlacement", err))
 
 	err = errors.Join(
 		client.Resources("gateway.networking.k8s.io/v1", "backendtlspolicies", "gatewayclasses", "gateways", "grpcroutes", "httproutes"),
@@ -126,8 +128,14 @@ func (d kubernetesDoctor) Run(parent context.Context, contextName string) Report
 
 	report.Checks = append(report.Checks,
 		deploymentCheck(ctx, client, "Platform Operator", "platform-operator"),
+		deploymentCheck(ctx, client, "Workspace Boundary", "workspace-boundary-controller"),
 		deploymentCheck(ctx, client, "Cluster Agent", "cluster-agent"),
 	)
+	evidence, evidenceErr := client.EncryptionAtRestEvidence(ctx)
+	if evidence == "" {
+		evidence = "operator evidence is unknown"
+	}
+	report.Checks = append(report.Checks, advisoryResultCheck("Encryption at rest", evidence, evidenceErr))
 	return report
 }
 
@@ -195,6 +203,21 @@ func (c realDoctorClient) Namespace(ctx context.Context, name string) error {
 		return fmt.Errorf("namespace %q unavailable: %w", name, err)
 	}
 	return nil
+}
+
+func (c realDoctorClient) EncryptionAtRestEvidence(ctx context.Context) (string, error) {
+	configMap, err := c.kubernetes.CoreV1().ConfigMaps(systemNamespace).Get(ctx, "molejo-security-evidence", metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		return "operator evidence is unknown", errors.New("operator evidence not provided")
+	}
+	if err != nil {
+		return "operator evidence could not be read", fmt.Errorf("read operator evidence: %w", err)
+	}
+	value := strings.TrimSpace(configMap.Data["kubernetes-encryption-at-rest"])
+	if value == "" {
+		return "operator evidence is unknown", errors.New("operator evidence not provided")
+	}
+	return "operator reports: " + value, nil
 }
 
 func (c realDoctorClient) Resources(groupVersion string, required ...string) error {

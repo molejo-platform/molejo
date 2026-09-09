@@ -215,6 +215,24 @@ func TestHierarchyAPIRejectsOutOfContractPagination(t *testing.T) {
 	}
 }
 
+func TestWorkspaceProvisioningRequiresCapabilityAndExplicitClusterConsent(t *testing.T) {
+	storage, _, server, owner := newHierarchyAPITestFixture(t)
+	ctx := context.Background()
+	requestBody := fmt.Sprintf(`{"name":"Isolated Workspace","clusterId":%q}`, testAgentInstallationID)
+
+	if _, err := storage.Pool.Exec(ctx, `UPDATE agent_installations SET workspace_provisioning_mode='Disabled' WHERE public_id=$1`, testAgentInstallationID); err != nil {
+		t.Fatal(err)
+	}
+	response := hierarchyRequest(t, server, owner, http.MethodPost, "/api/v1/workspaces", requestBody, map[string]string{"Idempotency-Key": "disabled-consent"})
+	assertHierarchyConflict(t, response, "cluster_consent_disabled", "workspace provisioning request was not admitted")
+
+	if _, err := storage.Pool.Exec(ctx, `UPDATE agent_installations SET workspace_provisioning_mode='Namespaced',capabilities_json='["runtime.v1alpha1"]'::jsonb WHERE public_id=$1`, testAgentInstallationID); err != nil {
+		t.Fatal(err)
+	}
+	response = hierarchyRequest(t, server, owner, http.MethodPost, "/api/v1/workspaces", requestBody, map[string]string{"Idempotency-Key": "missing-capability"})
+	assertHierarchyConflict(t, response, "capability_unavailable", "workspace provisioning request was not admitted")
+}
+
 func TestHierarchyAPIReportsConflictReasonsPrecisely(t *testing.T) {
 	_, workspace, server, owner := newHierarchyAPITestFixture(t)
 

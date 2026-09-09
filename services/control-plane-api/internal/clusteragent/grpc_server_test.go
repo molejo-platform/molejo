@@ -23,6 +23,7 @@ import (
 
 	clusteragentv1alpha1 "github.com/molejo-platform/molejo/contracts/molejo/clusteragent/v1alpha1"
 	"github.com/molejo-platform/molejo/packages/capabilitycontract"
+	"github.com/molejo-platform/molejo/packages/workspacecontract"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/audit"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/store"
 )
@@ -34,14 +35,15 @@ type recordingAgentRegistry struct {
 	sequence           uint64
 	fingerprint        []byte
 	activateErr        error
+	provisioningMode   workspacecontract.ProvisioningMode
 	observed           []store.RuntimeObservation
 	complete           bool
 	capabilities       []capabilitycontract.Observation
 	capabilityComplete bool
 }
 
-func (r *recordingAgentRegistry) ActivateAgent(_ context.Context, publicID string, fingerprint []byte, _, _, _ string, _ []string, _, sessionID string, _ time.Time, _ audit.Event) (bool, error) {
-	r.activatedID, r.fingerprint, r.sessionID = publicID, append([]byte(nil), fingerprint...), sessionID
+func (r *recordingAgentRegistry) ActivateAgent(_ context.Context, publicID string, fingerprint []byte, _, _, _ string, _ []string, mode workspacecontract.ProvisioningMode, _, sessionID string, _ time.Time, _ audit.Event) (bool, error) {
+	r.activatedID, r.fingerprint, r.sessionID, r.provisioningMode = publicID, append([]byte(nil), fingerprint...), sessionID, mode
 	return true, r.activateErr
 }
 
@@ -248,11 +250,12 @@ func TestGRPCServiceRenewsAnAuthenticatedAgentCertificate(t *testing.T) {
 
 func testAgentHello(installationID string) *clusteragentv1alpha1.AgentHello {
 	return &clusteragentv1alpha1.AgentHello{
-		InstallationId:    installationID,
-		AgentVersion:      "test",
-		ClusterUid:        "cluster-test-uid",
-		KubernetesVersion: "v1.36.3",
-		Capabilities:      []string{"runtime.v1alpha1"},
+		InstallationId:            installationID,
+		AgentVersion:              "test",
+		ClusterUid:                "cluster-test-uid",
+		KubernetesVersion:         "v1.36.3",
+		Capabilities:              []string{"runtime.v1alpha1"},
+		WorkspaceProvisioningMode: string(workspacecontract.ProvisioningNamespaced),
 	}
 }
 

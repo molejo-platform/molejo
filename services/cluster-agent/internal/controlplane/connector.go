@@ -30,9 +30,10 @@ type GRPCConnector struct {
 }
 
 type AgentMetadata struct {
-	ClusterUID        string
-	KubernetesVersion string
-	Capabilities      []string
+	ClusterUID                string
+	KubernetesVersion         string
+	Capabilities              []string
+	WorkspaceProvisioningMode string
 }
 
 type RuntimeExecutor interface {
@@ -166,7 +167,7 @@ type agentControlStream interface {
 }
 
 func runControlChannel(ctx context.Context, stream agentControlStream, installationID, trustBundleID string, version string, metadata AgentMetadata, executor RuntimeExecutor, observer RuntimeObserver, capabilities CapabilitySnapshotProvider, paired func(), sessionReady func(string), responseTimeout time.Duration) error {
-	hello := &clusteragentv1alpha1.AgentHello{InstallationId: installationID, AgentVersion: version, ClusterUid: metadata.ClusterUID, KubernetesVersion: metadata.KubernetesVersion, Capabilities: metadata.Capabilities, SupportedProtocolVersions: []string{"v1alpha1"}, TrustBundleId: trustBundleID}
+	hello := &clusteragentv1alpha1.AgentHello{InstallationId: installationID, AgentVersion: version, ClusterUid: metadata.ClusterUID, KubernetesVersion: metadata.KubernetesVersion, Capabilities: metadata.Capabilities, SupportedProtocolVersions: []string{"v1alpha1"}, TrustBundleId: trustBundleID, WorkspaceProvisioningMode: metadata.WorkspaceProvisioningMode}
 	if err := stream.Send(&clusteragentv1alpha1.ConnectRequest{Payload: &clusteragentv1alpha1.ConnectRequest_Hello{Hello: hello}}); err != nil {
 		return fmt.Errorf("send Agent hello: %w", err)
 	}
