@@ -10,3 +10,5 @@
 - [ADR-0016: Alpha Lifecycle Policy](0016-alpha-lifecycle-policy.md)
 - [ADR-0017: Human Identity Boundary](0017-human-identity-boundary.md)
 - [ADR-0018: Capability Observation and Feature Availability](0018-capability-observation-and-feature-availability.md)
+- [ADR-0019: Workspace Provisioning and Namespace Boundary](0019-workspace-provisioning-and-namespace-boundary.md)
+- [ADR-0020: Secret Custody and Runtime Delivery](0020-secret-custody-and-runtime-delivery.md)

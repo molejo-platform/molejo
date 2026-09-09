@@ -79,10 +79,15 @@ Guías actuales de arquitectura y componentes:
 - [Capacidades del clúster](capabilities/README.md)
 - [Application loop](application-loop/README.md)
 - [Releases con CI externa](application-loop/external-ci.md)
+- [Threat model de seguridad](architecture/threat-model-de-seguridad.md)
 - [ADR de identidad y pairing del Cluster Agent outbound](adr/0013-outbound-cluster-agent-identity-and-pairing.md)
 - [ADR del límite de Release y deploy con CI externa](adr/0014-limite-de-release-y-deploy-con-ci-externa.md)
 - [ADR de ownership de capacidades](adr/0015-ownership-de-capacidades.md)
 - [ADR de política de ciclo de vida alfa](adr/0016-politica-de-ciclo-de-vida-alfa.md)
+- [ADR del límite de identidad humana](adr/0017-limite-de-identidad-humana.md)
+- [ADR de observación de capacidades y disponibilidad](adr/0018-observacion-de-capacidades-y-disponibilidad-de-features.md)
+- [ADR de provisionamiento de Workspace y namespace](adr/0019-provisionamiento-de-workspace-y-limite-de-namespace.md)
+- [ADR de custodia de secrets y entrega](adr/0020-custodia-de-secrets-y-entrega-al-runtime.md)
 
 ## Contribuciones
 

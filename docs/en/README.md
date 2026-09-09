@@ -76,10 +76,15 @@ Current architecture and component guides:
 - [Cluster capabilities](capabilities/README.md)
 - [Application loop](application-loop/README.md)
 - [External CI releases](application-loop/external-ci.md)
+- [Security threat model](architecture/security-threat-model.md)
 - [Outbound Cluster Agent identity and pairing ADR](adr/0013-outbound-cluster-agent-identity-and-pairing.md)
 - [External CI release and deployment boundary ADR](adr/0014-external-ci-release-and-deployment-boundary.md)
 - [Capability ownership ADR](adr/0015-capability-ownership.md)
 - [Alpha lifecycle policy ADR](adr/0016-alpha-lifecycle-policy.md)
+- [Human identity boundary ADR](adr/0017-human-identity-boundary.md)
+- [Capability observation and feature availability ADR](adr/0018-capability-observation-and-feature-availability.md)
+- [Workspace provisioning and namespace boundary ADR](adr/0019-workspace-provisioning-and-namespace-boundary.md)
+- [Secret custody and runtime delivery ADR](adr/0020-secret-custody-and-runtime-delivery.md)
 
 ## Contributing
 

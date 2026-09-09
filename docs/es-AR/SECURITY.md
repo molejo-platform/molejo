@@ -5,6 +5,10 @@
 Esta es una traducción informativa. La versión canónica está en
 [inglés](../../SECURITY.md).
 
+El [threat model público](architecture/threat-model-de-seguridad.md) documenta
+límites de confianza, riesgos aceptados del alfa y requisitos de verificación.
+No reemplaza el informe privado de vulnerabilidades.
+
 ## Versiones Compatibles
 
 Molejo es un proyecto experimental en pre-alfa y no tiene una release

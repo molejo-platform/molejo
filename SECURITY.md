@@ -5,6 +5,10 @@
 
 English is the canonical version of this policy.
 
+The public architecture [security threat model](docs/en/architecture/security-threat-model.md)
+documents current trust boundaries, accepted alpha risks, and verification
+requirements. It does not replace private vulnerability reporting.
+
 ## Supported Versions
 
 Molejo is an experimental pre-alpha project and has no supported release
