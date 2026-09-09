@@ -113,6 +113,34 @@ func TestResolveWorkspaceProvisioningKeepsConsentSeparateFromProtocolSupport(t *
 	}
 }
 
+func TestHistoricalMetricsRequireExplicitConformantBinding(t *testing.T) {
+	now := time.Now().UTC()
+	observed := capabilitycontract.Observation{ID: capabilitycontract.TelemetryMetricsHistorical, ContractVersion: capabilitycontract.ContractVersion, Support: capabilitycontract.SupportSupported, Health: capabilitycontract.HealthHealthy, SampledAt: now, ReceivedAt: now, ExpiresAt: now.Add(time.Minute)}
+	tests := []struct {
+		name    string
+		binding *providerbinding.Binding
+		want    State
+		reason  string
+	}{
+		{name: "Agent observation cannot activate binding", want: NotConfigured, reason: ReasonHistoricalBackendMissing},
+		{name: "configured but unproven", binding: &providerbinding.Binding{Capability: capabilitycontract.TelemetryMetricsHistorical, Configured: true, Health: providerbinding.HealthUnknown, ConformanceRequired: true}, want: Unknown, reason: ReasonProviderHealthUnknown},
+		{name: "healthy and conformant", binding: &providerbinding.Binding{Capability: capabilitycontract.TelemetryMetricsHistorical, Configured: true, Health: providerbinding.HealthHealthy, ConformanceRequired: true, Conformant: true}, want: Available},
+		{name: "unreachable", binding: &providerbinding.Binding{Capability: capabilitycontract.TelemetryMetricsHistorical, Configured: true, Health: providerbinding.HealthUnavailable, ConformanceRequired: true, ReasonCode: "metrics_provider_unreachable"}, want: Unavailable, reason: "metrics_provider_unreachable"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			inventory := providerbinding.New()
+			if test.binding != nil {
+				inventory = inventory.With(*test.binding)
+			}
+			feature := featureByID(Resolve(now, Target{}, Facts{AgentConnected: true, Observations: []capabilitycontract.Observation{observed}, Providers: inventory}), capabilitycontract.TelemetryMetricsHistorical)
+			if feature.State != test.want || feature.ReasonCode != test.reason {
+				t.Fatalf("got %s/%s, want %s/%s", feature.State, feature.ReasonCode, test.want, test.reason)
+			}
+		})
+	}
+}
+
 func featureByID(features []Feature, id capabilitycontract.ID) Feature {
 	for _, feature := range features {
 		if feature.ID == id {

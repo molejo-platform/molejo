@@ -363,6 +363,38 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/admin/clusters/{clusterId}/bindings/historical-metrics:
+    parameters: [{ $ref: '#/components/parameters/ClusterId' }]
+    get:
+      operationId: getHistoricalMetricBinding
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { description: Historical metric provider binding, content: { application/json: { schema: { $ref: '#/components/schemas/HistoricalMetricBinding' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      operationId: putHistoricalMetricBinding
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/OptionalIfMatch' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/HistoricalMetricBindingInput' } } }
+      responses:
+        '200': { description: Historical metric provider binding updated and reverified, content: { application/json: { schema: { $ref: '#/components/schemas/HistoricalMetricBinding' } } } }
+        '201': { description: Historical metric provider binding created and verified, content: { application/json: { schema: { $ref: '#/components/schemas/HistoricalMetricBinding' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      operationId: deleteHistoricalMetricBinding
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/IfMatch' }]
+      responses:
+        '204': { description: Historical metric provider binding removed }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
   /api/v1/admin/agent-installations:
     post:
       operationId: createAgentInstallation
@@ -2206,6 +2238,31 @@ components:
       additionalProperties: false
       properties:
         reason: { type: string, minLength: 1, maxLength: 500 }
+    HistoricalMetricBindingInput:
+      type: object
+      required: [provider, endpoint]
+      additionalProperties: false
+      properties:
+        provider: { type: string, enum: [PrometheusCompatible] }
+        endpoint: { type: string, format: uri, maxLength: 2048, writeOnly: true, description: Control Plane-reachable Prometheus HTTP query endpoint. Never returned by the API. }
+    HistoricalMetricBinding:
+      type: object
+      required: [clusterId, provider, health, conformant, reasonCode, limitations, version, createdAt, updatedAt]
+      additionalProperties: false
+      properties:
+        clusterId: { type: string, pattern: '^(cls|agi)-[a-z2-7]{20}$' }
+        provider: { type: string, enum: [PrometheusCompatible] }
+        health: { type: string, enum: [Unknown, Healthy, Degraded, Unavailable] }
+        conformant: { type: boolean }
+        reasonCode: { type: string, maxLength: 128 }
+        limitations:
+          type: array
+          maxItems: 16
+          items: { type: string, maxLength: 128 }
+        observedAt: { type: string, format: date-time }
+        version: { type: integer, minimum: 1 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
     Cluster:
       type: object
       required: [id, name, status, capabilities, createdAt, updatedAt]

@@ -31,6 +31,7 @@ import (
 	controldelivery "github.com/molejo-platform/molejo/services/control-plane-api/internal/delivery"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/domain"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/githubapp"
+	"github.com/molejo-platform/molejo/services/control-plane-api/internal/historicalmetrics"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/observability"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/operationworker"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/parameters"
@@ -115,25 +116,27 @@ func Run(version string, args []string) error {
 		return err
 	}
 	currentObservability := controlagent.NewRuntimeObservability(runtimeQueryBroker)
+	historicalMetricBindings := historicalmetrics.NewService(s, &http.Client{Timeout: 12 * time.Second})
 	server := api.NewServer(cfg, api.Dependencies{
-		Store:                 s,
-		Logger:                slog.Default(),
-		GitHub:                github,
-		GitHubWebhookSecret:   githubWebhookSecret,
-		ParameterSecrets:      parameterSecrets,
-		SecretFingerprintKey:  secretFingerprintKey,
-		PasswordResetKey:      passwordResetKey,
-		AuthenticationSecrets: parameterSecrets,
-		HistoricalLogs:        historicalObservability.logs,
-		HistoricalMetrics:     historicalObservability.metrics,
-		HistoricalEvents:      historicalObservability.events,
-		CurrentLogs:           currentObservability,
-		CurrentMetrics:        currentObservability,
-		CurrentEvents:         currentObservability,
-		ProviderInventory:     configuredProviderInventory(github, parameterSecrets),
-		AgentSigner:           agentSigner,
-		AgentServerCAPEM:      agentServerCAPEM,
-		AgentTrustBundleID:    agentTrustBundleID,
+		Store:                    s,
+		Logger:                   slog.Default(),
+		GitHub:                   github,
+		GitHubWebhookSecret:      githubWebhookSecret,
+		ParameterSecrets:         parameterSecrets,
+		SecretFingerprintKey:     secretFingerprintKey,
+		PasswordResetKey:         passwordResetKey,
+		AuthenticationSecrets:    parameterSecrets,
+		HistoricalLogs:           historicalObservability.logs,
+		HistoricalMetrics:        historicalMetricBindings,
+		HistoricalMetricBindings: historicalMetricBindings,
+		HistoricalEvents:         historicalObservability.events,
+		CurrentLogs:              currentObservability,
+		CurrentMetrics:           currentObservability,
+		CurrentEvents:            currentObservability,
+		ProviderInventory:        configuredProviderInventory(github, parameterSecrets),
+		AgentSigner:              agentSigner,
+		AgentServerCAPEM:         agentServerCAPEM,
+		AgentTrustBundleID:       agentTrustBundleID,
 	})
 	httpServer := &http.Server{Addr: env("MOLEJO_HTTP_ADDR", ":8080"), Handler: server.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 20 * time.Second, WriteTimeout: 20 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
 	httpTLSCertificate := strings.TrimSpace(os.Getenv("MOLEJO_HTTP_TLS_CERT_FILE"))
@@ -193,9 +196,6 @@ func configuredProviderInventory(github githubapp.Service, secretStore parameter
 	if strings.TrimSpace(os.Getenv("MOLEJO_CLICKHOUSE_URL")) != "" {
 		configured(capabilitycontract.TelemetryLogsHistorical)
 		configured(capabilitycontract.TelemetryEventsHistorical)
-	}
-	if strings.TrimSpace(os.Getenv("MOLEJO_VICTORIAMETRICS_URL")) != "" {
-		configured(capabilitycontract.TelemetryMetricsHistorical)
 	}
 	return providerbinding.New(bindings...)
 }
@@ -500,9 +500,8 @@ func githubService(cfg api.Config) (githubapp.Service, error) {
 }
 
 type historicalObservability struct {
-	logs    observability.HistoricalLogReader
-	metrics observability.HistoricalMetricReader
-	events  observability.HistoricalEventReader
+	logs   observability.HistoricalLogReader
+	events observability.HistoricalEventReader
 }
 
 func historicalObservabilityReaders() (historicalObservability, error) {
@@ -519,13 +518,6 @@ func historicalObservabilityReaders() (historicalObservability, error) {
 		}
 		readers.logs = adapter
 		readers.events = adapter
-	}
-	if endpoint := strings.TrimSpace(os.Getenv("MOLEJO_VICTORIAMETRICS_URL")); endpoint != "" {
-		adapter, err := observability.NewPrometheusQueryAdapter(endpoint, httpClient)
-		if err != nil {
-			return historicalObservability{}, fmt.Errorf("configure Prometheus-compatible metrics: %w", err)
-		}
-		readers.metrics = adapter
 	}
 	return readers, nil
 }

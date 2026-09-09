@@ -83,6 +83,9 @@ func resolveRuntime(feature Feature, facts Facts) Feature {
 }
 
 func resolveProvider(now time.Time, feature Feature, facts Facts) Feature {
+	if feature.ID == capabilitycontract.TelemetryMetricsHistorical {
+		return resolveExplicitBinding(feature, facts)
+	}
 	if observation, ok := latestObservationRegardlessFreshness(feature.ID, facts.Observations); ok {
 		if !facts.AgentConnected {
 			feature.State, feature.ReasonCode = Unknown, ReasonClusterAgentOffline
@@ -113,14 +116,29 @@ func resolveProvider(now time.Time, feature Feature, facts Facts) Feature {
 		}
 		return feature
 	}
+	return resolveExplicitBinding(feature, facts)
+}
+
+func resolveExplicitBinding(feature Feature, facts Facts) Feature {
 	binding, ok := facts.Providers.Find(feature.ID)
 	if !ok || !binding.Configured {
 		feature.State, feature.ReasonCode = NotConfigured, missingProviderReason(feature.ID)
 		return feature
 	}
+	feature.Limitations = append([]string{}, binding.Limitations...)
+	if binding.ObservedAt != nil {
+		observed := binding.ObservedAt.UTC()
+		feature.ObservedAt = &observed
+	}
 	switch binding.Health {
 	case providerbinding.HealthHealthy:
-		feature.State = Available
+		if binding.ConformanceRequired && !binding.Conformant {
+			feature.State, feature.ReasonCode = Unknown, first(binding.ReasonCode, ReasonProviderHealthUnknown)
+		} else if len(binding.Limitations) > 0 {
+			feature.State, feature.ReasonCode = Limited, binding.ReasonCode
+		} else {
+			feature.State = Available
+		}
 	case providerbinding.HealthDegraded:
 		feature.State, feature.ReasonCode = Limited, first(binding.ReasonCode, ReasonBindingDegraded)
 	case providerbinding.HealthUnavailable:

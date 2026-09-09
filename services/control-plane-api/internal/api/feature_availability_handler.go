@@ -9,6 +9,7 @@ import (
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/api/generated"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/authorization"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/featureavailability"
+	"github.com/molejo-platform/molejo/services/control-plane-api/internal/historicalmetrics"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/store"
 )
 
@@ -30,6 +31,17 @@ func (h *generatedHandler) GetFeatureAvailability(w http.ResponseWriter, r *http
 		return
 	}
 	now := time.Now().UTC()
+	providers := h.server.providerInventory
+	if facts.Attached && h.server.historicalMetricBindings != nil {
+		binding, bindingErr := h.server.historicalMetricBindings.Get(r.Context(), facts.ClusterID)
+		switch {
+		case bindingErr == nil:
+			providers = providers.With(historicalmetrics.ProviderFact(binding))
+		case !errors.Is(bindingErr, historicalmetrics.ErrNotFound):
+			writeError(w, http.StatusInternalServerError, "storage_failed", "feature availability could not be loaded", r)
+			return
+		}
+	}
 	observations := []capabilitycontract.Observation{}
 	if facts.Attached {
 		observations, err = h.server.store.CapabilityObservations(r.Context(), facts.ClusterID)
@@ -44,7 +56,7 @@ func (h *generatedHandler) GetFeatureAvailability(w http.ResponseWriter, r *http
 		ProtocolCapabilities:      facts.Capabilities,
 		WorkspaceProvisioningMode: facts.WorkspaceProvisioningMode,
 		Observations:              observations,
-		Providers:                 h.server.providerInventory,
+		Providers:                 providers,
 	})
 	features := make([]generated.FeatureAvailability, 0, len(resolved))
 	for _, value := range resolved {

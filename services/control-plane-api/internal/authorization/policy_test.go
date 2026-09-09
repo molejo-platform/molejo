@@ -12,6 +12,8 @@ func TestWorkspacePolicy(t *testing.T) {
 		{name: "installation administrator creates workspace", context: Context{InstallationAdministrator: true}, permission: CreateWorkspace, allowed: true},
 		{name: "installation administrator manages agents", context: Context{InstallationAdministrator: true}, permission: ManageAgents, allowed: true},
 		{name: "workspace owner cannot manage agents", context: Context{MembershipRole: RoleOwner}, permission: ManageAgents, allowed: false},
+		{name: "installation administrator manages bindings", context: Context{InstallationAdministrator: true}, permission: ManageBindings, allowed: true},
+		{name: "workspace owner cannot manage bindings", context: Context{MembershipRole: RoleOwner}, permission: ManageBindings, allowed: false},
 		{name: "owner manages members", context: Context{MembershipRole: RoleOwner}, permission: ManageMembers, allowed: true},
 		{name: "owner manages automation", context: Context{MembershipRole: RoleOwner}, permission: ManageAutomation, allowed: true},
 		{name: "member cannot manage automation", context: Context{MembershipRole: RoleMember}, permission: ManageAutomation, allowed: false},

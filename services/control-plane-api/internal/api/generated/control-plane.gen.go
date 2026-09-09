@@ -629,6 +629,60 @@ func (e GitHubInstallationRepositorySelection) Valid() bool {
 	}
 }
 
+// Defines values for HistoricalMetricBindingHealth.
+const (
+	HistoricalMetricBindingHealthDegraded    HistoricalMetricBindingHealth = "Degraded"
+	HistoricalMetricBindingHealthHealthy     HistoricalMetricBindingHealth = "Healthy"
+	HistoricalMetricBindingHealthUnavailable HistoricalMetricBindingHealth = "Unavailable"
+	HistoricalMetricBindingHealthUnknown     HistoricalMetricBindingHealth = "Unknown"
+)
+
+// Valid indicates whether the value is a known member of the HistoricalMetricBindingHealth enum.
+func (e HistoricalMetricBindingHealth) Valid() bool {
+	switch e {
+	case HistoricalMetricBindingHealthDegraded:
+		return true
+	case HistoricalMetricBindingHealthHealthy:
+		return true
+	case HistoricalMetricBindingHealthUnavailable:
+		return true
+	case HistoricalMetricBindingHealthUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for HistoricalMetricBindingProvider.
+const (
+	HistoricalMetricBindingProviderPrometheusCompatible HistoricalMetricBindingProvider = "PrometheusCompatible"
+)
+
+// Valid indicates whether the value is a known member of the HistoricalMetricBindingProvider enum.
+func (e HistoricalMetricBindingProvider) Valid() bool {
+	switch e {
+	case HistoricalMetricBindingProviderPrometheusCompatible:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for HistoricalMetricBindingInputProvider.
+const (
+	HistoricalMetricBindingInputProviderPrometheusCompatible HistoricalMetricBindingInputProvider = "PrometheusCompatible"
+)
+
+// Valid indicates whether the value is a known member of the HistoricalMetricBindingInputProvider enum.
+func (e HistoricalMetricBindingInputProvider) Valid() bool {
+	switch e {
+	case HistoricalMetricBindingInputProviderPrometheusCompatible:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for InstallationUserStatus.
 const (
 	InstallationUserStatusActive   InstallationUserStatus = "Active"
@@ -2056,6 +2110,36 @@ type HierarchyInput struct {
 	Name string `json:"name"`
 }
 
+// HistoricalMetricBinding defines model for HistoricalMetricBinding.
+type HistoricalMetricBinding struct {
+	ClusterId   string                          `json:"clusterId"`
+	Conformant  bool                            `json:"conformant"`
+	CreatedAt   time.Time                       `json:"createdAt"`
+	Health      HistoricalMetricBindingHealth   `json:"health"`
+	Limitations []string                        `json:"limitations"`
+	ObservedAt  *time.Time                      `json:"observedAt,omitempty"`
+	Provider    HistoricalMetricBindingProvider `json:"provider"`
+	ReasonCode  string                          `json:"reasonCode"`
+	UpdatedAt   time.Time                       `json:"updatedAt"`
+	Version     int                             `json:"version"`
+}
+
+// HistoricalMetricBindingHealth defines model for HistoricalMetricBinding.Health.
+type HistoricalMetricBindingHealth string
+
+// HistoricalMetricBindingProvider defines model for HistoricalMetricBinding.Provider.
+type HistoricalMetricBindingProvider string
+
+// HistoricalMetricBindingInput defines model for HistoricalMetricBindingInput.
+type HistoricalMetricBindingInput struct {
+	// Endpoint Control Plane-reachable Prometheus HTTP query endpoint. Never returned by the API.
+	Endpoint *string                              `json:"endpoint,omitempty"`
+	Provider HistoricalMetricBindingInputProvider `json:"provider"`
+}
+
+// HistoricalMetricBindingInputProvider defines model for HistoricalMetricBindingInput.Provider.
+type HistoricalMetricBindingInputProvider string
+
 // InstallationRoleInput defines model for InstallationRoleInput.
 type InstallationRoleInput struct {
 	Administrator bool `json:"administrator"`
@@ -2876,6 +2960,16 @@ type ListInstallationAuditEventsParams struct {
 	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
+// DeleteHistoricalMetricBindingParams defines parameters for DeleteHistoricalMetricBinding.
+type DeleteHistoricalMetricBindingParams struct {
+	IfMatch IfMatch `json:"If-Match"`
+}
+
+// PutHistoricalMetricBindingParams defines parameters for PutHistoricalMetricBinding.
+type PutHistoricalMetricBindingParams struct {
+	IfMatch *OptionalIfMatch `json:"If-Match,omitempty"`
+}
+
 // ListUsersParams defines parameters for ListUsers.
 type ListUsersParams struct {
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
@@ -3220,6 +3314,9 @@ type CreateClusterJSONRequestBody = ClusterCreateInput
 // RevokeClusterJSONRequestBody defines body for RevokeCluster for application/json ContentType.
 type RevokeClusterJSONRequestBody = ClusterRevocationInput
 
+// PutHistoricalMetricBindingJSONRequestBody defines body for PutHistoricalMetricBinding for application/json ContentType.
+type PutHistoricalMetricBindingJSONRequestBody = HistoricalMetricBindingInput
+
 // CreateUserJSONRequestBody defines body for CreateUser for application/json ContentType.
 type CreateUserJSONRequestBody = UserCreateInput
 
@@ -3368,6 +3465,15 @@ type ServerInterface interface {
 
 	// (GET /api/v1/admin/clusters/{clusterId})
 	GetCluster(w http.ResponseWriter, r *http.Request, clusterId ClusterId)
+
+	// (DELETE /api/v1/admin/clusters/{clusterId}/bindings/historical-metrics)
+	DeleteHistoricalMetricBinding(w http.ResponseWriter, r *http.Request, clusterId ClusterId, params DeleteHistoricalMetricBindingParams)
+
+	// (GET /api/v1/admin/clusters/{clusterId}/bindings/historical-metrics)
+	GetHistoricalMetricBinding(w http.ResponseWriter, r *http.Request, clusterId ClusterId)
+
+	// (PUT /api/v1/admin/clusters/{clusterId}/bindings/historical-metrics)
+	PutHistoricalMetricBinding(w http.ResponseWriter, r *http.Request, clusterId ClusterId, params PutHistoricalMetricBindingParams)
 
 	// (POST /api/v1/admin/clusters/{clusterId}/enrollment-invitations)
 	CreateClusterEnrollmentInvitation(w http.ResponseWriter, r *http.Request, clusterId ClusterId)
@@ -3753,6 +3859,21 @@ func (_ Unimplemented) RevokeCluster(w http.ResponseWriter, r *http.Request, clu
 
 // (GET /api/v1/admin/clusters/{clusterId})
 func (_ Unimplemented) GetCluster(w http.ResponseWriter, r *http.Request, clusterId ClusterId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (DELETE /api/v1/admin/clusters/{clusterId}/bindings/historical-metrics)
+func (_ Unimplemented) DeleteHistoricalMetricBinding(w http.ResponseWriter, r *http.Request, clusterId ClusterId, params DeleteHistoricalMetricBindingParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /api/v1/admin/clusters/{clusterId}/bindings/historical-metrics)
+func (_ Unimplemented) GetHistoricalMetricBinding(w http.ResponseWriter, r *http.Request, clusterId ClusterId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (PUT /api/v1/admin/clusters/{clusterId}/bindings/historical-metrics)
+func (_ Unimplemented) PutHistoricalMetricBinding(w http.ResponseWriter, r *http.Request, clusterId ClusterId, params PutHistoricalMetricBindingParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -4485,6 +4606,136 @@ func (siw *ServerInterfaceWrapper) GetCluster(w http.ResponseWriter, r *http.Req
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetCluster(w, r, clusterId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteHistoricalMetricBinding operation middleware
+func (siw *ServerInterfaceWrapper) DeleteHistoricalMetricBinding(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "clusterId" -------------
+	var clusterId ClusterId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "clusterId", chi.URLParam(r, "clusterId"), &clusterId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "clusterId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeleteHistoricalMetricBindingParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch IfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "integer", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteHistoricalMetricBinding(w, r, clusterId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetHistoricalMetricBinding operation middleware
+func (siw *ServerInterfaceWrapper) GetHistoricalMetricBinding(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "clusterId" -------------
+	var clusterId ClusterId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "clusterId", chi.URLParam(r, "clusterId"), &clusterId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "clusterId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetHistoricalMetricBinding(w, r, clusterId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PutHistoricalMetricBinding operation middleware
+func (siw *ServerInterfaceWrapper) PutHistoricalMetricBinding(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "clusterId" -------------
+	var clusterId ClusterId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "clusterId", chi.URLParam(r, "clusterId"), &clusterId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "clusterId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PutHistoricalMetricBindingParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch OptionalIfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "integer", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = &IfMatch
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PutHistoricalMetricBinding(w, r, clusterId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -10431,6 +10682,15 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/api/v1/admin/clusters/{clusterId}/enrollment-invitations", wrapper.CreateClusterEnrollmentInvitation)
 	})
 	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/api/v1/admin/clusters/{clusterId}/bindings/historical-metrics", wrapper.DeleteHistoricalMetricBinding)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/admin/clusters/{clusterId}/bindings/historical-metrics", wrapper.GetHistoricalMetricBinding)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/api/v1/admin/clusters/{clusterId}/bindings/historical-metrics", wrapper.PutHistoricalMetricBinding)
+	})
+	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/admin/agent-installations", wrapper.CreateAgentInstallation)
 	})
 	r.Group(func(r chi.Router) {
@@ -11090,6 +11350,209 @@ func (response GetCluster404JSONResponse) VisitGetClusterResponse(w http.Respons
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteHistoricalMetricBindingRequestObject struct {
+	ClusterId ClusterId `json:"clusterId"`
+	Params    DeleteHistoricalMetricBindingParams
+}
+
+type DeleteHistoricalMetricBindingResponseObject interface {
+	VisitDeleteHistoricalMetricBindingResponse(w http.ResponseWriter) error
+}
+
+type DeleteHistoricalMetricBinding204Response struct {
+}
+
+func (response DeleteHistoricalMetricBinding204Response) VisitDeleteHistoricalMetricBindingResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteHistoricalMetricBinding403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response DeleteHistoricalMetricBinding403JSONResponse) VisitDeleteHistoricalMetricBindingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteHistoricalMetricBinding404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response DeleteHistoricalMetricBinding404JSONResponse) VisitDeleteHistoricalMetricBindingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteHistoricalMetricBinding409JSONResponse struct{ ConflictJSONResponse }
+
+func (response DeleteHistoricalMetricBinding409JSONResponse) VisitDeleteHistoricalMetricBindingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetHistoricalMetricBindingRequestObject struct {
+	ClusterId ClusterId `json:"clusterId"`
+}
+
+type GetHistoricalMetricBindingResponseObject interface {
+	VisitGetHistoricalMetricBindingResponse(w http.ResponseWriter) error
+}
+
+type GetHistoricalMetricBinding200JSONResponse HistoricalMetricBinding
+
+func (response GetHistoricalMetricBinding200JSONResponse) VisitGetHistoricalMetricBindingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetHistoricalMetricBinding403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response GetHistoricalMetricBinding403JSONResponse) VisitGetHistoricalMetricBindingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetHistoricalMetricBinding404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response GetHistoricalMetricBinding404JSONResponse) VisitGetHistoricalMetricBindingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutHistoricalMetricBindingRequestObject struct {
+	ClusterId ClusterId `json:"clusterId"`
+	Params    PutHistoricalMetricBindingParams
+	Body      *PutHistoricalMetricBindingJSONRequestBody
+}
+
+type PutHistoricalMetricBindingResponseObject interface {
+	VisitPutHistoricalMetricBindingResponse(w http.ResponseWriter) error
+}
+
+type PutHistoricalMetricBinding200JSONResponse HistoricalMetricBinding
+
+func (response PutHistoricalMetricBinding200JSONResponse) VisitPutHistoricalMetricBindingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutHistoricalMetricBinding201JSONResponse HistoricalMetricBinding
+
+func (response PutHistoricalMetricBinding201JSONResponse) VisitPutHistoricalMetricBindingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutHistoricalMetricBinding400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response PutHistoricalMetricBinding400JSONResponse) VisitPutHistoricalMetricBindingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutHistoricalMetricBinding403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response PutHistoricalMetricBinding403JSONResponse) VisitPutHistoricalMetricBindingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutHistoricalMetricBinding404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response PutHistoricalMetricBinding404JSONResponse) VisitPutHistoricalMetricBindingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutHistoricalMetricBinding409JSONResponse struct{ ConflictJSONResponse }
+
+func (response PutHistoricalMetricBinding409JSONResponse) VisitPutHistoricalMetricBindingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -17706,6 +18169,15 @@ type StrictServerInterface interface {
 	// (GET /api/v1/admin/clusters/{clusterId})
 	GetCluster(ctx context.Context, request GetClusterRequestObject) (GetClusterResponseObject, error)
 
+	// (DELETE /api/v1/admin/clusters/{clusterId}/bindings/historical-metrics)
+	DeleteHistoricalMetricBinding(ctx context.Context, request DeleteHistoricalMetricBindingRequestObject) (DeleteHistoricalMetricBindingResponseObject, error)
+
+	// (GET /api/v1/admin/clusters/{clusterId}/bindings/historical-metrics)
+	GetHistoricalMetricBinding(ctx context.Context, request GetHistoricalMetricBindingRequestObject) (GetHistoricalMetricBindingResponseObject, error)
+
+	// (PUT /api/v1/admin/clusters/{clusterId}/bindings/historical-metrics)
+	PutHistoricalMetricBinding(ctx context.Context, request PutHistoricalMetricBindingRequestObject) (PutHistoricalMetricBindingResponseObject, error)
+
 	// (POST /api/v1/admin/clusters/{clusterId}/enrollment-invitations)
 	CreateClusterEnrollmentInvitation(ctx context.Context, request CreateClusterEnrollmentInvitationRequestObject) (CreateClusterEnrollmentInvitationResponseObject, error)
 
@@ -18286,6 +18758,93 @@ func (sh *strictHandler) GetCluster(w http.ResponseWriter, r *http.Request, clus
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetClusterResponseObject); ok {
 		if err := validResponse.VisitGetClusterResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteHistoricalMetricBinding operation middleware
+func (sh *strictHandler) DeleteHistoricalMetricBinding(w http.ResponseWriter, r *http.Request, clusterId ClusterId, params DeleteHistoricalMetricBindingParams) {
+	var request DeleteHistoricalMetricBindingRequestObject
+
+	request.ClusterId = clusterId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteHistoricalMetricBinding(ctx, request.(DeleteHistoricalMetricBindingRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteHistoricalMetricBinding")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteHistoricalMetricBindingResponseObject); ok {
+		if err := validResponse.VisitDeleteHistoricalMetricBindingResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetHistoricalMetricBinding operation middleware
+func (sh *strictHandler) GetHistoricalMetricBinding(w http.ResponseWriter, r *http.Request, clusterId ClusterId) {
+	var request GetHistoricalMetricBindingRequestObject
+
+	request.ClusterId = clusterId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetHistoricalMetricBinding(ctx, request.(GetHistoricalMetricBindingRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetHistoricalMetricBinding")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetHistoricalMetricBindingResponseObject); ok {
+		if err := validResponse.VisitGetHistoricalMetricBindingResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PutHistoricalMetricBinding operation middleware
+func (sh *strictHandler) PutHistoricalMetricBinding(w http.ResponseWriter, r *http.Request, clusterId ClusterId, params PutHistoricalMetricBindingParams) {
+	var request PutHistoricalMetricBindingRequestObject
+
+	request.ClusterId = clusterId
+	request.Params = params
+
+	var body PutHistoricalMetricBindingJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PutHistoricalMetricBinding(ctx, request.(PutHistoricalMetricBindingRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PutHistoricalMetricBinding")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PutHistoricalMetricBindingResponseObject); ok {
+		if err := validResponse.VisitPutHistoricalMetricBindingResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

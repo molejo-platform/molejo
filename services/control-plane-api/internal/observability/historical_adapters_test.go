@@ -81,7 +81,8 @@ func TestPrometheusQueryAdapterAlwaysScopesEveryMetricQuery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	response, err := client.Metrics(context.Background(), Scope{Namespace: "workspace-a", RuntimeName: "runtime-a"}, MetricQuery{
+	scope := Scope{ClusterID: "cls-a", ClusterUID: "uid-a", WorkspaceID: "ws-a", AppEnvironmentID: "aev-a", Namespace: "workspace-a", RuntimeName: "runtime-a"}
+	response, err := client.Metrics(context.Background(), scope, MetricQuery{
 		From: time.Date(2026, 8, 28, 11, 0, 0, 0, time.UTC), To: time.Date(2026, 8, 28, 12, 0, 0, 0, time.UTC), Step: time.Minute,
 	})
 	if err != nil {
@@ -91,17 +92,22 @@ func TestPrometheusQueryAdapterAlwaysScopesEveryMetricQuery(t *testing.T) {
 		t.Fatalf("got %d series and %d queries", len(response.Series), len(queries))
 	}
 	for _, query := range queries {
-		assertRuntimeScopedMetricQuery(t, query)
+		assertRuntimeScopedMetricQuery(t, query, scope)
 		if strings.Contains(query, "k8s_pod_name") {
 			t.Fatalf("metric query exposes Kubernetes pod identity: %s", query)
 		}
 	}
 }
 
-func assertRuntimeScopedMetricQuery(t *testing.T, query string) {
+func assertRuntimeScopedMetricQuery(t *testing.T, query string, scope Scope) {
 	t.Helper()
-	if !strings.Contains(query, `k8s_namespace_name="workspace-a"`) {
-		t.Fatalf("metric query is not namespace scoped: %s", query)
+	for label, value := range map[string]string{
+		"molejo_cluster_id": scope.ClusterID, "molejo_cluster_uid": scope.ClusterUID, "molejo_workspace_id": scope.WorkspaceID,
+		"molejo_app_environment_id": scope.AppEnvironmentID, "k8s_namespace_name": scope.Namespace, "molejo_app_environment_runtime": scope.RuntimeName,
+	} {
+		if !strings.Contains(query, label+`="`+value+`"`) {
+			t.Fatalf("metric query lacks %s identity: %s", label, query)
+		}
 	}
 	if strings.Contains(query, "k8s_deployment_available") {
 		if !strings.Contains(query, `k8s_deployment_name="runtime-a"`) || !strings.Contains(query, `k8s_statefulset_name="runtime-a"`) || !strings.Contains(query, "k8s_statefulset_ready_pods") || !strings.Contains(query, " or ") {
@@ -120,6 +126,51 @@ func assertRuntimeScopedMetricQuery(t *testing.T, query string) {
 	}
 	if strings.Contains(query, "k8s_deployment_name") || strings.Contains(query, "k8s_statefulset_name") {
 		t.Fatalf("pod metric query is coupled to a Kubernetes workload kind: %s", query)
+	}
+}
+
+func TestPrometheusQueryAdapterConformanceRequiresMolejoIdentitySchema(t *testing.T) {
+	t.Parallel()
+	scope := Scope{ClusterID: "cls-a", ClusterUID: "uid-a", WorkspaceID: "ws-a", AppEnvironmentID: "aev-a", Namespace: "workspace-a", RuntimeName: "runtime-a"}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/query" {
+			t.Fatalf("path=%s", r.URL.Path)
+		}
+		query := r.URL.Query().Get("query")
+		for _, label := range []string{"molejo_cluster_id", "molejo_cluster_uid", "molejo_workspace_id", "molejo_app_environment_id", "k8s_namespace_name", "molejo_app_environment_runtime"} {
+			if !strings.Contains(query, label) {
+				t.Fatalf("conformance query lacks %s: %s", label, query)
+			}
+		}
+		if !strings.Contains(query, `molejo_cluster_id="cls-a"`) || !strings.Contains(query, `molejo_cluster_uid="uid-a"`) {
+			t.Fatalf("conformance query lacks cluster identity: %s", query)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"status": "success", "data": map[string]any{"resultType": "vector", "result": []any{map[string]any{"metric": map[string]string{
+			"molejo_cluster_id": scope.ClusterID, "molejo_cluster_uid": scope.ClusterUID, "molejo_workspace_id": scope.WorkspaceID,
+			"molejo_app_environment_id": scope.AppEnvironmentID, "k8s_namespace_name": scope.Namespace, "molejo_app_environment_runtime": scope.RuntimeName,
+		}, "value": []any{time.Now().Unix(), "1"}}}}})
+	}))
+	defer server.Close()
+	client, err := NewPrometheusQueryAdapter(server.URL, server.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+	evidence, err := client.CheckConformance(context.Background(), scope)
+	if err != nil || !evidence.Conformant || evidence.ReasonCode != "" {
+		t.Fatalf("evidence=%+v err=%v", evidence, err)
+	}
+}
+
+func TestPrometheusQueryAdapterConformanceKeepsEmptySchemaUnproven(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"status": "success", "data": map[string]any{"resultType": "vector", "result": []any{}}})
+	}))
+	defer server.Close()
+	client, _ := NewPrometheusQueryAdapter(server.URL, server.Client())
+	evidence, err := client.CheckConformance(context.Background(), Scope{ClusterID: "cls-a", ClusterUID: "uid-a"})
+	if err != nil || evidence.Conformant || evidence.ReasonCode != "metrics_schema_unproven" {
+		t.Fatalf("evidence=%+v err=%v", evidence, err)
 	}
 }
 

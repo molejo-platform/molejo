@@ -22,6 +22,7 @@ import (
 	controlagent "github.com/molejo-platform/molejo/services/control-plane-api/internal/clusteragent"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/domain"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/githubapp"
+	"github.com/molejo-platform/molejo/services/control-plane-api/internal/historicalmetrics"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/identity"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/observability"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/parameters"
@@ -76,33 +77,34 @@ func DefaultConfig() Config {
 }
 
 type Server struct {
-	store                 *store.Store
-	config                Config
-	log                   *slog.Logger
-	tracer                trace.Tracer
-	github                githubapp.Service
-	githubWebhookSecret   []byte
-	parameterSecrets      parameters.SecretValueStore
-	secretFingerprintKey  []byte
-	passwordResetKey      []byte
-	authenticationSecrets parameters.SecretValueStore
-	historicalLogs        observability.HistoricalLogReader
-	historicalMetrics     observability.HistoricalMetricReader
-	historicalEvents      observability.HistoricalEventReader
-	currentLogs           observability.CurrentLogReader
-	currentMetricReader   observability.CurrentMetricReader
-	currentEvents         observability.CurrentEventReader
-	providerInventory     providerbinding.Inventory
-	agentSigner           AgentCertificateSigner
-	agentServerCAPEM      []byte
-	agentTrustBundleID    string
-	logLiveLimiter        *concurrencyLimiter
-	metricsLiveLimiter    *concurrencyLimiter
-	metricSnapshots       *metricSnapshotCache
-	token                 func(int) (string, error)
-	deploymentID          func() (string, error)
-	parameterID           func() (string, error)
-	dummyPasswordHash     string
+	store                    *store.Store
+	config                   Config
+	log                      *slog.Logger
+	tracer                   trace.Tracer
+	github                   githubapp.Service
+	githubWebhookSecret      []byte
+	parameterSecrets         parameters.SecretValueStore
+	secretFingerprintKey     []byte
+	passwordResetKey         []byte
+	authenticationSecrets    parameters.SecretValueStore
+	historicalLogs           observability.HistoricalLogReader
+	historicalMetrics        observability.HistoricalMetricReader
+	historicalMetricBindings *historicalmetrics.Service
+	historicalEvents         observability.HistoricalEventReader
+	currentLogs              observability.CurrentLogReader
+	currentMetricReader      observability.CurrentMetricReader
+	currentEvents            observability.CurrentEventReader
+	providerInventory        providerbinding.Inventory
+	agentSigner              AgentCertificateSigner
+	agentServerCAPEM         []byte
+	agentTrustBundleID       string
+	logLiveLimiter           *concurrencyLimiter
+	metricsLiveLimiter       *concurrencyLimiter
+	metricSnapshots          *metricSnapshotCache
+	token                    func(int) (string, error)
+	deploymentID             func() (string, error)
+	parameterID              func() (string, error)
+	dummyPasswordHash        string
 }
 
 // AgentCertificateSigner issues the short-lived identity used by a paired cluster Agent.
@@ -112,25 +114,26 @@ type AgentCertificateSigner interface {
 
 // Dependencies declares every external collaborator used by the HTTP API.
 type Dependencies struct {
-	Store                 *store.Store
-	Logger                *slog.Logger
-	Tracer                trace.Tracer
-	GitHub                githubapp.Service
-	GitHubWebhookSecret   []byte
-	ParameterSecrets      parameters.SecretValueStore
-	SecretFingerprintKey  []byte
-	PasswordResetKey      []byte
-	AuthenticationSecrets parameters.SecretValueStore
-	HistoricalLogs        observability.HistoricalLogReader
-	HistoricalMetrics     observability.HistoricalMetricReader
-	HistoricalEvents      observability.HistoricalEventReader
-	CurrentLogs           observability.CurrentLogReader
-	CurrentMetrics        observability.CurrentMetricReader
-	CurrentEvents         observability.CurrentEventReader
-	ProviderInventory     providerbinding.Inventory
-	AgentSigner           AgentCertificateSigner
-	AgentServerCAPEM      []byte
-	AgentTrustBundleID    string
+	Store                    *store.Store
+	Logger                   *slog.Logger
+	Tracer                   trace.Tracer
+	GitHub                   githubapp.Service
+	GitHubWebhookSecret      []byte
+	ParameterSecrets         parameters.SecretValueStore
+	SecretFingerprintKey     []byte
+	PasswordResetKey         []byte
+	AuthenticationSecrets    parameters.SecretValueStore
+	HistoricalLogs           observability.HistoricalLogReader
+	HistoricalMetrics        observability.HistoricalMetricReader
+	HistoricalMetricBindings *historicalmetrics.Service
+	HistoricalEvents         observability.HistoricalEventReader
+	CurrentLogs              observability.CurrentLogReader
+	CurrentMetrics           observability.CurrentMetricReader
+	CurrentEvents            observability.CurrentEventReader
+	ProviderInventory        providerbinding.Inventory
+	AgentSigner              AgentCertificateSigner
+	AgentServerCAPEM         []byte
+	AgentTrustBundleID       string
 }
 
 // NewServer constructs a fully initialized API server from explicit dependencies.
@@ -158,8 +161,15 @@ func NewServer(cfg Config, dependencies Dependencies) *Server {
 	if dependencies.HistoricalLogs == nil {
 		dependencies.HistoricalLogs = observability.UnavailableHistoricalReader{}
 	}
+	if dependencies.HistoricalMetricBindings == nil && dependencies.Store != nil {
+		dependencies.HistoricalMetricBindings = historicalmetrics.NewService(dependencies.Store, nil)
+	}
 	if dependencies.HistoricalMetrics == nil {
-		dependencies.HistoricalMetrics = observability.UnavailableHistoricalReader{}
+		if dependencies.HistoricalMetricBindings != nil {
+			dependencies.HistoricalMetrics = dependencies.HistoricalMetricBindings
+		} else {
+			dependencies.HistoricalMetrics = observability.UnavailableHistoricalReader{}
+		}
 	}
 	if dependencies.HistoricalEvents == nil {
 		dependencies.HistoricalEvents = observability.UnavailableHistoricalReader{}
@@ -174,33 +184,34 @@ func NewServer(cfg Config, dependencies Dependencies) *Server {
 		dependencies.CurrentEvents = observability.UnavailableCurrentReader{}
 	}
 	return &Server{
-		store:                 dependencies.Store,
-		config:                cfg,
-		log:                   logger,
-		tracer:                dependencies.Tracer,
-		github:                dependencies.GitHub,
-		githubWebhookSecret:   dependencies.GitHubWebhookSecret,
-		parameterSecrets:      dependencies.ParameterSecrets,
-		secretFingerprintKey:  dependencies.SecretFingerprintKey,
-		passwordResetKey:      dependencies.PasswordResetKey,
-		authenticationSecrets: dependencies.AuthenticationSecrets,
-		historicalLogs:        dependencies.HistoricalLogs,
-		historicalMetrics:     dependencies.HistoricalMetrics,
-		historicalEvents:      dependencies.HistoricalEvents,
-		currentLogs:           dependencies.CurrentLogs,
-		currentMetricReader:   dependencies.CurrentMetrics,
-		currentEvents:         dependencies.CurrentEvents,
-		providerInventory:     dependencies.ProviderInventory,
-		agentSigner:           dependencies.AgentSigner,
-		agentServerCAPEM:      append([]byte(nil), dependencies.AgentServerCAPEM...),
-		agentTrustBundleID:    dependencies.AgentTrustBundleID,
-		logLiveLimiter:        &concurrencyLimiter{active: map[int64]int{}},
-		metricsLiveLimiter:    &concurrencyLimiter{active: map[int64]int{}},
-		metricSnapshots:       newMetricSnapshotCache(cfg.ObservabilityMetricsLivePoll),
-		token:                 randomToken,
-		deploymentID:          func() (string, error) { return domain.NewPublicID("dpl") },
-		parameterID:           func() (string, error) { return domain.NewPublicID("par") },
-		dummyPasswordHash:     dummyHash,
+		store:                    dependencies.Store,
+		config:                   cfg,
+		log:                      logger,
+		tracer:                   dependencies.Tracer,
+		github:                   dependencies.GitHub,
+		githubWebhookSecret:      dependencies.GitHubWebhookSecret,
+		parameterSecrets:         dependencies.ParameterSecrets,
+		secretFingerprintKey:     dependencies.SecretFingerprintKey,
+		passwordResetKey:         dependencies.PasswordResetKey,
+		authenticationSecrets:    dependencies.AuthenticationSecrets,
+		historicalLogs:           dependencies.HistoricalLogs,
+		historicalMetrics:        dependencies.HistoricalMetrics,
+		historicalMetricBindings: dependencies.HistoricalMetricBindings,
+		historicalEvents:         dependencies.HistoricalEvents,
+		currentLogs:              dependencies.CurrentLogs,
+		currentMetricReader:      dependencies.CurrentMetrics,
+		currentEvents:            dependencies.CurrentEvents,
+		providerInventory:        dependencies.ProviderInventory,
+		agentSigner:              dependencies.AgentSigner,
+		agentServerCAPEM:         append([]byte(nil), dependencies.AgentServerCAPEM...),
+		agentTrustBundleID:       dependencies.AgentTrustBundleID,
+		logLiveLimiter:           &concurrencyLimiter{active: map[int64]int{}},
+		metricsLiveLimiter:       &concurrencyLimiter{active: map[int64]int{}},
+		metricSnapshots:          newMetricSnapshotCache(cfg.ObservabilityMetricsLivePoll),
+		token:                    randomToken,
+		deploymentID:             func() (string, error) { return domain.NewPublicID("dpl") },
+		parameterID:              func() (string, error) { return domain.NewPublicID("par") },
+		dummyPasswordHash:        dummyHash,
 	}
 }
 

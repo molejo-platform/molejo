@@ -288,6 +288,22 @@ type ClusterCapabilityObservation struct {
 	SnapshotSequence  int64              `json:"snapshot_sequence"`
 }
 
+type ClusterHistoricalMetricBinding struct {
+	ClusterID       int64              `json:"cluster_id"`
+	ProviderType    string             `json:"provider_type"`
+	Endpoint        string             `json:"endpoint"`
+	Health          string             `json:"health"`
+	Conformant      bool               `json:"conformant"`
+	ReasonCode      string             `json:"reason_code"`
+	LimitationsJson []byte             `json:"limitations_json"`
+	ObservedAt      pgtype.Timestamptz `json:"observed_at"`
+	Version         int64              `json:"version"`
+	CreatedBy       int64              `json:"created_by"`
+	UpdatedBy       int64              `json:"updated_by"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
 type DeliveryTarget struct {
 	ID                int64              `json:"id"`
 	PublicID          string             `json:"public_id"`

@@ -392,6 +392,13 @@ type PrometheusQueryAdapter struct {
 	http     *http.Client
 }
 
+type MetricConformanceEvidence struct {
+	Conformant  bool
+	ReasonCode  string
+	Limitations []string
+	ObservedAt  time.Time
+}
+
 type metricDefinition struct {
 	Name          string
 	Unit          string
@@ -408,24 +415,78 @@ var metricDefinitions = []metricDefinition{
 }
 
 func (definition metricDefinition) expression(scope Scope) string {
-	namespace := fmt.Sprintf(`k8s_namespace_name=%q`, scope.Namespace)
+	stable := stableMetricMatchers(scope)
 	if definition.StatefulQuery != "" {
-		deployment := fmt.Sprintf(definition.Query, fmt.Sprintf(`%s,k8s_deployment_name=%q`, namespace, scope.RuntimeName))
-		stateful := fmt.Sprintf(definition.StatefulQuery, fmt.Sprintf(`%s,k8s_statefulset_name=%q`, namespace, scope.RuntimeName))
+		deployment := fmt.Sprintf(definition.Query, fmt.Sprintf(`%s,k8s_deployment_name=%q`, stable, scope.RuntimeName))
+		stateful := fmt.Sprintf(definition.StatefulQuery, fmt.Sprintf(`%s,k8s_statefulset_name=%q`, stable, scope.RuntimeName))
 		return deployment + " or " + stateful
 	}
-	return fmt.Sprintf(definition.Query, fmt.Sprintf(`%s,molejo_app_environment_runtime=%q`, namespace, scope.RuntimeName))
+	return fmt.Sprintf(definition.Query, stable)
+}
+
+func stableMetricMatchers(scope Scope) string {
+	return fmt.Sprintf(`molejo_cluster_id=%q,molejo_cluster_uid=%q,molejo_workspace_id=%q,molejo_app_environment_id=%q,k8s_namespace_name=%q,molejo_app_environment_runtime=%q`,
+		scope.ClusterID, scope.ClusterUID, scope.WorkspaceID, scope.AppEnvironmentID, scope.Namespace, scope.RuntimeName)
 }
 
 func NewPrometheusQueryAdapter(endpoint string, httpClient *http.Client) (*PrometheusQueryAdapter, error) {
 	parsed, err := url.Parse(strings.TrimSpace(endpoint))
-	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
 		return nil, fmt.Errorf("invalid Prometheus query endpoint")
 	}
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: 10 * time.Second}
 	}
 	return &PrometheusQueryAdapter{endpoint: parsed, http: httpClient}, nil
+}
+
+func (c *PrometheusQueryAdapter) CheckConformance(ctx context.Context, scope Scope) (MetricConformanceEvidence, error) {
+	now := time.Now().UTC()
+	labels := []string{"molejo_cluster_id", "molejo_cluster_uid", "molejo_workspace_id", "molejo_app_environment_id", "k8s_namespace_name", "molejo_app_environment_runtime"}
+	expression := fmt.Sprintf("count by (%s) ({molejo_cluster_id=%q,molejo_cluster_uid=%q})", strings.Join(labels, ","), scope.ClusterID, scope.ClusterUID)
+	endpoint := *c.endpoint
+	endpoint.Path = strings.TrimRight(endpoint.Path, "/") + "/api/v1/query"
+	values := endpoint.Query()
+	values.Set("query", expression)
+	values.Set("time", now.Format(time.RFC3339Nano))
+	endpoint.RawQuery = values.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
+	if err != nil {
+		return MetricConformanceEvidence{}, fmt.Errorf("%w: %v", ErrUnavailable, err)
+	}
+	response, err := c.http.Do(req)
+	if err != nil {
+		return MetricConformanceEvidence{}, fmt.Errorf("%w: %v", ErrUnavailable, err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4<<10))
+		return MetricConformanceEvidence{}, fmt.Errorf("%w: Prometheus query endpoint returned HTTP %d", ErrUnavailable, response.StatusCode)
+	}
+	var payload struct {
+		Status string `json:"status"`
+		Data   struct {
+			Result []struct {
+				Metric map[string]string `json:"metric"`
+			} `json:"result"`
+		} `json:"data"`
+	}
+	if err = json.NewDecoder(io.LimitReader(response.Body, 8<<20)).Decode(&payload); err != nil || payload.Status != "success" {
+		return MetricConformanceEvidence{}, fmt.Errorf("%w: invalid Prometheus query response", ErrUnavailable)
+	}
+	for _, result := range payload.Data.Result {
+		complete := true
+		for _, label := range labels {
+			if result.Metric[label] == "" {
+				complete = false
+				break
+			}
+		}
+		if complete && result.Metric["molejo_cluster_id"] == scope.ClusterID && result.Metric["molejo_cluster_uid"] == scope.ClusterUID {
+			return MetricConformanceEvidence{Conformant: true, Limitations: []string{}, ObservedAt: now}, nil
+		}
+	}
+	return MetricConformanceEvidence{ReasonCode: "metrics_schema_unproven", Limitations: []string{"historical_metrics_schema_unproven"}, ObservedAt: now}, nil
 }
 
 func (c *PrometheusQueryAdapter) Metrics(ctx context.Context, scope Scope, query MetricQuery) (Metrics, error) {

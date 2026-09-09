@@ -370,6 +370,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/clusters/{clusterId}/bindings/historical-metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                clusterId: components["parameters"]["ClusterId"];
+            };
+            cookie?: never;
+        };
+        get: operations["getHistoricalMetricBinding"];
+        put: operations["putHistoricalMetricBinding"];
+        post?: never;
+        delete: operations["deleteHistoricalMetricBinding"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/agent-installations": {
         parameters: {
             query?: never;
@@ -1642,6 +1660,32 @@ export interface components {
         };
         ClusterRevocationInput: {
             reason: string;
+        };
+        HistoricalMetricBindingInput: {
+            /** @enum {string} */
+            provider: "PrometheusCompatible";
+            /**
+             * Format: uri
+             * @description Control Plane-reachable Prometheus HTTP query endpoint. Never returned by the API.
+             */
+            endpoint: string;
+        };
+        HistoricalMetricBinding: {
+            clusterId: string;
+            /** @enum {string} */
+            provider: "PrometheusCompatible";
+            /** @enum {string} */
+            health: "Unknown" | "Healthy" | "Degraded" | "Unavailable";
+            conformant: boolean;
+            reasonCode: string;
+            limitations: string[];
+            /** Format: date-time */
+            observedAt?: string;
+            version: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
         };
         Cluster: {
             id: string;
@@ -3310,6 +3354,96 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["AgentEnrollmentInvitation"];
                 };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getHistoricalMetricBinding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                clusterId: components["parameters"]["ClusterId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Historical metric provider binding */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoricalMetricBinding"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    putHistoricalMetricBinding: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-Match"?: components["parameters"]["OptionalIfMatch"];
+            };
+            path: {
+                clusterId: components["parameters"]["ClusterId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HistoricalMetricBindingInput"];
+            };
+        };
+        responses: {
+            /** @description Historical metric provider binding updated and reverified */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoricalMetricBinding"];
+                };
+            };
+            /** @description Historical metric provider binding created and verified */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoricalMetricBinding"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    deleteHistoricalMetricBinding: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                clusterId: components["parameters"]["ClusterId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Historical metric provider binding removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];

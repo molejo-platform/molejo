@@ -9,6 +9,7 @@ const (
 	CreateWorkspace  Permission = "installation.workspace.create"
 	ManageUsers      Permission = "installation.users.manage"
 	ManageAgents     Permission = "installation.agents.manage"
+	ManageBindings   Permission = "installation.bindings.manage"
 	ReadWorkspace    Permission = "workspace.read"
 	ManageWorkspace  Permission = "workspace.manage"
 	ManageMembers    Permission = "workspace.members.manage"
@@ -62,7 +63,7 @@ func EffectiveCapabilities(context Context) Capabilities {
 }
 
 func Allowed(context Context, permission Permission) bool {
-	if permission == CreateWorkspace || permission == ManageUsers || permission == ManageAgents {
+	if permission == CreateWorkspace || permission == ManageUsers || permission == ManageAgents || permission == ManageBindings {
 		return context.InstallationAdministrator
 	}
 	if context.MembershipSuspended || context.MembershipRole == "" {
