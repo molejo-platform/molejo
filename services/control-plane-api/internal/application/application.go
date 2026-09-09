@@ -82,7 +82,7 @@ func Run(version string, args []string) error {
 		return err
 	}
 	s.SetPublicationPolicy(store.NewPublicationPolicy(cfg.PublicDomain, cfg.PublicStatefulDomain, cfg.PublicTCPEnabled, cfg.PublicTCPMinimumPort, cfg.PublicTCPMaximumPort))
-	observabilityBackend, err := observabilityReader()
+	historicalObservability, err := historicalObservabilityReaders()
 	if err != nil {
 		return err
 	}
@@ -114,6 +114,7 @@ func Run(version string, args []string) error {
 	if err != nil {
 		return err
 	}
+	currentObservability := controlagent.NewRuntimeObservability(runtimeQueryBroker)
 	server := api.NewServer(cfg, api.Dependencies{
 		Store:                 s,
 		Logger:                slog.Default(),
@@ -123,8 +124,12 @@ func Run(version string, args []string) error {
 		SecretFingerprintKey:  secretFingerprintKey,
 		PasswordResetKey:      passwordResetKey,
 		AuthenticationSecrets: parameterSecrets,
-		Observability:         observabilityBackend,
-		CurrentObservability:  controlagent.NewRuntimeObservability(runtimeQueryBroker),
+		HistoricalLogs:        historicalObservability.logs,
+		HistoricalMetrics:     historicalObservability.metrics,
+		HistoricalEvents:      historicalObservability.events,
+		CurrentLogs:           currentObservability,
+		CurrentMetrics:        currentObservability,
+		CurrentEvents:         currentObservability,
 		ProviderInventory:     configuredProviderInventory(github, parameterSecrets),
 		AgentSigner:           agentSigner,
 		AgentServerCAPEM:      agentServerCAPEM,
@@ -494,30 +499,35 @@ func githubService(cfg api.Config) (githubapp.Service, error) {
 	return client, nil
 }
 
-func observabilityReader() (observability.Reader, error) {
-	combined := observability.CombinedReader{}
+type historicalObservability struct {
+	logs    observability.HistoricalLogReader
+	metrics observability.HistoricalMetricReader
+	events  observability.HistoricalEventReader
+}
+
+func historicalObservabilityReaders() (historicalObservability, error) {
+	readers := historicalObservability{}
 	httpClient := &http.Client{Timeout: 12 * time.Second}
 	if endpoint := strings.TrimSpace(os.Getenv("MOLEJO_CLICKHOUSE_URL")); endpoint != "" {
 		password, err := readSecretFile("MOLEJO_CLICKHOUSE_PASSWORD_FILE")
 		if err != nil {
-			return nil, err
+			return historicalObservability{}, err
 		}
-		combined.Telemetry, err = observability.NewClickHouseClient(endpoint, env("MOLEJO_CLICKHOUSE_DATABASE", "otel"), env("MOLEJO_CLICKHOUSE_USERNAME", "molejo_reader"), password, httpClient)
+		adapter, err := observability.NewClickHouseClient(endpoint, env("MOLEJO_CLICKHOUSE_DATABASE", "otel"), env("MOLEJO_CLICKHOUSE_USERNAME", "molejo_reader"), password, httpClient)
 		if err != nil {
-			return nil, fmt.Errorf("configure ClickHouse observability: %w", err)
+			return historicalObservability{}, fmt.Errorf("configure ClickHouse observability: %w", err)
 		}
+		readers.logs = adapter
+		readers.events = adapter
 	}
 	if endpoint := strings.TrimSpace(os.Getenv("MOLEJO_VICTORIAMETRICS_URL")); endpoint != "" {
-		var err error
-		combined.MetricsDB, err = observability.NewVictoriaMetricsClient(endpoint, httpClient)
+		adapter, err := observability.NewPrometheusQueryAdapter(endpoint, httpClient)
 		if err != nil {
-			return nil, fmt.Errorf("configure VictoriaMetrics observability: %w", err)
+			return historicalObservability{}, fmt.Errorf("configure Prometheus-compatible metrics: %w", err)
 		}
+		readers.metrics = adapter
 	}
-	if combined.Telemetry == nil && combined.MetricsDB == nil {
-		return observability.UnavailableReader{}, nil
-	}
-	return combined, nil
+	return readers, nil
 }
 
 func githubBuildService(httpTimeout time.Duration) (githubapp.Service, error) {

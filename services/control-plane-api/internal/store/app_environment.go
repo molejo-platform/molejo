@@ -17,7 +17,7 @@ type rowQuerier interface {
 }
 
 const appEnvironmentColumns = `
-	ae.id,ae.public_id,ae.workspace_id,COALESCE(ae.cluster_id,0),COALESCE(ai.public_id,''),ae.project_id,p.public_id,ae.app_id,a.public_id,a.name,
+	ae.id,ae.public_id,ae.workspace_id,COALESCE(ae.cluster_id,0),COALESCE(ai.public_id,''),COALESCE(ai.cluster_uid,''),ae.project_id,p.public_id,ae.app_id,a.public_id,a.name,
 	ae.environment_id,e.public_id,e.name,ae.source_branch,ae.runtime_name,
 	ae.workload_kind,ae.configuration_json::text,ae.configuration_version,ae.version,
 	COALESCE(dd.public_id,''),COALESCE(cd.public_id,''),COALESCE(cr.public_id,''),
@@ -38,7 +38,7 @@ func scanAppEnvironment(row pgx.Row) (domain.AppEnvironment, error) {
 	var item domain.AppEnvironment
 	var configuration []byte
 	err := row.Scan(
-		&item.ID, &item.PublicID, &item.WorkspaceID, &item.ClusterID, &item.ClusterPublicID, &item.ProjectID, &item.ProjectPublicID,
+		&item.ID, &item.PublicID, &item.WorkspaceID, &item.ClusterID, &item.ClusterPublicID, &item.ClusterUID, &item.ProjectID, &item.ProjectPublicID,
 		&item.AppID, &item.AppPublicID, &item.AppName, &item.EnvironmentID, &item.EnvironmentPublicID,
 		&item.EnvironmentName, &item.SourceBranch, &item.RuntimeName, &item.WorkloadKind, &configuration,
 		&item.ConfigurationVersion, &item.Version, &item.DesiredDeploymentPublicID,

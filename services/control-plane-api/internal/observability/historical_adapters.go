@@ -33,6 +33,8 @@ var (
 
 type Scope struct {
 	ClusterID        string
+	ClusterUID       string
+	WorkspaceID      string
 	AppEnvironmentID string
 	Namespace        string
 	RuntimeName      string
@@ -143,73 +145,6 @@ type Event struct {
 	Type      string    `json:"type"`
 	Reason    string    `json:"reason"`
 	Message   string    `json:"message"`
-}
-
-type LogReader interface {
-	LogWatermark(context.Context) (LogCursor, error)
-	Logs(context.Context, Scope, LogQuery) (LogPage, error)
-	LiveLogs(context.Context, Scope, LiveLogQuery) (LogBatch, error)
-}
-
-type MetricReader interface {
-	Metrics(context.Context, Scope, MetricQuery) (Metrics, error)
-	CurrentMetrics(context.Context, Scope, time.Time) (MetricSnapshot, error)
-}
-
-type EventReader interface {
-	Events(context.Context, Scope, EventQuery) ([]Event, error)
-}
-
-type Reader interface {
-	LogReader
-	MetricReader
-	EventReader
-}
-
-type CurrentReader interface {
-	CurrentLogs(context.Context, Scope, time.Time, string, int) (LogBatch, error)
-	CurrentMetrics(context.Context, Scope, time.Time) (MetricSnapshot, error)
-	CurrentEvents(context.Context, Scope, EventQuery) ([]Event, bool, []string, error)
-}
-
-type UnavailableCurrentReader struct{}
-
-func (UnavailableCurrentReader) CurrentLogs(context.Context, Scope, time.Time, string, int) (LogBatch, error) {
-	return LogBatch{}, ErrUnavailable
-}
-
-func (UnavailableCurrentReader) CurrentMetrics(context.Context, Scope, time.Time) (MetricSnapshot, error) {
-	return MetricSnapshot{}, ErrUnavailable
-}
-
-func (UnavailableCurrentReader) CurrentEvents(context.Context, Scope, EventQuery) ([]Event, bool, []string, error) {
-	return nil, true, []string{"kubernetes"}, ErrUnavailable
-}
-
-type UnavailableReader struct{}
-
-func (UnavailableReader) LogWatermark(context.Context) (LogCursor, error) {
-	return LogCursor{}, ErrUnavailable
-}
-
-func (UnavailableReader) Logs(context.Context, Scope, LogQuery) (LogPage, error) {
-	return LogPage{}, ErrUnavailable
-}
-
-func (UnavailableReader) LiveLogs(context.Context, Scope, LiveLogQuery) (LogBatch, error) {
-	return LogBatch{}, ErrUnavailable
-}
-
-func (UnavailableReader) Metrics(context.Context, Scope, MetricQuery) (Metrics, error) {
-	return Metrics{}, ErrUnavailable
-}
-
-func (UnavailableReader) CurrentMetrics(context.Context, Scope, time.Time) (MetricSnapshot, error) {
-	return MetricSnapshot{}, ErrUnavailable
-}
-
-func (UnavailableReader) Events(context.Context, Scope, EventQuery) ([]Event, error) {
-	return nil, ErrUnavailable
 }
 
 type ClickHouseClient struct {
@@ -452,7 +387,7 @@ func clickHouseDateTime(value time.Time) string {
 	return value.UTC().Format("2006-01-02 15:04:05.000000000")
 }
 
-type VictoriaMetricsClient struct {
+type PrometheusQueryAdapter struct {
 	endpoint *url.URL
 	http     *http.Client
 }
@@ -482,18 +417,18 @@ func (definition metricDefinition) expression(scope Scope) string {
 	return fmt.Sprintf(definition.Query, fmt.Sprintf(`%s,molejo_app_environment_runtime=%q`, namespace, scope.RuntimeName))
 }
 
-func NewVictoriaMetricsClient(endpoint string, httpClient *http.Client) (*VictoriaMetricsClient, error) {
+func NewPrometheusQueryAdapter(endpoint string, httpClient *http.Client) (*PrometheusQueryAdapter, error) {
 	parsed, err := url.Parse(strings.TrimSpace(endpoint))
 	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
-		return nil, fmt.Errorf("invalid VictoriaMetrics endpoint")
+		return nil, fmt.Errorf("invalid Prometheus query endpoint")
 	}
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: 10 * time.Second}
 	}
-	return &VictoriaMetricsClient{endpoint: parsed, http: httpClient}, nil
+	return &PrometheusQueryAdapter{endpoint: parsed, http: httpClient}, nil
 }
 
-func (c *VictoriaMetricsClient) Metrics(ctx context.Context, scope Scope, query MetricQuery) (Metrics, error) {
+func (c *PrometheusQueryAdapter) Metrics(ctx context.Context, scope Scope, query MetricQuery) (Metrics, error) {
 	result := Metrics{From: query.From, To: query.To, Step: query.Step.String(), ResolutionSeconds: int(query.Step.Seconds()), Unavailable: []string{}, Series: make([]MetricSeries, 0, len(metricDefinitions))}
 	type metricResult struct {
 		series []MetricSeries
@@ -535,94 +470,7 @@ func (c *VictoriaMetricsClient) Metrics(ctx context.Context, scope Scope, query 
 	return result, nil
 }
 
-func (c *VictoriaMetricsClient) CurrentMetrics(ctx context.Context, scope Scope, at time.Time) (MetricSnapshot, error) {
-	result := MetricSnapshot{ObservedAt: at.UTC(), Unavailable: []string{}, Samples: make([]MetricSample, 0, len(metricDefinitions))}
-	type sampleResult struct {
-		samples []MetricSample
-		err     error
-	}
-	results := make([]sampleResult, len(metricDefinitions))
-	var group sync.WaitGroup
-	for index, definition := range metricDefinitions {
-		group.Add(1)
-		go func() {
-			defer group.Done()
-			results[index].samples, results[index].err = c.queryInstant(ctx, definition.expression(scope), at)
-		}()
-	}
-	group.Wait()
-	succeeded := 0
-	for index, definition := range metricDefinitions {
-		samples, err := results[index].samples, results[index].err
-		if err != nil {
-			result.Partial = true
-			result.Unavailable = append(result.Unavailable, definition.Name)
-			continue
-		}
-		succeeded++
-		for _, sample := range samples {
-			sample.Name = definition.Name
-			sample.Unit = definition.Unit
-			result.Samples = append(result.Samples, sample)
-		}
-	}
-	if succeeded == 0 {
-		return MetricSnapshot{}, ErrUnavailable
-	}
-	return result, nil
-}
-
-func (c *VictoriaMetricsClient) queryInstant(ctx context.Context, expression string, at time.Time) ([]MetricSample, error) {
-	endpoint := *c.endpoint
-	endpoint.Path = strings.TrimRight(endpoint.Path, "/") + "/api/v1/query"
-	values := endpoint.Query()
-	values.Set("query", expression)
-	values.Set("time", at.UTC().Format(time.RFC3339Nano))
-	endpoint.RawQuery = values.Encode()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrUnavailable, err)
-	}
-	response, err := c.http.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrUnavailable, err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4<<10))
-		return nil, fmt.Errorf("%w: VictoriaMetrics returned HTTP %d", ErrUnavailable, response.StatusCode)
-	}
-	var payload struct {
-		Status string `json:"status"`
-		Data   struct {
-			Result []struct {
-				Metric map[string]string `json:"metric"`
-				Value  []json.RawMessage `json:"value"`
-			} `json:"result"`
-		} `json:"data"`
-	}
-	if err = json.NewDecoder(io.LimitReader(response.Body, 8<<20)).Decode(&payload); err != nil || payload.Status != "success" {
-		return nil, fmt.Errorf("%w: invalid VictoriaMetrics response", ErrUnavailable)
-	}
-	samples := make([]MetricSample, 0, len(payload.Data.Result))
-	for _, row := range payload.Data.Result {
-		if len(row.Value) != 2 {
-			continue
-		}
-		var timestamp float64
-		var encoded string
-		if json.Unmarshal(row.Value[0], &timestamp) != nil || json.Unmarshal(row.Value[1], &encoded) != nil {
-			continue
-		}
-		number, parseErr := strconv.ParseFloat(encoded, 64)
-		if parseErr == nil {
-			samples = append(samples, MetricSample{Timestamp: time.Unix(0, int64(timestamp*float64(time.Second))).UTC(), Value: number})
-		}
-	}
-	return samples, nil
-}
-
-func (c *VictoriaMetricsClient) queryRange(ctx context.Context, expression string, query MetricQuery) ([]MetricSeries, error) {
+func (c *PrometheusQueryAdapter) queryRange(ctx context.Context, expression string, query MetricQuery) ([]MetricSeries, error) {
 	endpoint := *c.endpoint
 	endpoint.Path = strings.TrimRight(endpoint.Path, "/") + "/api/v1/query_range"
 	values := endpoint.Query()
@@ -642,7 +490,7 @@ func (c *VictoriaMetricsClient) queryRange(ctx context.Context, expression strin
 	defer response.Body.Close()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4<<10))
-		return nil, fmt.Errorf("%w: VictoriaMetrics returned HTTP %d", ErrUnavailable, response.StatusCode)
+		return nil, fmt.Errorf("%w: Prometheus query endpoint returned HTTP %d", ErrUnavailable, response.StatusCode)
 	}
 	var payload struct {
 		Status string `json:"status"`
@@ -654,7 +502,7 @@ func (c *VictoriaMetricsClient) queryRange(ctx context.Context, expression strin
 		} `json:"data"`
 	}
 	if err = json.NewDecoder(io.LimitReader(response.Body, 8<<20)).Decode(&payload); err != nil || payload.Status != "success" {
-		return nil, fmt.Errorf("%w: invalid VictoriaMetrics response", ErrUnavailable)
+		return nil, fmt.Errorf("%w: invalid Prometheus query response", ErrUnavailable)
 	}
 	series := make([]MetricSeries, 0, len(payload.Data.Result))
 	for _, row := range payload.Data.Result {
@@ -676,53 +524,6 @@ func (c *VictoriaMetricsClient) queryRange(ctx context.Context, expression strin
 		series = append(series, item)
 	}
 	return series, nil
-}
-
-type CombinedReader struct {
-	Telemetry *ClickHouseClient
-	MetricsDB *VictoriaMetricsClient
-}
-
-func (c CombinedReader) LogWatermark(ctx context.Context) (LogCursor, error) {
-	if c.Telemetry == nil {
-		return LogCursor{}, ErrUnavailable
-	}
-	return c.Telemetry.LogWatermark(ctx)
-}
-
-func (c CombinedReader) Logs(ctx context.Context, scope Scope, query LogQuery) (LogPage, error) {
-	if c.Telemetry == nil {
-		return LogPage{}, ErrUnavailable
-	}
-	return c.Telemetry.Logs(ctx, scope, query)
-}
-
-func (c CombinedReader) LiveLogs(ctx context.Context, scope Scope, query LiveLogQuery) (LogBatch, error) {
-	if c.Telemetry == nil {
-		return LogBatch{}, ErrUnavailable
-	}
-	return c.Telemetry.LiveLogs(ctx, scope, query)
-}
-
-func (c CombinedReader) Metrics(ctx context.Context, scope Scope, query MetricQuery) (Metrics, error) {
-	if c.MetricsDB == nil {
-		return Metrics{}, ErrUnavailable
-	}
-	return c.MetricsDB.Metrics(ctx, scope, query)
-}
-
-func (c CombinedReader) CurrentMetrics(ctx context.Context, scope Scope, at time.Time) (MetricSnapshot, error) {
-	if c.MetricsDB == nil {
-		return MetricSnapshot{}, ErrUnavailable
-	}
-	return c.MetricsDB.CurrentMetrics(ctx, scope, at)
-}
-
-func (c CombinedReader) Events(ctx context.Context, scope Scope, query EventQuery) ([]Event, error) {
-	if c.Telemetry == nil {
-		return nil, ErrUnavailable
-	}
-	return c.Telemetry.Events(ctx, scope, query)
 }
 
 func sanitizeText(value string) string {

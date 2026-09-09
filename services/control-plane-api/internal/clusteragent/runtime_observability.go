@@ -16,6 +16,12 @@ type RuntimeObservability struct {
 	broker *RuntimeQueryBroker
 }
 
+var (
+	_ observability.CurrentLogReader    = (*RuntimeObservability)(nil)
+	_ observability.CurrentMetricReader = (*RuntimeObservability)(nil)
+	_ observability.CurrentEventReader  = (*RuntimeObservability)(nil)
+)
+
 func NewRuntimeObservability(broker *RuntimeQueryBroker) *RuntimeObservability {
 	return &RuntimeObservability{broker: broker}
 }

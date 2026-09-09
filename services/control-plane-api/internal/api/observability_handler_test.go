@@ -34,7 +34,9 @@ func TestObservabilityMetricStepBoundsPointCount(t *testing.T) {
 }
 
 type recordingObservabilityReader struct {
-	scope observability.Scope
+	scope                  observability.Scope
+	historicalMetricsCalls int
+	currentMetricsCalls    int
 }
 
 type deadlineRecorder struct {
@@ -67,11 +69,13 @@ func (r *recordingObservabilityReader) CurrentLogs(ctx context.Context, scope ob
 
 func (r *recordingObservabilityReader) Metrics(_ context.Context, scope observability.Scope, query observability.MetricQuery) (observability.Metrics, error) {
 	r.scope = scope
+	r.historicalMetricsCalls++
 	return observability.Metrics{From: query.From, To: query.To, Step: query.Step.String(), Series: []observability.MetricSeries{}}, nil
 }
 
 func (r *recordingObservabilityReader) CurrentMetrics(_ context.Context, scope observability.Scope, at time.Time) (observability.MetricSnapshot, error) {
 	r.scope = scope
+	r.currentMetricsCalls++
 	return observability.MetricSnapshot{ObservedAt: at, Samples: []observability.MetricSample{{Name: "available", Unit: "replicas", Timestamp: at, Value: 1}}}, nil
 }
 
@@ -167,8 +171,12 @@ func TestOperationEventsNeverExposeInternalFields(t *testing.T) {
 func TestObservabilityAPIResolvesScopeOnlyAfterFullAncestryAuthorization(t *testing.T) {
 	storage, workspace, server, owner := newHierarchyAPITestFixture(t)
 	reader := &recordingObservabilityReader{}
-	server.observability = reader
-	server.currentObservability = reader
+	server.historicalLogs = reader
+	server.historicalMetrics = reader
+	server.historicalEvents = reader
+	server.currentLogs = reader
+	server.currentMetricReader = reader
+	server.currentEvents = reader
 
 	projectResponse := hierarchyRequest(t, server, owner, http.MethodPost, "/api/v1/workspaces/"+workspace.PublicID+"/projects", `{"name":"Observability"}`, nil)
 	var project domain.Project
@@ -190,14 +198,20 @@ func TestObservabilityAPIResolvesScopeOnlyAfterFullAncestryAuthorization(t *test
 
 	base := "/api/v1/workspaces/" + workspace.PublicID + "/projects/" + project.PublicID + "/apps/" + app.PublicID + "/environments/" + appEnvironment.PublicID + "/observability"
 	response := hierarchyRequest(t, server, owner, http.MethodGet, base+"/metrics", "", nil)
-	if response.Code != http.StatusOK || reader.scope.Namespace != workspace.Namespace || reader.scope.RuntimeName != persisted.RuntimeName {
+	if response.Code != http.StatusOK || reader.scope.ClusterID != persisted.ClusterPublicID || reader.scope.ClusterUID != persisted.ClusterUID || reader.scope.WorkspaceID != workspace.PublicID || reader.scope.AppEnvironmentID != persisted.PublicID || reader.scope.Namespace != workspace.Namespace || reader.scope.RuntimeName != persisted.RuntimeName {
 		t.Fatalf("status=%d scope=%+v body=%s", response.Code, reader.scope, response.Body.String())
+	}
+	if reader.historicalMetricsCalls != 1 || reader.currentMetricsCalls != 0 {
+		t.Fatalf("historical metrics route used the wrong port: historical=%d current=%d", reader.historicalMetricsCalls, reader.currentMetricsCalls)
 	}
 	server.config.ObservabilityLiveTTL = time.Millisecond
 	server.config.ObservabilityMetricsLivePoll = time.Hour
 	response = hierarchyRequest(t, server, owner, http.MethodGet, base+"/metrics/live", "", nil)
 	if response.Code != http.StatusOK || response.Header().Get("Content-Type") != "text/event-stream" || !strings.Contains(response.Body.String(), "event: metrics") || !strings.Contains(response.Body.String(), `"name":"available"`) {
 		t.Fatalf("live metrics status=%d content-type=%q body=%s", response.Code, response.Header().Get("Content-Type"), response.Body.String())
+	}
+	if reader.historicalMetricsCalls != 1 || reader.currentMetricsCalls != 1 {
+		t.Fatalf("current metrics route used the wrong port: historical=%d current=%d", reader.historicalMetricsCalls, reader.currentMetricsCalls)
 	}
 
 	otherAppResponse := hierarchyRequest(t, server, owner, http.MethodPost, "/api/v1/workspaces/"+workspace.PublicID+"/projects/"+project.PublicID+"/apps", `{"name":"Other"}`, nil)

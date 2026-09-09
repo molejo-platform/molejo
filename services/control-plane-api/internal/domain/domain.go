@@ -312,6 +312,7 @@ type AppEnvironment struct {
 	WorkspaceID                 int64         `json:"-"`
 	ClusterID                   int64         `json:"-"`
 	ClusterPublicID             string        `json:"clusterId"`
+	ClusterUID                  string        `json:"-"`
 	ProjectID                   int64         `json:"-"`
 	AppID                       int64         `json:"-"`
 	EnvironmentID               int64         `json:"-"`

@@ -13,6 +13,12 @@ import (
 	"time"
 )
 
+var (
+	_ HistoricalLogReader    = (*ClickHouseClient)(nil)
+	_ HistoricalEventReader  = (*ClickHouseClient)(nil)
+	_ HistoricalMetricReader = (*PrometheusQueryAdapter)(nil)
+)
+
 func TestClickHouseLogsAlwaysScopeQueriesToRuntime(t *testing.T) {
 	t.Parallel()
 
@@ -58,7 +64,7 @@ func TestClickHouseLogsAlwaysScopeQueriesToRuntime(t *testing.T) {
 	}
 }
 
-func TestVictoriaMetricsAlwaysScopesEveryMetricQuery(t *testing.T) {
+func TestPrometheusQueryAdapterAlwaysScopesEveryMetricQuery(t *testing.T) {
 	t.Parallel()
 
 	var queries []string
@@ -71,7 +77,7 @@ func TestVictoriaMetricsAlwaysScopesEveryMetricQuery(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := NewVictoriaMetricsClient(server.URL, server.Client())
+	client, err := NewPrometheusQueryAdapter(server.URL, server.Client())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,44 +95,6 @@ func TestVictoriaMetricsAlwaysScopesEveryMetricQuery(t *testing.T) {
 		if strings.Contains(query, "k8s_pod_name") {
 			t.Fatalf("metric query exposes Kubernetes pod identity: %s", query)
 		}
-	}
-}
-
-func TestVictoriaMetricsCurrentMetricsUsesInstantScopedQueries(t *testing.T) {
-	t.Parallel()
-
-	var paths, queries []string
-	var queriesMu sync.Mutex
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		queriesMu.Lock()
-		paths = append(paths, r.URL.Path)
-		queries = append(queries, r.URL.Query().Get("query"))
-		queriesMu.Unlock()
-		_ = json.NewEncoder(w).Encode(map[string]any{"status": "success", "data": map[string]any{"resultType": "vector", "result": []any{
-			map[string]any{"metric": map[string]string{"k8s_pod_name": "pod-a"}, "value": []any{1_787_918_400, "1.5"}},
-		}}})
-	}))
-	defer server.Close()
-
-	client, err := NewVictoriaMetricsClient(server.URL, server.Client())
-	if err != nil {
-		t.Fatal(err)
-	}
-	snapshot, err := client.CurrentMetrics(context.Background(), Scope{Namespace: "workspace-a", RuntimeName: "runtime-a"}, time.Date(2026, 8, 28, 12, 0, 0, 0, time.UTC))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(snapshot.Samples) != len(metricDefinitions) || len(paths) != len(metricDefinitions) {
-		t.Fatalf("got %d samples and %d queries", len(snapshot.Samples), len(paths))
-	}
-	for index, path := range paths {
-		if path != "/api/v1/query" {
-			t.Fatalf("path[%d] = %q", index, path)
-		}
-		assertRuntimeScopedMetricQuery(t, queries[index])
-	}
-	if snapshot.Samples[0].Name != "cpu" || snapshot.Samples[0].Value != 1.5 {
-		t.Fatalf("unexpected sample: %#v", snapshot.Samples[0])
 	}
 }
 
@@ -155,7 +123,7 @@ func assertRuntimeScopedMetricQuery(t *testing.T, query string) {
 	}
 }
 
-func TestVictoriaMetricsReturnsExplicitPartialResults(t *testing.T) {
+func TestPrometheusQueryAdapterReturnsExplicitPartialResults(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -166,7 +134,7 @@ func TestVictoriaMetricsReturnsExplicitPartialResults(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"status": "success", "data": map[string]any{"resultType": "matrix", "result": []any{}}})
 	}))
 	defer server.Close()
-	client, err := NewVictoriaMetricsClient(server.URL, server.Client())
+	client, err := NewPrometheusQueryAdapter(server.URL, server.Client())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -228,10 +196,10 @@ func TestSanitizeTextBoundsAndRemovesControlCharacters(t *testing.T) {
 	}
 }
 
-func TestUnavailableReaderHasStableError(t *testing.T) {
+func TestUnavailableHistoricalReaderHasStableError(t *testing.T) {
 	t.Parallel()
 
-	_, err := (UnavailableReader{}).Logs(context.Background(), Scope{}, LogQuery{})
+	_, err := (UnavailableHistoricalReader{}).Logs(context.Background(), Scope{}, LogQuery{})
 	if !errors.Is(err, ErrUnavailable) {
 		t.Fatalf("got %v, want ErrUnavailable", err)
 	}

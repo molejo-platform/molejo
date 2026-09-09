@@ -86,8 +86,12 @@ type Server struct {
 	secretFingerprintKey  []byte
 	passwordResetKey      []byte
 	authenticationSecrets parameters.SecretValueStore
-	observability         observability.Reader
-	currentObservability  observability.CurrentReader
+	historicalLogs        observability.HistoricalLogReader
+	historicalMetrics     observability.HistoricalMetricReader
+	historicalEvents      observability.HistoricalEventReader
+	currentLogs           observability.CurrentLogReader
+	currentMetricReader   observability.CurrentMetricReader
+	currentEvents         observability.CurrentEventReader
 	providerInventory     providerbinding.Inventory
 	agentSigner           AgentCertificateSigner
 	agentServerCAPEM      []byte
@@ -117,8 +121,12 @@ type Dependencies struct {
 	SecretFingerprintKey  []byte
 	PasswordResetKey      []byte
 	AuthenticationSecrets parameters.SecretValueStore
-	Observability         observability.Reader
-	CurrentObservability  observability.CurrentReader
+	HistoricalLogs        observability.HistoricalLogReader
+	HistoricalMetrics     observability.HistoricalMetricReader
+	HistoricalEvents      observability.HistoricalEventReader
+	CurrentLogs           observability.CurrentLogReader
+	CurrentMetrics        observability.CurrentMetricReader
+	CurrentEvents         observability.CurrentEventReader
 	ProviderInventory     providerbinding.Inventory
 	AgentSigner           AgentCertificateSigner
 	AgentServerCAPEM      []byte
@@ -147,13 +155,53 @@ func NewServer(cfg Config, dependencies Dependencies) *Server {
 	if dependencies.AuthenticationSecrets == nil {
 		dependencies.AuthenticationSecrets = parameters.UnavailableStore{}
 	}
-	if dependencies.Observability == nil {
-		dependencies.Observability = observability.UnavailableReader{}
+	if dependencies.HistoricalLogs == nil {
+		dependencies.HistoricalLogs = observability.UnavailableHistoricalReader{}
 	}
-	if dependencies.CurrentObservability == nil {
-		dependencies.CurrentObservability = observability.UnavailableCurrentReader{}
+	if dependencies.HistoricalMetrics == nil {
+		dependencies.HistoricalMetrics = observability.UnavailableHistoricalReader{}
 	}
-	return &Server{store: dependencies.Store, config: cfg, log: logger, tracer: dependencies.Tracer, github: dependencies.GitHub, githubWebhookSecret: dependencies.GitHubWebhookSecret, parameterSecrets: dependencies.ParameterSecrets, secretFingerprintKey: dependencies.SecretFingerprintKey, passwordResetKey: dependencies.PasswordResetKey, authenticationSecrets: dependencies.AuthenticationSecrets, observability: dependencies.Observability, currentObservability: dependencies.CurrentObservability, providerInventory: dependencies.ProviderInventory, agentSigner: dependencies.AgentSigner, agentServerCAPEM: append([]byte(nil), dependencies.AgentServerCAPEM...), agentTrustBundleID: dependencies.AgentTrustBundleID, logLiveLimiter: &concurrencyLimiter{active: map[int64]int{}}, metricsLiveLimiter: &concurrencyLimiter{active: map[int64]int{}}, metricSnapshots: newMetricSnapshotCache(cfg.ObservabilityMetricsLivePoll), token: randomToken, deploymentID: func() (string, error) { return domain.NewPublicID("dpl") }, parameterID: func() (string, error) { return domain.NewPublicID("par") }, dummyPasswordHash: dummyHash}
+	if dependencies.HistoricalEvents == nil {
+		dependencies.HistoricalEvents = observability.UnavailableHistoricalReader{}
+	}
+	if dependencies.CurrentLogs == nil {
+		dependencies.CurrentLogs = observability.UnavailableCurrentReader{}
+	}
+	if dependencies.CurrentMetrics == nil {
+		dependencies.CurrentMetrics = observability.UnavailableCurrentReader{}
+	}
+	if dependencies.CurrentEvents == nil {
+		dependencies.CurrentEvents = observability.UnavailableCurrentReader{}
+	}
+	return &Server{
+		store:                 dependencies.Store,
+		config:                cfg,
+		log:                   logger,
+		tracer:                dependencies.Tracer,
+		github:                dependencies.GitHub,
+		githubWebhookSecret:   dependencies.GitHubWebhookSecret,
+		parameterSecrets:      dependencies.ParameterSecrets,
+		secretFingerprintKey:  dependencies.SecretFingerprintKey,
+		passwordResetKey:      dependencies.PasswordResetKey,
+		authenticationSecrets: dependencies.AuthenticationSecrets,
+		historicalLogs:        dependencies.HistoricalLogs,
+		historicalMetrics:     dependencies.HistoricalMetrics,
+		historicalEvents:      dependencies.HistoricalEvents,
+		currentLogs:           dependencies.CurrentLogs,
+		currentMetricReader:   dependencies.CurrentMetrics,
+		currentEvents:         dependencies.CurrentEvents,
+		providerInventory:     dependencies.ProviderInventory,
+		agentSigner:           dependencies.AgentSigner,
+		agentServerCAPEM:      append([]byte(nil), dependencies.AgentServerCAPEM...),
+		agentTrustBundleID:    dependencies.AgentTrustBundleID,
+		logLiveLimiter:        &concurrencyLimiter{active: map[int64]int{}},
+		metricsLiveLimiter:    &concurrencyLimiter{active: map[int64]int{}},
+		metricSnapshots:       newMetricSnapshotCache(cfg.ObservabilityMetricsLivePoll),
+		token:                 randomToken,
+		deploymentID:          func() (string, error) { return domain.NewPublicID("dpl") },
+		parameterID:           func() (string, error) { return domain.NewPublicID("par") },
+		dummyPasswordHash:     dummyHash,
+	}
 }
 
 func (s *Server) Handler() http.Handler {

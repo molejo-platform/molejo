@@ -29,7 +29,7 @@ func newMetricSnapshotCache(ttl time.Duration) *metricSnapshotCache {
 
 func (s *Server) currentMetrics(ctx context.Context, scope observability.Scope, at time.Time) (observability.MetricSnapshot, error) {
 	return s.metricSnapshots.get(ctx, scope, at, func() (observability.MetricSnapshot, error) {
-		return s.currentObservability.CurrentMetrics(ctx, scope, at)
+		return s.currentMetricReader.CurrentMetrics(ctx, scope, at)
 	})
 }
 
