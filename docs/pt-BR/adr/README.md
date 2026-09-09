@@ -11,3 +11,5 @@
 - [ADR-0018: observação de capacidades e disponibilidade de features](0018-observacao-de-capacidades-e-disponibilidade-de-features.md)
 - [ADR-0019: provisionamento de Workspace e limite de namespace](0019-provisionamento-de-workspace-e-limite-de-namespace.md)
 - [ADR-0020: custódia de secrets e entrega ao runtime](0020-custodia-de-secrets-e-entrega-ao-runtime.md)
+- [ADR-0021: bindings explícitos gerenciados pelo operador](0021-bindings-explicitos-gerenciados-pelo-operador.md)
+- [ADR-0022: métricas neutras com adapter de consulta Prometheus-compatible](0022-metricas-neutras-com-consulta-prometheus.md)

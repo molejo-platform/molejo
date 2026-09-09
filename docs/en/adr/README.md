@@ -12,3 +12,5 @@
 - [ADR-0018: Capability Observation and Feature Availability](0018-capability-observation-and-feature-availability.md)
 - [ADR-0019: Workspace Provisioning and Namespace Boundary](0019-workspace-provisioning-and-namespace-boundary.md)
 - [ADR-0020: Secret Custody and Runtime Delivery](0020-secret-custody-and-runtime-delivery.md)
+- [ADR-0021: Explicit Operator-managed Bindings](0021-explicit-operator-managed-bindings.md)
+- [ADR-0022: Provider-neutral Metrics with a Prometheus-compatible Query Adapter](0022-provider-neutral-metrics-with-prometheus-query.md)

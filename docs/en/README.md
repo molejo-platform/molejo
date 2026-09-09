@@ -85,6 +85,8 @@ Current architecture and component guides:
 - [Capability observation and feature availability ADR](adr/0018-capability-observation-and-feature-availability.md)
 - [Workspace provisioning and namespace boundary ADR](adr/0019-workspace-provisioning-and-namespace-boundary.md)
 - [Secret custody and runtime delivery ADR](adr/0020-secret-custody-and-runtime-delivery.md)
+- [Explicit operator-managed bindings ADR](adr/0021-explicit-operator-managed-bindings.md)
+- [Provider-neutral metrics with a Prometheus-compatible query adapter ADR](adr/0022-provider-neutral-metrics-with-prometheus-query.md)
 
 ## Contributing
 

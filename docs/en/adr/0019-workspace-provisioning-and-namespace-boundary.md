@@ -64,6 +64,13 @@ Operator namespaced permissions are granted only after the placement is ready.
 Only discovery and fixed Molejo CR watches that are inherently cluster-scoped
 remain behind ClusterRoleBindings.
 
+The alpha installation predating this boundary is test-only and receives no
+permanent compatibility exception. Its Workspace, Projects, Apps, runtime
+resources, and shared namespace may be deleted explicitly and later recreated
+through `WorkspacePlacement`. Molejo does not attempt an in-place namespace
+migration because Kubernetes namespaces cannot be renamed and the alpha does not
+promise state compatibility.
+
 ## Consequences
 
 - A cluster configuration signal cannot grant a user or automation product
@@ -79,6 +86,8 @@ remain behind ClusterRoleBindings.
   further constrain it when a portable policy is proven.
 - Namespace isolation reduces blast radius but is not a hard security boundary
   against hostile workloads sharing a cluster or node.
+- Discarding the legacy test Workspace may interrupt and remove its workloads;
+  this is an explicit alpha teardown, not an automated upgrade behavior.
 
 ## Alternatives Considered
 

@@ -49,3 +49,5 @@ Las observaciones nunca mutan infraestructura ni estado deseado.
 
 - [ADR 0015: ownership de capacidades](0015-ownership-de-capacidades.md)
 - [ADR 0016: política de ciclo de vida alfa](0016-politica-de-ciclo-de-vida-alfa.md)
+- [ADR 0021: bindings explícitos gestionados por el operador](0021-bindings-explicitos-gestionados-por-el-operador.md)
+- [ADR 0022: métricas neutrales con consulta Prometheus-compatible](0022-metricas-neutrales-con-consulta-prometheus.md)

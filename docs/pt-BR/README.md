@@ -87,6 +87,8 @@ Guias atuais de arquitetura e componentes:
 - [ADR de observação de capacidades e disponibilidade](adr/0018-observacao-de-capacidades-e-disponibilidade-de-features.md)
 - [ADR de provisionamento de Workspace e namespace](adr/0019-provisionamento-de-workspace-e-limite-de-namespace.md)
 - [ADR de custódia de secrets e entrega](adr/0020-custodia-de-secrets-e-entrega-ao-runtime.md)
+- [ADR de bindings explícitos gerenciados pelo operador](adr/0021-bindings-explicitos-gerenciados-pelo-operador.md)
+- [ADR de métricas neutras com consulta Prometheus-compatible](adr/0022-metricas-neutras-com-consulta-prometheus.md)
 
 ## Contribuição
 

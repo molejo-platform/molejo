@@ -70,3 +70,5 @@ modificam estado desejado.
 
 - [ADR 0015: ownership de capacidades](0015-ownership-de-capacidades.md)
 - [ADR 0016: política de ciclo de vida alpha](0016-politica-de-ciclo-de-vida-alpha.md)
+- [ADR 0021: bindings explícitos gerenciados pelo operador](0021-bindings-explicitos-gerenciados-pelo-operador.md)
+- [ADR 0022: métricas neutras com consulta Prometheus-compatible](0022-metricas-neutras-com-consulta-prometheus.md)

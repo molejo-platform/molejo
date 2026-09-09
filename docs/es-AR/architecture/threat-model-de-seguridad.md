@@ -2,10 +2,11 @@
 
 ## Estado y alcance
 
-Este es el threat model normativo del alfa para provisionamiento de Workspaces y
-entrega de secrets. Cubre Console y automatizaciones, control plane, PostgreSQL,
-secret store externo, Cluster Agent outbound con mTLS, reconciler del límite,
-Platform Operator, API Kubernetes y workload de aplicación.
+Este es el threat model normativo del alfa para provisionamiento de Workspaces,
+entrega de secrets y activación explícita de bindings. Cubre Console y
+automatizaciones, control plane, PostgreSQL, providers y secret stores externos,
+Cluster Agent outbound con mTLS, reconciler del límite, Platform Operator, API
+Kubernetes y workload de aplicación.
 
 Es un artefacto de diseño y verificación, no una afirmación de seguridad en
 producción. Se revisa al cambiar actores, credenciales, límites de confianza,
@@ -20,6 +21,7 @@ endpoints, modos de entrega o privilegios del clúster.
 5. Los valores son write-only y no aparecen en estado duradero o diagnósticos.
 6. Reconciliación, rotación y cleanup son idempotentes ante replay o falla parcial.
 7. Los controles fallan cerrados y producen auditoría sanitizada.
+8. Discovery y observaciones del Agent nunca seleccionan ni activan bindings.
 
 ## Límites y flujo
 
@@ -57,15 +59,16 @@ endpoints, modos de entrega o privilegios del clúster.
 | TM-13 | Supply chain / A03/A08 | Imagen obtiene credencial privilegiada. | Digests, provenance, SBOM, scanning y ServiceAccounts separados. |
 | TM-14 | SSRF / A01 | Endpoint de provider alcanza metadata interna. | Configuración solo del operador y endpoints tipados. |
 | TM-15 | Exceptional / A10 | Falla parcial deja acceso huérfano. | Conditions, retry, ownership y pruebas de recuperación. |
+| TM-16 | Tampering / A01/A08 | Discovery o evidencia comprometida activa un binding no deseado. | Binding tipado creado por flujo autenticado del Cluster Operator; evidencia del Agent no activa candidatos. |
 
 ## Estado actual y gaps
 
-Ya existen sesión/CSRF, autorización, idempotencia, identidad mTLS,
-session/sequence, fencing, objetos inmutables, ownership, rendering cerrado y
-automount deshabilitado. Los permisos del Agent todavía usan
-ClusterRoleBindings y el Agent crea namespaces directamente. La ADR 0019 define
-la migración. La ADR 0020 cierra la dirección de secrets; scope RBAC, delivery y
-pruebas de fuga siguen pendientes.
+Ya están implementados y validados la decisión namespaced de provisionamiento,
+`WorkspacePlacement`, credenciales separadas de runtime/discovery, entrega
+inmutable just-in-time de secrets y sanitización. El Workspace legado de prueba
+se elimina y recrea explícitamente, sin migración. Backend externo de secrets y
+evidencia de encryption at rest siguen como capabilities opcionales no
+configuradas.
 
 ## Invariantes y riesgos aceptados
 
@@ -76,6 +79,7 @@ pruebas de fuga siguen pendientes.
 - Namespace reduce impacto, pero no es hard multi-tenancy.
 - Control plane ve plaintext en el modo alfa y una App puede divulgar lo recibido.
 - Molejo no administra etcd, KMS, nodes, CNI o IAM cloud.
+- Observaciones y candidatos descubiertos no activan bindings del Control Plane.
 
 Cada cambio de actor, permiso, credencial, callback, command kind, CRD,
 ServiceAccount, backend o delivery exige revisar este modelo y vincular pruebas a
@@ -85,6 +89,8 @@ los IDs afectados.
 
 - [ADR 0019](../adr/0019-provisionamiento-de-workspace-y-limite-de-namespace.md)
 - [ADR 0020](../adr/0020-custodia-de-secrets-y-entrega-al-runtime.md)
+- [ADR 0021](../adr/0021-bindings-explicitos-gestionados-por-el-operador.md)
+- [ADR 0022](../adr/0022-metricas-neutrales-con-consulta-prometheus.md)
 - [OWASP Threat Modeling](https://cheatsheetseries.owasp.org/cheatsheets/Threat_Modeling_Cheat_Sheet.html)
 - [OWASP Top 10: 2025](https://owasp.org/Top10/2025/0x00_2025-Introduction/)
 - [Buenas prácticas RBAC Kubernetes](https://kubernetes.io/docs/concepts/security/rbac-good-practices/)

@@ -74,3 +74,9 @@ cluster cannot satisfy another cluster's requirements, and optional providers
 remain composable. Observations never install infrastructure, rotate provider
 credentials, or mutate desired application state.
 
+## References
+
+- [ADR 0015: Capability ownership](0015-capability-ownership.md)
+- [ADR 0016: Alpha lifecycle policy](0016-alpha-lifecycle-policy.md)
+- [ADR 0021: Explicit operator-managed bindings](0021-explicit-operator-managed-bindings.md)
+- [ADR 0022: Provider-neutral metrics with a Prometheus-compatible query adapter](0022-provider-neutral-metrics-with-prometheus-query.md)

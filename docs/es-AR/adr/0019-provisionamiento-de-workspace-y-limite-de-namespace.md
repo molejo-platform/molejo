@@ -32,6 +32,13 @@ RoleBindings para roles fijos. El provisionamiento del límite y la reconciliaci
 de aplicaciones usan workloads y ServiceAccounts separados, aunque puedan
 compartir el mismo artefacto binario.
 
+La instalación alfa anterior a este límite contiene solamente datos de prueba y
+no recibe una excepción permanente. Su Workspace, Projects, Apps, recursos de
+runtime y namespace compartido pueden eliminarse explícitamente y recrearse
+después mediante `WorkspacePlacement`. Molejo no intenta migrar el namespace
+in-place porque Kubernetes no permite renombrarlo y el alfa no promete
+compatibilidad de estado.
+
 ## Consecuencias
 
 La configuración del clúster no concede privilegios de producto, el blast radius
@@ -39,6 +46,8 @@ del Agent queda limitado a namespaces vinculados y la creación pasa a ser
 asíncrona. El reconciler de límites sigue siendo un componente de alta confianza.
 Namespaces reducen impacto, pero no ofrecen aislamiento fuerte contra workloads
 hostiles en el mismo clúster o node.
+Eliminar el Workspace legado puede interrumpir y remover sus workloads; es un
+teardown alfa explícito, no un comportamiento automático de upgrade.
 
 ## Alternativas consideradas
 

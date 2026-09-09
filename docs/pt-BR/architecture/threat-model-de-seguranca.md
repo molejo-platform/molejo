@@ -2,9 +2,10 @@
 
 ## Status e escopo
 
-Este é o threat model normativo do alpha para provisionamento de Workspaces e
-entrega de secrets de aplicações. Ele cobre Console e automações externas,
-control plane, PostgreSQL, secret store externo, Cluster Agent outbound com mTLS,
+Este é o threat model normativo do alpha para provisionamento de Workspaces,
+entrega de secrets de aplicações e ativação explícita de bindings de
+capabilities. Ele cobre Console e automações externas, control plane, PostgreSQL,
+providers e secret stores externos, Cluster Agent outbound com mTLS,
 reconciliação do limite do Workspace, Platform Operator, API Kubernetes e
 workload da aplicação.
 
@@ -24,6 +25,8 @@ público, modo de entrega de secrets ou privilégio no cluster.
 6. Reconciliação, rotação, retry e cleanup permanecem idempotentes sob
    desconexão, replay, takeover e falha parcial.
 7. Controles falham de forma fechada e produzem auditoria sanitizada e atribuível.
+8. Discovery e observações do Agent nunca selecionam nem ativam bindings de
+   providers ou capabilities do cluster.
 
 ## Ativos protegidos
 
@@ -101,6 +104,7 @@ credenciais de providers.
 | TM-13 | Supply chain / A03/A08 | Imagem/chart comprometido obtém credencial privilegiada. | Digests, provenance/assinatura, SBOM, scanning e ServiceAccounts separados. | Gates de release e conformance. |
 | TM-14 | SSRF / A01 | Endpoint de provider fornecido por Workspace alcança rede interna. | Endpoints só por configuração do operador, schemes/hosts tipados e sem URL arbitrária em comandos. | Validação do adaptador e bloqueio de metadata/private targets. |
 | TM-15 | Exceptional / A10 | Falha parcial deixa namespace privilegiado ou utilizável cedo. | State machine por conditions, retry seguro, ownership, política explícita de deleção e sucesso somente completo. | Matriz envtest de interrupção/recuperação. |
+| TM-16 | Tampering / A01/A08 | Discovery ou evidência comprometida do Agent ativa binding malicioso ou não desejado de storage, publicação ou telemetria. | Binding tipado no Control Plane por fluxo autenticado do Cluster Operator; evidência do Agent é read-only e não ativa candidatos. | Testes de autorização/admission da API e teste negativo de observação para mutação de binding. |
 
 ## Evidências atuais e gaps
 
@@ -109,14 +113,16 @@ identidade mTLS, session/sequence, fencing de versão desejada, configuração
 imutável, ownership, rendering fechado e automount de ServiceAccount desabilitado
 para aplicações.
 
-As permissões de runtime e observação do Agent ainda usam ClusterRoleBindings e
-o Agent cria namespaces diretamente. São gaps aceitos da implementação alpha,
-não o limite desejado. A ADR 0019 define a migração antes de qualquer alegação de
-least privilege namespaced.
+A decisão namespaced de provisionamento, o boundary controller de
+`WorkspacePlacement`, a separação das credenciais de runtime/discovery, a entrega
+imutável just-in-time de secrets e os limites sanitizados de transporte e
+persistência estão implementados e validados no K3s alpha. O Workspace legado de
+teste ainda usa namespace compartilhado; sua transição aprovada é teardown e
+recriação explícitos, não migração.
 
-O fluxo de secret já usa port externo e materialização imutável. A ADR 0020 fecha
-a direção; escopo RBAC, vocabulário de delivery, aceitação de rotação e testes de
-vazamento continuam pendentes.
+Backend externo de secrets e evidência de encryption at rest sob responsabilidade
+do operador não estão configurados no K3s atual. Permanecem capabilities opcionais
+e não tornam o application loop core indisponível.
 
 ## Invariantes
 
@@ -128,6 +134,8 @@ vazamento continuam pendentes.
 - Secrets não aparecem em APIs de leitura ou storage durável do control plane.
 - Operator permanece secret-blind; Agent não possui list/watch de Secrets.
 - Falha opcional de provider não muda desired state nem derruba o core.
+- Observações do Agent e candidatos descobertos não criam nem ativam bindings no
+  Control Plane.
 - Administrador Kubernetes sempre pode sobrepor controles e fica fora do isolamento tenant.
 
 ## Riscos aceitos e não objetivos
@@ -150,6 +158,8 @@ ServiceAccount, backend ou modo de entrega.
 
 - [ADR 0019](../adr/0019-provisionamento-de-workspace-e-limite-de-namespace.md)
 - [ADR 0020](../adr/0020-custodia-de-secrets-e-entrega-ao-runtime.md)
+- [ADR 0021](../adr/0021-bindings-explicitos-gerenciados-pelo-operador.md)
+- [ADR 0022](../adr/0022-metricas-neutras-com-consulta-prometheus.md)
 - [OWASP Threat Modeling](https://cheatsheetseries.owasp.org/cheatsheets/Threat_Modeling_Cheat_Sheet.html)
 - [OWASP Top 10: 2025](https://owasp.org/Top10/2025/0x00_2025-Introduction/)
 - [Boas práticas RBAC Kubernetes](https://kubernetes.io/docs/concepts/security/rbac-good-practices/)

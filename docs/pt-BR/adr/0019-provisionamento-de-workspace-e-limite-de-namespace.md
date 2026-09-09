@@ -57,6 +57,13 @@ privilégio separados. Podem compartilhar o mesmo artefato binário, mas executa
 em workloads e ServiceAccounts diferentes. O reconciler de limites não lê
 Secrets, não cria workloads de aplicação e não se conecta ao control plane.
 
+A instalação alpha anterior a esse limite contém somente dados de teste e não
+recebe uma exceção permanente de compatibilidade. Seu Workspace, Projects, Apps,
+recursos de runtime e namespace compartilhado podem ser removidos explicitamente
+e depois recriados por `WorkspacePlacement`. A Molejo não tenta migrar o namespace
+in-place porque namespaces Kubernetes não podem ser renomeados e o alpha não
+promete compatibilidade de estado.
+
 ## Consequências
 
 - Configuração do cluster não concede privilégios de produto.
@@ -67,6 +74,9 @@ Secrets, não cria workloads de aplicação e não se conecta ao control plane.
   restringe todos os campos de um RoleBinding criado dinamicamente.
 - Namespace reduz blast radius, mas não oferece isolamento forte contra workloads
   hostis no mesmo cluster ou node.
+- Descartar o Workspace legado de testes pode interromper e remover seus
+  workloads; este é um teardown alpha explícito, não um comportamento automático
+  de upgrade.
 
 ## Alternativas consideradas
 

@@ -2,11 +2,11 @@
 
 ## Status and scope
 
-This is the normative alpha threat model for Workspace provisioning and
-application-secret delivery. It covers the Console and external automation,
-Control Plane, PostgreSQL, external secret store, outbound mTLS Cluster Agent,
-Workspace boundary reconciliation, Platform Operator, Kubernetes API, and
-application workload.
+This is the normative alpha threat model for Workspace provisioning,
+application-secret delivery, and explicit capability-binding activation. It
+covers the Console and external automation, Control Plane, PostgreSQL, external
+providers and secret stores, outbound mTLS Cluster Agent, Workspace boundary
+reconciliation, Platform Operator, Kubernetes API, and application workload.
 
 It is a design and verification artifact, not a production-security claim. It
 must be reviewed whenever a trust boundary, actor, credential, public endpoint,
@@ -26,6 +26,8 @@ secret delivery mode, or cluster privilege changes.
    disconnects, replay, takeover, and partial failure.
 7. Security controls fail closed and produce sanitized, attributable audit
    evidence.
+8. Discovery and Agent observations never select or activate provider or cluster
+   capability bindings.
 
 ## Assets
 
@@ -106,6 +108,7 @@ credentials or secret values.
 | TM-13 | Supply chain / A03/A08 | Compromised image or chart gains an Agent, Operator, or boundary-controller token. | Immutable digests, provenance/signature verification, minimal images, SBOM, dependency scanning, separated ServiceAccounts. | Release and installation conformance gates. |
 | TM-14 | SSRF / A01 | Provider endpoint or webhook target supplied by a Workspace actor reaches metadata or internal services. | Provider endpoints are installation/operator configuration, typed allowlisted schemes/hosts, no arbitrary URL in runtime commands. | Adapter validation and blocked private/metadata target tests. |
 | TM-15 | Exceptional condition / A10 | Partial provisioning leaves a namespace privileged, orphaned, or usable before policy is ready. | Condition-based state machine, access granted only after ownership checks, retry-safe plans, finalizers/explicit deletion policy, no success before all required conditions. | Envtest interruption and recovery matrix. |
+| TM-16 | Tampering / A01/A08 | Compromised discovery or Agent evidence activates a malicious or unintended storage, publication, or telemetry binding. | Typed Control Plane binding owned by an authenticated Cluster Operator workflow; Agent evidence is read-only and cannot activate candidates. | API authorization/admission tests and a negative observation-to-binding mutation test. |
 
 ## Current implementation evidence and gaps
 
@@ -115,16 +118,15 @@ sequence validation, desired-version fencing, immutable versioned configuration,
 ownership checks, closed application workload rendering, and disabled automatic
 ServiceAccount token mounting for application Pods.
 
-The current Agent runtime and observer permissions are still installed through
-ClusterRoleBindings, and the Agent directly creates Workspace namespaces. These
-are accepted alpha implementation gaps, not the target security boundary. ADR
-0019 defines the migration that must complete before claiming namespaced
-least-privilege isolation.
+The namespaced provisioning decision, `WorkspacePlacement` boundary controller,
+split runtime/discovery credentials, immutable just-in-time secret delivery, and
+sanitized transport/persistence boundaries are implemented and validated on the
+alpha K3s installation. The legacy test Workspace still uses a shared namespace;
+its approved transition is explicit teardown and recreation, not migration.
 
-The current secret path already uses an external value-store port and immutable
-Kubernetes materialization. ADR 0020 closes its architectural direction; RBAC
-scoping, explicit delivery vocabulary, rotation acceptance, and negative leakage
-tests remain implementation work.
+An external secret backend and operator-owned Kubernetes encryption-at-rest
+evidence are not configured in the current K3s installation. They remain
+optional capability state and do not make the core application loop unhealthy.
 
 ## Security invariants
 
@@ -142,6 +144,8 @@ tests remain implementation work.
   namespaced and excludes list/watch.
 - Optional provider failure cannot make the core Control Plane unhealthy or
   silently change desired application state.
+- Agent observations and discovered candidates cannot create or activate a
+  Control Plane binding.
 - A cluster administrator can always override Molejo controls; this actor is
   outside Molejo tenant isolation.
 
@@ -173,6 +177,8 @@ backend, delivery mode, or cluster-scoped controller.
 - [ADR 0018: Capability observation and feature availability](../adr/0018-capability-observation-and-feature-availability.md)
 - [ADR 0019: Workspace provisioning and namespace boundary](../adr/0019-workspace-provisioning-and-namespace-boundary.md)
 - [ADR 0020: Secret custody and runtime delivery](../adr/0020-secret-custody-and-runtime-delivery.md)
+- [ADR 0021: Explicit operator-managed bindings](../adr/0021-explicit-operator-managed-bindings.md)
+- [ADR 0022: Provider-neutral metrics with a Prometheus-compatible query adapter](../adr/0022-provider-neutral-metrics-with-prometheus-query.md)
 - [OWASP Threat Modeling Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Threat_Modeling_Cheat_Sheet.html)
 - [OWASP Top 10: 2025](https://owasp.org/Top10/2025/0x00_2025-Introduction/)
 - [Kubernetes RBAC good practices](https://kubernetes.io/docs/concepts/security/rbac-good-practices/)
