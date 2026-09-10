@@ -575,10 +575,7 @@ func readOptionalSecretFile(envName string) ([]byte, error) {
 }
 
 func configureStorageProfile(ctx context.Context, storage *store.Store) error {
-	id := strings.TrimSpace(os.Getenv("MOLEJO_STORAGE_PROFILE_ID"))
-	if id == "" {
-		return nil
-	}
+	id := env("MOLEJO_STORAGE_PROFILE_ID", "persistent-standard")
 	minimum, err := int64Env("MOLEJO_STORAGE_PROFILE_MIN_GIB", 1)
 	if err != nil {
 		return err
@@ -602,7 +599,7 @@ func configureStorageProfile(ctx context.Context, storage *store.Store) error {
 		Snapshots:       os.Getenv("MOLEJO_STORAGE_PROFILE_SNAPSHOTS") == "true",
 		AutomaticBackup: os.Getenv("MOLEJO_STORAGE_PROFILE_AUTOMATIC_BACKUP") == "true",
 		Durability:      env("MOLEJO_STORAGE_PROFILE_DURABILITY", "NodeLocal"),
-		RuntimeBinding:  strings.TrimSpace(os.Getenv("MOLEJO_STORAGE_PROFILE_RUNTIME_BINDING")), Enabled: true,
+		RuntimeBinding:  "", Enabled: true,
 	}
 	if err = storage.ConfigureStorageProfile(ctx, profile); err != nil {
 		return fmt.Errorf("configure storage profile: %w", err)

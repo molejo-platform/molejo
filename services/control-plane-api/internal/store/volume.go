@@ -40,9 +40,6 @@ func (s *Store) ConfigureStorageProfile(ctx context.Context, profile StorageProf
 	if profile.ID == "" || profile.MinimumSizeGiB < 1 || profile.MaximumSizeGiB < profile.MinimumSizeGiB || profile.TotalCapacityGiB < profile.MaximumSizeGiB || profile.WorkspaceQuotaGiB < profile.MinimumSizeGiB {
 		return errors.New("invalid storage profile installation")
 	}
-	if profile.Enabled && profile.RuntimeBinding == "" {
-		return errors.New("enabled storage profile requires an internal runtime binding")
-	}
 	_, err := s.Pool.Exec(ctx, `INSERT INTO storage_profiles(id,display_name,minimum_size_gib,maximum_size_gib,total_capacity_gib,workspace_quota_gib,expandable,snapshots,automatic_backup,durability,runtime_binding,enabled)
 		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
 		ON CONFLICT(id) DO UPDATE SET display_name=EXCLUDED.display_name,minimum_size_gib=EXCLUDED.minimum_size_gib,maximum_size_gib=EXCLUDED.maximum_size_gib,total_capacity_gib=EXCLUDED.total_capacity_gib,workspace_quota_gib=EXCLUDED.workspace_quota_gib,expandable=EXCLUDED.expandable,snapshots=EXCLUDED.snapshots,automatic_backup=EXCLUDED.automatic_backup,durability=EXCLUDED.durability,runtime_binding=EXCLUDED.runtime_binding,enabled=EXCLUDED.enabled,version=storage_profiles.version+1,updated_at=now()

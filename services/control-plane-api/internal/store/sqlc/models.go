@@ -684,21 +684,22 @@ type Session struct {
 }
 
 type StorageProfile struct {
-	ID                string             `json:"id"`
-	DisplayName       string             `json:"display_name"`
-	MinimumSizeGib    int64              `json:"minimum_size_gib"`
-	MaximumSizeGib    int64              `json:"maximum_size_gib"`
-	TotalCapacityGib  int64              `json:"total_capacity_gib"`
-	WorkspaceQuotaGib int64              `json:"workspace_quota_gib"`
-	Expandable        bool               `json:"expandable"`
-	Snapshots         bool               `json:"snapshots"`
-	AutomaticBackup   bool               `json:"automatic_backup"`
-	Durability        string             `json:"durability"`
-	RuntimeBinding    string             `json:"runtime_binding"`
-	Enabled           bool               `json:"enabled"`
-	Version           int64              `json:"version"`
-	CreatedAt         pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	ID                string `json:"id"`
+	DisplayName       string `json:"display_name"`
+	MinimumSizeGib    int64  `json:"minimum_size_gib"`
+	MaximumSizeGib    int64  `json:"maximum_size_gib"`
+	TotalCapacityGib  int64  `json:"total_capacity_gib"`
+	WorkspaceQuotaGib int64  `json:"workspace_quota_gib"`
+	Expandable        bool   `json:"expandable"`
+	Snapshots         bool   `json:"snapshots"`
+	AutomaticBackup   bool   `json:"automatic_backup"`
+	Durability        string `json:"durability"`
+	// Deprecated installation-wide binding retained for alpha schema compatibility; runtime selection uses cluster_storage_bindings.
+	RuntimeBinding string             `json:"runtime_binding"`
+	Enabled        bool               `json:"enabled"`
+	Version        int64              `json:"version"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 }
 
 type TotpCredential struct {

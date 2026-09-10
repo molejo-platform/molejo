@@ -134,6 +134,25 @@ func TestSchemaReadyAcceptsTheAppEnvironmentMigration(t *testing.T) {
 	}
 }
 
+func TestStorageProfileDoesNotSelectAClusterStorageClass(t *testing.T) {
+	storage, _, _ := newIntegrationFixture(t)
+	err := storage.ConfigureStorageProfile(context.Background(), StorageProfileInstallation{
+		ID: "persistent-standard", Name: "Persistent storage", MinimumSizeGiB: 1,
+		MaximumSizeGiB: 10, TotalCapacityGiB: 10, WorkspaceQuotaGiB: 5,
+		Durability: "NodeLocal", Enabled: true,
+	})
+	if err != nil {
+		t.Fatalf("portable storage profile requires a cluster binding: %v", err)
+	}
+	var runtimeBinding string
+	if err = storage.Pool.QueryRow(context.Background(), `SELECT runtime_binding FROM storage_profiles WHERE id='persistent-standard'`).Scan(&runtimeBinding); err != nil {
+		t.Fatal(err)
+	}
+	if runtimeBinding != "" {
+		t.Fatalf("portable profile selected runtime binding %q", runtimeBinding)
+	}
+}
+
 func TestAppEnvironmentOwnsBranchConfigurationAndUniquePair(t *testing.T) {
 	storage, workspaceID, actorID := newIntegrationFixture(t)
 	project, app, environment := createHierarchy(t, storage, workspaceID)
