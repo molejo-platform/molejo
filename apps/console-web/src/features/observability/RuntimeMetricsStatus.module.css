@@ -20,11 +20,27 @@
     color: var(--ui-inverse-text);
   }
 
+  .current {
+    align-items: center;
+    display: flex;
+    gap: var(--space-3);
+  }
+
+  .current > span:first-child {
+    color: var(--ui-inverse-text-subtle);
+    font-size: var(--font-size-2xs);
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
   .telemetry {
+    align-items: center;
     color: var(--ui-inverse-text-muted);
-    display: grid;
+    display: inline-flex;
     font-size: var(--font-size-xs);
     font-weight: 700;
+    gap: var(--space-2);
     text-align: right;
   }
 
@@ -32,19 +48,35 @@
     font: inherit;
   }
 
-  .telemetry small {
-    color: inherit;
-    font-size: var(--font-size-2xs);
-    font-weight: 600;
-    opacity: 0.8;
+  .activity {
+    background: currentColor;
+    border-radius: 50%;
+    display: inline-block;
+    height: 0.5rem;
+    width: 0.5rem;
   }
 
-  .telemetry[data-state="connected"] {
+  .telemetry[data-feedback="updated"] {
     color: var(--ui-inverse-success);
   }
 
-  .telemetry[data-state="reconnecting"],
-  .telemetry[data-stale="true"] {
+  .telemetry[data-feedback="updated"] .activity {
+    animation: telemetry-received 300ms ease-out;
+  }
+
+  .telemetry[data-feedback="updating"] .activity,
+  .telemetry[data-feedback="delayed"] .activity {
+    animation: telemetry-spin 700ms linear infinite;
+    background: transparent;
+    border: 1.5px solid currentColor;
+    border-right-color: transparent;
+    height: 0.65rem;
+    width: 0.65rem;
+  }
+
+  .telemetry[data-feedback="delayed"],
+  .telemetry[data-feedback="partial"],
+  .telemetry[data-feedback="unavailable"] {
     color: var(--ui-inverse-warning);
   }
 
@@ -90,6 +122,27 @@
 
     .scoreboard dl {
       grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @keyframes telemetry-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @keyframes telemetry-received {
+    from {
+      box-shadow: 0 0 0 0 currentColor;
+    }
+    to {
+      box-shadow: 0 0 0 0.35rem transparent;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .telemetry .activity {
+      animation: none;
     }
   }
 }

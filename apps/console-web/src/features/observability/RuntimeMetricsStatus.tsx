@@ -45,7 +45,7 @@ export function useRuntimeMetricsStream(
 }
 
 export function RuntimeStatusStrip({ target }: { target: AppEnvironment }) {
-  const { snapshot, state } = useRuntimeMetrics();
+  const { receivedAt, snapshot, state } = useRuntimeMetrics();
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 10_000);
@@ -61,28 +61,24 @@ export function RuntimeStatusStrip({ target }: { target: AppEnvironment }) {
   const restarts = sum(samples, "restarts");
   const replicas = target.configuration.replicas;
   const configurationSynced = target.currentConfigurationVersion === target.configurationVersion;
-  const connectionLabel = stale
-    ? "Dados desatualizados"
-    : snapshot?.partial
-      ? "Telemetria parcial"
-      : (
-          {
-            connecting: "Conectando à telemetria",
-            connected: "Atualização automática ativa",
-            reconnecting: "Atualização temporariamente interrompida",
-            paused: "Atualização pausada",
-            unavailable: "Telemetria indisponível",
-          } as const
-        )[state];
-  const freshness = latestTimestamp > 0 ? formatFreshness(now - latestTimestamp) : "Aguardando primeira amostra";
+  const feedback = runtimeMetricFeedback(state, Boolean(snapshot), stale, snapshot?.partial ?? false);
 
   return (
-    <section className={styles.scoreboard} aria-label="Saúde operacional">
+    <section className={styles.scoreboard} aria-label="Métricas atuais e saúde operacional">
       <div className={styles.heading}>
-        <StatusBadge status={target.state} />
-        <span className={styles.telemetry} data-state={state} data-stale={stale ? "true" : undefined}>
-          <strong>{connectionLabel}</strong>
-          <small>{freshness}</small>
+        <div className={styles.current}>
+          <span>Agora</span>
+          <StatusBadge status={target.state} />
+        </div>
+        <span
+          className={styles.telemetry}
+          data-feedback={feedback.kind}
+          role="status"
+          aria-atomic="true"
+          aria-busy={feedback.busy}
+        >
+          <span key={receivedAt ?? state} className={styles.activity} aria-hidden="true" />
+          <strong>{feedback.label}</strong>
         </span>
       </div>
       <dl>
@@ -117,6 +113,23 @@ export function RuntimeStatusStrip({ target }: { target: AppEnvironment }) {
   );
 }
 
+function runtimeMetricFeedback(
+  state: RuntimeMetricsValue["state"],
+  hasSnapshot: boolean,
+  stale: boolean,
+  partial: boolean,
+) {
+  if (state === "unavailable") {
+    return { busy: false, kind: "unavailable", label: "Não foi possível atualizar" } as const;
+  }
+  if (stale) return { busy: true, kind: "delayed", label: "Atualização atrasada" } as const;
+  if (partial) return { busy: false, kind: "partial", label: "Atualização parcial" } as const;
+  if (!hasSnapshot || state !== "connected") {
+    return { busy: true, kind: "updating", label: "Atualizando" } as const;
+  }
+  return { busy: false, kind: "updated", label: "Atualizado" } as const;
+}
+
 function Score({ label, value, detail }: { label: string; value: string; detail: string }) {
   return (
     <div>
@@ -142,12 +155,4 @@ function maximum(samples: RuntimeMetricSample[], name: RuntimeMetricSample["name
 
 function formatNumber(value: number) {
   return value.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
-}
-
-function formatFreshness(age: number) {
-  const seconds = Math.max(0, Math.floor(age / 1_000));
-  if (seconds < 10) return "Atualizado agora";
-  if (seconds < 60) return `Atualizado há ${seconds} s`;
-  const minutes = Math.floor(seconds / 60);
-  return `Atualizado há ${minutes} min`;
 }

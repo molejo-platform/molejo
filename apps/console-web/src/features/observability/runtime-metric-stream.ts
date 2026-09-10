@@ -3,7 +3,7 @@ import { useMemo, useSyncExternalStore } from "react";
 import type { RuntimeMetricSnapshot } from "../../shared/api/types";
 import { type RuntimeStreamState, transitionRuntimeStream } from "./runtime-stream-state";
 
-export type RuntimeMetricsValue = { snapshot?: RuntimeMetricSnapshot; state: RuntimeStreamState };
+export type RuntimeMetricsValue = { receivedAt?: number; snapshot?: RuntimeMetricSnapshot; state: RuntimeStreamState };
 
 const unavailable: RuntimeMetricsValue = { state: "unavailable" };
 const streams = new Map<string, RuntimeMetricStream>();
@@ -108,7 +108,11 @@ class RuntimeMetricStream {
 
   private receiveMetrics = (event: Event) => {
     try {
-      this.setValue({ snapshot: JSON.parse((event as MessageEvent<string>).data), state: "connected" });
+      this.setValue({
+        receivedAt: Date.now(),
+        snapshot: JSON.parse((event as MessageEvent<string>).data),
+        state: "connected",
+      });
       this.connected();
     } catch {
       this.stop("unavailable");

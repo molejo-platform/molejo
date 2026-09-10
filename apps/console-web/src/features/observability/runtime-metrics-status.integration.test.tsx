@@ -63,6 +63,8 @@ describe("runtime metrics stream", () => {
     );
     expect(FakeEventSource.instances).toHaveLength(1);
     expect(screen.getByText("— / 3")).toBeTruthy();
+    expect(screen.getByText("Agora")).toBeTruthy();
+    expect(screen.getByText("Atualizando")).toBeTruthy();
 
     const snapshot: RuntimeMetricSnapshot = {
       observedAt: "2026-08-28T12:00:00Z",
@@ -79,27 +81,37 @@ describe("runtime metrics stream", () => {
     expect(screen.getByText("2 / 3")).toBeTruthy();
     expect(screen.getByText("120 mCPU")).toBeTruthy();
     expect(screen.getByText("solicitado 300 · limite 1.500")).toBeTruthy();
-    expect(screen.getByText("Atualização automática ativa")).toBeTruthy();
+    expect(screen.getByText("Atualizado")).toBeTruthy();
+
+    act(() =>
+      FakeEventSource.instances[0].emit("metrics", {
+        ...snapshot,
+        samples: snapshot.samples.map((sample) => (sample.name === "cpu" ? { ...sample, value: 0.13 } : sample)),
+      }),
+    );
+    expect(screen.getByText("130 mCPU")).toBeTruthy();
+    expect(screen.getByText("Atualizado")).toBeTruthy();
 
     act(() => {
       FakeEventSource.instances[0].onerror?.();
     });
-    expect(screen.getByText("Atualização automática ativa")).toBeTruthy();
+    expect(screen.getByText("Atualizado")).toBeTruthy();
     act(() => vi.advanceTimersByTime(4_999));
-    expect(screen.getByText("Atualização automática ativa")).toBeTruthy();
+    expect(screen.getByText("Atualizado")).toBeTruthy();
     act(() => vi.advanceTimersByTime(1));
-    expect(screen.getByText("Atualização temporariamente interrompida")).toBeTruthy();
+    expect(screen.getByText("Atualizando")).toBeTruthy();
+    expect(screen.getByText("130 mCPU")).toBeTruthy();
     expect(FakeEventSource.instances[0].closed).toBe(false);
 
     act(() => FakeEventSource.instances[0].onopen?.());
-    expect(screen.getByText("Atualização automática ativa")).toBeTruthy();
+    expect(screen.getByText("Atualizado")).toBeTruthy();
 
     act(() => {
       visibility = "hidden";
       document.dispatchEvent(new Event("visibilitychange"));
     });
     expect(FakeEventSource.instances[0].closed).toBe(true);
-    expect(screen.getByText("Atualização pausada")).toBeTruthy();
+    expect(screen.getByText("Atualizando")).toBeTruthy();
     act(() => {
       visibility = "visible";
       document.dispatchEvent(new Event("visibilitychange"));
@@ -127,5 +139,31 @@ describe("runtime metrics stream", () => {
     );
 
     expect(FakeEventSource.instances).toHaveLength(1);
+  });
+
+  it("signals a delayed snapshot without exposing transport details", () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("EventSource", FakeEventSource);
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
+    const delayedTarget = Object.assign({}, target, { id: "aev-cccccccccccccccccccc" }) as never;
+    renderWithQueryClient(
+      <RuntimeMetricsProvider target={delayedTarget} params={params}>
+        <RuntimeStatusStrip target={delayedTarget} />
+      </RuntimeMetricsProvider>,
+    );
+    act(() =>
+      FakeEventSource.instances[0].emit("metrics", {
+        observedAt: new Date().toISOString(),
+        partial: false,
+        unavailable: [],
+        samples: [{ name: "cpu", unit: "cores", timestamp: new Date().toISOString(), value: 0.12 }],
+      }),
+    );
+    expect(screen.getByText("Atualizado")).toBeTruthy();
+
+    act(() => vi.advanceTimersByTime(80_000));
+
+    expect(screen.getByText("Atualização atrasada")).toBeTruthy();
+    expect(screen.queryByText(/conexão|telemetria|interrompida/i)).toBeNull();
   });
 });

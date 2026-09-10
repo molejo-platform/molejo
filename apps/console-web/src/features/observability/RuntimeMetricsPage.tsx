@@ -42,12 +42,9 @@ export function RuntimeMetricsPage({ target, params }: { target: AppEnvironment;
       <ObservabilityNav params={params} />
       <div className="section-heading">
         <div>
-          <p className="eyebrow">Runtime</p>
+          <p className="eyebrow">Histórico</p>
           <h2>Métricas</h2>
-          <p className="muted">
-            O histórico respeita o período escolhido e usa uma resolução segura definida pelo servidor. A amostra atual
-            permanece no placar rápido.
-          </p>
+          <p className="muted">As métricas atuais continuam no resumo acima.</p>
         </div>
         <Button type="button" variant="icon" aria-label="Atualizar métricas" onClick={viewModel.applyRange}>
           <Icon name="refresh" />
