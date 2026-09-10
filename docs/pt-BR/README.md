@@ -3,7 +3,7 @@
 [Início do projeto](../../README.md) | [English](../en/README.md) |
 [Español (Argentina)](../es-AR/README.md)
 
-> Projeto experimental em pre-alpha. A Molejo ainda não está pronta
+> Projeto experimental em alpha. A Molejo ainda não está pronta
 > para produção.
 
 A Molejo é uma Kubernetes Application Platform pública e portátil. Seu
@@ -16,11 +16,11 @@ essa intenção em recursos Kubernetes.
 
 ## Estado
 
-O repositório permanece experimental e em pre-alpha. Sua implementação atual
+O repositório permanece experimental e em alpha. Sua implementação atual
 inclui contratos Kubernetes versionados, o Platform Operator, um backend de
 control plane e o fluxo de pairing do Cluster Agent outbound. Esses componentes
-não constituem uma plataforma suportada para produção nem evidência de uma release
-pública suportada.
+não constituem uma plataforma suportada para produção. Releases alpha podem alterar
+contratos sem compromisso de compatibilidade ou migração.
 
 ## Modelo do Produto
 

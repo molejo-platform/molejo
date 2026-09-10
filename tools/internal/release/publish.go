@@ -202,7 +202,7 @@ func (p *Pipeline) publishGitHubRelease(ctx context.Context, directory, commit s
 		return fmt.Errorf("create release notes: %w", err)
 	}
 	defer os.Remove(notes.Name())
-	if _, err = fmt.Fprintf(notes, "Molejo %s is the first alpha distribution used to validate the release and future `molejoctl install` flow.\n\nCommit: `%s`\n\nThe control-plane distribution and console are experimental placeholders in this release.\n", tag, commit); err != nil {
+	if _, err = fmt.Fprint(notes, releaseNotes(tag, commit)); err != nil {
 		_ = notes.Close()
 		return fmt.Errorf("write release notes: %w", err)
 	}

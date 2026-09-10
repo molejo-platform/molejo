@@ -1,6 +1,6 @@
 # Molejo
 
-> Experimental pre-alpha project. Molejo is not ready for production.
+> Experimental alpha project. Molejo is not ready for production.
 
 Molejo is a public and portable Kubernetes Application Platform. It aims
 to let people create, publish, and operate applications without requiring them to

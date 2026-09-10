@@ -212,3 +212,27 @@ func TestVerifyChecksumsDetectsTampering(t *testing.T) {
 		t.Fatal("expected checksum verification to fail")
 	}
 }
+
+func TestReleaseNotesDescribeTheCurrentAlphaBaseline(t *testing.T) {
+	t.Parallel()
+
+	notes := releaseNotes("v0.1.0-alpha.3", "0123456789abcdef")
+	for _, expected := range []string{
+		"experimental alpha distribution",
+		"provider-neutral capability observations",
+		"outbound mTLS Cluster Agent pairing",
+		"namespaced Workspace placement",
+		"disposable Kind conformance",
+		"EKS acceptance",
+		"`0123456789abcdef`",
+	} {
+		if !strings.Contains(notes, expected) {
+			t.Errorf("release notes do not contain %q:\n%s", expected, notes)
+		}
+	}
+	for _, obsolete := range []string{"first alpha distribution", "experimental placeholders"} {
+		if strings.Contains(notes, obsolete) {
+			t.Errorf("release notes retain obsolete statement %q:\n%s", obsolete, notes)
+		}
+	}
+}

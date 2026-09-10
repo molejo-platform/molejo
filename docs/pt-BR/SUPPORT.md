@@ -5,7 +5,7 @@
 Esta é uma tradução informativa. A versão canônica está em
 [inglês](../../SUPPORT.md).
 
-A Molejo é um projeto experimental em pre-alpha. Atualmente, não oferece
+A Molejo é um projeto experimental em alpha. Atualmente, não oferece
 suporte para produção, compromisso de compatibilidade ou garantia de prazo de
 resposta.
 

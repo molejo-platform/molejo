@@ -5,7 +5,7 @@
 
 English is the canonical version of this policy.
 
-Molejo is an experimental pre-alpha project. It currently provides no
+Molejo is an experimental alpha project. It currently provides no
 production support, compatibility commitment, or response-time guarantee.
 
 ## Where to Ask
