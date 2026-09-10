@@ -18,7 +18,7 @@ aplican a la rama predeterminada según la disponibilidad de los mantenedores.
 ## Cómo Informar una Vulnerabilidad
 
 Informá las posibles vulnerabilidades mediante el
-[canal privado de vulnerabilidades de GitHub](https://github.com/molejo-platform/fruto/security/advisories/new).
+[canal privado de vulnerabilidades de GitHub](https://github.com/molejo-platform/molejo/security/advisories/new).
 No divulgues la vulnerabilidad en un issue, discusión o pull request público.
 
 Incluí, cuando sea posible:

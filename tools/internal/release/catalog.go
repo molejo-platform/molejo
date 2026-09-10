@@ -1,7 +1,7 @@
 package release
 
 const (
-	GitHubRepository = "molejo-platform/fruto"
+	GitHubRepository = "molejo-platform/molejo"
 	Registry         = "ghcr.io/molejo-platform"
 	ChartRegistry    = "oci://ghcr.io/molejo-platform/charts"
 )

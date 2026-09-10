@@ -63,7 +63,7 @@ func (p *Pipeline) Check(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if !strings.Contains(origin, "github.com:molejo-platform/fruto.git") && !strings.Contains(origin, "github.com/molejo-platform/fruto") {
+	if !strings.Contains(origin, "github.com/molejo-platform/molejo.git") && !strings.Contains(origin, "github.com/molejo-platform/molejo") {
 		return fmt.Errorf("origin %q does not match %s", origin, GitHubRepository)
 	}
 	for _, path := range p.requiredPaths() {

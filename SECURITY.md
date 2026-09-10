@@ -18,7 +18,7 @@ best-effort basis.
 ## Reporting a Vulnerability
 
 Report suspected vulnerabilities through
-[GitHub private vulnerability reporting](https://github.com/molejo-platform/fruto/security/advisories/new).
+[GitHub private vulnerability reporting](https://github.com/molejo-platform/molejo/security/advisories/new).
 Do not disclose the vulnerability in a public issue, discussion, or pull request.
 
 Include, when possible:

@@ -18,7 +18,7 @@ branch padrão conforme a disponibilidade dos mantenedores.
 ## Relatando uma Vulnerabilidade
 
 Relate suspeitas de vulnerabilidade pelo
-[canal privado de vulnerabilidades do GitHub](https://github.com/molejo-platform/fruto/security/advisories/new).
+[canal privado de vulnerabilidades do GitHub](https://github.com/molejo-platform/molejo/security/advisories/new).
 Não divulgue a vulnerabilidade em uma issue, discussão ou pull request público.
 
 Inclua, quando possível:
