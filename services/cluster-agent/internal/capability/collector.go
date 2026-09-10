@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	authorizationv1 "k8s.io/api/authorization/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -76,7 +75,9 @@ func (c *Collector) collect(ctx context.Context) []capabilitycontract.Observatio
 		c.dynamicObservation(ctx, now, capabilitycontract.WorkspaceProvisioning, schema.GroupVersionResource{Group: "platform.molejo.dev", Version: "v1alpha1", Resource: "workspaceplacements"}),
 		c.dynamicObservation(ctx, now, capabilitycontract.RuntimeWorkloadApply, schema.GroupVersionResource{Group: "platform.molejo.dev", Version: "v1alpha1", Resource: "appdeployments"}),
 		c.dynamicObservation(ctx, now, capabilitycontract.RuntimeWorkloadObserve, schema.GroupVersionResource{Group: "platform.molejo.dev", Version: "v1alpha1", Resource: "appdeployments"}),
-		c.podLogsObservation(ctx, now), c.eventsObservation(ctx, now), c.dynamicObservation(ctx, now, capabilitycontract.RuntimeMetricsCurrent, schema.GroupVersionResource{Group: "metrics.k8s.io", Version: "v1beta1", Resource: "pods"}),
+		c.namespacedResourceObservation(now, capabilitycontract.RuntimeLogsCurrent, schema.GroupVersionResource{Version: "v1", Resource: "pods/log"}),
+		c.namespacedResourceObservation(now, capabilitycontract.RuntimeEventsCurrent, schema.GroupVersionResource{Version: "v1", Resource: "events"}),
+		c.namespacedResourceObservation(now, capabilitycontract.RuntimeMetricsCurrent, schema.GroupVersionResource{Group: "metrics.k8s.io", Version: "v1beta1", Resource: "pods"}),
 		c.dynamicObservation(ctx, now, capabilitycontract.PublicationHTTP, schema.GroupVersionResource{Group: "gateway.networking.k8s.io", Version: "v1", Resource: "gateways"}),
 		c.dynamicObservation(ctx, now, capabilitycontract.PublicationTCP, schema.GroupVersionResource{Group: "gateway.networking.k8s.io", Version: "v1alpha2", Resource: "tcproutes"}),
 	}
@@ -95,24 +96,12 @@ func (c *Collector) dynamicObservation(ctx context.Context, now time.Time, id ca
 	return outcome(base, err)
 }
 
-func (c *Collector) podLogsObservation(ctx context.Context, now time.Time) capabilitycontract.Observation {
-	base := observation(capabilitycontract.RuntimeLogsCurrent, now)
-	if !c.resourceExists("v1", "pods/log") {
+func (c *Collector) namespacedResourceObservation(now time.Time, id capabilitycontract.ID, resource schema.GroupVersionResource) capabilitycontract.Observation {
+	base := observation(id, now)
+	if !c.resourceExists(resource.GroupVersion().String(), resource.Resource) {
 		base.Support, base.Health, base.ReasonCode = capabilitycontract.SupportUnsupported, capabilitycontract.HealthUnavailable, capabilitycontract.ReasonAPIMissing
-		return base
-	}
-	review, err := c.kubernetes.AuthorizationV1().SelfSubjectAccessReviews().Create(ctx, &authorizationv1.SelfSubjectAccessReview{Spec: authorizationv1.SelfSubjectAccessReviewSpec{ResourceAttributes: &authorizationv1.ResourceAttributes{Verb: "get", Group: "", Resource: "pods", Subresource: "log"}}}, metav1.CreateOptions{})
-	base = outcome(base, err)
-	if err == nil && !review.Status.Allowed {
-		base.Health, base.ReasonCode = capabilitycontract.HealthUnavailable, capabilitycontract.ReasonAccessDenied
 	}
 	return base
-}
-
-func (c *Collector) eventsObservation(ctx context.Context, now time.Time) capabilitycontract.Observation {
-	base := observation(capabilitycontract.RuntimeEventsCurrent, now)
-	_, err := c.kubernetes.CoreV1().Events(metav1.NamespaceAll).List(ctx, metav1.ListOptions{Limit: 1})
-	return outcome(base, err)
 }
 
 func (c *Collector) storageObservations(ctx context.Context, now time.Time) []capabilitycontract.Observation {
