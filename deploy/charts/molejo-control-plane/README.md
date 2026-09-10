@@ -1,8 +1,8 @@
 # Molejo control plane chart
 
 This chart is installed by `molejoctl platform control-plane install`. It contains only
-the in-cluster PostgreSQL database, bootstrap Job, control-plane API, and the
-internal HTTPS and mTLS services used by the cluster Agent.
+the in-cluster PostgreSQL database, bootstrap Job, control-plane API, Console,
+and the internal HTTPS and mTLS services used by the Cluster Agent.
 
 The installer creates the required credentials and certificate Secrets before
 installing the chart. When `postgresql.storageClass` is empty, the PVC uses the

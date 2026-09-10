@@ -24,14 +24,23 @@ structure whenever an equivalent page is available.
 Current experimental components:
 
 - [Operational model](docs/en/architecture/operational-model.md)
+- [Platform lifecycle](docs/en/platform/lifecycle.md)
 - [Platform Operator](docs/en/platform/platform-operator.md)
+- control-plane API and Console;
 - [Outbound Cluster Agent](docs/en/platform/cluster-agent.md)
 - [Cluster capabilities](docs/en/capabilities/README.md)
+- [Application delivery loop](docs/en/application-loop/README.md)
+
+## Try the Alpha
+
+Start with the published [GitHub prereleases](https://github.com/molejo-platform/molejo/releases)
+and follow the [platform lifecycle](docs/en/platform/lifecycle.md). Alpha releases
+may change contracts without compatibility or migration guarantees.
 
 ## Contributing
 
-Contribution guidelines will be added soon. See [CONTRIBUTING.md](CONTRIBUTING.md)
-for the language-specific entry points.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, validation, and the
+language-specific contribution guides.
 
 ## Community
 

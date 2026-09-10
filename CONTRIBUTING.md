@@ -1,8 +1,6 @@
 # Contributing
 
-Contribution guidelines will be added soon.
-
-Choose a language:
+Choose a contribution guide:
 
 - [English](docs/en/CONTRIBUTING.md)
 - [Português (Brasil)](docs/pt-BR/CONTRIBUTING.md)

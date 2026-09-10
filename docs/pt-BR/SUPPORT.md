@@ -11,10 +11,10 @@ resposta.
 
 ## Onde Pedir Ajuda
 
-- Use um relato de bug para defeitos reproduzíveis no repositório.
-- Use uma proposta para mudanças de produto ou engenharia.
-- Use GitHub Discussions para dúvidas e conversas iniciais de design quando esse
-  recurso estiver disponível.
+- Use um [relato de bug](https://github.com/molejo-platform/molejo/issues/new?template=bug.yml)
+  para defeitos reproduzíveis no repositório.
+- Use uma [proposta](https://github.com/molejo-platform/molejo/issues/new?template=proposal.yml)
+  para mudanças de produto ou engenharia.
 - Siga [SECURITY.md](SECURITY.md) para suspeitas de vulnerabilidade.
 
 Antes de abrir um relato, pesquise as issues existentes e forneça contexto

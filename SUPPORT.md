@@ -10,10 +10,10 @@ production support, compatibility commitment, or response-time guarantee.
 
 ## Where to Ask
 
-- Use a bug report for reproducible defects in the repository.
-- Use a proposal for product or engineering changes.
-- Use GitHub Discussions for questions and early design conversations when that
-  feature is available.
+- Use a [bug report](https://github.com/molejo-platform/molejo/issues/new?template=bug.yml)
+  for reproducible defects in the repository.
+- Use a [proposal](https://github.com/molejo-platform/molejo/issues/new?template=proposal.yml)
+  for product or engineering changes.
 - Follow [SECURITY.md](SECURITY.md) for suspected vulnerabilities.
 
 Before opening a report, search existing issues and include enough context for

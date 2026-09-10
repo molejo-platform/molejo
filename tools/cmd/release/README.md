@@ -3,12 +3,15 @@
 The local release tool is the single entry point used to validate, build, publish, and verify a Molejo pre-release. Run it from the repository root:
 
 ```sh
-VERSION=0.1.0-alpha.3
+VERSION="$(git branch --show-current | sed 's#^release/v##')"
 go -C tools run ./cmd/release check --version "$VERSION"
 go -C tools run ./cmd/release build --version "$VERSION"
 go -C tools run ./cmd/release publish --version "$VERSION"
 go -C tools run ./cmd/release verify --version "$VERSION"
 ```
+
+The current branch must be named `release/v<version>`; the command above derives
+the pre-release version from that branch name.
 
 The commands have distinct boundaries:
 

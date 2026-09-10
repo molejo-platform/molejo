@@ -18,9 +18,9 @@ confiables reconcilian esa intención en recursos de Kubernetes.
 
 El repositorio continúa siendo experimental y en alfa. Su implementación actual
 incluye contratos de Kubernetes versionados, el Platform Operator, un backend de
-control plane y el flujo de pairing del Cluster Agent outbound. Estos componentes
-no constituyen una plataforma soportada para producción. Las releases alfa pueden
-cambiar contratos sin compromiso de compatibilidad ni migración.
+control plane y Console, y el flujo de pairing del Cluster Agent outbound. Estos
+componentes no constituyen una plataforma soportada para producción. Las releases
+alfa pueden cambiar contratos sin compromiso de compatibilidad ni migración.
 
 ## Modelo del Producto
 
@@ -48,10 +48,13 @@ Kubernetes son proyecciones de runtime y nunca otorgan permisos del producto.
 Este repositorio es el monorepo público de Molejo. Su estructura actual es:
 
 - `contracts/` — contratos versionados neutrales de lenguaje y generados;
+- `apps/` — aplicaciones orientadas al usuario, incluidos `molejoctl` y Console;
 - `packages/` — bibliotecas compartidas con consumidores concretos;
 - `services/` — Platform Operator, control plane y Cluster Agent;
 - `deploy/` — artefactos de instalación de Kubernetes generados y mantenidos;
-- `docs/` — documentación pública de arquitectura y operaciones.
+- `docs/` — documentación pública de arquitectura y operaciones;
+- `tools/` — herramientas de release, generación y soporte de pruebas;
+- `test/` — pruebas de contratos y conformidad entre componentes.
 
 El código Go usa un único módulo en la raíz del repositorio. Se
 incorporarán nuevos módulos Go y un archivo `go.work` solamente cuando un
@@ -91,8 +94,8 @@ Guías actuales de arquitectura y componentes:
 
 ## Contribuciones
 
-Las pautas de contribución se publicarán en
-[CONTRIBUTING.md](CONTRIBUTING.md).
+Consultá [CONTRIBUTING.md](CONTRIBUTING.md) para conocer los requisitos previos,
+los comandos de validación y los flujos locales con Kubernetes.
 
 ## Comunidad
 
