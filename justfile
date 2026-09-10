@@ -75,13 +75,13 @@ distribution-build:
 
 distribution-test:
     go test ./apps/...
-    go -C tools test ./cmd/release/... ./internal/release/...
+    GOCACHE="${GOCACHE:-/tmp/molejo-go-cache}" go -C tools test ./cmd/conformance-bundle/... ./cmd/kubernetes-conformance/... ./cmd/release/... ./internal/conformance/... ./internal/release/...
 
 script-check:
     bash -n tools/testing/*.sh
 
-# Run one explicit Kubernetes conformance profile against a selected context.
-kubernetes-conformance profile context storage_class="" gateway_file="":
+# Run the disposable Kind harness or one profile against an existing context.
+kubernetes-conformance profile context="" storage_class="" gateway_file="":
     tools/testing/kubernetes-conformance.sh "{{ profile }}" --context "{{ context }}" --storage-class "{{ storage_class }}" --gateway-file "{{ gateway_file }}"
 
 # Run the fast automated suite without Docker.

@@ -40,6 +40,19 @@ func (s *Store) GetOperationForPrincipal(ctx context.Context, principalID int64,
 	return item, err
 }
 
+func (s *Store) FindOperationByIdempotency(ctx context.Context, workspaceID, actorID int64, idempotencyHash, payloadHash []byte) (domain.Operation, bool, error) {
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return domain.Operation{}, false, err
+	}
+	defer tx.Rollback(ctx)
+	operation, found, err := operationByIdempotency(ctx, tx, workspaceID, actorID, idempotencyHash, payloadHash)
+	if err != nil {
+		return domain.Operation{}, false, err
+	}
+	return operation, found, tx.Commit(ctx)
+}
+
 func (s *Store) ListAppEnvironmentOperations(ctx context.Context, workspaceID, appEnvironmentID int64, from, to time.Time, limit int) ([]domain.Operation, error) {
 	rows, err := s.Pool.Query(ctx, `SELECT `+operationSelectColumns+` FROM operations o `+operationJoins+`
 		WHERE o.workspace_id=$1 AND o.app_environment_id=$2 AND o.created_at >= $3 AND o.created_at <= $4

@@ -21,6 +21,17 @@ var gatewayCRDFiles = []string{
 }
 
 func (p *Pipeline) packageCharts(ctx context.Context, directory string, digests map[string]string) (map[string]Artifact, error) {
+	return p.packageChartsWithReferences(ctx, directory, imageReferences(Registry, digests))
+}
+
+// PackageCharts assembles the release charts with caller-supplied immutable
+// image references. It is shared by the release pipeline and local conformance
+// environments so both paths validate the same chart assembly.
+func (p *Pipeline) PackageCharts(ctx context.Context, directory string, references map[string]string) (map[string]Artifact, error) {
+	return p.packageChartsWithReferences(ctx, directory, references)
+}
+
+func (p *Pipeline) packageChartsWithReferences(ctx context.Context, directory string, references map[string]string) (map[string]Artifact, error) {
 	result := make(map[string]Artifact, len(Charts))
 	for _, chart := range Charts {
 		staging := filepath.Join(directory, "chart-staging", chart.Name)
@@ -30,7 +41,7 @@ func (p *Pipeline) packageCharts(ctx context.Context, directory string, digests 
 		if err := os.MkdirAll(filepath.Join(staging, "templates"), 0o755); err != nil {
 			return nil, fmt.Errorf("create chart templates: %w", err)
 		}
-		resources, err := p.renderChartResources(ctx, chart.Name, digests)
+		resources, err := p.renderChartResources(ctx, chart.Name, references)
 		if err != nil {
 			return nil, err
 		}
@@ -107,7 +118,7 @@ func copyCRDs(source, destination string) error {
 	return nil
 }
 
-func (p *Pipeline) renderChartResources(ctx context.Context, chart string, digests map[string]string) (string, error) {
+func (p *Pipeline) renderChartResources(ctx context.Context, chart string, references map[string]string) (string, error) {
 	var rendered string
 	var err error
 	switch chart {
@@ -138,17 +149,37 @@ func (p *Pipeline) renderChartResources(ctx context.Context, chart string, diges
 		return "", fmt.Errorf("unknown chart %q", chart)
 	}
 	for _, image := range Images {
-		digest := digests[image.Name]
-		if digest == "" {
-			return "", fmt.Errorf("missing digest for %s", image.Name)
+		reference := references[image.Name]
+		if !canonicalImageReference(reference) {
+			return "", fmt.Errorf("missing canonical image reference for %s", image.Name)
 		}
-		replacement := Registry + "/" + image.Name + "@" + digest
-		rendered = strings.ReplaceAll(rendered, image.Placeholder, replacement)
+		rendered = strings.ReplaceAll(rendered, image.Placeholder, reference)
 	}
 	if strings.Contains(rendered, "sha256:"+zeroDigest) {
 		return "", fmt.Errorf("chart %s retains an unresolved image digest", chart)
 	}
 	return rendered, nil
+}
+
+func imageReferences(registry string, digests map[string]string) map[string]string {
+	references := make(map[string]string, len(Images))
+	for _, image := range Images {
+		references[image.Name] = registry + "/" + image.Name + "@" + digests[image.Name]
+	}
+	return references
+}
+
+func canonicalImageReference(reference string) bool {
+	name, digest, found := strings.Cut(reference, "@sha256:")
+	if !found || name == "" || len(digest) != 64 {
+		return false
+	}
+	for _, character := range digest {
+		if !strings.ContainsRune("0123456789abcdef", character) {
+			return false
+		}
+	}
+	return true
 }
 
 func injectControlPlaneChartValues(rendered string) string {

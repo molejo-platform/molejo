@@ -105,13 +105,12 @@ Reconciliações repetidas já convergidas não emitem Events de transição dup
 
 ## Verificações reproduzíveis
 
-`just e2e` constrói duas imagens da fixture localmente, carrega ambas em um
-cluster Kind descartável e valida HTTP privado, egress interno controlado,
-rollout por digest, falha e recuperação de probes, drift, recriação dos filhos e
-garbage collection. Ele também instala um Gateway local e valida REST, GraphQL,
-SSE incremental, WebSocket persistente, remoção da rota e TLS com um certificado
-efêmero confiado pelo cliente de teste. `just e2e-public` adiciona uma chamada
-HTTPS real de saída e fica deliberadamente fora do gate determinístico `just ci`.
+`just kubernetes-conformance kind` cria um cluster Kind e um registry locais e
+descartáveis, empacota os mesmos charts consumidos pelo `molejoctl` e valida a
+instalação idempotente do runtime e do Control Plane. A jornada cria um Workspace
+com limites de RBAC, registra uma imagem OCI imutável, reconcilia e observa uma
+aplicação privada, cancela o stream de logs, remove a aplicação de forma
+idempotente e comprova o teardown do ambiente.
 
 Essa prova local não valida DNS público de entrada nem certificado publicamente
 confiável. Esses itens permanecem como uma etapa de aceite separada no ambiente
@@ -129,8 +128,9 @@ navegador; seu roteador no cliente é responsável pela página Not Found. Asset
 ausentes retornam `404` e nunca recebem o shell da SPA. HTML usa `no-cache` e é
 revalidado; assets com fingerprint são imutáveis por um ano.
 
-Execute `just frontend-test` para provar o container restrito e `just e2e` para o
-ciclo completo no Kind. Execute `just audit-frontend-images` separadamente quando
+Execute `just frontend-test` para provar o container restrito e
+`just kubernetes-conformance kind` para o ciclo completo no Kind. Execute
+`just audit-frontend-images` separadamente quando
 for necessária uma verificação pela base de vulnerabilidades do Docker Scout; a
 auditoria mutável não integra o gate determinístico `just ci`.
 

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: $0 <core|metrics-current|storage-rwo|publication-http> --context <name> [--storage-class <name>] [--gateway-file <path>]" >&2
+  echo "usage: $0 <kind|core|metrics-current|storage-rwo|publication-http> [--context <name>] [--storage-class <name>] [--gateway-file <path>]" >&2
   exit 2
 }
 
@@ -34,9 +34,15 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+repository_root="$(git rev-parse --show-toplevel)"
+
+if [[ "$profile" == "kind" ]]; then
+  [[ -z "$context_name" && -z "$storage_class" && -z "$gateway_file" ]] || usage
+  exec "$repository_root/tools/testing/kind-conformance.sh"
+fi
+
 [[ -n "$context_name" ]] || usage
 kubectl config get-contexts "$context_name" >/dev/null
-repository_root="$(git rev-parse --show-toplevel)"
 
 molejoctl() {
   if [[ -n "${MOLEJOCTL_BIN:-}" ]]; then

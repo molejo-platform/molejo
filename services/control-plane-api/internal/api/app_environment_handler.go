@@ -131,15 +131,27 @@ func (h *generatedHandler) DeleteAppEnvironment(w http.ResponseWriter, r *http.R
 	if !ok {
 		return
 	}
-	if _, ok = h.appEnvironment(w, r, workspace.ID, string(projectID), string(appID), string(appEnvironmentID)); !ok {
-		return
-	}
 	idempotencyKey, payloadHash, ok := idempotency(r)
 	if !ok {
 		writeError(w, http.StatusBadRequest, "idempotency_required", "Idempotency-Key is required", r)
 		return
 	}
-	operation, err := h.server.store.DeleteAppEnvironment(r.Context(), workspace.ID, actor.ID, string(appEnvironmentID), int64(params.IfMatch), auth.HashToken(idempotencyKey), scopedRequestPayloadHash(r, payloadHash))
+	idempotencyHash := auth.HashToken(idempotencyKey)
+	requestHash := scopedRequestPayloadHash(r, payloadHash)
+	operation, found, err := h.server.store.FindOperationByIdempotency(r.Context(), workspace.ID, actor.ID, idempotencyHash, requestHash)
+	if err != nil {
+		writeAppEnvironmentError(w, r, err)
+		return
+	}
+	if found {
+		h.server.logAcceptedOperation(r, operation)
+		writeJSON(w, http.StatusAccepted, operation)
+		return
+	}
+	if _, ok = h.appEnvironment(w, r, workspace.ID, string(projectID), string(appID), string(appEnvironmentID)); !ok {
+		return
+	}
+	operation, err = h.server.store.DeleteAppEnvironment(r.Context(), workspace.ID, actor.ID, string(appEnvironmentID), int64(params.IfMatch), idempotencyHash, requestHash)
 	if err != nil {
 		writeAppEnvironmentError(w, r, err)
 		return

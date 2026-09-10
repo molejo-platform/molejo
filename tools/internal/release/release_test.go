@@ -130,6 +130,40 @@ func TestExcludeYAMLKindRemovesNamespace(t *testing.T) {
 	}
 }
 
+func TestImageReferencesUseTheSelectedRegistryAndDigest(t *testing.T) {
+	digests := make(map[string]string, len(Images))
+	for _, image := range Images {
+		digests[image.Name] = "sha256:" + strings.Repeat("a", 64)
+	}
+
+	references := imageReferences("registry.example/molejo", digests)
+	for _, image := range Images {
+		want := "registry.example/molejo/" + image.Name + "@sha256:" + strings.Repeat("a", 64)
+		if references[image.Name] != want {
+			t.Fatalf("reference for %s = %q, want %q", image.Name, references[image.Name], want)
+		}
+	}
+}
+
+func TestCanonicalImageReference(t *testing.T) {
+	t.Parallel()
+
+	valid := "ghcr.io/molejo-platform/platform-operator@sha256:" + strings.Repeat("a", 64)
+	if !canonicalImageReference(valid) {
+		t.Fatalf("expected %q to be canonical", valid)
+	}
+	for _, reference := range []string{
+		"",
+		"ghcr.io/molejo-platform/platform-operator:latest",
+		"ghcr.io/molejo-platform/platform-operator@sha256:" + strings.Repeat("a", 63),
+		"ghcr.io/molejo-platform/platform-operator@sha256:" + strings.Repeat("z", 64),
+	} {
+		if canonicalImageReference(reference) {
+			t.Errorf("expected %q to be rejected", reference)
+		}
+	}
+}
+
 func TestControlPlaneStorageClassTemplateIsInjected(t *testing.T) {
 	rendered := "  MOLEJO_MODE: development\n  MOLEJO_PUBLIC_URL: http://127.0.0.1:8080\n  MOLEJO_ALLOWED_ORIGIN: http://127.0.0.1:8080\n  MOLEJO_COOKIE_SECURE: \"false\"\n      accessModes:\n      - ReadWriteOnce\n      resources:\n        requests:\n          storage: 2Gi\n"
 	templated := injectControlPlaneChartValues(rendered)

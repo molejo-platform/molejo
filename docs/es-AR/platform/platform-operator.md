@@ -107,14 +107,12 @@ emiten Events de transición duplicados.
 
 ## Verificaciones reproducibles
 
-`just e2e` construye dos imágenes de la fixture localmente, carga ambas en un
-cluster Kind descartable y valida HTTP privado, egress interno controlado, rollout
-por digest, falla y recuperación de probes, drift, recreación de los hijos y
-garbage collection. También instala un Gateway local y valida REST, GraphQL, SSE
-incremental, WebSocket persistente, eliminación de la ruta y TLS con un
-certificado efímero confiado por el cliente de prueba. `just e2e-public` agrega
-una llamada HTTPS real de salida y queda deliberadamente fuera del gate
-determinístico `just ci`.
+`just kubernetes-conformance kind` crea instancias locales y descartables de Kind
+y del registry, empaqueta los mismos charts consumidos por `molejoctl` y valida
+la instalación idempotente del runtime y del Control Plane. La jornada crea un
+Workspace con límites de RBAC, registra una imagen OCI inmutable, reconcilia y
+observa una aplicación privada, cancela su stream de logs, elimina la aplicación
+de forma idempotente y comprueba el teardown del ambiente.
 
 Esta prueba local no valida DNS público de entrada ni un certificado con confianza
 pública. Esos puntos permanecen como una etapa de aceptación separada en el
@@ -132,8 +130,9 @@ navegador; su router del cliente es responsable por la página Not Found. Los
 assets ausentes devuelven `404` y nunca reciben el shell de la SPA. HTML usa
 `no-cache` y se revalida; los assets con fingerprint son inmutables por un año.
 
-Ejecutar `just frontend-test` para probar el container restringido y `just e2e`
-para el ciclo completo en Kind. Ejecutar `just audit-frontend-images` por separado
+Ejecutar `just frontend-test` para probar el container restringido y
+`just kubernetes-conformance kind` para el ciclo completo en Kind. Ejecutar
+`just audit-frontend-images` por separado
 cuando se requiera una verificación con la base de vulnerabilidades de Docker
 Scout; la auditoría mutable no integra el gate determinístico `just ci`.
 

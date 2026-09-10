@@ -102,13 +102,12 @@ reconciliations do not emit duplicate transition Events.
 
 ## Reproducible checks
 
-`just e2e` builds two fixture images locally, loads them into a disposable Kind
-cluster, and validates private HTTP, controlled in-cluster egress, digest rollout,
-probe failure and recovery, drift, child recreation, and garbage collection. It
-also installs a local Gateway and validates REST, GraphQL, incremental SSE, a
-persistent WebSocket, route removal, and TLS using an ephemeral certificate
-trusted by the test client. `just e2e-public` adds a real outbound HTTPS request
-and is deliberately not part of the deterministic `just ci` gate.
+`just kubernetes-conformance kind` creates disposable local Kind and registry
+instances, packages the same charts consumed by `molejoctl`, and validates the
+idempotent runtime and Control Plane installation. The journey creates a
+Workspace with RBAC boundaries, registers an immutable OCI image, reconciles and
+observes a private application, cancels its log stream, deletes the application
+idempotently, and proves environment teardown.
 
 This local proof does not validate inbound public DNS or a publicly trusted
 certificate. Those remain a separate acceptance step in the foundation
@@ -126,8 +125,9 @@ Not Found page. Missing assets return `404` and never receive the SPA shell. HTM
 uses `no-cache` and is revalidated; fingerprinted assets are immutable for one
 year.
 
-Run `just frontend-test` for the restricted container proof and `just e2e` for
-the complete Kind lifecycle. Run `just audit-frontend-images` separately when a
+Run `just frontend-test` for the restricted container proof and
+`just kubernetes-conformance kind` for the complete Kind lifecycle. Run
+`just audit-frontend-images` separately when a
 Docker Scout vulnerability-database check is required; the mutable audit is not a
 deterministic `just ci` gate.
 
