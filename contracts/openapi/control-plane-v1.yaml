@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: Molejo Control Plane API
-  version: 1.0.0
-  description: Molejo Control Plane contract. Session-authenticated mutations require the CSRF security scheme and an allowed Origin.
+  version: 0.1.0-alpha
+  description: The version describes the alpha contract maturity; `/api/v1` is the route generation, not a production-stability promise. Session-authenticated mutations require the CSRF security scheme and an allowed Origin.
 servers:
   - url: /
 paths:
@@ -476,6 +476,7 @@ paths:
     post:
       operationId: createAgentInstallation
       deprecated: true
+      description: Deprecated compatibility endpoint. Use `POST /api/v1/admin/clusters`.
       security: [{ sessionCookie: [], csrfHeader: [] }]
       requestBody:
         required: true
@@ -2420,7 +2421,7 @@ components:
       additionalProperties: false
       properties:
         clusterId: { type: string, pattern: '^(cls|agi)-[a-z2-7]{20}$' }
-        installationId: { type: string, pattern: '^(cls|agi)-[a-z2-7]{20}$', deprecated: true }
+        installationId: { type: string, pattern: '^(cls|agi)-[a-z2-7]{20}$', deprecated: true, description: Deprecated compatibility alias for `clusterId`; use `clusterId`. }
         enrollmentToken: { type: string, minLength: 64, maxLength: 64, writeOnly: true }
         expiresAt: { type: string, format: date-time }
     AgentEnrollmentInput:

@@ -452,7 +452,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @deprecated */
+        /**
+         * @deprecated
+         * @description Deprecated compatibility endpoint. Use `POST /api/v1/admin/clusters`.
+         */
         post: operations["createAgentInstallation"];
         delete?: never;
         options?: never;
@@ -1815,7 +1818,10 @@ export interface components {
         };
         AgentEnrollmentInvitation: {
             clusterId: string;
-            /** @deprecated */
+            /**
+             * @deprecated
+             * @description Deprecated compatibility alias for `clusterId`; use `clusterId`.
+             */
             installationId: string;
             enrollmentToken: string;
             /** Format: date-time */

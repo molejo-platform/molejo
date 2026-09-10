@@ -80,6 +80,8 @@ spec:
             - storageClassName
             type: object
           status:
+            description: AppVolumeStatus reports the observed claim, capacity, and
+              lifecycle.
             properties:
               claimRef:
                 description: |-
@@ -160,6 +162,8 @@ spec:
                 format: int64
                 type: integer
               state:
+                description: AppVolumeState reports the observed lifecycle of the
+                  volume projection.
                 enum:
                 - Pending
                 - Provisioning

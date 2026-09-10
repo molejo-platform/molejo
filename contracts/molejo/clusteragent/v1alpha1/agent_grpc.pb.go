@@ -28,8 +28,11 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ClusterAgentServiceClient interface {
+	// Connect carries the authoritative Agent session, snapshots, commands, and results.
 	Connect(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[ConnectRequest, ConnectResponse], error)
+	// OpenRuntimeQueryChannel carries bounded live queries independently from reconciliation.
 	OpenRuntimeQueryChannel(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[OpenRuntimeQueryChannelRequest, OpenRuntimeQueryChannelResponse], error)
+	// RenewCertificate rotates the authenticated Agent identity idempotently.
 	RenewCertificate(ctx context.Context, in *RenewCertificateRequest, opts ...grpc.CallOption) (*RenewCertificateResponse, error)
 }
 
@@ -81,8 +84,11 @@ func (c *clusterAgentServiceClient) RenewCertificate(ctx context.Context, in *Re
 // All implementations must embed UnimplementedClusterAgentServiceServer
 // for forward compatibility.
 type ClusterAgentServiceServer interface {
+	// Connect carries the authoritative Agent session, snapshots, commands, and results.
 	Connect(grpc.BidiStreamingServer[ConnectRequest, ConnectResponse]) error
+	// OpenRuntimeQueryChannel carries bounded live queries independently from reconciliation.
 	OpenRuntimeQueryChannel(grpc.BidiStreamingServer[OpenRuntimeQueryChannelRequest, OpenRuntimeQueryChannelResponse]) error
+	// RenewCertificate rotates the authenticated Agent identity idempotently.
 	RenewCertificate(context.Context, *RenewCertificateRequest) (*RenewCertificateResponse, error)
 	mustEmbedUnimplementedClusterAgentServiceServer()
 }

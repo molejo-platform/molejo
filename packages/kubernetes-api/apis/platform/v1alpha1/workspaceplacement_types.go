@@ -24,6 +24,7 @@ type WorkspacePlacementSpec struct {
 	LifecycleState string `json:"lifecycleState"`
 }
 
+// WorkspacePlacementStatus reports the observed namespace and access boundary.
 type WorkspacePlacementStatus struct {
 	ObservedGeneration int64              `json:"observedGeneration,omitempty"`
 	Conditions         []metav1.Condition `json:"conditions,omitempty"`
@@ -44,6 +45,7 @@ type WorkspacePlacement struct {
 }
 
 // +kubebuilder:object:root=true
+// WorkspacePlacementList contains cluster-scoped Workspace placements.
 type WorkspacePlacementList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`

@@ -291,7 +291,7 @@ type AppDeploymentStatus struct {
 	// ObservedRelease is the immutable image reference projected to the workload.
 	ObservedRelease string `json:"observedRelease,omitempty"`
 
-	// WorkloadRef identifies the Deployment managed for this resource.
+	// WorkloadRef identifies the Deployment or StatefulSet managed for this resource.
 	WorkloadRef *corev1.LocalObjectReference `json:"workloadRef,omitempty"`
 
 	// Conditions describe readiness, progress, and degradation.

@@ -82,6 +82,8 @@ spec:
             - workspaceId
             type: object
           status:
+            description: WorkspacePlacementStatus reports the observed namespace and
+              access boundary.
             properties:
               conditions:
                 items:

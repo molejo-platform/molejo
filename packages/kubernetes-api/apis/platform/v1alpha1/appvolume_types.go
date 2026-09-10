@@ -24,12 +24,15 @@ const (
 )
 
 // +kubebuilder:validation:Enum=Preserve
+// AppVolumeRetentionPolicy controls data handling after logical deletion.
 type AppVolumeRetentionPolicy string
 
 // +kubebuilder:validation:Enum=Ready;Deleted
+// AppVolumeDesiredState distinguishes reconciliation from explicit deletion.
 type AppVolumeDesiredState string
 
 // +kubebuilder:validation:Enum=Pending;Provisioning;Ready;Expanding;Retained;Degraded
+// AppVolumeState reports the observed lifecycle of the volume projection.
 type AppVolumeState string
 
 // AppVolumeSpec declares one durable volume independently from releases.
@@ -52,6 +55,7 @@ type AppVolumeSpec struct {
 	DesiredState AppVolumeDesiredState `json:"desiredState,omitempty"`
 }
 
+// AppVolumeStatus reports the observed claim, capacity, and lifecycle.
 type AppVolumeStatus struct {
 	ObservedGeneration int64                        `json:"observedGeneration,omitempty"`
 	ObservedSizeGiB    int64                        `json:"observedSizeGiB,omitempty"`
@@ -79,7 +83,7 @@ type AppVolume struct {
 }
 
 // +kubebuilder:object:root=true
-
+// AppVolumeList contains namespaced application volume projections.
 type AppVolumeList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`

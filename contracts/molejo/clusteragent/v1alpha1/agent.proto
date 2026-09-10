@@ -5,8 +5,11 @@ package molejo.clusteragent.v1alpha1;
 option go_package = "github.com/molejo-platform/molejo/contracts/molejo/clusteragent/v1alpha1;clusteragentv1alpha1";
 
 service ClusterAgentService {
+  // Connect carries the authoritative Agent session, snapshots, commands, and results.
   rpc Connect(stream ConnectRequest) returns (stream ConnectResponse);
+  // OpenRuntimeQueryChannel carries bounded live queries independently from reconciliation.
   rpc OpenRuntimeQueryChannel(stream OpenRuntimeQueryChannelRequest) returns (stream OpenRuntimeQueryChannelResponse);
+  // RenewCertificate rotates the authenticated Agent identity idempotently.
   rpc RenewCertificate(RenewCertificateRequest) returns (RenewCertificateResponse);
 }
 
@@ -50,11 +53,14 @@ message Heartbeat {
   uint64 sequence = 1;
   int64 sent_at_unix = 2;
   repeated RuntimeObservation observations = 3;
+  // When true, observations replace the complete previously observed runtime set.
   bool observation_snapshot_complete = 4;
   string session_id = 5;
   repeated CapabilityObservation capability_observations = 6;
+  // When true, capability_observations replace the complete capability set.
   bool capability_snapshot_complete = 7;
   repeated BindingObservation binding_observations = 8;
+  // When true, binding_observations replace the complete binding observation set.
   bool binding_snapshot_complete = 9;
 }
 
@@ -91,6 +97,7 @@ message HeartbeatAck {
 }
 
 message BindingTarget {
+  // id and version identify the exact Control Plane binding generation to observe.
   string id = 1;
   string kind = 2;
   int64 version = 3;
@@ -111,6 +118,7 @@ message PublicationBindingTarget {
 }
 
 message BindingObservation {
+  // id, kind, and version must match one BindingTarget from the latest acknowledgement.
   string id = 1;
   string kind = 2;
   int64 version = 3;
@@ -146,15 +154,19 @@ message RuntimeCommand {
   string command_id = 1;
   string operation_id = 2;
   int64 desired_version = 3;
+  // fencing_token rejects results from a worker that lost the durable operation lease.
   int64 fencing_token = 4;
+  // deadline_unix bounds execution even if the stream remains connected.
   int64 deadline_unix = 5;
   string kind = 6;
+  // payload_json is accepted only for the closed kind and payload_schema_version pair.
   bytes payload_json = 7;
   string payload_schema_version = 8;
 }
 
 message RuntimeResult {
   string command_id = 1;
+  // fencing_token must echo the command token that remains authoritative in PostgreSQL.
   int64 fencing_token = 2;
   string state = 3;
   string message = 4;
@@ -192,6 +204,7 @@ message RuntimeQueryHello {
 
 message RuntimeQueryRequest {
   string request_id = 1;
+  // deadline_unix_milli bounds this query independently from the long-lived channel.
   int64 deadline_unix_milli = 2;
   string app_environment_id = 3;
   oneof query {
@@ -229,6 +242,7 @@ message RuntimeQueryCancel {
 
 message RuntimeQueryChunk {
   string request_id = 1;
+  // sequence is monotonic within one request and detects missing or repeated chunks.
   uint32 sequence = 2;
   oneof payload {
     PodLogsResult pod_logs = 3;
@@ -280,12 +294,14 @@ message RuntimeQueryComplete {
   string request_id = 1;
   string state = 2;
   string error_code = 3;
+  // sanitized_message is safe for product APIs and must not expose provider internals.
   string sanitized_message = 4;
   bool retryable = 5;
 }
 
 message RenewCertificateRequest {
   string installation_id = 1;
+  // attempt_id makes retries of the same persisted key and CSR idempotent.
   string attempt_id = 2;
   bytes csr_pem = 3;
 }
@@ -296,5 +312,6 @@ message RenewCertificateResponse {
   bytes ca_certificate_pem = 3;
   int64 expires_at_unix = 4;
   bytes server_ca_certificate_pem = 5;
+  // trust_bundle_id identifies the active client and server root set.
   string trust_bundle_id = 6;
 }

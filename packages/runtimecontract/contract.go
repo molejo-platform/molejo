@@ -41,6 +41,8 @@ type Payload struct {
 	Placement  *WorkspacePlacementIntent `json:"placement,omitempty"`
 }
 
+// WorkspacePlacementIntent requests the bounded namespace and access projection
+// for one logical Workspace.
 type WorkspacePlacementIntent struct {
 	WorkspaceID    string `json:"workspaceId"`
 	NamespaceName  string `json:"namespaceName"`
@@ -48,6 +50,7 @@ type WorkspacePlacementIntent struct {
 	LifecycleState string `json:"lifecycleState"`
 }
 
+// DeploymentIntent is the Kubernetes-neutral desired application runtime state.
 type DeploymentIntent struct {
 	Image                string           `json:"image"`
 	Replicas             int32            `json:"replicas"`
@@ -65,6 +68,7 @@ type DeploymentIntent struct {
 	Slug                 string           `json:"slug,omitempty"`
 }
 
+// AppVolume binds a deployment intent to one independently managed volume.
 type AppVolume struct {
 	PublicID        string `json:"id"`
 	MountPath       string `json:"mountPath"`
@@ -72,6 +76,7 @@ type AppVolume struct {
 	RetentionPolicy string `json:"retentionPolicy"`
 }
 
+// VolumeIntent declares the lifecycle of one durable volume projection.
 type VolumeIntent struct {
 	RuntimeBinding  string `json:"runtimeBinding"`
 	SizeGiB         int64  `json:"sizeGiB"`
@@ -79,34 +84,40 @@ type VolumeIntent struct {
 	DesiredState    string `json:"desiredState"`
 }
 
+// ResourceValues expresses compute in portable millicores and mebibytes.
 type ResourceValues struct {
 	CPUMillis int64 `json:"cpuMillis"`
 	MemoryMiB int64 `json:"memoryMiB"`
 }
 
+// Resources keeps requests and limits explicit at the transport boundary.
 type Resources struct {
 	Requests ResourceValues `json:"requests"`
 	Limits   ResourceValues `json:"limits"`
 }
 
+// Probe declares one HTTP or TCP health check against a named port.
 type Probe struct {
 	Type     string `json:"type"`
 	PortName string `json:"portName"`
 	Path     string `json:"path,omitempty"`
 }
 
+// Probes carries the complete startup, liveness, and readiness policy.
 type Probes struct {
 	Startup   Probe `json:"startup"`
 	Liveness  Probe `json:"liveness"`
 	Readiness Probe `json:"readiness"`
 }
 
+// RuntimePort is one stable named TCP port exposed by the runtime Service.
 type RuntimePort struct {
 	Name          string `json:"name"`
 	ContainerPort int32  `json:"containerPort"`
 	Protocol      string `json:"protocol"`
 }
 
+// PublicEndpoint is a Control Plane allocation, not user-supplied Gateway state.
 type PublicEndpoint struct {
 	Name          string `json:"name"`
 	Type          string `json:"type"`
@@ -116,6 +127,8 @@ type PublicEndpoint struct {
 	ExternalPort  int32  `json:"externalPort,omitempty"`
 }
 
+// Variable is one environment variable transported to the runtime projection.
+// Secret values may transit this type but must never be logged or persisted.
 type Variable struct {
 	Name  string `json:"name"`
 	Value string `json:"value"`

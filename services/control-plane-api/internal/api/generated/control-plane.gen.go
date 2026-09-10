@@ -1720,6 +1720,8 @@ type AgentEnrollmentInvitation struct {
 	ClusterId       string    `json:"clusterId"`
 	EnrollmentToken *string   `json:"enrollmentToken,omitempty"`
 	ExpiresAt       time.Time `json:"expiresAt"`
+
+	// InstallationId Deprecated compatibility alias for `clusterId`; use `clusterId`.
 	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	InstallationId string `json:"installationId"`
 }

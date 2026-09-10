@@ -512,8 +512,8 @@ spec:
                   to the workload.
                 type: string
               workloadRef:
-                description: WorkloadRef identifies the Deployment managed for this
-                  resource.
+                description: WorkloadRef identifies the Deployment or StatefulSet
+                  managed for this resource.
                 properties:
                   name:
                     default: ""

@@ -402,18 +402,21 @@ func (x *ControlPlaneHello) GetTrustBundleId() string {
 }
 
 type Heartbeat struct {
-	state                       protoimpl.MessageState   `protogen:"open.v1"`
-	Sequence                    uint64                   `protobuf:"varint,1,opt,name=sequence,proto3" json:"sequence,omitempty"`
-	SentAtUnix                  int64                    `protobuf:"varint,2,opt,name=sent_at_unix,json=sentAtUnix,proto3" json:"sent_at_unix,omitempty"`
-	Observations                []*RuntimeObservation    `protobuf:"bytes,3,rep,name=observations,proto3" json:"observations,omitempty"`
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	Sequence     uint64                 `protobuf:"varint,1,opt,name=sequence,proto3" json:"sequence,omitempty"`
+	SentAtUnix   int64                  `protobuf:"varint,2,opt,name=sent_at_unix,json=sentAtUnix,proto3" json:"sent_at_unix,omitempty"`
+	Observations []*RuntimeObservation  `protobuf:"bytes,3,rep,name=observations,proto3" json:"observations,omitempty"`
+	// When true, observations replace the complete previously observed runtime set.
 	ObservationSnapshotComplete bool                     `protobuf:"varint,4,opt,name=observation_snapshot_complete,json=observationSnapshotComplete,proto3" json:"observation_snapshot_complete,omitempty"`
 	SessionId                   string                   `protobuf:"bytes,5,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	CapabilityObservations      []*CapabilityObservation `protobuf:"bytes,6,rep,name=capability_observations,json=capabilityObservations,proto3" json:"capability_observations,omitempty"`
-	CapabilitySnapshotComplete  bool                     `protobuf:"varint,7,opt,name=capability_snapshot_complete,json=capabilitySnapshotComplete,proto3" json:"capability_snapshot_complete,omitempty"`
-	BindingObservations         []*BindingObservation    `protobuf:"bytes,8,rep,name=binding_observations,json=bindingObservations,proto3" json:"binding_observations,omitempty"`
-	BindingSnapshotComplete     bool                     `protobuf:"varint,9,opt,name=binding_snapshot_complete,json=bindingSnapshotComplete,proto3" json:"binding_snapshot_complete,omitempty"`
-	unknownFields               protoimpl.UnknownFields
-	sizeCache                   protoimpl.SizeCache
+	// When true, capability_observations replace the complete capability set.
+	CapabilitySnapshotComplete bool                  `protobuf:"varint,7,opt,name=capability_snapshot_complete,json=capabilitySnapshotComplete,proto3" json:"capability_snapshot_complete,omitempty"`
+	BindingObservations        []*BindingObservation `protobuf:"bytes,8,rep,name=binding_observations,json=bindingObservations,proto3" json:"binding_observations,omitempty"`
+	// When true, binding_observations replace the complete binding observation set.
+	BindingSnapshotComplete bool `protobuf:"varint,9,opt,name=binding_snapshot_complete,json=bindingSnapshotComplete,proto3" json:"binding_snapshot_complete,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *Heartbeat) Reset() {
@@ -802,10 +805,11 @@ func (x *HeartbeatAck) GetBindingTargets() []*BindingTarget {
 }
 
 type BindingTarget struct {
-	state   protoimpl.MessageState `protogen:"open.v1"`
-	Id      string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Kind    string                 `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
-	Version int64                  `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// id and version identify the exact Control Plane binding generation to observe.
+	Id      string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Kind    string `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
+	Version int64  `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
 	// Types that are valid to be assigned to Target:
 	//
 	//	*BindingTarget_Storage
@@ -1012,13 +1016,14 @@ func (x *PublicationBindingTarget) GetSectionName() string {
 }
 
 type BindingObservation struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Kind          string                 `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
-	Version       int64                  `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
-	Health        string                 `protobuf:"bytes,4,opt,name=health,proto3" json:"health,omitempty"`
-	ReasonCode    string                 `protobuf:"bytes,5,opt,name=reason_code,json=reasonCode,proto3" json:"reason_code,omitempty"`
-	SampledAtUnix int64                  `protobuf:"varint,6,opt,name=sampled_at_unix,json=sampledAtUnix,proto3" json:"sampled_at_unix,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// id, kind, and version must match one BindingTarget from the latest acknowledgement.
+	Id            string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Kind          string `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
+	Version       int64  `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
+	Health        string `protobuf:"bytes,4,opt,name=health,proto3" json:"health,omitempty"`
+	ReasonCode    string `protobuf:"bytes,5,opt,name=reason_code,json=reasonCode,proto3" json:"reason_code,omitempty"`
+	SampledAtUnix int64  `protobuf:"varint,6,opt,name=sampled_at_unix,json=sampledAtUnix,proto3" json:"sampled_at_unix,omitempty"`
 	// Types that are valid to be assigned to Observation:
 	//
 	//	*BindingObservation_Storage
@@ -1318,15 +1323,18 @@ func (x *PublicationBindingObservation) GetSupportedRouteKinds() []string {
 }
 
 type RuntimeCommand struct {
-	state                protoimpl.MessageState `protogen:"open.v1"`
-	CommandId            string                 `protobuf:"bytes,1,opt,name=command_id,json=commandId,proto3" json:"command_id,omitempty"`
-	OperationId          string                 `protobuf:"bytes,2,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"`
-	DesiredVersion       int64                  `protobuf:"varint,3,opt,name=desired_version,json=desiredVersion,proto3" json:"desired_version,omitempty"`
-	FencingToken         int64                  `protobuf:"varint,4,opt,name=fencing_token,json=fencingToken,proto3" json:"fencing_token,omitempty"`
-	DeadlineUnix         int64                  `protobuf:"varint,5,opt,name=deadline_unix,json=deadlineUnix,proto3" json:"deadline_unix,omitempty"`
-	Kind                 string                 `protobuf:"bytes,6,opt,name=kind,proto3" json:"kind,omitempty"`
-	PayloadJson          []byte                 `protobuf:"bytes,7,opt,name=payload_json,json=payloadJson,proto3" json:"payload_json,omitempty"`
-	PayloadSchemaVersion string                 `protobuf:"bytes,8,opt,name=payload_schema_version,json=payloadSchemaVersion,proto3" json:"payload_schema_version,omitempty"`
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	CommandId      string                 `protobuf:"bytes,1,opt,name=command_id,json=commandId,proto3" json:"command_id,omitempty"`
+	OperationId    string                 `protobuf:"bytes,2,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"`
+	DesiredVersion int64                  `protobuf:"varint,3,opt,name=desired_version,json=desiredVersion,proto3" json:"desired_version,omitempty"`
+	// fencing_token rejects results from a worker that lost the durable operation lease.
+	FencingToken int64 `protobuf:"varint,4,opt,name=fencing_token,json=fencingToken,proto3" json:"fencing_token,omitempty"`
+	// deadline_unix bounds execution even if the stream remains connected.
+	DeadlineUnix int64  `protobuf:"varint,5,opt,name=deadline_unix,json=deadlineUnix,proto3" json:"deadline_unix,omitempty"`
+	Kind         string `protobuf:"bytes,6,opt,name=kind,proto3" json:"kind,omitempty"`
+	// payload_json is accepted only for the closed kind and payload_schema_version pair.
+	PayloadJson          []byte `protobuf:"bytes,7,opt,name=payload_json,json=payloadJson,proto3" json:"payload_json,omitempty"`
+	PayloadSchemaVersion string `protobuf:"bytes,8,opt,name=payload_schema_version,json=payloadSchemaVersion,proto3" json:"payload_schema_version,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
 }
@@ -1418,19 +1426,20 @@ func (x *RuntimeCommand) GetPayloadSchemaVersion() string {
 }
 
 type RuntimeResult struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	CommandId       string                 `protobuf:"bytes,1,opt,name=command_id,json=commandId,proto3" json:"command_id,omitempty"`
-	FencingToken    int64                  `protobuf:"varint,2,opt,name=fencing_token,json=fencingToken,proto3" json:"fencing_token,omitempty"`
-	State           string                 `protobuf:"bytes,3,opt,name=state,proto3" json:"state,omitempty"`
-	Message         string                 `protobuf:"bytes,4,opt,name=message,proto3" json:"message,omitempty"`
-	ObservedRelease string                 `protobuf:"bytes,5,opt,name=observed_release,json=observedRelease,proto3" json:"observed_release,omitempty"`
-	VolumeState     string                 `protobuf:"bytes,6,opt,name=volume_state,json=volumeState,proto3" json:"volume_state,omitempty"`
-	VolumeMessage   string                 `protobuf:"bytes,7,opt,name=volume_message,json=volumeMessage,proto3" json:"volume_message,omitempty"`
-	ObservedSizeGib int64                  `protobuf:"varint,8,opt,name=observed_size_gib,json=observedSizeGib,proto3" json:"observed_size_gib,omitempty"`
-	ErrorCode       string                 `protobuf:"bytes,9,opt,name=error_code,json=errorCode,proto3" json:"error_code,omitempty"`
-	Retryable       bool                   `protobuf:"varint,10,opt,name=retryable,proto3" json:"retryable,omitempty"`
-	DesiredVersion  int64                  `protobuf:"varint,11,opt,name=desired_version,json=desiredVersion,proto3" json:"desired_version,omitempty"`
-	SpecHash        string                 `protobuf:"bytes,12,opt,name=spec_hash,json=specHash,proto3" json:"spec_hash,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	CommandId string                 `protobuf:"bytes,1,opt,name=command_id,json=commandId,proto3" json:"command_id,omitempty"`
+	// fencing_token must echo the command token that remains authoritative in PostgreSQL.
+	FencingToken    int64  `protobuf:"varint,2,opt,name=fencing_token,json=fencingToken,proto3" json:"fencing_token,omitempty"`
+	State           string `protobuf:"bytes,3,opt,name=state,proto3" json:"state,omitempty"`
+	Message         string `protobuf:"bytes,4,opt,name=message,proto3" json:"message,omitempty"`
+	ObservedRelease string `protobuf:"bytes,5,opt,name=observed_release,json=observedRelease,proto3" json:"observed_release,omitempty"`
+	VolumeState     string `protobuf:"bytes,6,opt,name=volume_state,json=volumeState,proto3" json:"volume_state,omitempty"`
+	VolumeMessage   string `protobuf:"bytes,7,opt,name=volume_message,json=volumeMessage,proto3" json:"volume_message,omitempty"`
+	ObservedSizeGib int64  `protobuf:"varint,8,opt,name=observed_size_gib,json=observedSizeGib,proto3" json:"observed_size_gib,omitempty"`
+	ErrorCode       string `protobuf:"bytes,9,opt,name=error_code,json=errorCode,proto3" json:"error_code,omitempty"`
+	Retryable       bool   `protobuf:"varint,10,opt,name=retryable,proto3" json:"retryable,omitempty"`
+	DesiredVersion  int64  `protobuf:"varint,11,opt,name=desired_version,json=desiredVersion,proto3" json:"desired_version,omitempty"`
+	SpecHash        string `protobuf:"bytes,12,opt,name=spec_hash,json=specHash,proto3" json:"spec_hash,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -1806,10 +1815,11 @@ func (x *RuntimeQueryHello) GetProtocolVersion() string {
 }
 
 type RuntimeQueryRequest struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	RequestId         string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	DeadlineUnixMilli int64                  `protobuf:"varint,2,opt,name=deadline_unix_milli,json=deadlineUnixMilli,proto3" json:"deadline_unix_milli,omitempty"`
-	AppEnvironmentId  string                 `protobuf:"bytes,3,opt,name=app_environment_id,json=appEnvironmentId,proto3" json:"app_environment_id,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	RequestId string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	// deadline_unix_milli bounds this query independently from the long-lived channel.
+	DeadlineUnixMilli int64  `protobuf:"varint,2,opt,name=deadline_unix_milli,json=deadlineUnixMilli,proto3" json:"deadline_unix_milli,omitempty"`
+	AppEnvironmentId  string `protobuf:"bytes,3,opt,name=app_environment_id,json=appEnvironmentId,proto3" json:"app_environment_id,omitempty"`
 	// Types that are valid to be assigned to Query:
 	//
 	//	*RuntimeQueryRequest_PodLogs
@@ -2186,7 +2196,8 @@ func (x *RuntimeQueryCancel) GetRequestId() string {
 type RuntimeQueryChunk struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	RequestId string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	Sequence  uint32                 `protobuf:"varint,2,opt,name=sequence,proto3" json:"sequence,omitempty"`
+	// sequence is monotonic within one request and detects missing or repeated chunks.
+	Sequence uint32 `protobuf:"varint,2,opt,name=sequence,proto3" json:"sequence,omitempty"`
 	// Types that are valid to be assigned to Payload:
 	//
 	//	*RuntimeQueryChunk_PodLogs
@@ -2682,12 +2693,13 @@ func (x *RuntimeEvent) GetMessage() string {
 }
 
 type RuntimeQueryComplete struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	RequestId        string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	State            string                 `protobuf:"bytes,2,opt,name=state,proto3" json:"state,omitempty"`
-	ErrorCode        string                 `protobuf:"bytes,3,opt,name=error_code,json=errorCode,proto3" json:"error_code,omitempty"`
-	SanitizedMessage string                 `protobuf:"bytes,4,opt,name=sanitized_message,json=sanitizedMessage,proto3" json:"sanitized_message,omitempty"`
-	Retryable        bool                   `protobuf:"varint,5,opt,name=retryable,proto3" json:"retryable,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	RequestId string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	State     string                 `protobuf:"bytes,2,opt,name=state,proto3" json:"state,omitempty"`
+	ErrorCode string                 `protobuf:"bytes,3,opt,name=error_code,json=errorCode,proto3" json:"error_code,omitempty"`
+	// sanitized_message is safe for product APIs and must not expose provider internals.
+	SanitizedMessage string `protobuf:"bytes,4,opt,name=sanitized_message,json=sanitizedMessage,proto3" json:"sanitized_message,omitempty"`
+	Retryable        bool   `protobuf:"varint,5,opt,name=retryable,proto3" json:"retryable,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -2760,10 +2772,11 @@ func (x *RuntimeQueryComplete) GetRetryable() bool {
 type RenewCertificateRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	InstallationId string                 `protobuf:"bytes,1,opt,name=installation_id,json=installationId,proto3" json:"installation_id,omitempty"`
-	AttemptId      string                 `protobuf:"bytes,2,opt,name=attempt_id,json=attemptId,proto3" json:"attempt_id,omitempty"`
-	CsrPem         []byte                 `protobuf:"bytes,3,opt,name=csr_pem,json=csrPem,proto3" json:"csr_pem,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// attempt_id makes retries of the same persisted key and CSR idempotent.
+	AttemptId     string `protobuf:"bytes,2,opt,name=attempt_id,json=attemptId,proto3" json:"attempt_id,omitempty"`
+	CsrPem        []byte `protobuf:"bytes,3,opt,name=csr_pem,json=csrPem,proto3" json:"csr_pem,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RenewCertificateRequest) Reset() {
@@ -2824,9 +2837,10 @@ type RenewCertificateResponse struct {
 	CaCertificatePem       []byte                 `protobuf:"bytes,3,opt,name=ca_certificate_pem,json=caCertificatePem,proto3" json:"ca_certificate_pem,omitempty"`
 	ExpiresAtUnix          int64                  `protobuf:"varint,4,opt,name=expires_at_unix,json=expiresAtUnix,proto3" json:"expires_at_unix,omitempty"`
 	ServerCaCertificatePem []byte                 `protobuf:"bytes,5,opt,name=server_ca_certificate_pem,json=serverCaCertificatePem,proto3" json:"server_ca_certificate_pem,omitempty"`
-	TrustBundleId          string                 `protobuf:"bytes,6,opt,name=trust_bundle_id,json=trustBundleId,proto3" json:"trust_bundle_id,omitempty"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	// trust_bundle_id identifies the active client and server root set.
+	TrustBundleId string `protobuf:"bytes,6,opt,name=trust_bundle_id,json=trustBundleId,proto3" json:"trust_bundle_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RenewCertificateResponse) Reset() {
