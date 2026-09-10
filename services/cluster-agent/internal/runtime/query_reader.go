@@ -24,6 +24,7 @@ import (
 
 	clusteragentv1alpha1 "github.com/molejo-platform/molejo/contracts/molejo/clusteragent/v1alpha1"
 	kubemetadata "github.com/molejo-platform/molejo/packages/kubernetes-api/metadata"
+	"github.com/molejo-platform/molejo/packages/workspacecontract"
 )
 
 const (
@@ -32,7 +33,10 @@ const (
 	maximumEventItems = 200
 )
 
-var appDeploymentResource = schema.GroupVersionResource{Group: "platform.molejo.dev", Version: "v1alpha1", Resource: "appdeployments"}
+var (
+	appDeploymentResource      = schema.GroupVersionResource{Group: "platform.molejo.dev", Version: "v1alpha1", Resource: "appdeployments"}
+	workspacePlacementResource = schema.GroupVersionResource{Group: "platform.molejo.dev", Version: "v1alpha1", Resource: "workspaceplacements"}
+)
 
 type QueryReader struct {
 	kubernetes kubernetes.Interface
@@ -78,8 +82,7 @@ func (r *QueryReader) target(ctx context.Context, namespace, runtimeName string)
 	if validation.IsDNS1123Label(namespace) != nil || validation.IsDNS1123Subdomain(runtimeName) != nil {
 		return queryTarget{}, errors.New("runtime target is invalid")
 	}
-	ns, err := r.kubernetes.CoreV1().Namespaces().Get(ctx, namespace, metav1.GetOptions{})
-	if err != nil || ns.Annotations[kubemetadata.ControlPlaneOwnerAnnotation] != kubemetadata.ControlPlaneOwner {
+	if err := r.validateWorkspacePlacement(ctx, namespace); err != nil {
 		return queryTarget{}, errors.New("runtime namespace is not Molejo-owned")
 	}
 	appDeployment, err := r.dynamic.Resource(appDeploymentResource).Namespace(namespace).Get(ctx, runtimeName, metav1.GetOptions{})
@@ -130,6 +133,18 @@ func (r *QueryReader) target(ctx context.Context, namespace, runtimeName string)
 	}
 	sort.Slice(target.pods, func(i, j int) bool { return target.pods[i].Name < target.pods[j].Name })
 	return target, nil
+}
+
+func (r *QueryReader) validateWorkspacePlacement(ctx context.Context, namespace string) error {
+	placement, err := r.dynamic.Resource(workspacePlacementResource).Get(ctx, namespace, metav1.GetOptions{})
+	if err != nil || placement.GetAnnotations()[kubemetadata.ControlPlaneOwnerAnnotation] != kubemetadata.ControlPlaneOwner {
+		return errors.New("WorkspacePlacement is not Molejo-owned")
+	}
+	spec, ok := placement.Object["spec"].(map[string]any)
+	if !ok || spec["workspaceId"] != namespace || spec["namespaceName"] != namespace || spec["accessProfile"] != string(workspacecontract.AccessProfileNamespaced) || spec["lifecycleState"] != string(workspacecontract.LifecycleReady) {
+		return errors.New("WorkspacePlacement is not ready for namespaced runtime access")
+	}
+	return nil
 }
 
 func (r *QueryReader) logs(ctx context.Context, query *clusteragentv1alpha1.PodLogsQuery) (*clusteragentv1alpha1.RuntimeQueryChunk, error) {
