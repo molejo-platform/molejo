@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type { AppEnvironmentSetupInput, RuntimeConfiguration, StorageProfile } from "../../shared/api/types";
 
 export type SetupMode = "existing" | "new";
@@ -18,6 +19,25 @@ export type ApplicationSetupDraft = {
 };
 
 export type SetupErrors = Record<string, string>;
+
+const runtimeConfigurationSchema = z.custom<RuntimeConfiguration>(
+  (value) => typeof value === "object" && value !== null,
+  "Configuração de runtime inválida.",
+);
+
+export const applicationSetupDraftSchema = z.object({
+  mode: z.enum(["existing", "new"]),
+  appId: z.string(),
+  name: z.string(),
+  branch: z.string(),
+  clusterId: z.string(),
+  workloadKind: z.enum(["Stateless", "Stateful"]),
+  storageProfileId: z.string(),
+  sizeGiB: z.number().finite(),
+  mountPath: z.string(),
+  configuration: runtimeConfigurationSchema,
+  variables: z.string(),
+});
 
 export function validateApplicationStep(draft: ApplicationSetupDraft, validateName: (name: string) => string) {
   const errors: SetupErrors = {};
@@ -85,7 +105,8 @@ export function applicationSetupInput(
 export function restoreApplicationSetupDraft(value: string | null, fallback: ApplicationSetupDraft) {
   if (!value) return fallback;
   try {
-    return { ...fallback, ...(JSON.parse(value) as Partial<ApplicationSetupDraft>) };
+    const result = applicationSetupDraftSchema.partial().safeParse(JSON.parse(value));
+    return result.success ? { ...fallback, ...result.data } : fallback;
   } catch {
     return fallback;
   }

@@ -75,23 +75,24 @@ export function AppOverviewPage() {
             ) : targets.data?.items.length ? (
               <DataList>
                 {targets.data.items.map((target) => (
-                  <Link
-                    className="data-list-item"
-                    key={target.id}
-                    to="/workspaces/$workspaceId/projects/$projectId/environments/$environmentId/apps/$appEnvironmentId"
-                    params={{
-                      workspaceId,
-                      projectId,
-                      environmentId: target.environmentId,
-                      appEnvironmentId: target.id,
-                    }}
-                  >
-                    <span>
-                      <strong>{target.environmentName}</strong>
-                      <small>{target.branch || "Imagem existente"}</small>
-                    </span>
-                    <span className="row-action">Abrir operação</span>
-                  </Link>
+                  <li className="data-list-entry" key={target.id}>
+                    <Link
+                      className="data-list-item"
+                      to="/workspaces/$workspaceId/projects/$projectId/environments/$environmentId/apps/$appEnvironmentId"
+                      params={{
+                        workspaceId,
+                        projectId,
+                        environmentId: target.environmentId,
+                        appEnvironmentId: target.id,
+                      }}
+                    >
+                      <span>
+                        <strong>{target.environmentName}</strong>
+                        <small>{target.branch || "Imagem existente"}</small>
+                      </span>
+                      <span className="row-action">Abrir operação</span>
+                    </Link>
+                  </li>
                 ))}
               </DataList>
             ) : targets.isError ? null : (

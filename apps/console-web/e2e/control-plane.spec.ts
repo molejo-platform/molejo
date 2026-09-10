@@ -1,3 +1,4 @@
+import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 
 const password = process.env.MOLEJO_E2E_PASSWORD ?? "";
@@ -24,6 +25,11 @@ async function login(page: Page) {
     .toBe(true);
 }
 
+async function expectNoAccessibilityViolations(page: Page) {
+  const results = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
+  expect(results.violations).toEqual([]);
+}
+
 test.describe("control plane browser flow", () => {
   test("logs in and organizes an App inside a Project", async ({ page }) => {
     test.skip(!password, "MOLEJO_E2E_PASSWORD is required");
@@ -45,6 +51,7 @@ test.describe("control plane browser flow", () => {
     await expect(page.getByRole("heading", { name: "Browser app" })).toBeVisible();
     const operationalHealth = page.getByRole("region", { name: "Saúde operacional" });
     await expect(operationalHealth).toBeVisible();
+    await expectNoAccessibilityViolations(page);
     await expect(page.getByRole("link", { name: "Entrega", exact: true })).toBeVisible();
     await expect(page.getByRole("link", { name: "Observabilidade", exact: true })).toBeVisible();
     await expect(page.getByRole("link", { name: "Configuração", exact: true })).toBeVisible();

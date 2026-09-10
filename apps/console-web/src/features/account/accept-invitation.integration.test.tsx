@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ acceptUserInvitation: vi.fn(), navigate: vi.fn() }));
 
 vi.mock("@tanstack/react-router", () => ({
-  Link: ({ children }: { children: ReactNode }) => <a href="#">{children}</a>,
+  Link: ({ children }: { children: ReactNode }) => <a href="/">{children}</a>,
   useNavigate: () => mocks.navigate,
 }));
 vi.mock("./api", async (importOriginal) => ({
@@ -15,7 +15,7 @@ vi.mock("./api", async (importOriginal) => ({
   acceptUserInvitation: mocks.acceptUserInvitation,
 }));
 
-import { AcceptInvitationPage } from "./AccountPages";
+import { AcceptInvitationPage } from "./AcceptInvitationPage";
 
 afterEach(() => {
   cleanup();

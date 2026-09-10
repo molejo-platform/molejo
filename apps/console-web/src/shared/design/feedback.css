@@ -118,23 +118,6 @@
   background: var(--ui-surface-subtle);
   color: var(--ui-text-muted);
 }
-dialog.dialog {
-  background: transparent;
-  border: 0;
-  max-width: 30rem;
-  padding: 0;
-  width: calc(100% - 2rem);
-}
-dialog.dialog::backdrop {
-  background: var(--ui-scrim);
-}
-.dialog-content {
-  background: var(--ui-surface);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--ui-shadow-dialog);
-  color: var(--ui-text);
-  padding: var(--space-6);
-}
 .dialog-actions {
   display: flex;
   flex-wrap: wrap;

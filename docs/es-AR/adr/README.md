@@ -13,3 +13,4 @@
 - [ADR-0020: custodia de secrets y entrega al runtime](0020-custodia-de-secrets-y-entrega-al-runtime.md)
 - [ADR-0021: bindings explícitos gestionados por el operador](0021-bindings-explicitos-gestionados-por-el-operador.md)
 - [ADR-0022: métricas neutrales con adapter de consulta Prometheus-compatible](0022-metricas-neutrales-con-consulta-prometheus.md)
+- [ADR-0023: límite de la stack frontend de la Consola](0023-limite-de-la-stack-frontend-de-la-consola.md)

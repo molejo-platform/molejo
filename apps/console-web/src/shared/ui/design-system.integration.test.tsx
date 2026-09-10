@@ -34,8 +34,8 @@ describe("shared design-system primitives", () => {
       </PageFrame>,
     );
     expect(screen.getByLabelText("Conteúdo").className).toContain("page-frame-readable");
-    expect(screen.getByLabelText("Recursos").className).toContain("data-list");
-    expect(screen.getByText("Registry interno").className).toContain("data-list-item");
+    expect(screen.getByRole("list", { name: "Recursos" }).className).toContain("data-list");
+    expect(screen.getByRole("listitem").className).toContain("data-list-item");
   });
 
   it("announces outcomes without turning persistent guidance into a live region", () => {

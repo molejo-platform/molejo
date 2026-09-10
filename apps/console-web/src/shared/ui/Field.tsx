@@ -1,4 +1,5 @@
 import {
+  forwardRef,
   type InputHTMLAttributes,
   type ReactNode,
   type SelectHTMLAttributes,
@@ -31,20 +32,17 @@ function FieldDescription({ id, helper, error }: { id: string; helper?: string; 
   );
 }
 
-export function Field({
-  label,
-  helper,
-  error,
-  id: providedId,
-  required,
-  ...props
-}: InputHTMLAttributes<HTMLInputElement> & FieldMeta) {
+export const Field = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement> & FieldMeta>(function Field(
+  { label, helper, error, id: providedId, required, ...props },
+  ref,
+) {
   const generatedId = useId();
   const id = providedId ?? generatedId;
   const descriptionId = describedBy(id, helper, error);
   const className = `field${props.type === "checkbox" ? " field-checkbox" : ""}${required ? " is-required" : ""}`;
   const input = (
     <input
+      ref={ref}
       id={id}
       required={required}
       aria-invalid={Boolean(error) || undefined}
@@ -70,17 +68,12 @@ export function Field({
       <FieldDescription id={id} helper={helper} error={error} />
     </div>
   );
-}
+});
 
-export function SelectField({
-  label,
-  helper,
-  error,
-  id: providedId,
-  required,
-  children,
-  ...props
-}: SelectHTMLAttributes<HTMLSelectElement> & FieldMeta & { children: ReactNode }) {
+export const SelectField = forwardRef<
+  HTMLSelectElement,
+  SelectHTMLAttributes<HTMLSelectElement> & FieldMeta & { children: ReactNode }
+>(function SelectField({ label, helper, error, id: providedId, required, children, ...props }, ref) {
   const generatedId = useId();
   const id = providedId ?? generatedId;
   const descriptionId = describedBy(id, helper, error);
@@ -90,6 +83,7 @@ export function SelectField({
         <span className="field-label">{label}</span>
       </label>
       <select
+        ref={ref}
         id={id}
         required={required}
         aria-invalid={Boolean(error) || undefined}
@@ -101,32 +95,28 @@ export function SelectField({
       <FieldDescription id={id} helper={helper} error={error} />
     </div>
   );
-}
+});
 
-export function TextareaField({
-  label,
-  helper,
-  error,
-  id: providedId,
-  required,
-  ...props
-}: TextareaHTMLAttributes<HTMLTextAreaElement> & FieldMeta) {
-  const generatedId = useId();
-  const id = providedId ?? generatedId;
-  const descriptionId = describedBy(id, helper, error);
-  return (
-    <div className={`field${required ? " is-required" : ""}`} data-invalid={Boolean(error)}>
-      <label htmlFor={id}>
-        <span className="field-label">{label}</span>
-      </label>
-      <textarea
-        id={id}
-        required={required}
-        aria-invalid={Boolean(error) || undefined}
-        aria-describedby={descriptionId}
-        {...props}
-      />
-      <FieldDescription id={id} helper={helper} error={error} />
-    </div>
-  );
-}
+export const TextareaField = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement> & FieldMeta>(
+  function TextareaField({ label, helper, error, id: providedId, required, ...props }, ref) {
+    const generatedId = useId();
+    const id = providedId ?? generatedId;
+    const descriptionId = describedBy(id, helper, error);
+    return (
+      <div className={`field${required ? " is-required" : ""}`} data-invalid={Boolean(error)}>
+        <label htmlFor={id}>
+          <span className="field-label">{label}</span>
+        </label>
+        <textarea
+          ref={ref}
+          id={id}
+          required={required}
+          aria-invalid={Boolean(error) || undefined}
+          aria-describedby={descriptionId}
+          {...props}
+        />
+        <FieldDescription id={id} helper={helper} error={error} />
+      </div>
+    );
+  },
+);

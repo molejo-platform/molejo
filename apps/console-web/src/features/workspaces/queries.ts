@@ -1,8 +1,7 @@
-import { queryOptions, type QueryClient, useQuery } from "@tanstack/react-query";
-
-import { getWorkspace, getWorkspaceSummary, listWorkspaces } from "./api";
+import { type QueryClient, queryOptions, useQuery } from "@tanstack/react-query";
 import { cachePolicy } from "../../shared/api/cache-policy";
 import type { Workspace } from "../../shared/api/types";
+import { getWorkspace, getWorkspaceSummary, listWorkspaces } from "./api";
 
 export const workspaceKeys = {
   all: ["workspaces"] as const,

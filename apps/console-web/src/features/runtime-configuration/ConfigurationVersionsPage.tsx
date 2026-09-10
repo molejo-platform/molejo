@@ -8,7 +8,7 @@ import { DataList, DataListItem } from "../../shared/ui/DataList";
 import { EmptyState } from "../../shared/ui/Page";
 import { EnvironmentAppLayout, type EnvironmentParams } from "../app-environments/public";
 import { runtimeConfigurationQueries } from "./queries";
-import { ConfigurationNav } from "./RuntimeConfigurationPages";
+import { ConfigurationNav } from "./RuntimeConfigurationPage";
 
 export function EnvironmentConfigurationVersionsPage() {
   return (

@@ -1,3 +1,4 @@
+import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "@fontsource-variable/ibm-plex-sans";
 import "@fontsource-variable/space-grotesk";
@@ -15,7 +16,9 @@ const queryClient = createQueryClient();
 const router = createAppRouter(queryClient);
 
 createRoot(document.getElementById("root")!).render(
-  <AppProviders queryClient={queryClient}>
-    <RouterProvider router={router} />
-  </AppProviders>,
+  <StrictMode>
+    <AppProviders queryClient={queryClient}>
+      <RouterProvider router={router} />
+    </AppProviders>
+  </StrictMode>,
 );

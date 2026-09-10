@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useForm } from "react-hook-form";
 
 import { errorViolations, userFacingError } from "../../shared/api/errors";
 import { createIdempotencyKey } from "../../shared/api/http-client";
@@ -30,8 +31,11 @@ import {
   RuntimeConfigurationFields,
   runtimeConfigurationQueries,
 } from "../runtime-configuration/public";
+import { ApplicationSetupProgress } from "./ApplicationSetupProgress";
 import { ApplicationSetupReview } from "./ApplicationSetupReview";
+import { ApplicationStepFields } from "./ApplicationStepFields";
 import { createProjectAppEnvironment } from "./api";
+import { draftErrorFields, violationFields, violationMessage } from "./errors";
 import {
   type ApplicationSetupDraft,
   applicationSetupInput,
@@ -42,24 +46,6 @@ import {
   validateRuntimeStep,
 } from "./model";
 import "./application-setup.css";
-
-const violationFields: Record<string, string> = {
-  "/app/id": "setup-app",
-  "/app/name": "setup-name",
-  "/clusterId": "setup-cluster",
-  "/workloadKind": "setup-workload",
-};
-
-const draftErrorFields: Partial<Record<keyof ApplicationSetupDraft, string>> = {
-  appId: "setup-app",
-  name: "setup-name",
-  clusterId: "setup-cluster",
-  workloadKind: "setup-workload",
-  storageProfileId: "setup-storage-profile",
-  sizeGiB: "setup-size",
-  mountPath: "setup-mount-path",
-  variables: "setup-variables",
-};
 
 export function ApplicationSetupFlow({
   workspaceId,
@@ -92,9 +78,10 @@ export function ApplicationSetupFlow({
     }),
     [availableApps],
   );
-  const [draft, setDraft] = useState(() =>
-    restoreApplicationSetupDraft(sessionStorage.getItem(draftKey), initialDraft),
-  );
+  const form = useForm<ApplicationSetupDraft>({
+    defaultValues: restoreApplicationSetupDraft(sessionStorage.getItem(draftKey), initialDraft),
+  });
+  const draft = form.watch();
   const [step, setStep] = useState<SetupStep>(1);
   const [errors, setErrors] = useState<SetupErrors>({});
   const idempotencyKey = useRef(createIdempotencyKey());
@@ -112,28 +99,27 @@ export function ApplicationSetupFlow({
 
   useEffect(() => sessionStorage.setItem(draftKey, JSON.stringify(draft)), [draft, draftKey]);
   useEffect(() => {
-    setDraft((current) => ({
-      ...current,
-      appId: availableApps.some((app) => app.id === current.appId) ? current.appId : (availableApps[0]?.id ?? ""),
-    }));
-  }, [availableApps]);
+    const current = form.getValues("appId");
+    form.setValue("appId", availableApps.some((app) => app.id === current) ? current : (availableApps[0]?.id ?? ""));
+  }, [availableApps, form]);
   useEffect(() => {
-    setDraft((current) => ({
-      ...current,
-      storageProfileId: storageProfiles.data?.items.some((profile) => profile.id === current.storageProfileId)
-        ? current.storageProfileId
+    const current = form.getValues("storageProfileId");
+    form.setValue(
+      "storageProfileId",
+      storageProfiles.data?.items.some((profile) => profile.id === current)
+        ? current
         : (storageProfiles.data?.items[0]?.id ?? ""),
-    }));
-  }, [storageProfiles.data?.items]);
+    );
+  }, [form, storageProfiles.data?.items]);
   useEffect(() => {
-    setDraft((current) => ({
-      ...current,
-      clusterId: reconcileClusterSelection(
+    form.setValue(
+      "clusterId",
+      reconcileClusterSelection(
         readyClusters.map((cluster) => cluster.clusterId),
-        current.clusterId,
+        form.getValues("clusterId"),
       ),
-    }));
-  }, [readyClusters]);
+    );
+  }, [form, readyClusters]);
 
   const create = useMutation({
     mutationFn: () => {
@@ -160,7 +146,7 @@ export function ApplicationSetupFlow({
   });
 
   function set<K extends keyof ApplicationSetupDraft>(key: K, value: ApplicationSetupDraft[K]) {
-    setDraft((current) => ({ ...current, [key]: value }));
+    form.setValue(key, value as never, { shouldDirty: true });
     const field = draftErrorFields[key];
     if (field)
       setErrors((current) => {
@@ -184,8 +170,7 @@ export function ApplicationSetupFlow({
     if (!Object.keys(nextErrors).length) setStep((step + 1) as SetupStep);
   }
 
-  function submit(event: FormEvent) {
-    event.preventDefault();
+  function submit() {
     if (step !== 3) return next();
     const allErrors = {
       ...validateApplicationStep(draft, validateResourceName),
@@ -209,71 +194,11 @@ export function ApplicationSetupFlow({
       (availability.isError || (!availability.isPending && !statefulAvailable) || storageProfiles.isError));
 
   return (
-    <form className="panel stack setup-flow" onSubmit={submit} noValidate>
-      <div>
-        <p className="eyebrow">Novo App no Environment</p>
-        <h3>Configure somente o necessário para começar</h3>
-        <p className="muted">O rascunho fica salvo nesta sessão até a configuração ser concluída.</p>
-      </div>
-      <ol className="setup-steps" aria-label="Etapas da configuração">
-        {["Aplicação", "Execução", "Revisão"].map((label, index) => (
-          <li key={label} aria-current={step === index + 1 ? "step" : undefined} data-complete={step > index + 1}>
-            <span>{index + 1}</span> {label}
-          </li>
-        ))}
-      </ol>
+    <form className="panel stack setup-flow" onSubmit={form.handleSubmit(submit)} noValidate>
+      <ApplicationSetupProgress step={step} />
       <FormErrorSummary errors={formErrors} />
       {step === 1 && (
-        <fieldset className="form-section">
-          <legend>Aplicação</legend>
-          <p className="muted field-group-description">Escolha um App do catálogo ou crie um novo.</p>
-          <div className="choice-grid">
-            <Button
-              variant={draft.mode === "existing" ? "primary" : "secondary"}
-              aria-pressed={draft.mode === "existing"}
-              type="button"
-              onClick={() => set("mode", "existing")}
-              disabled={!availableApps.length}
-            >
-              Usar App existente
-            </Button>
-            <Button
-              variant={draft.mode === "new" ? "primary" : "secondary"}
-              aria-pressed={draft.mode === "new"}
-              type="button"
-              onClick={() => set("mode", "new")}
-            >
-              Criar novo App
-            </Button>
-          </div>
-          {draft.mode === "existing" ? (
-            <SelectField
-              id="setup-app"
-              label="App existente"
-              value={draft.appId}
-              onChange={(event) => set("appId", event.target.value)}
-              error={errors["setup-app"]}
-              required
-            >
-              <option value="">Selecione</option>
-              {availableApps.map((app) => (
-                <option key={app.id} value={app.id}>
-                  {app.name}
-                </option>
-              ))}
-            </SelectField>
-          ) : (
-            <Field
-              id="setup-name"
-              label="Nome do novo App"
-              value={draft.name}
-              onChange={(event) => set("name", event.target.value)}
-              error={errors["setup-name"]}
-              maxLength={80}
-              required
-            />
-          )}
-        </fieldset>
+        <ApplicationStepFields draft={draft} errors={errors} availableApps={availableApps} onChange={set} />
       )}
       {step === 2 && (
         <fieldset className="form-section">
@@ -312,12 +237,13 @@ export function ApplicationSetupFlow({
             value={draft.workloadKind}
             onChange={(event) => {
               const workloadKind = event.target.value as "Stateless" | "Stateful";
-              setDraft((current) => ({
-                ...current,
-                workloadKind,
-                configuration:
-                  workloadKind === "Stateful" ? { ...current.configuration, replicas: 1 } : current.configuration,
-              }));
+              const configuration = form.getValues("configuration");
+              form.setValue("workloadKind", workloadKind, { shouldDirty: true });
+              form.setValue(
+                "configuration",
+                workloadKind === "Stateful" ? { ...configuration, replicas: 1 } : configuration,
+                { shouldDirty: true },
+              );
               setErrors((current) => {
                 const next = { ...current };
                 delete next["setup-workload"];
@@ -439,10 +365,4 @@ export function ApplicationSetupFlow({
       </div>
     </form>
   );
-}
-
-function violationMessage(code: string) {
-  if (code === "name_conflict") return "Já existe um App ativo com esse nome.";
-  if (code === "required") return "Preencha este campo obrigatório.";
-  return "Revise este campo.";
 }

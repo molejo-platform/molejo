@@ -9,6 +9,10 @@ The contract has four layers:
    cohesive design stylesheets.
 4. Feature styles beside the feature that owns them.
 
+Private selectors use CSS Modules when a component or feature owns them. Global
+classes are reserved for shared semantic contracts such as buttons, fields,
+panels, layout composition, and feedback.
+
 Components and feature styles consume semantic roles. They must not depend on
 `--color-molejo-*` primitives or author colors outside `theme-molejo.css`. This
 keeps palette changes and a future validated brand theme from requiring component
@@ -26,9 +30,11 @@ for navigation and action groups. Media queries control viewport-level shell
 changes; components use container queries when their behavior depends on the
 space provided by a parent.
 
-The Console intentionally has no Tailwind, CSS-in-JS, runtime theme provider, or
-parallel design-token source. Introduce one only through an explicit migration
-decision that removes, rather than duplicates, the current contract.
+The Console intentionally has no Tailwind, CSS preprocessor, CSS-in-JS, runtime
+theme provider, or parallel design-token source. Base UI supplies behavior only,
+and Lucide supplies icons only; both stay behind contracts in `shared/ui`.
+Introduce another styling system only through an explicit migration decision that
+removes, rather than duplicates, the current contract.
 
 ## Change checklist
 

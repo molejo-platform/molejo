@@ -38,7 +38,7 @@ vi.mock("./ProjectLayout", () => ({
 }));
 
 import { renderWithQueryClient } from "../../test/render";
-import { ProjectAppsPage } from "./ProjectPages";
+import { ProjectAppsPage } from "./ProjectAppsPage";
 
 afterEach(() => {
   cleanup();

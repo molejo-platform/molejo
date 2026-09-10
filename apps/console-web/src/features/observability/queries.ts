@@ -1,3 +1,15 @@
+import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
+
+import { cachePolicy } from "../../shared/api/cache-policy";
+import {
+  getRuntimeMetrics,
+  listRuntimeEvents,
+  listRuntimeLogs,
+  type RuntimeEventFilters,
+  type RuntimeLogFilters,
+  type RuntimeMetricFilters,
+} from "./api";
+
 const runtime = (workspaceId: string, projectId: string, appId: string, appEnvironmentId: string) =>
   ["workspaces", workspaceId, "projects", projectId, "apps", appId, "environments", appEnvironmentId] as const;
 
@@ -48,14 +60,3 @@ export const observabilityQueries = {
       staleTime: cachePolicy.history,
     }),
 };
-import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
-
-import { cachePolicy } from "../../shared/api/cache-policy";
-import {
-  getRuntimeMetrics,
-  listRuntimeEvents,
-  listRuntimeLogs,
-  type RuntimeEventFilters,
-  type RuntimeLogFilters,
-  type RuntimeMetricFilters,
-} from "./api";

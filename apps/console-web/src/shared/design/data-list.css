@@ -3,7 +3,10 @@
   border: 1px solid var(--ui-border);
   border-radius: var(--radius-md);
   container-type: inline-size;
+  list-style: none;
+  margin: 0;
   overflow: hidden;
+  padding: 0;
 }
 .data-list-item {
   align-items: center;
@@ -17,6 +20,12 @@
 }
 .data-list-item + .data-list-item {
   border-top: 1px solid var(--ui-border);
+}
+.data-list-entry + .data-list-entry {
+  border-top: 1px solid var(--ui-border);
+}
+.data-list-entry > .data-list-item {
+  width: 100%;
 }
 a.data-list-item:hover,
 button.data-list-item:hover {

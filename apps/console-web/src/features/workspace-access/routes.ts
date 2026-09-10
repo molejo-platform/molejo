@@ -1,6 +1,4 @@
-export {
-  WorkspaceAccessGrantsPage,
-  WorkspaceAuditPage,
-  WorkspaceGroupsPage,
-  WorkspaceMembersPage,
-} from "./WorkspaceAccessPages";
+export { WorkspaceAccessGrantsPage } from "./WorkspaceAccessGrantsPage";
+export { WorkspaceAuditPage } from "./WorkspaceAuditPage";
+export { WorkspaceGroupsPage } from "./WorkspaceGroupsPage";
+export { WorkspaceMembersPage } from "./WorkspaceMembersPage";

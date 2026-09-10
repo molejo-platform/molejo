@@ -7,6 +7,7 @@ import { Alert } from "../../shared/ui/Alert";
 import { BrandLogo } from "../../shared/ui/BrandLogo";
 import { Button } from "../../shared/ui/Button";
 import { Icon } from "../../shared/ui/Icon";
+import { NavigationDrawer } from "../../shared/ui/NavigationDrawer";
 import { useLogoutMutation, useSessionQuery } from "../authentication/public";
 import { useSelectedWorkspace } from "./WorkspaceContext";
 
@@ -44,35 +45,20 @@ export function WorkspaceHeader() {
     { label: "Parameters", to: "/workspaces/$workspaceId/parameters" },
   ] as const;
 
-  return (
-    <>
-      <header className="mobile-topbar">
-        <Link
-          to={workspaceId ? "/workspaces/$workspaceId/overview" : "/"}
-          params={workspaceId ? { workspaceId } : undefined}
-          className="brand"
-        >
-          <BrandLogo compact surface="dark" />
-        </Link>
-        <Button
-          variant="icon"
-          aria-label={menuOpen ? "Fechar navegação" : "Abrir navegação"}
-          aria-expanded={menuOpen}
-          onClick={() => setMenuOpen((current) => !current)}
-        >
-          <Icon name={menuOpen ? "close" : "menu"} />
-        </Button>
-      </header>
-      <aside className={`sidebar ${menuOpen ? "open" : ""}`}>
-        <Link
-          to={workspaceId ? "/workspaces/$workspaceId/overview" : "/"}
-          params={workspaceId ? { workspaceId } : undefined}
-          className="brand desktop-brand"
-          onClick={() => setMenuOpen(false)}
-        >
-          <BrandLogo surface="dark" />
-          <span className="brand-product-name">Console</span>
-        </Link>
+  function navigationContent(showBrand: boolean) {
+    return (
+      <>
+        {showBrand && (
+          <Link
+            to={workspaceId ? "/workspaces/$workspaceId/overview" : "/"}
+            params={workspaceId ? { workspaceId } : undefined}
+            className="brand"
+            onClick={() => setMenuOpen(false)}
+          >
+            <BrandLogo surface="dark" />
+            <span className="brand-product-name">Console</span>
+          </Link>
+        )}
         <label className="workspace-switcher">
           <span>Workspace</span>
           <select
@@ -143,15 +129,38 @@ export function WorkspaceHeader() {
             {shortCommit ? ` · ${shortCommit}` : ""}
           </small>
         </div>
-      </aside>
-      {menuOpen && (
-        <button
-          type="button"
-          className="sidebar-scrim"
-          aria-label="Fechar navegação"
-          onClick={() => setMenuOpen(false)}
-        />
-      )}
+      </>
+    );
+  }
+
+  return (
+    <>
+      <header className="mobile-topbar">
+        <Link
+          to={workspaceId ? "/workspaces/$workspaceId/overview" : "/"}
+          params={workspaceId ? { workspaceId } : undefined}
+          className="brand"
+        >
+          <BrandLogo compact surface="dark" />
+        </Link>
+        <NavigationDrawer
+          open={menuOpen}
+          onOpenChange={setMenuOpen}
+          title="Navegação da Molejo"
+          trigger={
+            <Button
+              variant="icon"
+              aria-label={menuOpen ? "Fechar navegação" : "Abrir navegação"}
+              aria-expanded={menuOpen}
+            >
+              <Icon name={menuOpen ? "close" : "menu"} />
+            </Button>
+          }
+        >
+          {navigationContent(true)}
+        </NavigationDrawer>
+      </header>
+      <aside className="sidebar desktop-sidebar">{navigationContent(true)}</aside>
     </>
   );
 }

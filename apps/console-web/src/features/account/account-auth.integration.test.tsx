@@ -18,7 +18,7 @@ vi.mock("./api", async (importOriginal) => ({
   beginTOTPEnrollment: mocks.beginTOTPEnrollment,
 }));
 
-import { TOTPSection } from "./AccountPages";
+import { TOTPSection } from "./TOTPSection";
 
 afterEach(() => {
   cleanup();

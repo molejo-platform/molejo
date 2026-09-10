@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 import { ApiRequestError } from "../../shared/api/errors";
 import type { AppEnvironment, RuntimeConfiguration } from "../../shared/api/types";
-import { appEnvironmentKeys, updateAppEnvironment, type EnvironmentParams } from "../app-environments/public";
+import { appEnvironmentKeys, type EnvironmentParams, updateAppEnvironment } from "../app-environments/public";
 import { environmentKeys } from "../environments/public";
 import { parameterQueries } from "../parameters/public";
 import { useEffectiveCapabilities } from "../workspace-access/public";

@@ -59,4 +59,17 @@ describe("WorkspaceHeader", () => {
     view.rerender(<WorkspaceHeader />);
     expect(screen.getByRole("alert").textContent).toContain("Não foi possível concluir a operação");
   });
+
+  it("keeps mobile navigation in an accessible modal boundary", async () => {
+    const user = userEvent.setup();
+    render(<WorkspaceHeader />);
+
+    const trigger = screen.getByRole("button", { name: "Abrir navegação" });
+    await user.click(trigger);
+    expect(screen.getByRole("dialog", { name: "Navegação da Molejo" })).toBeTruthy();
+
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "Navegação da Molejo" })).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
 });

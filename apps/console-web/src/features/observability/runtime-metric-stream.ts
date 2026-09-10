@@ -1,7 +1,7 @@
 import { useMemo, useSyncExternalStore } from "react";
 
 import type { RuntimeMetricSnapshot } from "../../shared/api/types";
-import { transitionRuntimeStream, type RuntimeStreamState } from "./runtime-stream-state";
+import { type RuntimeStreamState, transitionRuntimeStream } from "./runtime-stream-state";
 
 export type RuntimeMetricsValue = { snapshot?: RuntimeMetricSnapshot; state: RuntimeStreamState };
 

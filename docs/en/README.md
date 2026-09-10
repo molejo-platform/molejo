@@ -87,6 +87,7 @@ Current architecture and component guides:
 - [Secret custody and runtime delivery ADR](adr/0020-secret-custody-and-runtime-delivery.md)
 - [Explicit operator-managed bindings ADR](adr/0021-explicit-operator-managed-bindings.md)
 - [Provider-neutral metrics with a Prometheus-compatible query adapter ADR](adr/0022-provider-neutral-metrics-with-prometheus-query.md)
+- [Console frontend stack boundary ADR](adr/0023-console-frontend-stack-boundary.md)
 
 ## Contributing
 

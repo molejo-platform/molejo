@@ -14,3 +14,4 @@
 - [ADR-0020: Secret Custody and Runtime Delivery](0020-secret-custody-and-runtime-delivery.md)
 - [ADR-0021: Explicit Operator-managed Bindings](0021-explicit-operator-managed-bindings.md)
 - [ADR-0022: Provider-neutral Metrics with a Prometheus-compatible Query Adapter](0022-provider-neutral-metrics-with-prometheus-query.md)
+- [ADR-0023: Console Frontend Stack Boundary](0023-console-frontend-stack-boundary.md)

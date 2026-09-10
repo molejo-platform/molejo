@@ -1,7 +1,6 @@
 import { createRoute, lazyRouteComponent, Outlet } from "@tanstack/react-router";
-
-import { ApplicationLayout, applicationQueries } from "../../features/applications/public";
 import { EnvironmentAppLayout } from "../../features/app-environments/public";
+import { ApplicationLayout, applicationQueries } from "../../features/applications/public";
 import { environmentQueries } from "../../features/environments/public";
 import { projectQueries } from "../../features/projects/public";
 import { workspaceDetailQueryOptions } from "../../features/workspaces/queries";

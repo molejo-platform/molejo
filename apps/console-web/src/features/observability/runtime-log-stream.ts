@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 
 import type { RuntimeLogBatch } from "../../shared/api/types";
-import { transitionRuntimeStream, type RuntimeStreamState } from "./runtime-stream-state";
 import type { RuntimeLogStore } from "./runtime-log-store";
+import { type RuntimeStreamState, transitionRuntimeStream } from "./runtime-stream-state";
 
 type CursorRecord = { cursor: string; expiresAt: number };
 const cursorTTL = 30 * 60_000;

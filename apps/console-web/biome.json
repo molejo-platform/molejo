@@ -1,7 +1,7 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.5.12/schema.json",
   "files": {
-    "includes": ["**", "!dist", "!node_modules", "!src/shared/api/generated"]
+    "includes": ["**", "!dist", "!node_modules", "!test-results", "!src/shared/api/generated"]
   },
   "formatter": {
     "enabled": true,
@@ -12,11 +12,6 @@
     "enabled": true,
     "rules": {
       "preset": "recommended",
-      "a11y": {
-        "useAriaPropsSupportedByRole": "off",
-        "useKeyWithClickEvents": "off",
-        "useValidAnchor": "off"
-      },
       "complexity": {
         "noImportantStyles": "off"
       },

@@ -106,18 +106,19 @@ export function ProjectEntryPage() {
           </div>
           <DataList>
             {environments.data.items.map((environment) => (
-              <Link
-                className="data-list-item"
-                key={environment.id}
-                to="/workspaces/$workspaceId/projects/$projectId/environments/$environmentId"
-                params={{ workspaceId, projectId, environmentId: environment.id }}
-              >
-                <span>
-                  <strong>{environment.name}</strong>
-                  <small>{environment.id}</small>
-                </span>
-                <span className="row-action">Abrir</span>
-              </Link>
+              <li className="data-list-entry" key={environment.id}>
+                <Link
+                  className="data-list-item"
+                  to="/workspaces/$workspaceId/projects/$projectId/environments/$environmentId"
+                  params={{ workspaceId, projectId, environmentId: environment.id }}
+                >
+                  <span>
+                    <strong>{environment.name}</strong>
+                    <small>{environment.id}</small>
+                  </span>
+                  <span className="row-action">Abrir</span>
+                </Link>
+              </li>
             ))}
           </DataList>
         </section>

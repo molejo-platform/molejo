@@ -61,15 +61,16 @@ installation runbooks.
 
 ## File policy
 
-- Authored files must remain below 1,000 lines.
-- Files over 400 lines require an explicit cohesion review.
+- Production-authored files must remain at or below 400 lines.
 - A range of 150-300 lines is preferred, but splitting by line count alone is not.
-- Generated OpenAPI files are exempt.
+- Tests and generated OpenAPI files are exempt from the hard limit, but still split by behavior when navigation becomes
+  difficult.
 
 ## Visual architecture
 
-The Console uses native CSS, cascade layers, and semantic custom properties. It
-does not maintain a parallel utility framework or runtime theme provider.
+The Console uses native CSS, cascade layers, semantic custom properties, and CSS
+Modules for private component or feature styles. It does not maintain a parallel
+utility framework, preprocessor, or runtime theme provider.
 
 - `shared/design/theme-molejo.css` owns shared visual values and semantic roles.
 - `shared/design/base.css` owns document defaults and native element behavior.
@@ -78,6 +79,10 @@ does not maintain a parallel utility framework or runtime theme provider.
   viewport-level responsive changes.
 - A feature owns layouts that express its product vocabulary and imports its own
   stylesheet in the `features` cascade layer.
+- Interactive behavior that is difficult to implement accessibly may use Base UI,
+  but only behind a contract in `shared/ui`. Features must not import Base UI.
+- Icons use the local `Icon` contract. Lucide is an implementation detail and must
+  not be imported outside `shared/ui`.
 
 Use grid for aligned, two-dimensional relationships such as field groups,
 cards, and filters. Use flexbox for one-dimensional relationships such as
@@ -88,6 +93,18 @@ queries.
 Create a React component when semantics, behavior, or supported variants repeat.
 Use a named CSS layout contract when only geometry repeats. A local dimension
 becomes a token only after it represents shared product knowledge.
+
+Native controls remain the default. React Hook Form and Zod are reserved for
+multi-step or structurally complex workflows; simple forms keep native HTML and
+local React state. The API remains the authority for business validation.
+
+## Browser support
+
+The authored frontend targets current evergreen browsers with the following
+minimums: Chromium 111, Firefox 128, and Safari 16.4. Critical journeys must be
+usable with keyboard navigation, reduced motion, and mobile viewports. Automated
+accessibility checks are a regression gate, not a substitute for manual assistive
+technology review.
 
 ## Adding a capability
 

@@ -36,8 +36,9 @@ vi.mock("./api", async (importOriginal) => {
 });
 
 import { renderWithQueryClient } from "../../test/render";
-import { MetricCard, RuntimeLogsPage, RuntimeMetricsPage } from "./ObservabilityPages";
 import { RuntimeLogBody } from "./RuntimeLogBody";
+import { RuntimeLogsPage } from "./RuntimeLogsPage";
+import { MetricCard, RuntimeMetricsPage } from "./RuntimeMetricsPage";
 
 const target = {
   id: "aev-aaaaaaaaaaaaaaaaaaaa",

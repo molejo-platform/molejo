@@ -20,7 +20,7 @@ import { useOperationTracker } from "../operations/public";
 import { useEffectiveCapabilities } from "../workspace-access/public";
 import { deleteAppEnvironmentVolume, expandAppEnvironmentVolume } from "./api";
 import { runtimeConfigurationKeys, runtimeConfigurationQueries } from "./queries";
-import { ConfigurationNav } from "./RuntimeConfigurationPages";
+import { ConfigurationNav } from "./RuntimeConfigurationPage";
 
 export function EnvironmentStoragePage() {
   return (

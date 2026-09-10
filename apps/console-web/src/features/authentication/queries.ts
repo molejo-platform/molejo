@@ -1,8 +1,7 @@
 import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-
+import { cachePolicy } from "../../shared/api/cache-policy";
 import { isUnauthenticatedError } from "../../shared/api/errors";
 import { setCsrfToken } from "../../shared/api/http-client";
-import { cachePolicy } from "../../shared/api/cache-policy";
 import type { Session } from "../../shared/api/types";
 import {
   applySessionState,

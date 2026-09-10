@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   createAccessGrant: vi.fn(),
@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@tanstack/react-router", () => ({
-  Link: ({ children }: { children: ReactNode }) => <a href="#">{children}</a>,
+  Link: ({ children }: { children: ReactNode }) => <a href="/">{children}</a>,
   useMatchRoute: () => () => false,
   useParams: () => ({ workspaceId: "ws-aaaaaaaaaaaaaaaaaaaa" }),
 }));
@@ -47,22 +47,8 @@ vi.mock("./api", () => ({
   listMembers: mocks.listMembers,
 }));
 
-import { WorkspaceAccessGrantsPage } from "./WorkspaceAccessPages";
+import { WorkspaceAccessGrantsPage } from "./WorkspaceAccessGrantsPage";
 
-beforeAll(() => {
-  Object.defineProperty(HTMLDialogElement.prototype, "showModal", {
-    configurable: true,
-    value() {
-      this.open = true;
-    },
-  });
-  Object.defineProperty(HTMLDialogElement.prototype, "close", {
-    configurable: true,
-    value() {
-      this.open = false;
-    },
-  });
-});
 afterEach(() => cleanup());
 
 describe("workspace access relations", () => {

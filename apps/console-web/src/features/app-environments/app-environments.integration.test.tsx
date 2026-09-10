@@ -266,18 +266,14 @@ vi.mock("../runtime-configuration/api", async (importOriginal) => ({
 
 import { renderWithQueryClient } from "../../test/render";
 import { ProjectEntryPage } from "../projects/ProjectEntryPage";
-import {
-  EnvironmentBuildConfigurationPage,
-  EnvironmentVariablesPage,
-} from "../runtime-configuration/RuntimeConfigurationPages";
+import { EnvironmentBuildConfigurationPage } from "../runtime-configuration/EnvironmentBuildConfigurationPage";
+import { EnvironmentVariablesPage } from "../runtime-configuration/EnvironmentVariablesPage";
 import { EnvironmentStoragePage } from "../runtime-configuration/StoragePage";
-import {
-  EnvironmentAppBuildsPage,
-  EnvironmentAppDeploymentsPage,
-  EnvironmentAppOverviewPage,
-  EnvironmentAppsPage,
-  EnvironmentBuildDetailPage,
-} from "./AppEnvironmentPages";
+import { EnvironmentAppBuildsPage } from "./EnvironmentAppBuildsPage";
+import { EnvironmentAppDeploymentsPage } from "./EnvironmentAppDeploymentsPage";
+import { EnvironmentAppOverviewPage } from "./EnvironmentAppOverviewPage";
+import { EnvironmentAppsPage } from "./EnvironmentAppsPage";
+import { EnvironmentBuildDetailPage } from "./EnvironmentBuildDetailPage";
 
 afterEach(() => {
   cleanup();

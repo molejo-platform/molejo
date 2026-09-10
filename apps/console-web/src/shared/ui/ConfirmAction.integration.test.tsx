@@ -1,24 +1,9 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ConfirmAction } from "./ConfirmAction";
-
-beforeEach(() => {
-  Object.defineProperty(HTMLDialogElement.prototype, "showModal", {
-    configurable: true,
-    value() {
-      this.open = true;
-    },
-  });
-  Object.defineProperty(HTMLDialogElement.prototype, "close", {
-    configurable: true,
-    value() {
-      this.open = false;
-    },
-  });
-});
 
 afterEach(cleanup);
 
@@ -38,10 +23,40 @@ describe("ConfirmAction", () => {
     expect(confirm).toHaveBeenCalledOnce();
     expect((screen.getByRole("button", { name: "Cancelar" }) as HTMLButtonElement).disabled).toBe(true);
     await user.keyboard("{Escape}");
-    expect(screen.getByRole("dialog")).toBeTruthy();
+    expect(screen.getByRole("alertdialog", { name: "Remover recurso?" })).toBeTruthy();
 
     finish();
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
+  it("associates each confirmation with its own accessible title and returns focus to its trigger", async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <ConfirmAction
+          trigger="Remover primeiro"
+          title="Remover primeiro recurso?"
+          description="O primeiro recurso será removido."
+          confirmLabel="Confirmar primeiro"
+          onConfirm={() => undefined}
+        />
+        <ConfirmAction
+          trigger="Remover segundo"
+          title="Remover segundo recurso?"
+          description="O segundo recurso será removido."
+          confirmLabel="Confirmar segundo"
+          onConfirm={() => undefined}
+        />
+      </>,
+    );
+
+    const trigger = screen.getByRole("button", { name: "Remover segundo" });
+    await user.click(trigger);
+    expect(screen.getByRole("alertdialog", { name: "Remover segundo recurso?" })).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Cancelar" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(document.activeElement).toBe(trigger);
   });
 });
 

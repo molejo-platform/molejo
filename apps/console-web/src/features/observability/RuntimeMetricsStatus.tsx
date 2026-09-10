@@ -3,7 +3,7 @@ import { createContext, type ReactNode, useContext, useEffect, useState } from "
 import type { AppEnvironment, RuntimeMetricSample } from "../../shared/api/types";
 import { StatusBadge } from "../../shared/ui/StatusBadge";
 import { runtimeMetricStreamURL } from "./api";
-import { useRuntimeMetricStream, type RuntimeMetricsValue } from "./runtime-metric-stream";
+import { type RuntimeMetricsValue, useRuntimeMetricStream } from "./runtime-metric-stream";
 
 type RuntimeTargetRef = {
   workspaceId: string;

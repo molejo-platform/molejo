@@ -12,7 +12,8 @@ export const RuntimeLogBody = memo(function RuntimeLogBody({ body }: { body: str
   const tokens = formatted ? json.formattedTokens : json.compactTokens;
   return (
     <div className="runtime-log-body">
-      <pre id={contentId} aria-label="Conteúdo JSON do log">
+      {/* biome-ignore lint/a11y/useSemanticElements: pre preserves log whitespace while region supplies an accessible name. */}
+      <pre id={contentId} role="region" aria-label="Conteúdo JSON do log">
         {tokens.map((token, index) => (
           <JsonToken key={index} token={token} />
         ))}

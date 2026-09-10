@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@tanstack/react-router", () => ({
-  Link: ({ children }: { children: ReactNode }) => <a href="#">{children}</a>,
+  Link: ({ children }: { children: ReactNode }) => <a href="/">{children}</a>,
   useNavigate: () => mocks.navigate,
 }));
 vi.mock("../authentication/public", () => ({

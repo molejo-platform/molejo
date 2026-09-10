@@ -53,8 +53,11 @@ const importPattern = /(?:import|export)\s+(?:[^"']*?\s+from\s+)?["']([^"']+)["'
 for (const file of authoredFiles(sourceRoot)) {
   const content = readFileSync(file, "utf8");
   const lineCount = content.split("\n").length;
-  if (lineCount > 1_000)
-    problems.push(`${relative(root, file)} has ${lineCount} lines; authored files must stay below 1,000`);
+  const isTest = /\.(unit|integration)\.test\.tsx?$/.test(file);
+  if (!isTest && lineCount > 400)
+    problems.push(
+      `${relative(root, file)} has ${lineCount} lines; production-authored files must stay at or below 400`,
+    );
 
   if (extname(file) === ".css" && relative(sourceRoot, file).startsWith(`shared${sep}`)) {
     if (/@import\s+[^;]*(?:features|\/app\/)/.test(content)) {
@@ -73,10 +76,18 @@ for (const file of authoredFiles(sourceRoot)) {
 
 for (const file of productionFiles) {
   const content = readFileSync(file, "utf8");
+  const sourcePath = relative(sourceRoot, file);
 
   const imports = [];
   for (const match of content.matchAll(importPattern)) {
-    const imported = resolveImport(file, match[1] ?? match[2]);
+    const specifier = match[1] ?? match[2];
+    if (
+      (specifier === "lucide-react" || specifier.startsWith("@base-ui/react")) &&
+      !sourcePath.startsWith(`shared${sep}ui${sep}`)
+    ) {
+      problems.push(`${relative(root, file)} imports ${specifier} outside the shared/ui adapter boundary`);
+    }
+    const imported = resolveImport(file, specifier);
     if (!imported) continue;
     imports.push(imported);
 

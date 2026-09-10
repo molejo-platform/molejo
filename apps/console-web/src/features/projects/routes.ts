@@ -1,2 +1,5 @@
+export { ProjectAppsPage } from "./ProjectAppsPage";
 export { ProjectEntryPage } from "./ProjectEntryPage";
-export { ProjectAppsPage, ProjectEnvironmentsPage, ProjectOverviewPage, ProjectsPage } from "./ProjectPages";
+export { ProjectEnvironmentsPage } from "./ProjectEnvironmentsPage";
+export { ProjectOverviewPage } from "./ProjectOverviewPage";
+export { ProjectsPage } from "./ProjectsPage";

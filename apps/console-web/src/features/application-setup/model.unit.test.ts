@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 import type { StorageProfile } from "../../shared/api/types";
 import { defaultRuntimeConfiguration } from "../runtime-configuration/public";
 import {
-  applicationSetupInput,
   type ApplicationSetupDraft,
+  applicationSetupInput,
   restoreApplicationSetupDraft,
   validateApplicationStep,
   validateRuntimeStep,
@@ -68,5 +68,6 @@ describe("application setup model", () => {
   it("recovers a compatible draft and ignores corrupt storage", () => {
     expect(restoreApplicationSetupDraft('{"branch":"develop"}', draft()).branch).toBe("develop");
     expect(restoreApplicationSetupDraft("not-json", draft())).toEqual(draft());
+    expect(restoreApplicationSetupDraft('{"sizeGiB":"large"}', draft())).toEqual(draft());
   });
 });

@@ -128,8 +128,7 @@
   justify-content: flex-start;
   width: 100%;
 }
-.mobile-topbar,
-.sidebar-scrim {
+.mobile-topbar {
   display: none;
 }
 .main-content {
@@ -157,33 +156,8 @@
   .mobile-topbar .button[data-variant="icon"] {
     color: var(--ui-inverse-text);
   }
-  .desktop-brand {
+  .desktop-sidebar {
     display: none;
-  }
-  .sidebar {
-    height: 100dvh;
-    left: 0;
-    max-width: 310px;
-    position: fixed;
-    top: 0;
-    transform: translateX(-105%);
-    transition: transform var(--motion-medium) ease;
-    width: 86vw;
-    z-index: var(--layer-drawer);
-  }
-  .sidebar.open {
-    transform: translateX(0);
-  }
-  .sidebar-scrim {
-    background: var(--ui-scrim-soft);
-    border: 0;
-    border-radius: 0;
-    display: block;
-    inset: 0;
-    min-height: 0;
-    padding: 0;
-    position: fixed;
-    z-index: var(--layer-scrim);
   }
   .main-content {
     padding: var(--space-8) var(--space-4);

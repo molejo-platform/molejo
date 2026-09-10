@@ -8,8 +8,8 @@ import { useSessionQuery } from "../authentication/public";
 import { canUseFeature, featureIds, findFeature, useFeatureAvailability } from "../feature-availability/public";
 import { type RuntimeLogFilters, runtimeLogStreamURL } from "./api";
 import { observabilityQueries } from "./queries";
-import { readRuntimeLogCursor, runtimeLogCursorKey, useRuntimeLogStream } from "./runtime-log-stream";
 import { RuntimeLogStore } from "./runtime-log-store";
+import { readRuntimeLogCursor, runtimeLogCursorKey, useRuntimeLogStream } from "./runtime-log-stream";
 import { createRuntimeRange } from "./runtime-range";
 
 export function useRuntimeLogsViewModel(target: AppEnvironment, params: EnvironmentParams) {

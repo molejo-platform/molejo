@@ -1,11 +1,15 @@
-import type { HTMLAttributes, ReactNode } from "react";
+import type { HTMLAttributes, LiHTMLAttributes, ReactNode } from "react";
 
-export function DataList({ children, className, ...props }: HTMLAttributes<HTMLDivElement> & { children: ReactNode }) {
+export function DataList({
+  children,
+  className,
+  ...props
+}: HTMLAttributes<HTMLUListElement> & { children: ReactNode }) {
   const classes = ["data-list", className].filter(Boolean).join(" ");
   return (
-    <div className={classes} {...props}>
+    <ul className={classes} {...props}>
       {children}
-    </div>
+    </ul>
   );
 }
 
@@ -13,11 +17,11 @@ export function DataListItem({
   children,
   className,
   ...props
-}: HTMLAttributes<HTMLDivElement> & { children: ReactNode }) {
+}: LiHTMLAttributes<HTMLLIElement> & { children: ReactNode }) {
   const classes = ["data-list-item", className].filter(Boolean).join(" ");
   return (
-    <div className={classes} {...props}>
+    <li className={classes} {...props}>
       {children}
-    </div>
+    </li>
   );
 }

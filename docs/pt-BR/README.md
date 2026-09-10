@@ -89,6 +89,7 @@ Guias atuais de arquitetura e componentes:
 - [ADR de custódia de secrets e entrega](adr/0020-custodia-de-secrets-e-entrega-ao-runtime.md)
 - [ADR de bindings explícitos gerenciados pelo operador](adr/0021-bindings-explicitos-gerenciados-pelo-operador.md)
 - [ADR de métricas neutras com consulta Prometheus-compatible](adr/0022-metricas-neutras-com-consulta-prometheus.md)
+- [ADR do limite da stack frontend do Console](adr/0023-limite-da-stack-frontend-do-console.md)
 
 ## Contribuição
 
