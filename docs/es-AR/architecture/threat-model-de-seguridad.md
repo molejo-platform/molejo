@@ -47,7 +47,7 @@ endpoints, modos de entrega o privilegios del clúster.
 | TM-01 | Spoofing / A07 | Sesión actúa en otro tenant. | CSRF, sesión, ancestry, auditoría; integración negativa. |
 | TM-02 | Elevation / A01 | Availability se interpreta como permiso. | Capability, consentimiento, autorización y admission separados. |
 | TM-03 | Elevation / A01/A02 | Agent/Operator alcanza todos namespaces. | RoleBindings por Workspace y SelfSubjectAccessReview negativo afuera. |
-| TM-04 | Elevation / A01 | Input apunta Kubernetes arbitrario. | Comandos tipados, placement listo y rechazo de targets extraños. |
+| TM-04 | Elevation / A01 | Input apunta Kubernetes arbitrario. | Comandos cerrados y versionados, placement listo y rechazo de targets extraños. |
 | TM-05 | Tampering / A08 | Replay o versión regresiva. | mTLS, session, sequence, deadline, idempotencia, lease y fencing. |
 | TM-06 | Disclosure / A04 | Secret aparece en DB/API/log. | Store externo, handle opaco, write-only y sentinelas de redaction. |
 | TM-07 | Disclosure / A01/A02 | Agent lista Secrets del clúster. | Sin list/watch; get/create/delete namespaced y namespaces separados. |
@@ -63,11 +63,12 @@ endpoints, modos de entrega o privilegios del clúster.
 
 ## Estado actual y gaps
 
-Ya están implementados y validados la decisión namespaced de provisionamiento,
-`WorkspacePlacement`, credenciales separadas de runtime/discovery, entrega
-inmutable just-in-time de secrets y sanitización. El Workspace legado de prueba
-se elimina y recrea explícitamente, sin migración. Backend externo de secrets y
-evidencia de encryption at rest siguen como capabilities opcionales no
+Ya están implementados la decisión namespaced de provisionamiento,
+`WorkspacePlacement`, permisos namespaced de runtime y observación, entrega
+inmutable just-in-time de secrets y sanitización. El workload actual del Agent
+usa una única ServiceAccount para runtime, observación y discovery; los permisos
+son roles separados, pero no credenciales separadas. Backend externo de secrets
+y evidencia de encryption at rest siguen como capabilities opcionales no
 configuradas.
 
 ## Invariantes y riesgos aceptados
@@ -87,10 +88,11 @@ los IDs afectados.
 
 ## Referencias
 
-- [ADR 0019](../adr/0019-provisionamiento-de-workspace-y-limite-de-namespace.md)
-- [ADR 0020](../adr/0020-custodia-de-secrets-y-entrega-al-runtime.md)
-- [ADR 0021](../adr/0021-bindings-explicitos-gestionados-por-el-operador.md)
-- [ADR 0022](../adr/0022-metricas-neutrales-con-consulta-prometheus.md)
+- [ADR-0001: límite del producto y topología de runtime](../../en/adr/0001-product-boundary-and-runtime-topology.md)
+- [ADR-0003: principals, autenticación y autorización](../../en/adr/0003-principals-authentication-and-authorization.md)
+- [ADR-0004: placement de Workspace y límite de privilegios de Kubernetes](../../en/adr/0004-workspace-placement-and-kubernetes-privilege-boundary.md)
+- [ADR-0005: composición de capabilities y bindings explícitos](../../en/adr/0005-capability-composition-and-explicit-bindings.md)
+- [ADR-0006: custodia y entrega de secrets](../../en/adr/0006-secret-custody-and-runtime-delivery.md)
 - [OWASP Threat Modeling](https://cheatsheetseries.owasp.org/cheatsheets/Threat_Modeling_Cheat_Sheet.html)
 - [OWASP Top 10: 2025](https://owasp.org/Top10/2025/0x00_2025-Introduction/)
 - [Buenas prácticas RBAC Kubernetes](https://kubernetes.io/docs/concepts/security/rbac-good-practices/)

@@ -26,11 +26,17 @@ compatibility or migration commitment.
 The canonical hierarchy is:
 
 ```text
-Workspace → Project → Environment → App
+Workspace
+└── Project
+    ├── App
+    └── Environment
+         ↘ AppEnvironment ↙
 ```
 
-An `App` is the logical application identity. An `AppDeployment` represents the
-deployment of a specific release of an App into an Environment.
+An `App` is the logical application identity. An `AppEnvironment` binds one App
+to one Environment. An immutable `Deployment` selects a Release and a
+configuration revision for that binding; `AppDeployment` is its Kubernetes
+runtime projection.
 
 The platform remains the source of truth for product identity, ownership, and
 authorization. Kubernetes names, namespaces, labels, and annotations are runtime
@@ -64,8 +70,8 @@ and are not scaffolded before their phase begins.
 ## Documentation
 
 English is the canonical documentation language. Portuguese (`pt-BR`) and
-Argentinian Spanish (`es-AR`) versions are maintained alongside it, and more
-languages may be added later.
+Argentinian Spanish (`es-AR`) architecture and operations guides are maintained
+alongside it. ADRs have one English canonical copy to prevent decision drift.
 
 Current architecture and component guides:
 
@@ -78,17 +84,7 @@ Current architecture and component guides:
 - [Application loop](application-loop/README.md)
 - [External CI releases](application-loop/external-ci.md)
 - [Security threat model](architecture/security-threat-model.md)
-- [Outbound Cluster Agent identity and pairing ADR](adr/0013-outbound-cluster-agent-identity-and-pairing.md)
-- [External CI release and deployment boundary ADR](adr/0014-external-ci-release-and-deployment-boundary.md)
-- [Capability ownership ADR](adr/0015-capability-ownership.md)
-- [Alpha lifecycle policy ADR](adr/0016-alpha-lifecycle-policy.md)
-- [Human identity boundary ADR](adr/0017-human-identity-boundary.md)
-- [Capability observation and feature availability ADR](adr/0018-capability-observation-and-feature-availability.md)
-- [Workspace provisioning and namespace boundary ADR](adr/0019-workspace-provisioning-and-namespace-boundary.md)
-- [Secret custody and runtime delivery ADR](adr/0020-secret-custody-and-runtime-delivery.md)
-- [Explicit operator-managed bindings ADR](adr/0021-explicit-operator-managed-bindings.md)
-- [Provider-neutral metrics with a Prometheus-compatible query adapter ADR](adr/0022-provider-neutral-metrics-with-prometheus-query.md)
-- [Console frontend stack boundary ADR](adr/0023-console-frontend-stack-boundary.md)
+- [Architecture decisions](adr/README.md)
 
 ## Contributing
 

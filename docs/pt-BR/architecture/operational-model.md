@@ -36,9 +36,10 @@ Workspaces como `Disabled` ou `Namespaced` na instalação do Agent. Em
 control plane possui o Workspace lógico, o Agent transporta estado desejado
 limitado e um domínio privilegiado separado cria namespace e RoleBindings fixos.
 
-Armazenamento e entrega de secrets também são responsabilidades distintas. Um
-SecretValueStore externo é a fonte durável. Secret Kubernetes versionado é o
-mecanismo inicial de última milha, não vault ou fallback.
+Armazenamento e entrega de secrets também são responsabilidades distintas.
+Quando parâmetros secretos estão habilitados, um SecretValueStore externo é a
+fonte durável. Secret Kubernetes versionado é o mecanismo inicial de última
+milha, não vault ou fallback.
 
 A release atual é alpha. Contratos e caminhos da CLI podem quebrar entre alphas.
 A transição suportada é uma reinstalação experimental limpa, não upgrade in-place.
@@ -55,6 +56,8 @@ limitados e efêmeros; dados históricos dependem de provider e retenção próp
 
 ## Referências de segurança
 
-- [Provisionamento de Workspace e limite de namespace](../adr/0019-provisionamento-de-workspace-e-limite-de-namespace.md)
-- [Custódia de secrets e entrega ao runtime](../adr/0020-custodia-de-secrets-e-entrega-ao-runtime.md)
+- [Limite do produto e topologia de runtime](../../en/adr/0001-product-boundary-and-runtime-topology.md)
+- [Placement de Workspace e limite de privilégios Kubernetes](../../en/adr/0004-workspace-placement-and-kubernetes-privilege-boundary.md)
+- [Composição de capabilities e bindings explícitos](../../en/adr/0005-capability-composition-and-explicit-bindings.md)
+- [Custódia e entrega de secrets](../../en/adr/0006-secret-custody-and-runtime-delivery.md)
 - [Threat model de segurança](threat-model-de-seguranca.md)

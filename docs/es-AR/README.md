@@ -27,11 +27,17 @@ cambiar contratos sin compromiso de compatibilidad ni migración.
 La jerarquía canónica es:
 
 ```text
-Workspace → Project → Environment → App
+Workspace
+└── Project
+    ├── App
+    └── Environment
+         ↘ AppEnvironment ↙
 ```
 
-Un `App` es la identidad lógica de la aplicación. Un `AppDeployment` representa el
-despliegue de una release específica de un App en un Environment.
+Un `App` es la identidad lógica de la aplicación. Un `AppEnvironment` vincula un
+App con un Environment. Un `Deployment` inmutable selecciona una Release y una
+revisión de configuración para ese vínculo; `AppDeployment` es su proyección en
+el runtime de Kubernetes.
 
 La plataforma continúa siendo la fuente confiable de identidad, ownership y
 autorización del producto. Los nombres, namespaces, labels y annotations de
@@ -65,9 +71,10 @@ de forma incremental y no reciben scaffold antes del inicio de su fase.
 
 ## Documentación
 
-El inglés es el idioma canónico de la documentación. Las versiones en portugués
-(`pt-BR`) y español de Argentina (`es-AR`) se mantienen en conjunto, y se podrán
-incorporar otros idiomas en el futuro.
+El inglés es el idioma canónico de la documentación. Las guías de arquitectura y
+operación en portugués (`pt-BR`) y español de Argentina (`es-AR`) se mantienen en
+conjunto. Las ADR tienen una única copia canónica en inglés para evitar
+divergencias entre decisiones.
 
 Guías actuales de arquitectura y componentes:
 
@@ -80,17 +87,7 @@ Guías actuales de arquitectura y componentes:
 - [Application loop](application-loop/README.md)
 - [Releases con CI externa](application-loop/external-ci.md)
 - [Threat model de seguridad](architecture/threat-model-de-seguridad.md)
-- [ADR de identidad y pairing del Cluster Agent outbound](adr/0013-outbound-cluster-agent-identity-and-pairing.md)
-- [ADR del límite de Release y deploy con CI externa](adr/0014-limite-de-release-y-deploy-con-ci-externa.md)
-- [ADR de ownership de capacidades](adr/0015-ownership-de-capacidades.md)
-- [ADR de política de ciclo de vida alfa](adr/0016-politica-de-ciclo-de-vida-alfa.md)
-- [ADR del límite de identidad humana](adr/0017-limite-de-identidad-humana.md)
-- [ADR de observación de capacidades y disponibilidad](adr/0018-observacion-de-capacidades-y-disponibilidad-de-features.md)
-- [ADR de provisionamiento de Workspace y namespace](adr/0019-provisionamiento-de-workspace-y-limite-de-namespace.md)
-- [ADR de custodia de secrets y entrega](adr/0020-custodia-de-secrets-y-entrega-al-runtime.md)
-- [ADR de bindings explícitos gestionados por el operador](adr/0021-bindings-explicitos-gestionados-por-el-operador.md)
-- [ADR de métricas neutrales con consulta Prometheus-compatible](adr/0022-metricas-neutrales-con-consulta-prometheus.md)
-- [ADR del límite de la stack frontend de la Consola](adr/0023-limite-de-la-stack-frontend-de-la-consola.md)
+- [Decisiones arquitectónicas canónicas](adr/README.md)
 
 ## Contribuciones
 

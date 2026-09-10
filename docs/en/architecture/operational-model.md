@@ -37,10 +37,10 @@ Control Plane owns the logical Workspace, the Cluster Agent transports bounded
 desired state, and a separate boundary privilege creates the namespace and fixed
 namespaced RoleBindings.
 
-Secret storage and runtime delivery are also separate concerns. An external
-SecretValueStore is the durable source of truth. A versioned Kubernetes Secret is
-the initial last-mile delivery mechanism, not a vault or fallback. See ADRs 0019
-and 0020 and the security threat model.
+Secret storage and runtime delivery are also separate concerns. When secret
+parameters are enabled, an external SecretValueStore is the durable source of
+truth. A versioned Kubernetes Secret is the initial last-mile delivery mechanism,
+not a vault or fallback. See ADR 0006 and the security threat model.
 
 The current release is alpha. Contracts and command paths may break between alpha
 releases. The supported transition is a clean experimental reinstall, not an
@@ -60,6 +60,8 @@ fallback for the other.
 
 ## Security references
 
-- [Workspace provisioning and namespace boundary](../adr/0019-workspace-provisioning-and-namespace-boundary.md)
-- [Secret custody and runtime delivery](../adr/0020-secret-custody-and-runtime-delivery.md)
+- [Product boundary and runtime topology](../adr/0001-product-boundary-and-runtime-topology.md)
+- [Workspace placement and Kubernetes privilege boundary](../adr/0004-workspace-placement-and-kubernetes-privilege-boundary.md)
+- [Capability composition and explicit bindings](../adr/0005-capability-composition-and-explicit-bindings.md)
+- [Secret custody and runtime delivery](../adr/0006-secret-custody-and-runtime-delivery.md)
 - [Security threat model](security-threat-model.md)

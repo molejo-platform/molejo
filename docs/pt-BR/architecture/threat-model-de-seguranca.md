@@ -92,7 +92,7 @@ credenciais de providers.
 | TM-01 | Spoofing / A07 | Sessão humana roubada atua em outro tenant. | Cookie seguro, CSRF, invalidação, ancestry completa e auditoria. | Integração HTTP negativa entre dois Workspaces. |
 | TM-02 | Elevation / A01 | Disponibilidade do Agent é tratada como permissão. | Capability, consentimento, autorização e admission separados. | Matriz pura e negação direta pela API. |
 | TM-03 | Elevation / A01/A02 | Token do Agent/Operator alcança todos namespaces. | RoleBindings por Workspace; cluster-wide apenas para recursos inerentemente globais. | SelfSubjectAccessReview positivo dentro e negativo fora. |
-| TM-04 | Elevation / A01 | Input remoto aponta recurso Kubernetes arbitrário. | Comandos tipados, sem YAML/GVR/selectors, placement pronto e namespaces reservados bloqueados. | Unit/envtest com alvo estrangeiro. |
+| TM-04 | Elevation / A01 | Input remoto aponta recurso Kubernetes arbitrário. | Comandos fechados e versionados, sem YAML/GVR/selectors, placement pronto e namespaces reservados bloqueados. | Unit/envtest com alvo estrangeiro. |
 | TM-05 | Tampering / A08 | Replay ou worker antigo aplica versão regressiva. | mTLS, session, sequence, deadline, idempotência, desired version, lease e fencing. | Testes TLS de replay, takeover e reconnect. |
 | TM-06 | Disclosure / A04 | Secret aparece no PostgreSQL, API ou logs. | Store externo, handle opaco, API write-only, redaction e erros sanitizados. | Testes de parâmetros e sentinelas de logs/snapshots. |
 | TM-07 | Disclosure / A01/A02 | Agent lista Secrets ou lê credenciais de sistema. | Sem list/watch; get/create/delete namespaced; namespaces de sistema separados. | Contrato RBAC e negação real. |
@@ -114,11 +114,11 @@ imutável, ownership, rendering fechado e automount de ServiceAccount desabilita
 para aplicações.
 
 A decisão namespaced de provisionamento, o boundary controller de
-`WorkspacePlacement`, a separação das credenciais de runtime/discovery, a entrega
+`WorkspacePlacement`, as permissões namespaced de runtime e observação, a entrega
 imutável just-in-time de secrets e os limites sanitizados de transporte e
-persistência estão implementados e validados no K3s alpha. O Workspace legado de
-teste ainda usa namespace compartilhado; sua transição aprovada é teardown e
-recriação explícitos, não migração.
+persistência estão implementados. O workload atual do Agent usa uma única
+ServiceAccount para runtime, observação e discovery; as permissões são roles
+separadas, mas não credenciais separadas.
 
 Backend externo de secrets e evidência de encryption at rest sob responsabilidade
 do operador não estão configurados no K3s atual. Permanecem capabilities opcionais
@@ -156,10 +156,11 @@ ServiceAccount, backend ou modo de entrega.
 
 ## Referências
 
-- [ADR 0019](../adr/0019-provisionamento-de-workspace-e-limite-de-namespace.md)
-- [ADR 0020](../adr/0020-custodia-de-secrets-e-entrega-ao-runtime.md)
-- [ADR 0021](../adr/0021-bindings-explicitos-gerenciados-pelo-operador.md)
-- [ADR 0022](../adr/0022-metricas-neutras-com-consulta-prometheus.md)
+- [ADR-0001: limite do produto e topologia de runtime](../../en/adr/0001-product-boundary-and-runtime-topology.md)
+- [ADR-0003: principals, autenticação e autorização](../../en/adr/0003-principals-authentication-and-authorization.md)
+- [ADR-0004: placement de Workspace e limite de privilégios Kubernetes](../../en/adr/0004-workspace-placement-and-kubernetes-privilege-boundary.md)
+- [ADR-0005: composição de capabilities e bindings explícitos](../../en/adr/0005-capability-composition-and-explicit-bindings.md)
+- [ADR-0006: custódia e entrega de secrets](../../en/adr/0006-secret-custody-and-runtime-delivery.md)
 - [OWASP Threat Modeling](https://cheatsheetseries.owasp.org/cheatsheets/Threat_Modeling_Cheat_Sheet.html)
 - [OWASP Top 10: 2025](https://owasp.org/Top10/2025/0x00_2025-Introduction/)
 - [Boas práticas RBAC Kubernetes](https://kubernetes.io/docs/concepts/security/rbac-good-practices/)

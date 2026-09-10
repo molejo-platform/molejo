@@ -34,9 +34,10 @@ placement corresponde a un namespace de Molejo. Control plane posee el Workspace
 lógico, Agent transporta estado limitado y un dominio privilegiado separado crea
 namespace y RoleBindings fijos.
 
-Storage y delivery de secrets son responsabilidades distintas. Un
-SecretValueStore externo es la fuente duradera; Secret Kubernetes versionado es
-la entrega inicial, no vault ni fallback.
+Storage y delivery de secrets son responsabilidades distintas. Cuando los
+parámetros secretos están habilitados, un SecretValueStore externo es la fuente
+duradera; Secret Kubernetes versionado es la entrega inicial, no vault ni
+fallback.
 
 La release actual es alfa. Los contratos y comandos pueden romperse entre alfas.
 La transición soportada es una reinstalación experimental limpia, no un upgrade
@@ -50,6 +51,8 @@ son capacidades distintas y nunca se sustituyen silenciosamente.
 
 ## Referencias de seguridad
 
-- [Provisionamiento de Workspace](../adr/0019-provisionamiento-de-workspace-y-limite-de-namespace.md)
-- [Custodia de secrets](../adr/0020-custodia-de-secrets-y-entrega-al-runtime.md)
+- [Límite del producto y topología de runtime](../../en/adr/0001-product-boundary-and-runtime-topology.md)
+- [Placement de Workspace y límite de privilegios de Kubernetes](../../en/adr/0004-workspace-placement-and-kubernetes-privilege-boundary.md)
+- [Composición de capabilities y bindings explícitos](../../en/adr/0005-capability-composition-and-explicit-bindings.md)
+- [Custodia y entrega de secrets](../../en/adr/0006-secret-custody-and-runtime-delivery.md)
 - [Threat model de seguridad](threat-model-de-seguridad.md)

@@ -3,14 +3,15 @@
 [Início da documentação](../README.md) | [Template compartilhado](../../ADR_TEMPLATE.md) |
 [English](../../en/adr/README.md) | [Español (Argentina)](../../es-AR/adr/README.md)
 
-- [ADR-0013: identidade e pareamento outbound do Cluster Agent](0013-outbound-cluster-agent-identity-and-pairing.md)
-- [ADR-0014: limite de Release e deploy por CI externa](0014-limite-de-release-e-deploy-por-ci-externa.md)
-- [ADR-0015: ownership de capacidades](0015-ownership-de-capacidades.md)
-- [ADR-0016: política de ciclo de vida alpha](0016-politica-de-ciclo-de-vida-alpha.md)
-- [ADR-0017: limite da identidade humana](0017-limite-da-identidade-humana.md)
-- [ADR-0018: observação de capacidades e disponibilidade de features](0018-observacao-de-capacidades-e-disponibilidade-de-features.md)
-- [ADR-0019: provisionamento de Workspace e limite de namespace](0019-provisionamento-de-workspace-e-limite-de-namespace.md)
-- [ADR-0020: custódia de secrets e entrega ao runtime](0020-custodia-de-secrets-e-entrega-ao-runtime.md)
-- [ADR-0021: bindings explícitos gerenciados pelo operador](0021-bindings-explicitos-gerenciados-pelo-operador.md)
-- [ADR-0022: métricas neutras com adapter de consulta Prometheus-compatible](0022-metricas-neutras-com-consulta-prometheus.md)
-- [ADR-0023: limite da stack frontend do Console](0023-limite-da-stack-frontend-do-console.md)
+O inglês é a única fonte canônica das ADRs. Os guias localizados de arquitetura
+e operação explicam as mesmas decisões sem manter cópias divergentes dos
+registros.
+
+As ADRs estão listadas em ordem de dependência:
+
+- [ADR-0001: limite do produto e topologia de runtime](../../en/adr/0001-product-boundary-and-runtime-topology.md)
+- [ADR-0002: modelo de recursos e application delivery loop](../../en/adr/0002-product-resource-model-and-application-delivery-loop.md)
+- [ADR-0003: principals, autenticação e autorização](../../en/adr/0003-principals-authentication-and-authorization.md)
+- [ADR-0004: placement de Workspace e limite de privilégios Kubernetes](../../en/adr/0004-workspace-placement-and-kubernetes-privilege-boundary.md)
+- [ADR-0005: composição de capabilities e bindings explícitos](../../en/adr/0005-capability-composition-and-explicit-bindings.md)
+- [ADR-0006: custódia e entrega de secrets](../../en/adr/0006-secret-custody-and-runtime-delivery.md)

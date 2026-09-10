@@ -2,7 +2,11 @@
 
 ## Status
 
-Draft
+Proposed | Accepted | Superseded
+
+## Date
+
+YYYY-MM-DD
 
 ## Context
 
@@ -16,7 +20,7 @@ Describe the chosen direction and its scope.
 
 Describe the positive, negative, and neutral consequences of the decision.
 
-## Alternatives Considered
+## Alternatives considered
 
 Describe the relevant alternatives and why they were not selected.
 

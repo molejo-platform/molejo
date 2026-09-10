@@ -69,7 +69,7 @@ secret delivery mode, or cluster privilege changes.
       |
       +---- outbound-established mTLS ---- [Cluster Agent]
                                                 |
-                                                | typed desired state
+                                                | bounded, versioned desired state
                                                 v
                                         [Kubernetes API]
                                            |          |
@@ -96,7 +96,7 @@ credentials or secret values.
 | TM-01 | Spoofing / A07 | Stolen human session creates or changes another tenant's resources. | Secure cookie, CSRF on mutation, session invalidation, complete ancestry authorization, audit actor. | Negative HTTP integration across two Workspaces. |
 | TM-02 | Elevation / A01 | Availability reported by an Agent is treated as permission to create a Workspace. | Capability, cluster consent, actor authorization, and admission are separate decisions; API rechecks all server-side gates. | Pure decision matrix and direct API denial despite available capability. |
 | TM-03 | Elevation / A01/A02 | Stolen Agent or Operator token accesses every namespace through a ClusterRoleBinding. | Per-Workspace RoleBindings; retain cluster-wide grants only for inherently cluster-scoped reads and fixed Molejo CRs. | ServiceAccount SelfSubjectAccessReview positive inside and negative outside owned namespaces. |
-| TM-04 | Elevation / A01 | Remote input asks the Agent to mutate arbitrary Kubernetes resources or target a foreign namespace. | Typed commands, no raw YAML/GVR/selectors, placement readiness, immutable ownership identifiers, reserved namespace rejection. | Unit and envtest foreign-target cases. |
+| TM-04 | Elevation / A01 | Remote input asks the Agent to mutate arbitrary Kubernetes resources or target a foreign namespace. | Closed versioned commands, no raw YAML/GVR/selectors, placement readiness, immutable ownership identifiers, reserved namespace rejection. | Unit and envtest foreign-target cases. |
 | TM-05 | Tampering / A08 | Command replay, stale worker, or Agent takeover applies an older desired version. | mTLS identity, session ID, monotonic sequence, deadline, idempotency key, desired version, lease, and fencing token. | Real TLS in-memory replay, regression, takeover, and reconnect tests. |
 | TM-06 | Information disclosure / A04 | Secret is stored in PostgreSQL, returned by an API, or emitted in logs/errors. | External value store, opaque handle, write-only API, structured redaction, sanitized errors, no value snapshots. | Parameter integration tests and log/snapshot sentinels. |
 | TM-07 | Information disclosure / A01/A02 | Agent lists Secrets cluster-wide or reads provider credentials in a shared namespace. | No Secret list/watch; namespaced get/create/delete only; separate system/capability namespaces. | RBAC contract tests and live negative access checks. |
@@ -119,10 +119,10 @@ ownership checks, closed application workload rendering, and disabled automatic
 ServiceAccount token mounting for application Pods.
 
 The namespaced provisioning decision, `WorkspacePlacement` boundary controller,
-split runtime/discovery credentials, immutable just-in-time secret delivery, and
-sanitized transport/persistence boundaries are implemented and validated on the
-alpha K3s installation. The legacy test Workspace still uses a shared namespace;
-its approved transition is explicit teardown and recreation, not migration.
+namespaced runtime and observation permissions, immutable just-in-time secret
+delivery, and sanitized transport/persistence boundaries are implemented. The
+current Agent workload uses one ServiceAccount for runtime, observation, and
+discovery; those permissions are separate roles but not separate credentials.
 
 An external secret backend and operator-owned Kubernetes encryption-at-rest
 evidence are not configured in the current K3s installation. They remain
@@ -174,11 +174,11 @@ backend, delivery mode, or cluster-scoped controller.
 
 ## References
 
-- [ADR 0018: Capability observation and feature availability](../adr/0018-capability-observation-and-feature-availability.md)
-- [ADR 0019: Workspace provisioning and namespace boundary](../adr/0019-workspace-provisioning-and-namespace-boundary.md)
-- [ADR 0020: Secret custody and runtime delivery](../adr/0020-secret-custody-and-runtime-delivery.md)
-- [ADR 0021: Explicit operator-managed bindings](../adr/0021-explicit-operator-managed-bindings.md)
-- [ADR 0022: Provider-neutral metrics with a Prometheus-compatible query adapter](../adr/0022-provider-neutral-metrics-with-prometheus-query.md)
+- [ADR-0001: Product boundary and runtime topology](../adr/0001-product-boundary-and-runtime-topology.md)
+- [ADR-0003: Principals, authentication, and authorization](../adr/0003-principals-authentication-and-authorization.md)
+- [ADR-0004: Workspace placement and Kubernetes privilege boundary](../adr/0004-workspace-placement-and-kubernetes-privilege-boundary.md)
+- [ADR-0005: Capability composition and explicit bindings](../adr/0005-capability-composition-and-explicit-bindings.md)
+- [ADR-0006: Secret custody and runtime delivery](../adr/0006-secret-custody-and-runtime-delivery.md)
 - [OWASP Threat Modeling Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Threat_Modeling_Cheat_Sheet.html)
 - [OWASP Top 10: 2025](https://owasp.org/Top10/2025/0x00_2025-Introduction/)
 - [Kubernetes RBAC good practices](https://kubernetes.io/docs/concepts/security/rbac-good-practices/)
