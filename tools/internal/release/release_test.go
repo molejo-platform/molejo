@@ -25,6 +25,23 @@ func TestVersionPattern(t *testing.T) {
 	}
 }
 
+func TestGitHubRepositoryFromOrigin(t *testing.T) {
+	t.Parallel()
+
+	for _, origin := range []string{
+		"git@github.com:molejo-platform/molejo.git",
+		"https://github.com/molejo-platform/molejo.git",
+		"https://github.com/molejo-platform/molejo",
+	} {
+		if got := githubRepositoryFromOrigin(origin); got != GitHubRepository {
+			t.Errorf("githubRepositoryFromOrigin(%q) = %q, want %q", origin, got, GitHubRepository)
+		}
+	}
+	if got := githubRepositoryFromOrigin("git@github.com:other/molejo.git"); got == GitHubRepository {
+		t.Fatalf("foreign origin resolved to canonical repository")
+	}
+}
+
 func TestCreateTarGzipOrdersEntries(t *testing.T) {
 	t.Parallel()
 

@@ -63,7 +63,7 @@ func (p *Pipeline) Check(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if !strings.Contains(origin, "github.com/molejo-platform/molejo.git") && !strings.Contains(origin, "github.com/molejo-platform/molejo") {
+	if githubRepositoryFromOrigin(origin) != GitHubRepository {
 		return fmt.Errorf("origin %q does not match %s", origin, GitHubRepository)
 	}
 	for _, path := range p.requiredPaths() {
@@ -86,6 +86,16 @@ func (p *Pipeline) Check(ctx context.Context) error {
 	}
 	_, err = fmt.Fprintf(p.Out, "release check passed: version=%s commit=%s repository=%s\n", p.Version, head, GitHubRepository)
 	return err
+}
+
+func githubRepositoryFromOrigin(origin string) string {
+	origin = strings.TrimSuffix(strings.TrimSpace(origin), ".git")
+	for _, prefix := range []string{"git@github.com:", "https://github.com/", "ssh://git@github.com/"} {
+		if repository, found := strings.CutPrefix(origin, prefix); found {
+			return repository
+		}
+	}
+	return origin
 }
 
 func (p *Pipeline) requiredPaths() []string {
