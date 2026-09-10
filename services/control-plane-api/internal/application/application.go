@@ -39,6 +39,8 @@ import (
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/store"
 )
 
+const agentGRPCShutdownTimeout = 5 * time.Second
+
 // Run dispatches and executes one control-plane process mode.
 func Run(version string, args []string) error {
 	command := "serve"
@@ -174,9 +176,13 @@ func Run(version string, args []string) error {
 	defer stop()
 	_ = httpServer.Shutdown(shutdown)
 	if grpcServer != nil {
-		gracefulStopGRPC(grpcServer, 5*time.Second)
+		gracefulStopGRPC(grpcServer, agentGRPCShutdownTimeout)
 	}
 	return serveErr
+}
+
+func newAgentGRPCServer(connectionTimeout time.Duration, options ...grpc.ServerOption) *grpc.Server {
+	return grpc.NewServer(append(options, grpc.ConnectionTimeout(connectionTimeout))...)
 }
 
 func configuredProviderInventory(github githubapp.Service, secretStore parameters.SecretValueStore) providerbinding.Inventory {
@@ -277,7 +283,7 @@ func configureAgentPairing(registry *store.Store, dispatcher controlagent.Runtim
 	if err != nil {
 		return nil, nil, "", nil, nil, fmt.Errorf("listen for Agent gRPC: %w", err)
 	}
-	grpcServer := grpc.NewServer(grpc.Creds(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS13, Certificates: []tls.Certificate{serverCertificate}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: clientRoots})))
+	grpcServer := newAgentGRPCServer(agentGRPCShutdownTimeout, grpc.Creds(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS13, Certificates: []tls.Certificate{serverCertificate}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: clientRoots})))
 	service := controlagent.NewGRPCService(registry, dispatcher, 5*time.Second)
 	service.ConfigureCertificateRenewal(signer, serverCAPEM, trustBundleID)
 	service.ConfigureRuntimeQueries(runtimeQueries)
