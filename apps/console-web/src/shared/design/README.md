@@ -5,7 +5,8 @@ The contract has four layers:
 
 1. Molejo brand primitives in `theme-molejo.css`.
 2. Semantic `--ui-*` roles in the same theme file.
-3. Shared component styles in `components.css`.
+3. Shared UI styles owned by the corresponding contracts in `shared/ui` or the
+   cohesive design stylesheets.
 4. Feature styles beside the feature that owns them.
 
 Components and feature styles consume semantic roles. They must not depend on
@@ -15,6 +16,19 @@ changes.
 
 Layout values stay local unless they are already repeated. A value does not become
 a token merely because it can be named.
+
+`app/styles.css` is the composition root. Shared styles must never import a
+feature stylesheet. Features import their own CSS and place it in the `features`
+cascade layer.
+
+Use grid for aligned field, card, filter, and data relationships. Use flexbox
+for navigation and action groups. Media queries control viewport-level shell
+changes; components use container queries when their behavior depends on the
+space provided by a parent.
+
+The Console intentionally has no Tailwind, CSS-in-JS, runtime theme provider, or
+parallel design-token source. Introduce one only through an explicit migration
+decision that removes, rather than duplicates, the current contract.
 
 ## Change checklist
 

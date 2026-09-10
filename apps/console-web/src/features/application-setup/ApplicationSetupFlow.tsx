@@ -30,17 +30,18 @@ import {
   RuntimeConfigurationFields,
   runtimeConfigurationQueries,
 } from "../runtime-configuration/public";
-import { createProjectAppEnvironment } from "./api";
 import { ApplicationSetupReview } from "./ApplicationSetupReview";
+import { createProjectAppEnvironment } from "./api";
 import {
-  applicationSetupInput,
   type ApplicationSetupDraft,
+  applicationSetupInput,
   restoreApplicationSetupDraft,
   type SetupErrors,
   type SetupStep,
   validateApplicationStep,
   validateRuntimeStep,
 } from "./model";
+import "./application-setup.css";
 
 const violationFields: Record<string, string> = {
   "/app/id": "setup-app",
@@ -369,7 +370,7 @@ export function ApplicationSetupFlow({
                   </option>
                 ))}
               </SelectField>
-              <div className="form-row">
+              <div className="form-grid">
                 <Field
                   id="setup-size"
                   label="Capacidade (GiB)"

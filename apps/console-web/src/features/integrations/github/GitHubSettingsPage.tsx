@@ -6,6 +6,7 @@ import { userFacingError } from "../../../shared/api/errors";
 import { Alert } from "../../../shared/ui/Alert";
 import { Button } from "../../../shared/ui/Button";
 import { ConfirmAction } from "../../../shared/ui/ConfirmAction";
+import { DataList, DataListItem } from "../../../shared/ui/DataList";
 import { EmptyState } from "../../../shared/ui/Page";
 import {
   canUseFeature,
@@ -86,9 +87,9 @@ export function GitHubSettingsPage() {
             Carregando instalações…
           </p>
         ) : installations.data?.items.length ? (
-          <div className="data-list">
+          <DataList>
             {installations.data.items.map((installation) => (
-              <div className="data-row" key={installation.id}>
+              <DataListItem key={installation.id}>
                 <span>
                   <strong>{installation.accountLogin}</strong>
                   <small>
@@ -111,9 +112,9 @@ export function GitHubSettingsPage() {
                     }
                   />
                 )}
-              </div>
+              </DataListItem>
             ))}
-          </div>
+          </DataList>
         ) : (
           <EmptyState
             title="GitHub não conectado"

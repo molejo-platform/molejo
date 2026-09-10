@@ -66,6 +66,29 @@ installation runbooks.
 - A range of 150-300 lines is preferred, but splitting by line count alone is not.
 - Generated OpenAPI files are exempt.
 
+## Visual architecture
+
+The Console uses native CSS, cascade layers, and semantic custom properties. It
+does not maintain a parallel utility framework or runtime theme provider.
+
+- `shared/design/theme-molejo.css` owns shared visual values and semantic roles.
+- `shared/design/base.css` owns document defaults and native element behavior.
+- `shared/ui` owns reusable component contracts and their styles.
+- `app` owns the stylesheet composition root, the application shell, and
+  viewport-level responsive changes.
+- A feature owns layouts that express its product vocabulary and imports its own
+  stylesheet in the `features` cascade layer.
+
+Use grid for aligned, two-dimensional relationships such as field groups,
+cards, and filters. Use flexbox for one-dimensional relationships such as
+navigation and action groups. Viewport media queries are reserved for shell
+changes; reusable components respond to their containing block with container
+queries.
+
+Create a React component when semantics, behavior, or supported variants repeat.
+Use a named CSS layout contract when only geometry repeats. A local dimension
+becomes a token only after it represents shared product knowledge.
+
 ## Adding a capability
 
 1. Choose the feature that owns the resource or workflow; create a new feature

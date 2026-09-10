@@ -1,0 +1,144 @@
+.spinner {
+  animation: spin 0.7s linear infinite;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  height: 1rem;
+  opacity: 0.75;
+  width: 1rem;
+}
+.alert-content {
+  align-items: center;
+  display: flex;
+  gap: var(--space-4);
+  justify-content: space-between;
+}
+.refresh-status {
+  color: var(--ui-text-muted);
+  font-size: var(--font-size-sm);
+  margin: 0;
+}
+.skeleton {
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+  background: linear-gradient(
+    90deg,
+    var(--ui-surface-subtle) 25%,
+    var(--ui-surface-hover) 50%,
+    var(--ui-surface-subtle) 75%
+  );
+  background-size: 200% 100%;
+  border-radius: var(--radius-sm);
+  display: block;
+  min-height: 1rem;
+}
+.skeleton[data-variant="card"] {
+  border-radius: var(--radius-lg);
+  min-height: 8rem;
+}
+.skeleton[data-variant="row"] {
+  border-radius: var(--radius-md);
+  min-height: 4.5rem;
+}
+@keyframes skeleton-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+}
+.alert {
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 0.8rem 1rem;
+}
+.alert[data-tone="error"] {
+  background: var(--ui-danger-surface);
+  border-color: var(--ui-danger-border);
+  color: var(--ui-danger);
+}
+.alert[data-tone="success"] {
+  background: var(--ui-success-surface);
+  border-color: var(--ui-success-border);
+  color: var(--ui-success);
+}
+.alert[data-tone="info"] {
+  background: var(--ui-info-surface);
+  border-color: var(--ui-info-border);
+  color: var(--ui-info);
+}
+.alert[data-tone="warning"] {
+  background: var(--ui-warning-surface);
+  border-color: var(--ui-warning-border);
+  color: var(--ui-warning);
+}
+.status-badge,
+.status {
+  align-items: center;
+  border-radius: var(--radius-pill);
+  display: inline-flex;
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  gap: 0.4rem;
+  padding: 0.35rem 0.6rem;
+  white-space: nowrap;
+}
+.status-dot {
+  background: currentColor;
+  border-radius: 50%;
+  height: 0.45rem;
+  width: 0.45rem;
+}
+.status-badge[data-tone="positive"],
+.status.ready,
+.status.completed {
+  background: var(--ui-success-surface);
+  color: var(--ui-success);
+}
+.status-badge[data-tone="negative"],
+.status.degraded,
+.status.failed {
+  background: var(--ui-danger-surface);
+  color: var(--ui-danger);
+}
+.status-badge[data-tone="progress"],
+.status.pending,
+.status.progressing,
+.status.running {
+  background: var(--ui-info-surface);
+  color: var(--ui-info);
+}
+.status-badge[data-tone="neutral"],
+.status.unknown {
+  background: var(--ui-surface-subtle);
+  color: var(--ui-text-muted);
+}
+dialog.dialog {
+  background: transparent;
+  border: 0;
+  max-width: 30rem;
+  padding: 0;
+  width: calc(100% - 2rem);
+}
+dialog.dialog::backdrop {
+  background: var(--ui-scrim);
+}
+.dialog-content {
+  background: var(--ui-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--ui-shadow-dialog);
+  color: var(--ui-text);
+  padding: var(--space-6);
+}
+.dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  justify-content: flex-end;
+  margin-top: var(--space-6);
+}

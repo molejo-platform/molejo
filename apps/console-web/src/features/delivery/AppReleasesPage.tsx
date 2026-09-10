@@ -7,6 +7,7 @@ import type { Release } from "../../shared/api/types";
 import { formatDateTime } from "../../shared/format";
 import { Alert } from "../../shared/ui/Alert";
 import { Button } from "../../shared/ui/Button";
+import { DataList, DataListItem } from "../../shared/ui/DataList";
 import { Field } from "../../shared/ui/Field";
 import { EmptyState } from "../../shared/ui/Page";
 import { ApplicationLayout } from "../applications/public";
@@ -125,9 +126,9 @@ function ReleaseCatalog({ workspaceId, projectId, appId }: { workspaceId: string
 
 function ReleaseList({ items }: { items: Release[] }) {
   return (
-    <div className="data-list">
+    <DataList>
       {items.map((release) => (
-        <div className="data-row" key={release.id}>
+        <DataListItem key={release.id}>
           <span>
             <strong className="mono">{release.image}</strong>
             <small>
@@ -136,8 +137,8 @@ function ReleaseList({ items }: { items: Release[] }) {
             </small>
           </span>
           <span className="row-action">{release.availabilityStatus === "Available" ? "Disponível" : "Expirada"}</span>
-        </div>
+        </DataListItem>
       ))}
-    </div>
+    </DataList>
   );
 }

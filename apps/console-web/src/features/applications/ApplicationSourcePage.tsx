@@ -8,7 +8,6 @@ import { Button } from "../../shared/ui/Button";
 import { ConfirmAction } from "../../shared/ui/ConfirmAction";
 import { SelectField } from "../../shared/ui/Field";
 import { EmptyState } from "../../shared/ui/Page";
-import { githubQueries } from "../integrations/github/public";
 import {
   canUseFeature,
   FeatureAvailabilityNotice,
@@ -16,6 +15,7 @@ import {
   findFeature,
   useFeatureAvailability,
 } from "../feature-availability/public";
+import { githubQueries } from "../integrations/github/public";
 import { useEffectiveCapabilities } from "../workspace-access/public";
 import { ApplicationLayout } from "./ApplicationLayout";
 import { clearAppSource, setAppSource } from "./api";
@@ -102,7 +102,7 @@ export function AppSourcePage() {
             </p>
           ) : installations.isError ? null : installations.data?.items.length ? (
             <div className="stack">
-              <div className="form-row">
+              <div className="form-grid">
                 <SelectField
                   label="Instalação GitHub"
                   value={selectedInstallation?.id ?? ""}

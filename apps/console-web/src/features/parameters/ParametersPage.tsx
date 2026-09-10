@@ -7,6 +7,7 @@ import type { Parameter, ParameterInput } from "../../shared/api/types";
 import { Alert } from "../../shared/ui/Alert";
 import { Button } from "../../shared/ui/Button";
 import { ConfirmAction } from "../../shared/ui/ConfirmAction";
+import { DataList, DataListItem } from "../../shared/ui/DataList";
 import { Field, SelectField, TextareaField } from "../../shared/ui/Field";
 import { EmptyState, PageHeader } from "../../shared/ui/Page";
 import {
@@ -19,6 +20,7 @@ import {
 import { useEffectiveCapabilities } from "../workspace-access/public";
 import { archiveParameter, createParameter, replaceParameter } from "./api";
 import { parameterKeys, parameterQueries } from "./queries";
+import "./parameters.css";
 
 const emptyInput: ParameterInput = { path: "", type: "PlainText", description: "", value: "" };
 
@@ -103,9 +105,9 @@ export function ParametersPage() {
             Carregando Parameters…
           </p>
         ) : query.isError ? null : query.data?.items.length ? (
-          <div className="data-list">
+          <DataList>
             {query.data.items.map((parameter) => (
-              <div className="stack data-row" key={parameter.id}>
+              <DataListItem className="parameter-list-item" key={parameter.id}>
                 <span>
                   <strong className="mono">{parameter.path}</strong>
                   <small>
@@ -139,17 +141,19 @@ export function ParametersPage() {
                   </div>
                 )}
                 {editing?.id === parameter.id && (parameter.type !== "Secret" || secretAvailable) && (
-                  <ParameterForm
-                    parameter={parameter}
-                    submitLabel={parameter.type === "Secret" ? "Substituir segredo" : "Salvar nova versão"}
-                    onSubmit={(input) => replace.mutate({ parameter, input })}
-                    pending={replace.isPending}
-                    secretAvailable={secretAvailable}
-                  />
+                  <div className="parameter-editor">
+                    <ParameterForm
+                      parameter={parameter}
+                      submitLabel={parameter.type === "Secret" ? "Substituir segredo" : "Salvar nova versão"}
+                      onSubmit={(input) => replace.mutate({ parameter, input })}
+                      pending={replace.isPending}
+                      secretAvailable={secretAvailable}
+                    />
+                  </div>
                 )}
-              </div>
+              </DataListItem>
             ))}
-          </div>
+          </DataList>
         ) : (
           <EmptyState
             title="Nenhum Parameter"
@@ -193,7 +197,7 @@ function ParameterForm({
   }
   return (
     <form className="panel stack" onSubmit={submit}>
-      <div className="form-row">
+      <div className="form-grid">
         <Field
           label="Path"
           helper="Ex.: /shared/database/host"

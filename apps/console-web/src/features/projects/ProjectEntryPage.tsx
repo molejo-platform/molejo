@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 
 import { RefreshStatus, RetryAlert, Skeleton, SkeletonRegion } from "../../shared/ui/AsyncState";
+import { DataList } from "../../shared/ui/DataList";
 import { EmptyState, PageHeader } from "../../shared/ui/Page";
 import { applicationQueries } from "../applications/public";
 import { environmentQueries } from "../environments/public";
@@ -103,10 +104,10 @@ export function ProjectEntryPage() {
             <h2>Environments</h2>
             <p className="muted">Abra um Environment para acompanhar e configurar seus Apps.</p>
           </div>
-          <div className="data-list">
+          <DataList>
             {environments.data.items.map((environment) => (
               <Link
-                className="data-row"
+                className="data-list-item"
                 key={environment.id}
                 to="/workspaces/$workspaceId/projects/$projectId/environments/$environmentId"
                 params={{ workspaceId, projectId, environmentId: environment.id }}
@@ -118,7 +119,7 @@ export function ProjectEntryPage() {
                 <span className="row-action">Abrir</span>
               </Link>
             ))}
-          </div>
+          </DataList>
         </section>
       ) : environments.isError ? null : (
         <EmptyState

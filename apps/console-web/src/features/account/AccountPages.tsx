@@ -9,8 +9,10 @@ import { Alert } from "../../shared/ui/Alert";
 import { BrandLogo } from "../../shared/ui/BrandLogo";
 import { Button } from "../../shared/ui/Button";
 import { ConfirmAction } from "../../shared/ui/ConfirmAction";
+import { DataList, DataListItem } from "../../shared/ui/DataList";
 import { Field } from "../../shared/ui/Field";
 import { EmptyState, PageHeader } from "../../shared/ui/Page";
+import { PageFrame } from "../../shared/ui/PageFrame";
 import { useAuthenticationCapabilitiesQuery, useSessionQuery } from "../authentication/public";
 import {
   acceptUserInvitation,
@@ -57,7 +59,7 @@ export function AccountPage() {
   });
   if (!user) return null;
   return (
-    <div className="stack constrained">
+    <PageFrame width="readable" className="stack">
       <PageHeader
         eyebrow="Conta"
         title="Perfil e segurança"
@@ -70,7 +72,7 @@ export function AccountPage() {
           <p className="muted">O username é estável; o nome de exibição pode ser alterado.</p>
         </div>
         <form
-          className="form-row"
+          className="inline-form"
           onSubmit={(event) => {
             event.preventDefault();
             profile.mutate();
@@ -97,7 +99,7 @@ export function AccountPage() {
           <p className="muted">A alteração encerra todas as sessões, inclusive esta.</p>
         </div>
         <form
-          className="form-row"
+          className="inline-form"
           onSubmit={(event) => {
             event.preventDefault();
             password.mutate();
@@ -136,41 +138,43 @@ export function AccountPage() {
         {sessions.isPending ? (
           <p role="status">Carregando sessões…</p>
         ) : sessions.data?.items.length ? (
-          sessions.data?.items.map((item) => (
-            <div className="data-row" key={item.id}>
-              <span>
-                <strong>{item.current ? "Esta sessão" : item.id}</strong>
-                <small>
-                  {item.assuranceLevel} · vista em {formatDateTime(item.lastSeenAt)} · expira em{" "}
-                  {formatDateTime(item.expiresAt)}
-                </small>
-              </span>
-              <ConfirmAction
-                trigger="Revogar"
-                title="Revogar esta sessão?"
-                description={
-                  item.current
-                    ? "Você será desconectado imediatamente."
-                    : "O dispositivo precisará autenticar novamente."
-                }
-                confirmLabel="Revogar sessão"
-                pending={revoke.isPending && revoke.variables === item.id}
-                onConfirm={async () => {
-                  await revoke.mutateAsync(item.id);
-                  if (item.current) {
-                    clearSessionState(queryClient);
-                    await navigate({ to: "/login", search: { returnTo: "/" }, replace: true });
+          <DataList>
+            {sessions.data.items.map((item) => (
+              <DataListItem key={item.id}>
+                <span>
+                  <strong>{item.current ? "Esta sessão" : item.id}</strong>
+                  <small>
+                    {item.assuranceLevel} · vista em {formatDateTime(item.lastSeenAt)} · expira em{" "}
+                    {formatDateTime(item.expiresAt)}
+                  </small>
+                </span>
+                <ConfirmAction
+                  trigger="Revogar"
+                  title="Revogar esta sessão?"
+                  description={
+                    item.current
+                      ? "Você será desconectado imediatamente."
+                      : "O dispositivo precisará autenticar novamente."
                   }
-                }}
-              />
-            </div>
-          ))
+                  confirmLabel="Revogar sessão"
+                  pending={revoke.isPending && revoke.variables === item.id}
+                  onConfirm={async () => {
+                    await revoke.mutateAsync(item.id);
+                    if (item.current) {
+                      clearSessionState(queryClient);
+                      await navigate({ to: "/login", search: { returnTo: "/" }, replace: true });
+                    }
+                  }}
+                />
+              </DataListItem>
+            ))}
+          </DataList>
         ) : sessions.isError ? null : (
           <EmptyState title="Nenhuma sessão ativa" description="Entre novamente para iniciar uma nova sessão." />
         )}
         {sessions.isError && <Alert>{userFacingError(sessions.error)}</Alert>}
       </section>
-    </div>
+    </PageFrame>
   );
 }
 
@@ -245,7 +249,7 @@ export function TOTPSection() {
       {status.isPending || capabilities.isPending ? (
         <p role="status">Carregando segurança…</p>
       ) : status.data?.totpEnabled ? (
-        <form className="form-row" onSubmit={disableEnrollment}>
+        <form className="inline-form" onSubmit={disableEnrollment}>
           <Field
             label="Senha atual"
             type="password"
@@ -281,7 +285,7 @@ export function TOTPSection() {
           </Button>
         </form>
       ) : (
-        <form className="form-row" onSubmit={beginEnrollment}>
+        <form className="inline-form" onSubmit={beginEnrollment}>
           <Field
             label="Confirme sua senha"
             type="password"
@@ -353,7 +357,7 @@ export function ForgotPasswordPage() {
     }
   };
   return (
-    <main className="shell narrow">
+    <PageFrame as="main" width="form" className="shell">
       <div className="brand">
         <BrandLogo surface="light" />
         <span className="brand-product-name">Console</span>
@@ -415,7 +419,7 @@ export function ForgotPasswordPage() {
           Voltar ao login
         </Link>
       </section>
-    </main>
+    </PageFrame>
   );
 }
 
@@ -440,7 +444,7 @@ export function AcceptInvitationPage() {
     }
   }
   return (
-    <main className="shell narrow">
+    <PageFrame as="main" width="form" className="shell">
       <div className="brand">
         <BrandLogo surface="light" />
         <span className="brand-product-name">Console</span>
@@ -476,6 +480,6 @@ export function AcceptInvitationPage() {
           Voltar ao login
         </Link>
       </section>
-    </main>
+    </PageFrame>
   );
 }

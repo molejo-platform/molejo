@@ -30,9 +30,10 @@ import { observabilityKeys, observabilityQueries } from "./queries";
 import { RuntimeLogBody } from "./RuntimeLogBody";
 import { useRuntimeMetrics } from "./RuntimeMetricsStatus";
 import { createRuntimeRange } from "./runtime-range";
-import { useRuntimeLogsViewModel } from "./useRuntimeLogsViewModel";
 import { useRuntimeEventsViewModel } from "./useRuntimeEventsViewModel";
+import { useRuntimeLogsViewModel } from "./useRuntimeLogsViewModel";
 import { useRuntimeMetricsViewModel } from "./useRuntimeMetricsViewModel";
+import "./observability.css";
 
 const ranges = [
   { value: "0.25", label: "Últimos 15 minutos" },

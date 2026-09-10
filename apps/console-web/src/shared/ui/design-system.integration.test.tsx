@@ -6,7 +6,9 @@ import { describe, expect, it } from "vitest";
 import { Alert } from "./Alert";
 import { BrandLogo } from "./BrandLogo";
 import { Button } from "./Button";
+import { DataList, DataListItem } from "./DataList";
 import { Field } from "./Field";
+import { PageFrame } from "./PageFrame";
 
 describe("shared design-system primitives", () => {
   it("keeps button variants inside the component contract", () => {
@@ -21,6 +23,19 @@ describe("shared design-system primitives", () => {
     const checkbox = screen.getByRole("checkbox", { name: "Entrega automática" });
     expect(checkbox.getAttribute("aria-describedby")).not.toBeNull();
     expect(screen.getByText("Executa após um push.").id).toBe(checkbox.getAttribute("aria-describedby"));
+  });
+
+  it("expresses page widths and static collections through shared contracts", () => {
+    render(
+      <PageFrame width="readable" aria-label="Conteúdo">
+        <DataList aria-label="Recursos">
+          <DataListItem>Registry interno</DataListItem>
+        </DataList>
+      </PageFrame>,
+    );
+    expect(screen.getByLabelText("Conteúdo").className).toContain("page-frame-readable");
+    expect(screen.getByLabelText("Recursos").className).toContain("data-list");
+    expect(screen.getByText("Registry interno").className).toContain("data-list-item");
   });
 
   it("announces outcomes without turning persistent guidance into a live region", () => {
@@ -51,7 +66,8 @@ describe("shared design-system primitives", () => {
         <BrandLogo compact surface="dark" />
       </>,
     );
-    const sources = screen.getAllByRole("img", { name: "Molejo" }).map((image) => image.getAttribute("src") ?? "");
+    const images = screen.getAllByRole("img", { name: "Molejo" });
+    const sources = images.map((image) => image.getAttribute("src") ?? "");
     expect(sources).toEqual([
       "/brand/molejo-horizontal-on-light.webp",
       "/brand/molejo-horizontal-on-dark.webp",
@@ -63,5 +79,11 @@ describe("shared design-system primitives", () => {
       expect(asset.subarray(0, 4).toString()).toBe("RIFF");
       expect(asset.subarray(8, 12).toString()).toBe("WEBP");
     }
+    expect(images.map((image) => [image.getAttribute("width"), image.getAttribute("height")])).toEqual([
+      ["420", "90"],
+      ["420", "90"],
+      ["180", "99"],
+      ["180", "99"],
+    ]);
   });
 });

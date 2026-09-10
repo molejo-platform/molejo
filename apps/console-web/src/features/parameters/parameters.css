@@ -1,0 +1,22 @@
+@layer features {
+  .parameter-list-item {
+    align-items: start;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .parameter-editor {
+    grid-column: 1 / -1;
+    min-width: 0;
+    width: 100%;
+  }
+
+  @container (max-width: 36rem) {
+    .parameter-list-item {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .parameter-list-item .form-actions {
+      justify-content: flex-start;
+      width: 100%;
+    }
+  }
+}

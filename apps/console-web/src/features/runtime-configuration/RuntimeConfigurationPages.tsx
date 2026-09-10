@@ -300,7 +300,7 @@ function SecretsEditor({
         )}
       </div>
       {draft.parameters.map((binding, index) => (
-        <div className="form-row" key={`${binding.parameterId}-${index}`}>
+        <div className="form-grid" key={`${binding.parameterId}-${index}`}>
           <Field
             label="Nome no container"
             value={binding.name}
@@ -428,7 +428,7 @@ function NetworkEditor({
         )}
       </div>
       {draft.ports.map((port, index) => (
-        <div className="form-row" key={`${port.name}-${index}`}>
+        <div className="form-grid" key={`${port.name}-${index}`}>
           <Field
             label="Nome"
             value={port.name}
@@ -455,7 +455,7 @@ function NetworkEditor({
           )}
         </div>
       ))}
-      <div className="form-row">
+      <div className="form-grid">
         <SelectField
           label="HTTP público"
           value={http ? "enabled" : "disabled"}
@@ -518,7 +518,7 @@ function NetworkEditor({
         )}
       </div>
       {session.data?.installationCapabilities?.publicTCP?.enabled ? (
-        <div className="form-row">
+        <div className="form-grid">
           <SelectField
             label="TCP público (experimental)"
             value={tcp ? "enabled" : "disabled"}
@@ -598,7 +598,7 @@ export const EnvironmentHealthPage = page(
   "Health checks",
   "Defina startup, prontidão e vivacidade sobre portas nomeadas.",
   (draft, setDraft, _parameters, disabled) => (
-    <div className="form-row">
+    <div className="form-grid">
       {(["startup", "readiness", "liveness"] as const).map((name) => (
         <div className="stack" key={name}>
           <SelectField
@@ -665,7 +665,7 @@ export const EnvironmentResourcesPage = page(
   "Recursos",
   "Controle escala e limites do runtime sem misturar esta decisão com rede ou segredos.",
   (draft, setDraft, _parameters, disabled, _onValidityChange, target) => (
-    <div className="form-row">
+    <div className="form-grid">
       <Field
         label="Réplicas"
         helper={target.workloadKind === "Stateful" ? "Stateful usa uma réplica nesta fase experimental." : undefined}

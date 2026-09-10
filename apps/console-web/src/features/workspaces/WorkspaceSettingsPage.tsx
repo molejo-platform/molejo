@@ -44,7 +44,7 @@ export function WorkspaceSettingsPage() {
           <p className="muted">O nome identifica o contexto ativo no Console; IDs técnicos permanecem estáveis.</p>
         </div>
         {capabilities.data?.manageWorkspace ? (
-          <form className="form-row" onSubmit={submit}>
+          <form className="inline-form" onSubmit={submit}>
             <Field
               label="Nome do Workspace"
               value={name}

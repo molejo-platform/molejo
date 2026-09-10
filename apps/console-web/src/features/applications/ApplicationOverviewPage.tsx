@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 
 import { RefreshStatus, RetryAlert, Skeleton, SkeletonRegion } from "../../shared/ui/AsyncState";
+import { DataList } from "../../shared/ui/DataList";
 import { appEnvironmentQueries } from "../app-environments/public";
 import { ApplicationLayout } from "./ApplicationLayout";
 import { applicationQueries } from "./queries";
@@ -72,10 +73,10 @@ export function AppOverviewPage() {
                 <Skeleton variant="row" />
               </SkeletonRegion>
             ) : targets.data?.items.length ? (
-              <div className="data-list">
+              <DataList>
                 {targets.data.items.map((target) => (
                   <Link
-                    className="data-row"
+                    className="data-list-item"
                     key={target.id}
                     to="/workspaces/$workspaceId/projects/$projectId/environments/$environmentId/apps/$appEnvironmentId"
                     params={{
@@ -92,7 +93,7 @@ export function AppOverviewPage() {
                     <span className="row-action">Abrir operação</span>
                   </Link>
                 ))}
-              </div>
+              </DataList>
             ) : targets.isError ? null : (
               <p className="muted">Este App ainda não foi adicionado a nenhum Environment.</p>
             )}

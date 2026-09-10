@@ -75,7 +75,7 @@ export function RuntimeConfigurationFields({
   };
   return (
     <>
-      <div className="form-row">
+      <div className="form-grid">
         <SelectField
           label="HTTP público"
           value={httpEndpoint ? "Public" : "Private"}
@@ -156,7 +156,7 @@ export function RuntimeConfigurationFields({
       <details className="advanced">
         <summary>Recursos, probes e configuração</summary>
         <div className="stack">
-          <div className="form-row">
+          <div className="form-grid">
             <Field
               label="CPU solicitada (m)"
               type="number"
@@ -198,7 +198,7 @@ export function RuntimeConfigurationFields({
               required
             />
           </div>
-          <div className="form-row">
+          <div className="form-grid">
             <Field
               label="Startup"
               value={value.probes.startup.path ?? ""}
@@ -271,7 +271,7 @@ export function RuntimeConfigurationFields({
               )}
             </div>
             {value.parameters.map((binding, index) => (
-              <div className="form-row" key={`${binding.parameterId}-${index}`}>
+              <div className="form-grid" key={`${binding.parameterId}-${index}`}>
                 <Field
                   label="Nome no container"
                   value={binding.name}

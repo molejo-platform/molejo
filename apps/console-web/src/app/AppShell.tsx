@@ -5,6 +5,7 @@ import { SessionBoundary } from "../features/authentication/public";
 import { useSelectedWorkspace, WorkspaceHeader, WorkspaceProvider } from "../features/workspaces/public";
 import { userFacingError } from "../shared/api/errors";
 import { Alert } from "../shared/ui/Alert";
+import { PageFrame } from "../shared/ui/PageFrame";
 
 export function AppShell() {
   const params = useParams({ strict: false });
@@ -32,15 +33,17 @@ function ShellContent() {
       <div className="app-layout">
         <WorkspaceHeader />
         <main id="main-content" className="main-content" tabIndex={-1}>
-          {error ? (
-            <Alert>{userFacingError(error)}</Alert>
-          ) : !isPending && preferredWorkspaceMissing ? (
-            <Alert>
-              Workspace não encontrado. <Link to="/">Voltar à seleção de Workspace</Link>
-            </Alert>
-          ) : (
-            <Outlet />
-          )}
+          <PageFrame>
+            {error ? (
+              <Alert>{userFacingError(error)}</Alert>
+            ) : !isPending && preferredWorkspaceMissing ? (
+              <Alert>
+                Workspace não encontrado. <Link to="/">Voltar à seleção de Workspace</Link>
+              </Alert>
+            ) : (
+              <Outlet />
+            )}
+          </PageFrame>
         </main>
       </div>
     </>

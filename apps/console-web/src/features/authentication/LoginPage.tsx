@@ -6,6 +6,7 @@ import { Alert } from "../../shared/ui/Alert";
 import { BrandLogo } from "../../shared/ui/BrandLogo";
 import { Button } from "../../shared/ui/Button";
 import { Field } from "../../shared/ui/Field";
+import { PageFrame } from "../../shared/ui/PageFrame";
 import { useCompleteTOTPLoginMutation, useLoginMutation } from "./queries";
 import { safeReturnTo } from "./return-to";
 
@@ -56,7 +57,7 @@ export function LoginPage() {
   }
 
   return (
-    <main className="shell narrow">
+    <PageFrame as="main" width="form" className="shell">
       <div className="brand">
         <BrandLogo surface="light" />
         <span className="brand-product-name">Console</span>
@@ -118,6 +119,6 @@ export function LoginPage() {
           </form>
         )}
       </section>
-    </main>
+    </PageFrame>
   );
 }

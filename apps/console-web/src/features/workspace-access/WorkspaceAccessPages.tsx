@@ -7,6 +7,7 @@ import { formatDateTime } from "../../shared/format";
 import { Alert } from "../../shared/ui/Alert";
 import { Button } from "../../shared/ui/Button";
 import { ConfirmAction } from "../../shared/ui/ConfirmAction";
+import { DataList, DataListItem } from "../../shared/ui/DataList";
 import { Field, SelectField } from "../../shared/ui/Field";
 import { EmptyState } from "../../shared/ui/Page";
 import { WorkspaceSettingsLayout } from "../workspaces/public";
@@ -70,7 +71,7 @@ export function WorkspaceMembersPage() {
           <p className="muted">Usuários existem globalmente; a membership define o papel dentro deste Workspace.</p>
         </div>
         {canManage && (
-          <form className="form-row" onSubmit={submit}>
+          <form className="inline-form" onSubmit={submit}>
             <Field
               label="Username existente"
               value={input.username}
@@ -100,63 +101,65 @@ export function WorkspaceMembersPage() {
         {members.isPending ? (
           <p role="status">Carregando membros…</p>
         ) : members.data?.items.length ? (
-          members.data?.items.map((member) => (
-            <div className="data-row" key={member.userId}>
-              <span>
-                <strong>{member.displayName}</strong>
-                <small>
-                  {member.username} · {member.status}
-                </small>
-              </span>
-              {canManage && (
-                <div className="row-controls">
-                  <SelectField
-                    label={`Papel de ${member.username}`}
-                    value={member.role}
-                    disabled={update.isPending && update.variables?.member.userId === member.userId}
-                    onChange={(event) =>
-                      update.mutate({
-                        member,
-                        role: event.target.value as WorkspaceMembership["role"],
-                        status: member.status,
-                      })
-                    }
-                  >
-                    <option value="Owner">Owner</option>
-                    <option value="Member">Member</option>
-                    <option value="Viewer">Viewer</option>
-                  </SelectField>
-                  <Button
-                    variant="secondary"
-                    loading={update.isPending && update.variables?.member.userId === member.userId}
-                    onClick={() =>
-                      update.mutate({
-                        member,
-                        role: member.role,
-                        status: member.status === "Active" ? "Suspended" : "Active",
-                      })
-                    }
-                  >
-                    {member.status === "Active" ? "Suspender" : "Reativar"}
-                  </Button>
-                  <ConfirmAction
-                    trigger="Remover"
-                    title={`Remover ${member.username}?`}
-                    description="O usuário perde imediatamente o acesso a este Workspace e por grupos."
-                    confirmLabel="Remover membro"
-                    pending={remove.isPending && remove.variables === member.userId}
-                    error={remove.isError && remove.variables === member.userId ? userFacingError(remove.error) : ""}
-                    onConfirm={() => remove.mutateAsync(member.userId)}
-                  />
-                </div>
-              )}
-              {update.isError && update.variables?.member.userId === member.userId && (
-                <small className="field-error" role="alert">
-                  {userFacingError(update.error)}
-                </small>
-              )}
-            </div>
-          ))
+          <DataList>
+            {members.data.items.map((member) => (
+              <DataListItem key={member.userId}>
+                <span>
+                  <strong>{member.displayName}</strong>
+                  <small>
+                    {member.username} · {member.status}
+                  </small>
+                </span>
+                {canManage && (
+                  <div className="row-controls">
+                    <SelectField
+                      label={`Papel de ${member.username}`}
+                      value={member.role}
+                      disabled={update.isPending && update.variables?.member.userId === member.userId}
+                      onChange={(event) =>
+                        update.mutate({
+                          member,
+                          role: event.target.value as WorkspaceMembership["role"],
+                          status: member.status,
+                        })
+                      }
+                    >
+                      <option value="Owner">Owner</option>
+                      <option value="Member">Member</option>
+                      <option value="Viewer">Viewer</option>
+                    </SelectField>
+                    <Button
+                      variant="secondary"
+                      loading={update.isPending && update.variables?.member.userId === member.userId}
+                      onClick={() =>
+                        update.mutate({
+                          member,
+                          role: member.role,
+                          status: member.status === "Active" ? "Suspended" : "Active",
+                        })
+                      }
+                    >
+                      {member.status === "Active" ? "Suspender" : "Reativar"}
+                    </Button>
+                    <ConfirmAction
+                      trigger="Remover"
+                      title={`Remover ${member.username}?`}
+                      description="O usuário perde imediatamente o acesso a este Workspace e por grupos."
+                      confirmLabel="Remover membro"
+                      pending={remove.isPending && remove.variables === member.userId}
+                      error={remove.isError && remove.variables === member.userId ? userFacingError(remove.error) : ""}
+                      onConfirm={() => remove.mutateAsync(member.userId)}
+                    />
+                  </div>
+                )}
+                {update.isError && update.variables?.member.userId === member.userId && (
+                  <small className="field-error" role="alert">
+                    {userFacingError(update.error)}
+                  </small>
+                )}
+              </DataListItem>
+            ))}
+          </DataList>
         ) : members.isError ? null : (
           <EmptyState title="Nenhum membro" description="Adicione uma identidade existente a este Workspace." />
         )}
@@ -191,7 +194,7 @@ export function WorkspaceGroupsPage() {
         </div>
         {canManage && (
           <form
-            className="form-row"
+            className="inline-form"
             onSubmit={(event) => {
               event.preventDefault();
               create.mutate();
@@ -300,28 +303,30 @@ function GroupMembers({
       {assigned.isPending ? (
         <p role="status">Carregando membros do grupo…</p>
       ) : assigned.data?.items.length ? (
-        assigned.data?.items.map((member) => (
-          <div className="data-row" key={member.userId}>
-            <span>
-              <strong>{member.displayName}</strong>
-              <small>{member.username}</small>
-            </span>
-            {canManage && (
-              <Button
-                variant="secondary"
-                loading={remove.isPending && remove.variables === member.userId}
-                onClick={() => remove.mutate(member.userId)}
-              >
-                Remover do grupo
-              </Button>
-            )}
-            {remove.isError && remove.variables === member.userId && (
-              <small className="field-error" role="alert">
-                {userFacingError(remove.error)}
-              </small>
-            )}
-          </div>
-        ))
+        <DataList>
+          {assigned.data.items.map((member) => (
+            <DataListItem key={member.userId}>
+              <span>
+                <strong>{member.displayName}</strong>
+                <small>{member.username}</small>
+              </span>
+              {canManage && (
+                <Button
+                  variant="secondary"
+                  loading={remove.isPending && remove.variables === member.userId}
+                  onClick={() => remove.mutate(member.userId)}
+                >
+                  Remover do grupo
+                </Button>
+              )}
+              {remove.isError && remove.variables === member.userId && (
+                <small className="field-error" role="alert">
+                  {userFacingError(remove.error)}
+                </small>
+              )}
+            </DataListItem>
+          ))}
+        </DataList>
       ) : assigned.isError ? null : (
         <p className="muted">Nenhum membro neste grupo.</p>
       )}
@@ -379,7 +384,7 @@ export function WorkspaceAccessGrantsPage() {
         </div>
         {canManage && (
           <form
-            className="form-row"
+            className="inline-form"
             onSubmit={(event) => {
               event.preventDefault();
               create.mutate();
@@ -454,9 +459,9 @@ export function WorkspaceAccessGrantsPage() {
         {grants.isPending ? (
           <p role="status">Carregando relações…</p>
         ) : grants.data?.items.length ? (
-          <div className="data-list">
+          <DataList>
             {grants.data.items.map((grant) => (
-              <div className="data-row" key={grant.id}>
+              <DataListItem key={grant.id}>
                 <span>
                   <strong>
                     {grant.subjectName} · {grant.relation}
@@ -476,9 +481,9 @@ export function WorkspaceAccessGrantsPage() {
                     onConfirm={() => remove.mutateAsync(grant.id)}
                   />
                 )}
-              </div>
+              </DataListItem>
             ))}
-          </div>
+          </DataList>
         ) : grants.isError ? null : (
           <EmptyState
             title="Nenhuma relação explícita"
@@ -506,9 +511,9 @@ export function WorkspaceAuditPage() {
         ) : audit.isError ? (
           <Alert>{userFacingError(audit.error)}</Alert>
         ) : audit.data?.items.length ? (
-          <div className="data-list">
+          <DataList>
             {audit.data.items.map((event) => (
-              <div className="data-row" key={event.id}>
+              <DataListItem key={event.id}>
                 <span>
                   <strong>{event.action}</strong>
                   <small>
@@ -517,9 +522,9 @@ export function WorkspaceAuditPage() {
                   </small>
                 </span>
                 <span className="mono">{event.requestId || event.id}</span>
-              </div>
+              </DataListItem>
             ))}
-          </div>
+          </DataList>
         ) : (
           <EmptyState title="Sem eventos" description="As próximas ações relevantes aparecerão aqui." />
         )}

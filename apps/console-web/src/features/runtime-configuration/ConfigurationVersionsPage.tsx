@@ -4,6 +4,7 @@ import { userFacingError } from "../../shared/api/errors";
 import type { AppEnvironment } from "../../shared/api/types";
 import { formatDateTime } from "../../shared/format";
 import { Alert } from "../../shared/ui/Alert";
+import { DataList, DataListItem } from "../../shared/ui/DataList";
 import { EmptyState } from "../../shared/ui/Page";
 import { EnvironmentAppLayout, type EnvironmentParams } from "../app-environments/public";
 import { runtimeConfigurationQueries } from "./queries";
@@ -44,9 +45,9 @@ function ConfigurationVersions({ target, params }: { target: AppEnvironment; par
           Carregando versões…
         </p>
       ) : revisions.data?.items.length ? (
-        <div className="data-list">
+        <DataList>
           {revisions.data.items.map((revision) => (
-            <div className="data-row" key={revision.version}>
+            <DataListItem key={revision.version}>
               <span>
                 <strong>Configuração v{revision.version}</strong>
                 <small>
@@ -56,9 +57,9 @@ function ConfigurationVersions({ target, params }: { target: AppEnvironment; par
               <span className="row-action">
                 {revision.version === target.configurationVersion ? "Desejada" : "Histórica"}
               </span>
-            </div>
+            </DataListItem>
           ))}
-        </div>
+        </DataList>
       ) : (
         <EmptyState
           title="Nenhuma versão"

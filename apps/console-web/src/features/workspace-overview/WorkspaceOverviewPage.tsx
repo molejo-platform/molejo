@@ -5,9 +5,10 @@ import { Alert } from "../../shared/ui/Alert";
 import { RefreshStatus, RetryAlert, Skeleton, SkeletonRegion } from "../../shared/ui/AsyncState";
 import { Icon } from "../../shared/ui/Icon";
 import { PageHeader } from "../../shared/ui/Page";
-import { githubQueries } from "../integrations/github/public";
 import { canUseFeature, featureIds, findFeature, useFeatureAvailability } from "../feature-availability/public";
+import { githubQueries } from "../integrations/github/public";
 import { useSelectedWorkspace, useWorkspaceSummaryQuery } from "../workspaces/public";
+import "./workspace-overview.css";
 
 export function OverviewPage() {
   const { workspaceId } = useParams({ from: "/protected/workspaces/$workspaceId/overview" });

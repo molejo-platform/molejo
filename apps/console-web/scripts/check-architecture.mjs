@@ -6,12 +6,25 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const sourceRoot = join(root, "src");
 const generatedRoot = join(sourceRoot, "shared", "api", "generated");
 const extensions = [".ts", ".tsx"];
+const authoredExtensions = [...extensions, ".css"];
 
 function sourceFiles(directory) {
   return readdirSync(directory).flatMap((entry) => {
     const path = join(directory, entry);
     if (path.startsWith(generatedRoot)) return [];
     return statSync(path).isDirectory() ? sourceFiles(path) : extensions.includes(extname(path)) ? [path] : [];
+  });
+}
+
+function authoredFiles(directory) {
+  return readdirSync(directory).flatMap((entry) => {
+    const path = join(directory, entry);
+    if (path.startsWith(generatedRoot)) return [];
+    return statSync(path).isDirectory()
+      ? authoredFiles(path)
+      : authoredExtensions.includes(extname(path))
+        ? [path]
+        : [];
   });
 }
 
@@ -37,11 +50,29 @@ const graph = new Map();
 const problems = [];
 const importPattern = /(?:import|export)\s+(?:[^"']*?\s+from\s+)?["']([^"']+)["']|import\(["']([^"']+)["']\)/g;
 
-for (const file of productionFiles) {
+for (const file of authoredFiles(sourceRoot)) {
   const content = readFileSync(file, "utf8");
   const lineCount = content.split("\n").length;
   if (lineCount > 1_000)
     problems.push(`${relative(root, file)} has ${lineCount} lines; authored files must stay below 1,000`);
+
+  if (extname(file) === ".css" && relative(sourceRoot, file).startsWith(`shared${sep}`)) {
+    if (/@import\s+[^;]*(?:features|\/app\/)/.test(content)) {
+      problems.push(`${relative(root, file)} imports application or feature CSS across the shared boundary`);
+    }
+  }
+
+  const legacyLayoutContracts = ["form-row", "data-row", "constrained", "narrow"];
+  for (const contract of legacyLayoutContracts) {
+    if (content.includes(contract)) problems.push(`${relative(root, file)} uses legacy layout contract '${contract}'`);
+  }
+  if (content.includes("stack data-list-item")) {
+    problems.push(`${relative(root, file)} combines stack and data-list-item instead of composing an owned item`);
+  }
+}
+
+for (const file of productionFiles) {
+  const content = readFileSync(file, "utf8");
 
   const imports = [];
   for (const match of content.matchAll(importPattern)) {

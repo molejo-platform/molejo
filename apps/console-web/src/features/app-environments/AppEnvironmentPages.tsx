@@ -6,12 +6,13 @@ import type { AppEnvironment, Release, RuntimeConfiguration } from "../../shared
 import { formatDateTime, shortSha } from "../../shared/format";
 import { Alert } from "../../shared/ui/Alert";
 import { Button } from "../../shared/ui/Button";
+import { DataList, DataListItem } from "../../shared/ui/DataList";
 import { SelectField } from "../../shared/ui/Field";
 import { Icon } from "../../shared/ui/Icon";
 import { EmptyState } from "../../shared/ui/Page";
 import { StatusBadge } from "../../shared/ui/StatusBadge";
-import { applicationQueries } from "../applications/public";
 import { ApplicationSetupFlow } from "../application-setup/public";
+import { applicationQueries } from "../applications/public";
 import { useSessionQuery } from "../authentication/public";
 import { createAppBuild, DeliveryNav, deliveryKeys, deliveryQueries } from "../delivery/public";
 import { environmentKeys, environmentQueries } from "../environments/public";
@@ -28,6 +29,7 @@ import { publicationAddress } from "./publication";
 import { EnvironmentAppLayout } from "./RuntimeLayout";
 import type { EnvironmentParams } from "./runtime-ref";
 import { useDeploymentViewModel } from "./useDeploymentViewModel";
+import "./app-environments.css";
 
 function runtimeAddresses(configuration: RuntimeConfiguration, session: ReturnType<typeof useSessionQuery>["data"]) {
   return configuration.publicEndpoints.map((endpoint) => publicationAddress(session, endpoint));
@@ -317,10 +319,10 @@ function TargetBuilds({
           Carregando builds…
         </p>
       ) : items.length ? (
-        <div className="data-list">
+        <DataList>
           {items.map((build) => (
             <Link
-              className="data-row"
+              className="data-list-item"
               key={build.id}
               to="/workspaces/$workspaceId/projects/$projectId/environments/$environmentId/apps/$appEnvironmentId/builds/$buildId"
               params={{
@@ -342,7 +344,7 @@ function TargetBuilds({
               <StatusBadge status={build.status} />
             </Link>
           ))}
-        </div>
+        </DataList>
       ) : (
         <EmptyState
           title="Nenhum build neste Environment"
@@ -624,9 +626,9 @@ function TargetDeployments({ target, params }: { target: AppEnvironment; params:
           Carregando implantações…
         </p>
       ) : deployments.data?.items.length ? (
-        <div className="data-list">
+        <DataList>
           {deployments.data.items.map((deployment) => (
-            <div className="data-row" key={deployment.id}>
+            <DataListItem key={deployment.id}>
               <span>
                 <strong className="mono">{deployment.releaseId}</strong>
                 <small>
@@ -635,9 +637,9 @@ function TargetDeployments({ target, params }: { target: AppEnvironment; params:
                 </small>
               </span>
               <StatusBadge status={deployment.state} />
-            </div>
+            </DataListItem>
           ))}
-        </div>
+        </DataList>
       ) : (
         <EmptyState
           title="Nenhuma implantação"

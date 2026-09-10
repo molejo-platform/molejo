@@ -30,8 +30,11 @@
   --ui-on-action-secondary: var(--color-molejo-petroleum);
   --ui-action-quiet: transparent;
   --ui-action-quiet-hover: var(--ui-surface-subtle);
+  --ui-action-quiet-text: var(--color-molejo-teal-strong);
+  --ui-action-quiet-text-hover: var(--color-molejo-petroleum);
   --ui-link: var(--color-molejo-teal-strong);
   --ui-link-hover: var(--color-molejo-petroleum);
+  --ui-accent: var(--color-molejo-teal-strong);
   --ui-focus-ring: var(--color-molejo-teal);
   --ui-active-indicator: var(--color-molejo-lime);
 
@@ -85,6 +88,7 @@
   --ui-code-number: #f5c980;
   --ui-code-literal: #efb2c2;
   --ui-chart-accent-fill: rgb(14 143 130 / 10%);
+  --ui-data-primary: var(--color-molejo-teal-strong);
 
   /* Effects. */
   --ui-shadow-sm: 0 1px 2px rgb(18 51 63 / 8%);

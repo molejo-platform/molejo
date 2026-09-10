@@ -8,8 +8,10 @@ import { clearSessionState } from "../../shared/auth/session-state";
 import { formatDateTime } from "../../shared/format";
 import { Alert } from "../../shared/ui/Alert";
 import { Button } from "../../shared/ui/Button";
+import { DataList, DataListItem } from "../../shared/ui/DataList";
 import { Field, SelectField } from "../../shared/ui/Field";
 import { EmptyState, PageHeader } from "../../shared/ui/Page";
+import { PageFrame } from "../../shared/ui/PageFrame";
 import { useSessionQuery } from "../authentication/public";
 import {
   createResetGrant,
@@ -124,10 +126,10 @@ export function AdministrationPage() {
   }
   if (!enabled)
     return (
-      <div className="stack constrained">
+      <PageFrame width="readable" className="stack">
         <Alert>A administração da instalação é necessária.</Alert>
         <Link to="/">Voltar</Link>
-      </div>
+      </PageFrame>
     );
 
   const directory = users.data?.pages.flatMap((page) => page.items) ?? [];
@@ -159,7 +161,7 @@ export function AdministrationPage() {
             O usuário define a própria senha ao aceitar o convite. A associação a Workspaces é feita separadamente.
           </p>
         </div>
-        <form className="form-row" onSubmit={submit}>
+        <form className="inline-form" onSubmit={submit}>
           <Field
             label="Username"
             value={form.username}
@@ -188,71 +190,73 @@ export function AdministrationPage() {
         {users.isPending ? (
           <p role="status">Carregando usuários…</p>
         ) : directory.length ? (
-          directory.map((user) => (
-            <div className="data-row" key={user.id}>
-              <span>
-                <strong>{user.displayName}</strong>
-                <small>
-                  {user.username} · {user.status} · {user.installationAdministrator ? "Administrador" : "Usuário"}
-                </small>
-              </span>
-              <div className="row-controls">
-                {user.status === "Invited" ? (
+          <DataList>
+            {directory.map((user) => (
+              <DataListItem key={user.id}>
+                <span>
+                  <strong>{user.displayName}</strong>
+                  <small>
+                    {user.username} · {user.status} · {user.installationAdministrator ? "Administrador" : "Usuário"}
+                  </small>
+                </span>
+                <div className="row-controls">
+                  {user.status === "Invited" ? (
+                    <Button
+                      variant="secondary"
+                      onClick={() => void revealInvitation(user)}
+                      loading={invitation.isPending && invitation.variables?.id === user.id}
+                    >
+                      Novo convite
+                    </Button>
+                  ) : (
+                    <SelectField
+                      label={`Status de ${user.username}`}
+                      value={user.status}
+                      onChange={(event) =>
+                        status.mutate({ user, next: event.target.value as "Active" | "Locked" | "Disabled" })
+                      }
+                      disabled={status.isPending && status.variables?.user.id === user.id}
+                    >
+                      <option value="Active">Ativo</option>
+                      <option value="Locked">Bloqueado</option>
+                      <option value="Disabled">Desabilitado</option>
+                    </SelectField>
+                  )}
                   <Button
                     variant="secondary"
-                    onClick={() => void revealInvitation(user)}
-                    loading={invitation.isPending && invitation.variables?.id === user.id}
+                    onClick={() => role.mutate({ user, administrator: !user.installationAdministrator })}
+                    loading={role.isPending && role.variables?.user.id === user.id}
                   >
-                    Novo convite
+                    {user.installationAdministrator ? "Remover admin" : "Tornar admin"}
                   </Button>
-                ) : (
-                  <SelectField
-                    label={`Status de ${user.username}`}
-                    value={user.status}
-                    onChange={(event) =>
-                      status.mutate({ user, next: event.target.value as "Active" | "Locked" | "Disabled" })
-                    }
-                    disabled={status.isPending && status.variables?.user.id === user.id}
-                  >
-                    <option value="Active">Ativo</option>
-                    <option value="Locked">Bloqueado</option>
-                    <option value="Disabled">Desabilitado</option>
-                  </SelectField>
+                  {user.status === "Active" && (
+                    <Button
+                      variant="secondary"
+                      onClick={() => void revealReset(user)}
+                      loading={reset.isPending && reset.variables?.id === user.id}
+                    >
+                      Gerar reset
+                    </Button>
+                  )}
+                </div>
+                {status.isError && status.variables?.user.id === user.id && (
+                  <small className="field-error" role="alert">
+                    {userFacingError(status.error)}
+                  </small>
                 )}
-                <Button
-                  variant="secondary"
-                  onClick={() => role.mutate({ user, administrator: !user.installationAdministrator })}
-                  loading={role.isPending && role.variables?.user.id === user.id}
-                >
-                  {user.installationAdministrator ? "Remover admin" : "Tornar admin"}
-                </Button>
-                {user.status === "Active" && (
-                  <Button
-                    variant="secondary"
-                    onClick={() => void revealReset(user)}
-                    loading={reset.isPending && reset.variables?.id === user.id}
-                  >
-                    Gerar reset
-                  </Button>
+                {role.isError && role.variables?.user.id === user.id && (
+                  <small className="field-error" role="alert">
+                    {userFacingError(role.error)}
+                  </small>
                 )}
-              </div>
-              {status.isError && status.variables?.user.id === user.id && (
-                <small className="field-error" role="alert">
-                  {userFacingError(status.error)}
-                </small>
-              )}
-              {role.isError && role.variables?.user.id === user.id && (
-                <small className="field-error" role="alert">
-                  {userFacingError(role.error)}
-                </small>
-              )}
-              {oneTimeError?.userId === user.id && (
-                <small className="field-error" role="alert">
-                  {userFacingError(oneTimeError.error)}
-                </small>
-              )}
-            </div>
-          ))
+                {oneTimeError?.userId === user.id && (
+                  <small className="field-error" role="alert">
+                    {userFacingError(oneTimeError.error)}
+                  </small>
+                )}
+              </DataListItem>
+            ))}
+          </DataList>
         ) : users.isError ? null : (
           <EmptyState title="Nenhum usuário" description="Crie o primeiro convite para iniciar o diretório." />
         )}
@@ -271,18 +275,20 @@ export function AdministrationPage() {
         {audit.isPending ? (
           <p role="status">Carregando auditoria…</p>
         ) : audit.data?.items.length ? (
-          audit.data?.items.map((event) => (
-            <div className="data-row" key={event.id}>
-              <span>
-                <strong>{event.action}</strong>
-                <small>
-                  {event.outcome} · {event.targetType}
-                  {event.targetId ? ` ${event.targetId}` : ""} · {formatDateTime(event.occurredAt)}
-                </small>
-              </span>
-              <span className="mono">{event.requestId || event.id}</span>
-            </div>
-          ))
+          <DataList>
+            {audit.data.items.map((event) => (
+              <DataListItem key={event.id}>
+                <span>
+                  <strong>{event.action}</strong>
+                  <small>
+                    {event.outcome} · {event.targetType}
+                    {event.targetId ? ` ${event.targetId}` : ""} · {formatDateTime(event.occurredAt)}
+                  </small>
+                </span>
+                <span className="mono">{event.requestId || event.id}</span>
+              </DataListItem>
+            ))}
+          </DataList>
         ) : audit.isError ? null : (
           <EmptyState title="Sem eventos" description="As próximas alterações administrativas aparecerão aqui." />
         )}

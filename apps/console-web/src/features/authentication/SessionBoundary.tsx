@@ -4,22 +4,23 @@ import type { ReactNode } from "react";
 import { userFacingError } from "../../shared/api/errors";
 import { Alert } from "../../shared/ui/Alert";
 import { Button } from "../../shared/ui/Button";
+import { PageFrame } from "../../shared/ui/PageFrame";
 import { useSessionQuery } from "./queries";
 import { safeReturnTo } from "./return-to";
 
 export function SessionLoading() {
   return (
-    <main className="shell">
+    <PageFrame as="main" width="form" className="shell">
       <p className="muted" role="status">
         Carregando sessão…
       </p>
-    </main>
+    </PageFrame>
   );
 }
 
 export function SessionUnavailable({ error, retry }: { error: unknown; retry: () => void }) {
   return (
-    <main className="shell narrow">
+    <PageFrame as="main" width="form" className="shell">
       <section className="card stack">
         <h1>Control plane indisponível</h1>
         <Alert>{userFacingError(error)}</Alert>
@@ -27,7 +28,7 @@ export function SessionUnavailable({ error, retry }: { error: unknown; retry: ()
           Tentar novamente
         </Button>
       </section>
-    </main>
+    </PageFrame>
   );
 }
 

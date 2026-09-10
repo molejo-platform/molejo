@@ -6,6 +6,7 @@ import type { AppEnvironment, Release } from "../../shared/api/types";
 import { formatDateTime, shortSha } from "../../shared/format";
 import { Alert } from "../../shared/ui/Alert";
 import { Button } from "../../shared/ui/Button";
+import { DataList, DataListItem } from "../../shared/ui/DataList";
 import { EmptyState } from "../../shared/ui/Page";
 import { EnvironmentAppLayout, type EnvironmentParams } from "../app-environments/public";
 import { useEffectiveCapabilities } from "../workspace-access/public";
@@ -71,9 +72,9 @@ function TargetReleases({
           Carregando releases…
         </p>
       ) : items.length ? (
-        <div className="data-list">
+        <DataList>
           {items.map((release) => (
-            <div className="data-row" key={release.id}>
+            <DataListItem key={release.id}>
               <span>
                 <strong>{release.commitTitle || shortSha(releaseRevision(release))}</strong>
                 <small>
@@ -103,9 +104,9 @@ function TargetReleases({
                   {userFacingError(rebuild.error)}
                 </small>
               )}
-            </div>
+            </DataListItem>
           ))}
-        </div>
+        </DataList>
       ) : (
         <EmptyState
           title="Nenhuma release"

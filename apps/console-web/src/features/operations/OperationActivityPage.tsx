@@ -4,6 +4,7 @@ import { useParams } from "@tanstack/react-router";
 import type { Operation } from "../../shared/api/types";
 import { formatDateTime } from "../../shared/format";
 import { RefreshStatus, RetryAlert, Skeleton, SkeletonRegion } from "../../shared/ui/AsyncState";
+import { DataList, DataListItem } from "../../shared/ui/DataList";
 import { EmptyState, PageHeader } from "../../shared/ui/Page";
 import { StatusBadge } from "../../shared/ui/StatusBadge";
 import { operationQueries } from "./queries";
@@ -43,9 +44,9 @@ export function OperationActivityPage() {
           <Skeleton variant="row" />
         </SkeletonRegion>
       ) : operations.data?.items.length ? (
-        <div className="data-list">
+        <DataList>
           {operations.data.items.map((operation) => (
-            <div className="data-row" key={operation.id}>
+            <DataListItem key={operation.id}>
               <span>
                 <strong>{kindLabels[operation.kind]}</strong>
                 <small>
@@ -55,9 +56,9 @@ export function OperationActivityPage() {
                 {operation.errorMessage && <small className="field-error">{operation.errorMessage}</small>}
               </span>
               <StatusBadge status={operation.status} />
-            </div>
+            </DataListItem>
           ))}
-        </div>
+        </DataList>
       ) : operations.isError ? null : (
         <EmptyState
           title="Nenhuma atividade registrada"

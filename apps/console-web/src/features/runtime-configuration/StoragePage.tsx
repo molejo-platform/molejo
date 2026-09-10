@@ -198,7 +198,7 @@ function StorageEditor({ target, params }: { target: AppEnvironment; params: Env
           title="Expansão de volume indisponível"
         />
         {canMutate && canExpand && profile?.expandable && (
-          <div className="form-row">
+          <div className="form-grid">
             <Field
               label="Nova capacidade (GiB)"
               helper={`Atual: ${volume.data.sizeGiB} GiB. Máximo do perfil: ${profile.maximumSizeGiB} GiB.`}

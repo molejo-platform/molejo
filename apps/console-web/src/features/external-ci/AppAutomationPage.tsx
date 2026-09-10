@@ -8,6 +8,7 @@ import { formatDateTime } from "../../shared/format";
 import { Alert } from "../../shared/ui/Alert";
 import { Button } from "../../shared/ui/Button";
 import { ConfirmAction } from "../../shared/ui/ConfirmAction";
+import { DataList, DataListItem } from "../../shared/ui/DataList";
 import { Field } from "../../shared/ui/Field";
 import { EmptyState } from "../../shared/ui/Page";
 import { appEnvironmentKeys, listAppEnvironments } from "../app-environments/public";
@@ -229,30 +230,32 @@ function ServiceAccountPanel({
       {tokens.isPending ? (
         <p role="status">Carregando tokens…</p>
       ) : tokens.data?.items.length ? (
-        tokens.data.items.map((token) => (
-          <div className="data-row" key={token.id}>
-            <span>
-              <strong className="mono">{token.id}</strong>
-              <small>
-                Expira em {formatDateTime(token.expiresAt)}
-                {token.revokedAt ? " · revogado" : ""}
-              </small>
-            </span>
-            {!token.revokedAt && (
-              <ConfirmAction
-                trigger="Revogar token"
-                title="Revogar este token?"
-                description="Pipelines que usam este token falharão imediatamente."
-                confirmLabel="Revogar"
-                pending={revokeToken.isPending && revokeToken.variables === token.id}
-                error={
-                  revokeToken.isError && revokeToken.variables === token.id ? userFacingError(revokeToken.error) : ""
-                }
-                onConfirm={() => revokeToken.mutateAsync(token.id)}
-              />
-            )}
-          </div>
-        ))
+        <DataList>
+          {tokens.data.items.map((token) => (
+            <DataListItem key={token.id}>
+              <span>
+                <strong className="mono">{token.id}</strong>
+                <small>
+                  Expira em {formatDateTime(token.expiresAt)}
+                  {token.revokedAt ? " · revogado" : ""}
+                </small>
+              </span>
+              {!token.revokedAt && (
+                <ConfirmAction
+                  trigger="Revogar token"
+                  title="Revogar este token?"
+                  description="Pipelines que usam este token falharão imediatamente."
+                  confirmLabel="Revogar"
+                  pending={revokeToken.isPending && revokeToken.variables === token.id}
+                  error={
+                    revokeToken.isError && revokeToken.variables === token.id ? userFacingError(revokeToken.error) : ""
+                  }
+                  onConfirm={() => revokeToken.mutateAsync(token.id)}
+                />
+              )}
+            </DataListItem>
+          ))}
+        </DataList>
       ) : tokens.isError ? null : (
         <p className="muted">Nenhum token emitido para esta identidade.</p>
       )}

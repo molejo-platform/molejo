@@ -8,6 +8,7 @@ import { SelectField } from "../../shared/ui/Field";
 import { PageHeader } from "../../shared/ui/Page";
 import { environmentQueries } from "../environments/public";
 import { projectQueries } from "../projects/public";
+import "./app-environments.css";
 
 export function AppEnvironmentLayout({
   workspaceId,

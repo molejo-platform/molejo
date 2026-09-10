@@ -8,6 +8,7 @@ import { RetryAlert } from "../../shared/ui/AsyncState";
 import { Button } from "../../shared/ui/Button";
 import { Field, SelectField } from "../../shared/ui/Field";
 import { PageHeader } from "../../shared/ui/Page";
+import { PageFrame } from "../../shared/ui/PageFrame";
 import { useSessionQuery } from "../authentication/public";
 import { activeClusters, clusterPlacementQueries, reconcileClusterSelection } from "../cluster-placement/public";
 import { useOperationTracker } from "../operations/public";
@@ -85,7 +86,7 @@ export function NewWorkspacePage() {
   }
 
   return (
-    <div className="stack constrained">
+    <PageFrame width="readable" className="stack">
       <PageHeader
         eyebrow="Novo contexto"
         title="Criar Workspace"
@@ -170,6 +171,6 @@ export function NewWorkspacePage() {
           )}
         </section>
       )}
-    </div>
+    </PageFrame>
   );
 }

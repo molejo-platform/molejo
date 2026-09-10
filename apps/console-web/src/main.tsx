@@ -9,7 +9,7 @@ import { RouterProvider } from "@tanstack/react-router";
 import { AppProviders } from "./app/providers/AppProviders";
 import { createQueryClient } from "./app/providers/query-client";
 import { createAppRouter } from "./app/router";
-import "./shared/styles.css";
+import "./app/styles.css";
 
 const queryClient = createQueryClient();
 const router = createAppRouter(queryClient);

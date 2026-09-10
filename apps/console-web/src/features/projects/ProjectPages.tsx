@@ -7,6 +7,7 @@ import { Alert } from "../../shared/ui/Alert";
 import { RefreshStatus, RetryAlert, Skeleton, SkeletonRegion } from "../../shared/ui/AsyncState";
 import { Button } from "../../shared/ui/Button";
 import { ConfirmAction } from "../../shared/ui/ConfirmAction";
+import { DataList, DataListItem } from "../../shared/ui/DataList";
 import { Field } from "../../shared/ui/Field";
 import { EmptyState, PageHeader } from "../../shared/ui/Page";
 import {
@@ -77,11 +78,11 @@ export function ProjectsPage() {
           <Skeleton variant="row" />
         </SkeletonRegion>
       ) : projects.data?.items.length ? (
-        <div className="data-list">
+        <DataList>
           {projects.data.items.map((project) => (
             <Link
               aria-label={`Abrir Project ${project.name}`}
-              className="data-row"
+              className="data-list-item"
               key={project.id}
               to="/workspaces/$workspaceId/projects/$projectId"
               params={{ workspaceId, projectId: project.id }}
@@ -93,7 +94,7 @@ export function ProjectsPage() {
               <span className="row-action">Abrir</span>
             </Link>
           ))}
-        </div>
+        </DataList>
       ) : projects.isError ? null : (
         <EmptyState title="Nenhum Project" description="Crie um Project para organizar Apps e Environments." />
       )}
@@ -315,9 +316,9 @@ function ProjectResourcePage<T extends App | Environment>({
               <Skeleton variant="row" />
             </SkeletonRegion>
           ) : resources.data?.items.length ? (
-            <div className="data-list">
+            <DataList>
               {resources.data.items.map((resource) => (
-                <div className="data-row resource-management" key={resource.id}>
+                <DataListItem className="resource-management" key={resource.id}>
                   <div>
                     {href ? (
                       <Link to={href(resource).to} params={href(resource).params}>
@@ -357,9 +358,9 @@ function ProjectResourcePage<T extends App | Environment>({
                       />
                     </div>
                   )}
-                </div>
+                </DataListItem>
               ))}
-            </div>
+            </DataList>
           ) : resources.isError ? null : (
             <EmptyState title={`Nenhum ${kind}`} description={`Crie o primeiro ${kind} deste Project.`} />
           )}
@@ -453,7 +454,7 @@ function NameEditor({
       </Button>
     );
   return (
-    <form className={compact ? "inline-edit" : "form-row"} onSubmit={submit}>
+    <form className={compact ? "inline-edit" : "inline-form"} onSubmit={submit}>
       <Field
         label={label}
         value={name}
