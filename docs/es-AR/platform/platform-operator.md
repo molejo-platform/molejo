@@ -1,25 +1,27 @@
 # Operación del Platform Operator
 
-Este runbook describe las señales expuestas por el primer controller de
-`AppDeployment`. Las Conditions son la fuente duradera de verdad; Events, logs,
-métricas y traces explican cómo el controller llegó al estado actual.
+Este runbook describe las señales expuestas por el controller de `AppDeployment`.
+Las Conditions son la fuente duradera de verdad; Events, logs, métricas y traces
+explican cómo el controller llegó al estado actual.
 
 ## Contrato de estado
 
 | Condition activa | Significado | Primeras verificaciones |
 | --- | --- | --- |
-| `Ready=True` | Service y Deployment convergieron; un workload público también tiene un HTTPRoute actual y aceptado y un Gateway HTTPS compartido programado. | Confirmar Service, release observada, réplicas, parent del HTTPRoute, Gateway y listener `https-molejo`. |
-| `Progressing=True` | El rollout del workload, la ruta o el Gateway compartido todavía está convergiendo. | Inspeccionar Deployment y, para workloads públicos, las Conditions del parent del HTTPRoute y del Gateway. |
+| `Ready=True` | Service y el Deployment o StatefulSet seleccionado convergieron; todos los endpoints públicos también convergieron mediante el Gateway compartido. | Confirmar Service, workload, release observada, réplicas, Routes, Gateway y listener correspondiente. |
+| `Progressing=True` | El rollout del workload, la ruta o el Gateway compartido todavía está convergiendo. | Inspeccionar el workload seleccionado y, para workloads públicos, las Conditions del parent de la Route y del Gateway. |
 | `Degraded=True` | Una falla conocida de workload, ownership, hostname, ruta o Gateway bloquea la convergencia. | Inspeccionar `reason`, Conditions de los hijos y del Gateway y Events. |
 
-`DeploymentAvailable` identifica el estado listo. Los reasons de progreso son
-`DeploymentProgressing`, `HTTPRouteProgressing` y `GatewayProgressing`. Los reasons
-estables de degradación son `ProgressDeadlineExceeded`, `ReplicaFailure`,
-`OwnershipConflict`, `HostnameConflict`, `HTTPRouteRejected`, `GatewayRejected` y
-`ReconcileFailed`. Los conflictos de ownership y hostname y los errores
-persistentes de la API se verifican cada cinco minutos sin usar el backoff de
-error del controller. Las fallas transitorias de la API de Kubernetes usan el
-backoff de error de controller-runtime.
+`DeploymentAvailable` y `StatefulSetAvailable` identifican estados listos del
+workload. Los reasons de progreso incluyen `DeploymentProgressing`,
+`StatefulSetProgressing`, `StatefulSetReplacingStalePod`, `HTTPRouteProgressing` y
+`GatewayProgressing`. Los reasons estables de degradación son
+`ProgressDeadlineExceeded`, `ReplicaFailure`, `OwnershipConflict`,
+`HostnameConflict`, `HTTPRouteRejected`, `GatewayRejected`,
+`PublicationRejected` y `ReconcileFailed`. Los conflictos de ownership y hostname
+y los errores persistentes de la API se verifican cada cinco minutos sin usar el
+backoff de error del controller. Las fallas transitorias de la API de Kubernetes
+usan el backoff de error de `controller-runtime`.
 
 ## Validación de schema
 
@@ -53,8 +55,9 @@ el hostname exacto resuelto por el control plane a partir de `domainId` y
 `hostnameLabel`. El catálogo inicial ofrece `molejo.dev` a ambos tipos de
 workload y `stateful.molejo.dev` solo a workloads Stateful. TCP se conecta al listener preasignado
 `tcp-{externalPort}`. Ambas rutas reenvían a un puerto con nombre del Service con
-el mismo nombre. Una lista vacía mantiene privado al workload. `spec.exposure`,
-`spec.slug` y `spec.port` se conservan solamente para migración legada.
+el mismo nombre. Una lista vacía mantiene privado al workload. Durante el alfa
+actual, el Agent todavía emite las proyecciones de compatibilidad legadas
+`spec.exposure`, `spec.slug` y `spec.port` junto con el contrato actual.
 
 El operator considera que la publicación convergió solamente cuando el parent
 esperado de la ruta tiene Conditions `Accepted=True` y `ResolvedRefs=True` de la
@@ -84,6 +87,8 @@ kubectl get appdeployment ap-example -n ws-example -o yaml
 kubectl describe appdeployment ap-example -n ws-example
 kubectl get deployment ap-example -n ws-example -o yaml
 kubectl describe deployment ap-example -n ws-example
+kubectl get statefulset ap-example -n ws-example -o yaml
+kubectl describe statefulset ap-example -n ws-example
 kubectl get service ap-example -n ws-example -o yaml
 kubectl get httproute ap-example -n ws-example -o yaml
 kubectl describe httproute ap-example -n ws-example
@@ -98,12 +103,10 @@ Correlacionar logs y traces mediante `trace_id` y refinar la investigación con 
 UID del recurso, la generación, el estado y el reason. Los mensajes del status se
 sanitizan intencionalmente; los errores técnicos permanecen en logs y traces.
 
-Los Events `DeploymentCreated`, `DeploymentUpdated`, `ServiceCreated`,
-`ServiceUpdated`, `HTTPRouteCreated`, `HTTPRouteUpdated` y `HTTPRouteDeleted`
-identifican transiciones de los hijos. La aplicación del Service y de la ruta se
-rastrea mediante los spans `kubernetes.service.apply` y
-`kubernetes.httproute.apply`. Las reconciliaciones repetidas ya convergidas no
-emiten Events de transición duplicados.
+Los Events del workload, Service y Route identifican transiciones de los hijos.
+La aplicación del Service y del HTTPRoute se rastrea mediante los spans
+`kubernetes.service.apply` y `kubernetes.httproute.apply`. Las reconciliaciones
+repetidas ya convergidas no emiten Events de transición duplicados.
 
 ## Verificaciones reproducibles
 
@@ -117,39 +120,6 @@ de forma idempotente y comprueba el teardown del ambiente.
 Esta prueba local no valida DNS público de entrada ni un certificado con confianza
 pública. Esos puntos permanecen como una etapa de aceptación separada en el
 ambiente de foundation.
-
-## Contratos de imagen para frontend
-
-Las fixtures `static-html` y `vite-react-spa` son imágenes de referencia mantenidas
-y usan el mismo runtime de AppDeployment. El operator también acepta imágenes HTTP
-inmutables propias y no inspecciona su framework o servidor. Las referencias
-escuchan en `8080`, exponen `/healthz` y `/readyz` y ejecutan NGINX como
-`65532:65532` con root filesystem de solo lectura. El HTML estático devuelve `404`
-para paths desconocidos. La SPA devuelve `index.html` con HTTP `200` para rutas del
-navegador; su router del cliente es responsable por la página Not Found. Los
-assets ausentes devuelven `404` y nunca reciben el shell de la SPA. HTML usa
-`no-cache` y se revalida; los assets con fingerprint son inmutables por un año.
-
-Ejecutar `just frontend-test` para probar el container restringido y
-`just kubernetes-conformance kind` para el ciclo completo en Kind. Ejecutar
-`just audit-frontend-images` por separado
-cuando se requiera una verificación con la base de vulnerabilidades de Docker
-Scout; la auditoría mutable no integra el gate determinístico `just ci`.
-
-`just e2e-frontend-k3s` es una aceptación separada solo para mantenedores. Requiere
-Docker con push autenticado mediante Buildx, `curl`, `jq`, `kubectl`, `sed`, un
-cluster exclusivamente amd64, el Gateway `molejo-system/molejo` programado y el
-Secret de origen del registry `molejo-system/registry-pull`. El target usa
-`--context molejo-lab` por default y rechaza otro contexto, salvo cuando
-`MOLEJO_KUBE_CONTEXT` y `MOLEJO_ALLOW_CUSTOM_CONTEXT=true` sustituyen explícitamente
-esa protección.
-
-El target publica tres imágenes amd64 con tags temporales, crea o actualiza
-`ws-e2e-static` y `ws-e2e-spa`, copia el Secret del registry en esos
-namespaces, modifica sus ServiceAccounts `default` y mantiene ambos AppDeployments
-y sus rutas públicas disponibles. Los archivos locales temporales se eliminan,
-pero las imágenes del registry y los recursos estables del cluster se conservan
-intencionalmente. Nunca debe agregarse a `just ci`.
 
 ## Salud y métricas
 

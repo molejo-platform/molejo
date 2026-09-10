@@ -51,9 +51,9 @@ existing cluster:
 
 ```bash
 tools/testing/control-plane-k3s.sh verify --context molejo-k3s
-tools/testing/tls-k3s.sh verify --context molejo-k3s --profile default
+tools/testing/tls-k3s.sh verify --context molejo-k3s --file ./tls-setup.yaml
 ```
 
-`teardown` and `cycle` change cluster state and require an explicit
-`--confirm <context>` argument. Run the scripts without arguments to see their
-complete usage.
+The control-plane script's `teardown` and `cycle` modes change cluster state and
+require an explicit `--confirm <context>` argument. TLS verification is read-only.
+Run the scripts without arguments to see their complete usage.

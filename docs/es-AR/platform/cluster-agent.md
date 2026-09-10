@@ -11,8 +11,8 @@ Instalá Operator y Agent con `molejoctl platform runtime install` y ejecutá
 `molejoctl platform control-plane install`. Una instalación nueva crea raíces ECDSA P-256
 separadas: `molejo-agent-ca` firma identidades cliente de Agents y
 `molejo-control-plane-server-ca` firma la identidad interna de API/gRPC. Las
-instalaciones alpha anteriores conservan su CA única hasta actualizar el chart,
-por lo que otra ejecución idempotente no interrumpe el Console ni el Agent.
+instalaciones alfa anteriores que usan una sola CA no tienen una ruta de
+actualización soportada; guardá los datos necesarios y reinstalá el alfa deseado.
 
 El ServiceAccount del Agent tiene acceso limitado a sus dos Secrets de identidad
 y a los recursos Kubernetes requeridos por el contrato de runtime. No puede

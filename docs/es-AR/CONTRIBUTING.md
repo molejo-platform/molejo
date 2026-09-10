@@ -43,9 +43,9 @@ requieren un clúster existente:
 
 ```bash
 tools/testing/control-plane-k3s.sh verify --context molejo-k3s
-tools/testing/tls-k3s.sh verify --context molejo-k3s --profile default
+tools/testing/tls-k3s.sh verify --context molejo-k3s --file ./tls-setup.yaml
 ```
 
-Los modos `teardown` y `cycle` modifican el clúster y requieren el argumento
-explícito `--confirm <context>`. Ejecutá los scripts sin argumentos para ver su
-uso completo.
+Los modos `teardown` y `cycle` del script del control plane modifican el clúster
+y requieren el argumento explícito `--confirm <context>`. La verificación TLS es
+de solo lectura. Ejecutá los scripts sin argumentos para ver su uso completo.

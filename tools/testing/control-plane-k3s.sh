@@ -44,7 +44,7 @@ install_control_plane() {
     exit 2
   }
   if [[ -n "${MOLEJOCTL_BIN:-}" ]]; then
-    "$MOLEJOCTL_BIN" control-plane install --kube-context "$context_name" --version "$version"
+    "$MOLEJOCTL_BIN" platform control-plane install --kube-context "$context_name" --version "$version"
     return
   fi
   (

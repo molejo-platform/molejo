@@ -15,9 +15,8 @@ separadas:
 - `molejo-control-plane-server-ca` assina a identidade interna da API e do gRPC.
 
 A separação impede que uma chave de servidor comprometida emita identidades de
-Agent. Instalações alpha antigas que ainda usam uma única CA mantêm esse arranjo
-até o upgrade do chart; uma nova execução idempotente do instalador não interrompe
-o Console nem a conexão do Agent.
+Agent. Instalações alpha antigas que usam uma única CA não possuem caminho de
+upgrade suportado; faça backup dos dados necessários e reinstale o alpha desejado.
 
 O ServiceAccount do Agent possui acesso restrito aos dois Secrets nomeados de
 identidade e aos recursos Kubernetes exigidos pelo contrato de runtime. Ele não

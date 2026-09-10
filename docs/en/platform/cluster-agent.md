@@ -15,9 +15,8 @@ P-256 trust roots:
 - `molejo-control-plane-server-ca` signs the internal API/gRPC server identity.
 
 The split prevents a stolen server-signing key from minting Agent identities.
-Existing alpha installations that still use one CA keep that trust layout until
-their chart is upgraded, so an idempotent installer run does not break the
-Console or Agent connection.
+Older alpha installations that use one CA are not a supported upgrade path;
+back up required data and reinstall the requested alpha.
 
 The Agent ServiceAccount has narrowly scoped access to its two named identity
 Secrets and to the Kubernetes resources required by the runtime contract. It

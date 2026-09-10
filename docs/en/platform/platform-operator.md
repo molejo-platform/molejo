@@ -1,24 +1,26 @@
 # Platform Operator Operations
 
-This runbook describes the signals exposed by the first `AppDeployment`
-controller. Conditions are the durable source of truth; Events, logs, metrics,
-and traces explain how the controller reached that state.
+This runbook describes the signals exposed by the `AppDeployment` controller.
+Conditions are the durable source of truth; Events, logs, metrics, and traces
+explain how the controller reached that state.
 
 ## State contract
 
 | Active condition | Meaning | First checks |
 | --- | --- | --- |
-| `Ready=True` | The Service and Deployment converged; a public workload also has a current accepted HTTPRoute and a programmed shared HTTPS Gateway. | Confirm the Service, observed release, replicas, HTTPRoute parent, Gateway, and `https-molejo` listener. |
-| `Progressing=True` | The workload rollout, route, or shared Gateway is still converging. | Inspect the Deployment and, for public workloads, HTTPRoute parent and Gateway conditions. |
+| `Ready=True` | The Service and selected Deployment or StatefulSet converged; every public endpoint also converged through the shared Gateway. | Confirm the Service, workload, observed release, replicas, Routes, Gateway, and matching listener. |
+| `Progressing=True` | The workload rollout, route, or shared Gateway is still converging. | Inspect the selected workload and, for public workloads, Route parent and Gateway conditions. |
 | `Degraded=True` | A known workload, ownership, hostname, route, or Gateway failure blocks convergence. | Inspect `reason`, child and Gateway conditions, and Events. |
 
-`DeploymentAvailable` identifies the ready state. Progressing reasons are
-`DeploymentProgressing`, `HTTPRouteProgressing`, and `GatewayProgressing`. Stable
-degraded reasons are `ProgressDeadlineExceeded`, `ReplicaFailure`,
+`DeploymentAvailable` and `StatefulSetAvailable` identify ready workload states.
+Progressing reasons include `DeploymentProgressing`, `StatefulSetProgressing`,
+`StatefulSetReplacingStalePod`, `HTTPRouteProgressing`, and `GatewayProgressing`.
+Stable degraded reasons are `ProgressDeadlineExceeded`, `ReplicaFailure`,
 `OwnershipConflict`, `HostnameConflict`, `HTTPRouteRejected`, `GatewayRejected`,
-and `ReconcileFailed`. Ownership and hostname conflicts and persistent API errors
-are checked every five minutes without using the controller error backoff.
-Transient Kubernetes API failures use the controller-runtime error backoff.
+`PublicationRejected`, and `ReconcileFailed`. Ownership and hostname conflicts
+and persistent API errors are checked every five minutes without using the
+controller error backoff. Transient Kubernetes API failures use the
+controller-runtime error backoff.
 
 ## Schema validation
 
@@ -50,8 +52,9 @@ the exact hostname resolved by the control plane from `domainId` and
 `hostnameLabel`. The initial catalog offers `molejo.dev` to both workload kinds
 and `stateful.molejo.dev` only to Stateful workloads. TCP attaches to the preallocated
 `tcp-{externalPort}` listener. Both routes forward to a named port on the
-same-named Service. Empty publication keeps the workload private. Legacy
-`spec.exposure`, `spec.slug`, and `spec.port` remain migration-only fields.
+same-named Service. Empty publication keeps the workload private. During the
+current alpha, the Agent still emits legacy `spec.exposure`, `spec.slug`, and
+`spec.port` compatibility projections alongside the current contract.
 
 The operator considers publication converged only when the expected route parent
 has current-generation `Accepted=True` and `ResolvedRefs=True` conditions, the
@@ -80,6 +83,8 @@ kubectl get appdeployment ap-example -n ws-example -o yaml
 kubectl describe appdeployment ap-example -n ws-example
 kubectl get deployment ap-example -n ws-example -o yaml
 kubectl describe deployment ap-example -n ws-example
+kubectl get statefulset ap-example -n ws-example -o yaml
+kubectl describe statefulset ap-example -n ws-example
 kubectl get service ap-example -n ws-example -o yaml
 kubectl get httproute ap-example -n ws-example -o yaml
 kubectl describe httproute ap-example -n ws-example
@@ -94,9 +99,8 @@ Correlate logs and traces using `trace_id`, then narrow the investigation with
 the resource UID, generation, state, and reason. Status messages are intentionally
 sanitized; technical errors remain in logs and traces.
 
-`DeploymentCreated`, `DeploymentUpdated`, `ServiceCreated`, `ServiceUpdated`,
-`HTTPRouteCreated`, `HTTPRouteUpdated`, and `HTTPRouteDeleted` Events identify
-child transitions. Service and route application are traced by
+Workload, Service, and Route Events identify child transitions. Service and
+HTTPRoute application are traced by
 `kubernetes.service.apply` and `kubernetes.httproute.apply`. Repeated converged
 reconciliations do not emit duplicate transition Events.
 
@@ -112,38 +116,6 @@ idempotently, and proves environment teardown.
 This local proof does not validate inbound public DNS or a publicly trusted
 certificate. Those remain a separate acceptance step in the foundation
 environment.
-
-## Frontend image contracts
-
-The `static-html` and `vite-react-spa` fixtures are maintained reference images
-using the same AppDeployment runtime. The operator also accepts custom immutable
-HTTP images and does not inspect their framework or server. The references listen
-on `8080`, expose `/healthz` and `/readyz`, and run NGINX as `65532:65532` with a
-read-only root filesystem. Static HTML returns `404` for unknown paths. The SPA
-returns `index.html` with HTTP `200` for browser routes; its client router owns the
-Not Found page. Missing assets return `404` and never receive the SPA shell. HTML
-uses `no-cache` and is revalidated; fingerprinted assets are immutable for one
-year.
-
-Run `just frontend-test` for the restricted container proof and
-`just kubernetes-conformance kind` for the complete Kind lifecycle. Run
-`just audit-frontend-images` separately when a
-Docker Scout vulnerability-database check is required; the mutable audit is not a
-deterministic `just ci` gate.
-
-`just e2e-frontend-k3s` is a separate maintainer-only acceptance target. It
-requires Docker with an authenticated Buildx push, `curl`, `jq`, `kubectl`, `sed`,
-an amd64-only cluster, a programmed `molejo-system/molejo` Gateway, and the source
-registry Secret `molejo-system/registry-pull`. It defaults to `--context
-molejo-lab` and refuses another context unless both `MOLEJO_KUBE_CONTEXT` and
-`MOLEJO_ALLOW_CUSTOM_CONTEXT=true` explicitly override the guard.
-
-The target pushes three timestamped amd64 images, creates or updates
-`ws-e2e-static` and `ws-e2e-spa`, copies the registry Secret into them,
-patches their default ServiceAccounts, and leaves both AppDeployments and their
-public routes available. Temporary local files are removed, but registry images
-and stable cluster resources are intentionally retained. It must never be added
-to `just ci`.
 
 ## Health and metrics
 

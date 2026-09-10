@@ -9,7 +9,10 @@ spec:
     stateless: {}
   # Replace this placeholder with an HTTP image pinned by its manifest digest.
   image: registry.example.com/molejo/http-app@sha256:0000000000000000000000000000000000000000000000000000000000000000
-  port: 8080
+  ports:
+    - name: http
+      containerPort: 8080
+      protocol: TCP
   resources:
     requests:
       cpuMillis: 50
@@ -18,7 +21,15 @@ spec:
       cpuMillis: 500
       memoryMiB: 256
   probes:
+    startup:
+      type: HTTP
+      portName: http
+      path: /readyz
     liveness:
+      type: HTTP
+      portName: http
       path: /healthz
     readiness:
+      type: HTTP
+      portName: http
       path: /readyz
