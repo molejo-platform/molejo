@@ -75,6 +75,8 @@ and are not scaffolded before their phase begins.
 English is the canonical documentation language. Portuguese (`pt-BR`) and
 Argentinian Spanish (`es-AR`) architecture and operations guides are maintained
 alongside it. ADRs have one English canonical copy to prevent decision drift.
+The [translation glossary](../TRANSLATION_GLOSSARY.md) defines shared product and
+operational terminology.
 
 Current architecture and component guides:
 

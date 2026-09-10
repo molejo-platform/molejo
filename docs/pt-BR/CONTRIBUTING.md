@@ -55,6 +55,6 @@ tools/testing/control-plane-k3s.sh verify --context molejo-k3s
 tools/testing/tls-k3s.sh verify --context molejo-k3s --file ./tls-setup.yaml
 ```
 
-Os modos `teardown` e `cycle` do script do control plane modificam o cluster e
+Os modos `teardown` e `cycle` do script do Control Plane modificam o cluster e
 exigem o argumento explícito `--confirm <context>`. A verificação TLS é somente
 leitura. Execute os scripts sem argumentos para consultar o uso completo.

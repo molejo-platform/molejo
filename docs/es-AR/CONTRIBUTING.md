@@ -3,12 +3,15 @@
 ## Requisitos previos
 
 - Go 1.26.6, la versión utilizada por CI.
+- Node.js 24 o superior con Corepack habilitado.
 - `just` 1.57 o superior.
 - Docker para las pruebas de integración con PostgreSQL.
 - `kubectl` solamente para pruebas de aceptación en un clúster real.
 
 La primera ejecución descarga los módulos Go y los binarios de Kubernetes
-`envtest`. Usá `just --list` para descubrir los comandos mantenidos.
+`envtest`. Instalá las dependencias de Console con
+`corepack pnpm install --frozen-lockfile`. Usá `just --list` para descubrir los
+comandos mantenidos.
 
 ## Pruebas
 
@@ -36,6 +39,14 @@ MOLEJO_TEST_DATABASE_URL='postgres://user:password@host/database?sslmode=disable
 `just verify` ejecuta ambas suites y todos los controles de calidad del
 repositorio.
 
+Console también puede verificarse de forma independiente:
+
+```bash
+just frontend-check
+just frontend-test
+just frontend-build
+```
+
 ## Pruebas de aceptación en K3s
 
 Estas pruebas para mantenedores no forman parte de `just verify` porque
@@ -46,6 +57,6 @@ tools/testing/control-plane-k3s.sh verify --context molejo-k3s
 tools/testing/tls-k3s.sh verify --context molejo-k3s --file ./tls-setup.yaml
 ```
 
-Los modos `teardown` y `cycle` del script del control plane modifican el clúster
+Los modos `teardown` y `cycle` del script del Control Plane modifican el clúster
 y requieren el argumento explícito `--confirm <context>`. La verificación TLS es
 de solo lectura. Ejecutá los scripts sin argumentos para ver su uso completo.

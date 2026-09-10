@@ -76,7 +76,8 @@ incremental e não recebem scaffold antes do início de sua fase.
 Inglês é o idioma canônico da documentação. Guias de arquitetura e operação em
 português (`pt-BR`) e espanhol da Argentina (`es-AR`) são mantidos em conjunto.
 As ADRs possuem uma única cópia canônica em inglês para evitar divergência entre
-decisões.
+decisões. O [glossário de tradução](../TRANSLATION_GLOSSARY.md) define a
+terminologia compartilhada de produto e operação.
 
 Guias atuais de arquitetura e componentes:
 

@@ -53,6 +53,7 @@ nunca modifica estado desejado.
 
 Telemetria atual e histórica são capacidades distintas. Dados atuais são
 limitados e efêmeros; dados históricos dependem de provider e retenção próprios.
+Uma nunca é apresentada como fallback transparente para a outra.
 
 ## Referências de segurança
 

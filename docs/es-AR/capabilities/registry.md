@@ -47,4 +47,4 @@ rotalas ejecutando nuevamente `plan`, `apply` y `smoke`.
 Este runbook atiende solamente imágenes de aplicaciones. Las credenciales OCI
 de Helm y las imágenes internas de Molejo son flujos separados. Un namespace
 creado posteriormente requiere otra ejecución explícita o un mecanismo continuo
-elegido por el operador del cluster.
+elegido por el operador del clúster.

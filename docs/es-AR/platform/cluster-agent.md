@@ -1,86 +1,113 @@
 # Operación del Cluster Agent
 
 El Cluster Agent es el único componente de Molejo que ejecuta la intención de
-runtime del control plane en Kubernetes. Inicia un stream saliente con mTLS y
-TLS 1.3; la API pública no recibe un kubeconfig y el cluster no expone un puerto
-de administración entrante.
+runtime del Control Plane en Kubernetes. Inicia un stream saliente con mTLS sobre
+TLS 1.3; la API pública nunca recibe un kubeconfig y el clúster no expone un
+puerto de administración entrante.
 
 ## Instalación y confianza
 
-Instalá Operator y Agent con `molejoctl platform runtime install` y ejecutá
-`molejoctl platform control-plane install`. Una instalación nueva crea raíces ECDSA P-256
-separadas: `molejo-agent-ca` firma identidades cliente de Agents y
-`molejo-control-plane-server-ca` firma la identidad interna de API/gRPC. Las
-instalaciones alfa anteriores que usan una sola CA no tienen una ruta de
-actualización soportada; guardá los datos necesarios y reinstalá el alfa deseado.
+Instalá Operator y Agent con `molejoctl platform runtime install` y después
+ejecutá `molejoctl platform control-plane install`. Una instalación nueva crea
+raíces de confianza ECDSA P-256 separadas:
+
+- `molejo-agent-ca` firma identidades cliente del Agent;
+- `molejo-control-plane-server-ca` firma la identidad interna del servidor API/gRPC.
+
+La separación impide que una clave de firma del servidor robada emita identidades
+del Agent. Las instalaciones alfa anteriores que usan una sola CA no tienen una
+ruta de actualización soportada; guardá los datos necesarios y reinstalá el alfa
+deseado.
 
 El ServiceAccount del Agent tiene acceso limitado a sus dos Secrets de identidad
-y a los recursos Kubernetes requeridos por el contrato de runtime. No puede
-listar Secrets arbitrarios. Los Secrets de configuración se gestionan por nombres
-determinísticos derivados de ConfigMaps pertenecientes a Molejo.
+nombrados y a los recursos Kubernetes requeridos por el contrato de runtime. No
+puede listar Secrets arbitrarios. Los Secrets de configuración de runtime se
+seleccionan y administran únicamente mediante nombres determinísticos derivados
+de ConfigMaps pertenecientes a Molejo.
 
-## Identidad, enrollment y rotación
+## Identidad del clúster y enrollment
 
-Cluster es un registro durable; sus credenciales son registros hijos rotativos.
-Un administrador crea el Cluster con `POST /api/v1/admin/clusters` y transfiere
-el token de un solo uso, válido por diez minutos, a
-`molejo-agent-enrollment`. La clave privada nunca sale del cluster y repetir el
-mismo intento y CSR es idempotente.
+Un `Cluster` es un registro durable del Control Plane. Sus credenciales son
+registros hijos rotativos, no la identidad del propio Cluster. Un administrador
+de la instalación crea un Cluster con `POST /api/v1/admin/clusters` y transfiere
+el token devuelto, de un solo uso y válido durante diez minutos, a
+`molejo-agent-enrollment` sin colocarlo en Git, el historial del shell, logs ni
+chats.
 
-Los certificados cliente duran siete días y se renuevan automáticamente en las
-últimas 24 horas. La renovación persiste una clave, un CSR y un ID de intento
-nuevos antes de la solicitud autenticada. La credencial anterior permanece
-válida durante una hora para tolerar interrupciones. El certificado nuevo y la
-eliminación del intento se persisten atómicamente. Revocar el Cluster invalida
-todas sus credenciales y falla sus operaciones pendientes o arrendadas.
+El Agent persiste su clave, CSR e ID de intento antes del enrollment. Repetir el
+mismo intento y CSR es idempotente. La clave privada nunca sale del clúster.
+Después de validar el certificado firmado, URI SAN, raíces de confianza y
+vencimiento, el Agent elimina el token de enrollment y abre su stream saliente.
 
-Reemplazar una raíz de confianza es una operación explícita en dos fases. Antes,
-guardá un backup cifrado de PostgreSQL y de los Secrets `molejo-agent-ca`,
-`molejo-control-plane-server-ca` y `molejo-agent-server-tls`, nunca en Git. Una
-CA perdida se restaura; no se reemplaza debajo de una instalación activa.
+Los certificados cliente duran siete días y se renuevan automáticamente durante
+las últimas 24 horas. La renovación crea y persiste una clave y un CSR nuevos
+antes de realizar la solicitud autenticada. La credencial anterior continúa
+válida durante una superposición de una hora para que una rotación interrumpida
+pueda converger de forma segura. Repetir el mismo intento de renovación devuelve
+la misma credencial; el certificado nuevo y la eliminación del intento de
+renovación se persisten atómicamente. Revocar un Cluster invalida todas sus
+credenciales y marca como fallidas sus operaciones en cola o arrendadas.
 
-Durante la transición, cada bundle contiene primero la raíz nueva y después la
-anterior, y la clave activa ya corresponde a la nueva. El servidor acepta
-certificados cliente de ambas raíces, pero emite sólo con la nueva. Inicialmente
-se conserva el certificado servidor anterior. El hello anuncia un
-`trustBundleId`; una divergencia fuerza la renovación inmediata y el Agent sólo
-confirma el ID luego de persistir atómicamente y reconectar.
+El reemplazo de una raíz de confianza es una operación explícita de dos fases.
+Antes, creá un backup cifrado de PostgreSQL y de los Secrets `molejo-agent-ca`,
+`molejo-control-plane-server-ca` y `molejo-agent-server-tls`; nunca confirmes esos
+backups en Git. Restaurá una CA perdida en vez de reemplazarla debajo de una
+instalación activa.
 
-El certificado servidor se cambia a la CA nueva sólo cuando todos los Clusters
-`Active` informan el ID objetivo en `GET /api/v1/admin/clusters`. Las raíces
-anteriores se quitan únicamente después de esa confirmación y de la superposición
-de una hora; los Clusters offline fuera del plazo se revocan o recuperan de forma
-explícita. El ID permanece estable al quitar raíces anteriores del final del
-bundle.
+Durante la transición, cada bundle contiene primero la raíz nueva y luego la
+anterior, mientras que la clave activa ya pertenece a la raíz nueva. El servidor
+acepta certificados cliente de cualquiera de las raíces, pero emite únicamente
+desde la nueva. Conservá inicialmente el certificado servidor anterior; las
+respuestas de enrollment y renovación distribuyen ambos bundles. El hello anuncia
+un `trustBundleId`. Una diferencia fuerza la renovación inmediata del Agent, la
+persistencia atómica del certificado, la clave y los bundles, y la confirmación
+solo después de reconectar con ese material persistido.
 
-## Protocolo y reconciliación
+Cambiá el certificado servidor a la CA nueva solamente después de que todos los
+Clusters `Active` informen el `trustBundleId` objetivo mediante
+`GET /api/v1/admin/clusters`. Eliminá las raíces antiguas únicamente después de
+esa confirmación y de que transcurra la superposición de credenciales de una hora;
+los Clusters sin conexión más allá del plazo operacional deben revocarse o
+recuperarse explícitamente. El ID se deriva de las raíces activas y permanece
+estable cuando se eliminan las raíces antiguas finales. Una ejecución idempotente
+de `molejoctl platform control-plane install` continúa renovando únicamente el
+certificado servidor y conserva las raíces configuradas.
 
-El hello negocia versión y capacidades, establece la sesión autoritativa e
-informa la diferencia de reloj. Cada comando contiene versión de schema, versión
-deseada, fencing token persistido y deadline limitado por el lease. El Agent rechaza comandos
-incompatibles, inválidos o vencidos; el control plane acepta el resultado sólo
-mientras el lease y el fencing token en PostgreSQL sean válidos.
+## Protocolo de runtime y reconciliación
 
-Los heartbeats pueden incluir un snapshot completo de observaciones de
-`AppDeployment` y `AppVolume` pertenecientes a Molejo con estado, versión deseada
-y SHA-256 canónico del `spec`, sin configuración abierta ni valores de Secrets.
-El control plane reutiliza operaciones durables cuando falta un objeto o diverge
-cualquier parte de su `spec`, incluidos réplicas, recursos, puertos, probes,
-exposición y volúmenes. El Platform Operator continúa siendo responsable de la
-convergencia Kubernetes.
+La negociación hello declara versiones y capabilities del protocolo, establece
+la sesión autoritativa e informa el desfase del reloj. Los comandos incluyen una
+versión de schema del payload, versión deseada, fencing token de la base de datos
+y un deadline limitado por el lease de la operación.
+El Agent rechaza comandos incompatibles, malformados o vencidos. El Control Plane
+acepta un resultado únicamente mientras el lease PostgreSQL y el fencing token
+correspondientes sigan siendo autoritativos; la memoria del proceso no forma
+parte de la corrección.
+
+Cada heartbeat puede incluir un snapshot completo de observaciones de
+`AppDeployment` y `AppVolume` pertenecientes a Molejo. Contiene status, versión
+deseada y un SHA-256 canónico del `spec`, nunca configuración abierta ni valores
+de Secrets. El Control Plane reutiliza operaciones durables cuando falta un
+objeto o cualquier parte de su `spec` diverge, incluidas réplicas, recursos,
+puertos, probes, exposición y volúmenes. El Platform Operator sigue siendo
+responsable de la convergencia de cada CR en Kubernetes.
 Los heartbeats de sesiones reemplazadas y las secuencias repetidas o regresivas
-se rechazan antes de cambiar el estado observado.
+se rechazan antes de modificar el estado observado.
 
-El destino es explícito mediante un vínculo Workspace-to-Cluster. Cada
-AppEnvironment conserva su Cluster, por lo que agregar otro no mueve workloads
-existentes ni depende de un Agent global predeterminado.
-La revocación preserva workloads e historial, marca bindings como `Failed` y
-AppEnvironments como `Unknown`. El mismo UID Kubernetes puede registrarse de
-nuevo sólo después de revocar el registro anterior.
+El placement del Workspace es explícito mediante un Binding entre Workspace y
+Cluster. Un AppEnvironment registra su Cluster objetivo, por lo que agregar un
+segundo Cluster no cambia workloads existentes ni depende de un Agent global
+predeterminado. La revocación conserva workloads e historial, marca los Bindings
+como `Failed` y los AppEnvironments como `Unknown`. El mismo UID de Kubernetes
+solo puede inscribirse en un nuevo registro Cluster después de revocar el
+registro anterior.
 
 ## Salud y recuperación
 
-`/healthz`, `/readyz` y `/status` exponen salud y estado sin material de
-identidad. Interrupciones de red vuelven a un backoff limitado. Una renovación
-interrumpida reutiliza el intento persistido; un nuevo enrollment se reserva
-para identidades ausentes, vencidas o revocadas.
+`/healthz` informa la salud del proceso. `/readyz` está disponible en
+`Unconfigured`, `Unpaired`, `Enrolling`, `Connecting` y `Paired`, y no está
+disponible en `Initializing`, `Stopping` o `Failed`. `/status` expone el estado
+sin material de identidad. Una interrupción de red vuelve a un backoff limitado.
+La renovación de un certificado se reintenta con su intento persistido; un nuevo
+enrollment se reserva para una identidad ausente, vencida o revocada por un
+administrador.
