@@ -71,7 +71,7 @@ export function EnvironmentAppLayout({
         <PageHeader
           eyebrow={target.environmentName}
           title={target.appName}
-          description={`${target.workloadKind} · ${target.branch} · configuração desejada v${target.configurationVersion}`}
+          description={`${target.workloadKind} · ${target.branch || "imagem existente"} · configuração desejada v${target.configurationVersion}`}
           breadcrumbs={[
             {
               label: "Environment",

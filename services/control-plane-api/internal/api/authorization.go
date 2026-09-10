@@ -110,7 +110,7 @@ func (h *generatedHandler) authorizeWorkspacePermission(w http.ResponseWriter, r
 }
 
 func mutationPermission(r *http.Request) authorization.Permission {
-	if r.Method == http.MethodPost && (strings.Contains(r.URL.Path, "/builds") || strings.Contains(r.URL.Path, "/deployments")) {
+	if r.Method == http.MethodPost && (strings.Contains(r.URL.Path, "/builds") || strings.Contains(r.URL.Path, "/deployments") || strings.Contains(r.URL.Path, "/releases")) {
 		return authorization.Deploy
 	}
 	return authorization.EditResources

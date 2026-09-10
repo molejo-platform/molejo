@@ -129,3 +129,40 @@ func TestAutomationAPIRegistersAndDeploysExternalRelease(t *testing.T) {
 		t.Fatalf("replacement token status=%d body=%s", response.Code, response.Body.String())
 	}
 }
+
+func TestSessionAPIRegistersExternalRelease(t *testing.T) {
+	ctx := context.Background()
+	storage, workspaceID, ownerID, _ := newExecutorIntegrationFixture(t)
+	workspace, err := storage.Workspace(ctx, workspaceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	project, err := storage.CreateProject(ctx, workspaceID, mustAPIID(t, "prj"), "Platform", "platform")
+	if err != nil {
+		t.Fatal(err)
+	}
+	app, err := storage.CreateApp(ctx, workspaceID, project.PublicID, mustAPIID(t, "app"), "Testkit", "testkit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := DefaultConfig()
+	config.PublicURL = "https://console.example"
+	config.AllowedOrigin = "https://console.example"
+	config.AllowedHosts = []string{"console.example"}
+	config.AllowedRegistries = []string{"ghcr.io"}
+	server := NewServer(config, Dependencies{Store: storage})
+	owner := createAPISession(t, storage, ownerID, "release-owner-session", "release-owner-csrf")
+	base := "/api/v1/workspaces/" + workspace.PublicID + "/projects/" + project.PublicID + "/apps/" + app.PublicID
+	image := "ghcr.io/molejo-platform/testkit@sha256:" + strings.Repeat("a", 64)
+	body := `{"artifact":{"kind":"OCIImage","reference":"` + image + `"},"source":{"provider":"OCIRegistry","repository":"ghcr.io/molejo-platform/testkit","revision":"sha256:` + strings.Repeat("a", 64) + `"},"provenance":{"producer":"MolejoConsole"}}`
+
+	response := hierarchyRequest(t, server, owner, http.MethodPost, base+"/releases", body, map[string]string{"Idempotency-Key": "manual-release-123"})
+	if response.Code != http.StatusCreated {
+		t.Fatalf("register release status=%d body=%s", response.Code, response.Body.String())
+	}
+	var registered domain.Release
+	decodeResponse(t, response, &registered)
+	if registered.Image != image || registered.CreatedBy.Kind != "User" {
+		t.Fatalf("registered=%+v", registered)
+	}
+}

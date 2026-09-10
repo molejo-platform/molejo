@@ -143,7 +143,7 @@ export function EnvironmentAppsPage() {
                   </div>
                   <div>
                     <h3>{target.appName}</h3>
-                    <p>{target.branch}</p>
+                    <p>{target.branch || "Imagem existente"}</p>
                   </div>
                   <dl>
                     <div>
@@ -214,7 +214,7 @@ function TargetOverview({ target }: { target: AppEnvironment }) {
           </div>
           <div>
             <dt>Branch de build</dt>
-            <dd className="mono">{target.branch}</dd>
+            <dd className="mono">{target.branch || "Não configurada"}</dd>
           </div>
           <div>
             <dt>Endereços públicos</dt>
@@ -268,7 +268,9 @@ function TargetBuilds({
   const capabilities = useEffectiveCapabilities(params.workspaceId, "AppEnvironment", target.id);
   const availability = useFeatureAvailability(params.workspaceId, "AppEnvironment", target.id);
   const managedBuild = findFeature(availability.data, featureIds.buildManaged);
-  const canMutate = capabilities.data?.deploy === true && canUseFeature(managedBuild);
+  const sourceGitHub = findFeature(availability.data, featureIds.sourceGitHub);
+  const managedBuildUsable = canUseFeature(managedBuild) && canUseFeature(sourceGitHub);
+  const canMutate = capabilities.data?.deploy === true && managedBuildUsable && Boolean(target.branch);
   const builds = useQuery({
     queryKey: deliveryKeys.builds(params.workspaceId, params.projectId, target.appId),
     queryFn: ({ signal }) => listAppBuilds(params.workspaceId, params.projectId, target.appId, signal),
@@ -278,6 +280,7 @@ function TargetBuilds({
   const source = useQuery({
     queryKey: applicationKeys.source(params.workspaceId, params.projectId, target.appId),
     queryFn: () => getAppSource(params.workspaceId, params.projectId, target.appId),
+    enabled: managedBuildUsable,
   });
   const items = builds.data?.items.filter((build) => build.appEnvironmentId === target.id) ?? [];
   const active = items.some((build) => build.status === "Pending" || build.status === "Running");
@@ -297,7 +300,11 @@ function TargetBuilds({
         <div>
           <p className="eyebrow">Pipeline</p>
           <h2>Builds de {target.environmentName}</h2>
-          <p className="muted">Cada build resolve um SHA da branch {target.branch}.</p>
+          <p className="muted">
+            {target.branch
+              ? `Cada build resolve um SHA da branch ${target.branch}.`
+              : "Configure uma fonte e uma branch somente se quiser usar builds gerenciados."}
+          </p>
         </div>
         {canMutate && (
           <Button
@@ -311,14 +318,14 @@ function TargetBuilds({
         )}
       </div>
       {error && <Alert>{userFacingError(error)}</Alert>}
-      {!canUseFeature(managedBuild) && (
+      {!managedBuildUsable && (
         <FeatureAvailabilityNotice
-          feature={managedBuild}
+          feature={!canUseFeature(sourceGitHub) ? sourceGitHub : managedBuild}
           pending={availability.isPending}
           title="Build gerenciado indisponível"
         />
       )}
-      {!source.isPending && !source.data?.source && (
+      {managedBuildUsable && !source.isPending && !source.data?.source && (
         <Alert tone="warning">
           Configure a fonte do App antes de iniciar um build.{" "}
           <Link
@@ -328,6 +335,9 @@ function TargetBuilds({
             Configurar fonte
           </Link>
         </Alert>
+      )}
+      {managedBuildUsable && source.data?.source && !target.branch && (
+        <Alert tone="warning">Configure uma branch neste Environment antes de iniciar um build gerenciado.</Alert>
       )}
       {builds.isPending ? (
         <p className="muted" role="status">
@@ -363,7 +373,11 @@ function TargetBuilds({
       ) : (
         <EmptyState
           title="Nenhum build neste Environment"
-          description="Inicie um build para produzir uma release a partir da branch configurada."
+          description={
+            managedBuildUsable
+              ? "Configure fonte e branch para produzir uma Release, ou registre uma imagem OCI existente no App."
+              : "O build gerenciado não está configurado. Você ainda pode registrar uma imagem OCI existente no App."
+          }
         />
       )}
     </section>
@@ -516,11 +530,8 @@ function TargetDeployments({
     queryFn: ({ signal }) => listAppReleases(params.workspaceId, params.projectId, target.appId, signal),
   });
   const availableReleases = useMemo(
-    () =>
-      releases.data?.items.filter(
-        (release) => release.appEnvironmentId === target.id && release.availabilityStatus === "Available",
-      ) ?? [],
-    [releases.data?.items, target.id],
+    () => releases.data?.items.filter((release) => release.availabilityStatus === "Available") ?? [],
+    [releases.data?.items],
   );
   const revisions = useQuery({
     queryKey: runtimeConfigurationKeys.versions(params.workspaceId, params.projectId, target.appId, target.id),
@@ -613,7 +624,22 @@ function TargetDeployments({
           title="Implantação indisponível"
         />
       )}
-      {canMutate && (
+      {!releases.isPending && !availableReleases.length && (
+        <EmptyState
+          title="Nenhuma Release disponível"
+          description="Registre uma imagem OCI existente nas Releases do App antes de implantar."
+          action={
+            <Link
+              className="button-link primary"
+              to="/workspaces/$workspaceId/projects/$projectId/apps/$appId/releases"
+              params={{ workspaceId: params.workspaceId, projectId: params.projectId, appId: target.appId }}
+            >
+              Registrar imagem
+            </Link>
+          }
+        />
+      )}
+      {canMutate && availableReleases.length > 0 && (
         <form
           className="panel stack"
           onSubmit={(event) => {

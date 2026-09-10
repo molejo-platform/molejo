@@ -26,7 +26,6 @@ export function validateApplicationStep(draft: ApplicationSetupDraft, validateNa
     const message = validateName(draft.name);
     if (message) errors["setup-name"] = message;
   }
-  if (!draft.branch.trim()) errors["setup-branch"] = "Informe a branch usada neste Environment.";
   return errors;
 }
 
@@ -68,7 +67,7 @@ export function applicationSetupInput(
     app: draft.mode === "new" ? { mode: "New", name: normalizedName } : { mode: "Existing", id: draft.appId },
     environmentId,
     clusterId: draft.clusterId,
-    branch: draft.branch.trim(),
+    ...(draft.branch.trim() ? { branch: draft.branch.trim() } : {}),
     workloadKind: draft.workloadKind,
     configuration,
     ...(draft.workloadKind === "Stateful"

@@ -196,7 +196,7 @@ export function RuntimeStatusStrip({ target }: { target: AppEnvironment }) {
           value={target.currentConfigurationVersion ? `v${target.currentConfigurationVersion}` : "—"}
           detail={configurationSynced ? "em execução" : `v${target.configurationVersion} aguardando implantação`}
         />
-        <Score label="Release" value={target.currentReleaseId ?? "—"} detail={target.branch} />
+        <Score label="Release" value={target.currentReleaseId ?? "—"} detail={target.branch || "Imagem existente"} />
       </dl>
     </section>
   );

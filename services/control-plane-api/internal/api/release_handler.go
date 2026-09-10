@@ -9,12 +9,25 @@ import (
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/auth"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/automation"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/domain"
+	"github.com/molejo-platform/molejo/services/control-plane-api/internal/principal"
 	releasecontract "github.com/molejo-platform/molejo/services/control-plane-api/internal/release"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/store"
 )
 
 func (h *generatedHandler) RegisterAppRelease(w http.ResponseWriter, r *http.Request, workspaceID generated.WorkspaceId, projectID generated.ProjectId, appID generated.AppId, _ generated.RegisterAppReleaseParams) {
-	actor, workspace, ok := h.authorizeAutomation(w, r, string(workspaceID), string(projectID), string(appID), "", automation.PermissionReleaseWrite)
+	var actor principal.Principal
+	var actorUserID int64
+	var workspace domain.Workspace
+	var ok bool
+	isAutomation := usesAutomationAuthentication(r)
+	if isAutomation {
+		actor, workspace, ok = h.authorizeAutomation(w, r, string(workspaceID), string(projectID), string(appID), "", automation.PermissionReleaseWrite)
+	} else {
+		user, authorizedWorkspace, authorized := h.authorizeWorkspace(w, r, string(workspaceID), true)
+		if authorized {
+			actorUserID, workspace, ok = user.ID, authorizedWorkspace, true
+		}
+	}
 	if !ok {
 		return
 	}
@@ -43,7 +56,7 @@ func (h *generatedHandler) RegisterAppRelease(w http.ResponseWriter, r *http.Req
 			break
 		}
 		event := h.server.auditEvent(r, "release.register", "Release", releaseID, audit.Succeeded)
-		item, replay, err := h.server.store.RegisterExternalRelease(r.Context(), actor, store.RegisterExternalReleaseParams{
+		params := store.RegisterExternalReleaseParams{
 			WorkspaceID:     workspace.ID,
 			ProjectPublicID: string(projectID),
 			AppPublicID:     string(appID),
@@ -52,12 +65,23 @@ func (h *generatedHandler) RegisterAppRelease(w http.ResponseWriter, r *http.Req
 			IdempotencyHash: auth.HashToken(idempotencyKey),
 			PayloadHash:     scopedRequestPayloadHash(r, payloadHash),
 			AuditEvent:      event,
-		})
+		}
+		var item domain.Release
+		var replay bool
+		if isAutomation {
+			item, replay, err = h.server.store.RegisterExternalRelease(r.Context(), actor, params)
+		} else {
+			item, replay, err = h.server.store.RegisterExternalReleaseForUser(r.Context(), actorUserID, params)
+		}
 		if errors.Is(err, store.ErrPublicIDCollision) {
 			continue
 		}
 		if err != nil {
-			writeAutomationError(w, r, err)
+			if isAutomation {
+				writeAutomationError(w, r, err)
+			} else {
+				writeReleaseRegistrationError(w, r, err)
+			}
 			return
 		}
 		status := http.StatusCreated
@@ -68,6 +92,17 @@ func (h *generatedHandler) RegisterAppRelease(w http.ResponseWriter, r *http.Req
 		return
 	}
 	writeError(w, http.StatusServiceUnavailable, "id_generation_failed", "could not allocate a Release identifier", r)
+}
+
+func writeReleaseRegistrationError(w http.ResponseWriter, r *http.Request, err error) {
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		writeError(w, http.StatusNotFound, "resource_not_found", "resource was not found", r)
+	case errors.Is(err, store.ErrIdempotencyConflict):
+		writeError(w, http.StatusConflict, "idempotency_conflict", "idempotency key was already used with a different request", r)
+	default:
+		writeError(w, http.StatusInternalServerError, "storage_failed", "release could not be registered", r)
+	}
 }
 
 func (h *generatedHandler) ListAppReleases(w http.ResponseWriter, r *http.Request, workspaceID generated.WorkspaceId, projectID generated.ProjectId, appID generated.AppId, params generated.ListAppReleasesParams) {

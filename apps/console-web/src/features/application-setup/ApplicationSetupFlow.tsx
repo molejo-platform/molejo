@@ -47,7 +47,6 @@ import {
 const violationFields: Record<string, string> = {
   "/app/id": "setup-app",
   "/app/name": "setup-name",
-  "/branch": "setup-branch",
   "/clusterId": "setup-cluster",
   "/workloadKind": "setup-workload",
 };
@@ -55,7 +54,6 @@ const violationFields: Record<string, string> = {
 const draftErrorFields: Partial<Record<keyof ApplicationSetupDraft, string>> = {
   appId: "setup-app",
   name: "setup-name",
-  branch: "setup-branch",
   clusterId: "setup-cluster",
   workloadKind: "setup-workload",
   storageProfileId: "setup-storage-profile",
@@ -84,7 +82,7 @@ export function ApplicationSetupFlow({
       mode: availableApps.length ? "existing" : "new",
       appId: availableApps[0]?.id ?? "",
       name: "",
-      branch: "main",
+      branch: "",
       clusterId: "",
       workloadKind: "Stateless",
       storageProfileId: "",
@@ -235,7 +233,7 @@ export function ApplicationSetupFlow({
       <FormErrorSummary errors={formErrors} />
       {step === 1 && (
         <fieldset className="form-section">
-          <legend>Aplicação e fonte</legend>
+          <legend>Aplicação</legend>
           <p className="muted field-group-description">Escolha um App do catálogo ou crie um novo.</p>
           <div className="choice-grid">
             <Button
@@ -283,16 +281,6 @@ export function ApplicationSetupFlow({
               required
             />
           )}
-          <Field
-            id="setup-branch"
-            label="Branch"
-            helper="Esta branch será construída para este Environment."
-            value={draft.branch}
-            onChange={(event) => set("branch", event.target.value)}
-            error={errors["setup-branch"]}
-            maxLength={255}
-            required
-          />
         </fieldset>
       )}
       {step === 2 && (

@@ -85,9 +85,12 @@ export function AppSourcePage() {
       {(appName) => (
         <section className="panel stack">
           <div>
-            <p className="eyebrow">Repositório</p>
-            <h2>Fonte do App</h2>
-            <p className="muted">O App seleciona um repositório. Cada App Environment define sua própria branch.</p>
+            <p className="eyebrow">Integração opcional</p>
+            <h2>GitHub</h2>
+            <p className="muted">
+              Conecte um repositório somente quando quiser construir a aplicação a partir do código-fonte. Imagens OCI
+              existentes podem ser registradas diretamente em Releases.
+            </p>
           </div>
           {error && <Alert>{userFacingError(error)}</Alert>}
           {source.data?.source && (
@@ -162,8 +165,8 @@ export function AppSourcePage() {
             </div>
           ) : (
             <EmptyState
-              title="Conecte o GitHub primeiro"
-              description="Este Workspace ainda não possui uma instalação GitHub autorizada."
+              title="Nenhuma instalação GitHub autorizada"
+              description="Esta integração é opcional. Autorize uma GitHub App apenas para selecionar repositórios e usar builds gerenciados."
               action={
                 <Link
                   className="button-link primary"

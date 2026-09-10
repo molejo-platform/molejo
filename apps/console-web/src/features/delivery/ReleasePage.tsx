@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 
 import { userFacingError } from "../../shared/api/errors";
 import type { AppEnvironment, Release } from "../../shared/api/types";
@@ -40,7 +41,7 @@ function TargetReleases({
     queryKey: deliveryKeys.releases(params.workspaceId, params.projectId, target.appId),
     queryFn: ({ signal }) => listAppReleases(params.workspaceId, params.projectId, target.appId, signal),
   });
-  const items = releases.data?.items.filter((release) => release.appEnvironmentId === target.id) ?? [];
+  const items = releases.data?.items ?? [];
   const rebuild = useMutation({
     mutationFn: (commitSha: string) =>
       createAppBuild(params.workspaceId, params.projectId, target.appId, { appEnvironmentId: target.id, commitSha }),
@@ -65,9 +66,7 @@ function TargetReleases({
       <div>
         <p className="eyebrow">Artefatos</p>
         <h2>Releases</h2>
-        <p className="muted">
-          Este App no Environment mantém até três imagens disponíveis; o histórico permanece visível para reconstrução.
-        </p>
+        <p className="muted">Releases pertencem ao App e podem ser selecionadas neste ou em outro Environment.</p>
       </div>
       {rebuild.isSuccess && <Alert tone="success">Reconstrução enfileirada para este commit.</Alert>}
       {releases.isPending ? (
@@ -87,7 +86,7 @@ function TargetReleases({
                 </small>
               </span>
               <span className="row-action">
-                {release.availabilityStatus === "Expired" && canMutate ? (
+                {release.availabilityStatus === "Expired" && release.origin === "ManagedBuild" && canMutate ? (
                   <Button
                     type="button"
                     variant="secondary"
@@ -113,7 +112,16 @@ function TargetReleases({
       ) : (
         <EmptyState
           title="Nenhuma release"
-          description="Um build bem-sucedido criará o primeiro artefato implantável."
+          description="Registre uma imagem OCI existente no App ou use um build gerenciado."
+          action={
+            <Link
+              className="button-link primary"
+              to="/workspaces/$workspaceId/projects/$projectId/apps/$appId/releases"
+              params={{ workspaceId: params.workspaceId, projectId: params.projectId, appId: target.appId }}
+            >
+              Abrir Releases do App
+            </Link>
+          }
         />
       )}
     </section>

@@ -105,7 +105,7 @@ export function OverviewPage() {
           <p className="eyebrow">Primeiros passos</p>
           <h2>Prepare o primeiro App</h2>
           <p className="muted">
-            Comece pela estrutura do produto. Fonte, builds e releases ficam contextualizados dentro de cada App.
+            Comece pela estrutura do produto. Use uma imagem OCI existente ou conecte uma fonte e um provider de build.
           </p>
         </div>
         <ol className="task-list">

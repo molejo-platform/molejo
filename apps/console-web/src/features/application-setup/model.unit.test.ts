@@ -28,11 +28,16 @@ describe("application setup model", () => {
   it("validates each step without transport dependencies", () => {
     expect(validateApplicationStep({ ...draft(), name: "", branch: "" }, () => "Informe um nome.")).toEqual({
       "setup-name": "Informe um nome.",
-      "setup-branch": "Informe a branch usada neste Environment.",
     });
     expect(validateRuntimeStep({ ...draft(), clusterId: "" }, undefined)).toEqual({
       "setup-cluster": "Selecione um cluster pronto.",
     });
+  });
+
+  it("omits source branch when the App starts from an existing image", () => {
+    expect(applicationSetupInput({ ...draft(), branch: "" }, "env-production", [], "console")).not.toHaveProperty(
+      "branch",
+    );
   });
 
   it("builds one atomic Stateful request", () => {

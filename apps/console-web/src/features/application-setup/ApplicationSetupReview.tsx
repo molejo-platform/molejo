@@ -18,8 +18,12 @@ export function ApplicationSetupReview({
       <dl>
         <dt>App</dt>
         <dd>{appName}</dd>
-        <dt>Branch</dt>
-        <dd className="mono">{draft.branch}</dd>
+        {draft.branch && (
+          <>
+            <dt>Branch</dt>
+            <dd className="mono">{draft.branch}</dd>
+          </>
+        )}
         <dt>Cluster</dt>
         <dd>{clusterName}</dd>
         <dt>Execução</dt>

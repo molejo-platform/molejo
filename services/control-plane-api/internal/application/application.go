@@ -681,7 +681,7 @@ func bootstrap() error {
 			return fmt.Errorf("configure at least one MOLEJO_*_PASSWORD_HASH")
 		}
 		ctx := context.Background()
-		if err := s.Bootstrap(ctx, domain.Workspace{PublicID: workspaceID, Name: "Beta Workspace", Namespace: env("MOLEJO_WORKSPACE_NAMESPACE", "molejo-workspaces")}, actors); err != nil {
+		if err := s.Bootstrap(ctx, bootstrapWorkspace(workspaceID), actors); err != nil {
 			return err
 		}
 		installationID := strings.TrimSpace(os.Getenv("MOLEJO_AGENT_INSTALLATION_ID"))
@@ -698,4 +698,8 @@ func bootstrap() error {
 		}
 		return s.EnsureBootstrapAgentInstallation(ctx, installationID, env("MOLEJO_AGENT_INSTALLATION_NAME", "Local cluster"), tokenHash, time.Now().UTC().Add(30*time.Minute))
 	})
+}
+
+func bootstrapWorkspace(workspaceID string) domain.Workspace {
+	return domain.Workspace{PublicID: workspaceID, Name: "Beta Workspace", Namespace: workspaceID}
 }

@@ -329,14 +329,16 @@ func (h *generatedHandler) appEnvironmentInput(w http.ResponseWriter, r *http.Re
 			return appEnvironmentInput{}, false
 		}
 	}
-	branch, err := domain.NormalizeSourceBranch(input.Branch)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "branch_invalid", err.Error(), r)
-		return appEnvironmentInput{}, false
+	if input.Branch != "" {
+		branch, err := domain.NormalizeSourceBranch(input.Branch)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "branch_invalid", err.Error(), r)
+			return appEnvironmentInput{}, false
+		}
+		input.Branch = branch
 	}
-	input.Branch = branch
 	input.Configuration = domain.NormalizeRuntimeConfig(input.Configuration)
-	if err = domain.ValidateRuntimeConfig(input.Configuration, h.server.config.MaxReplicas, h.server.config.MaxCPU, h.server.config.MaxMemory); err != nil {
+	if err := domain.ValidateRuntimeConfig(input.Configuration, h.server.config.MaxReplicas, h.server.config.MaxCPU, h.server.config.MaxMemory); err != nil {
 		writeError(w, http.StatusBadRequest, "configuration_invalid", err.Error(), r)
 		return appEnvironmentInput{}, false
 	}

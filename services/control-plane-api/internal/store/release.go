@@ -41,6 +41,19 @@ type RegisterExternalReleaseParams struct {
 }
 
 func (s *Store) RegisterExternalRelease(ctx context.Context, actor principal.Principal, params RegisterExternalReleaseParams) (domain.Release, bool, error) {
+	return s.registerExternalRelease(ctx, actor, true, params)
+}
+
+func (s *Store) RegisterExternalReleaseForUser(ctx context.Context, userID int64, params RegisterExternalReleaseParams) (domain.Release, bool, error) {
+	actor, err := s.principalForUser(ctx, userID)
+	if err != nil {
+		return domain.Release{}, false, err
+	}
+	params.AuditEvent.ActorUserID = &userID
+	return s.registerExternalRelease(ctx, actor, false, params)
+}
+
+func (s *Store) registerExternalRelease(ctx context.Context, actor principal.Principal, enforceAutomationScope bool, params RegisterExternalReleaseParams) (domain.Release, bool, error) {
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return domain.Release{}, false, err
@@ -61,7 +74,7 @@ func (s *Store) RegisterExternalRelease(ctx context.Context, actor principal.Pri
 	if err != nil {
 		return domain.Release{}, false, err
 	}
-	if actor.WorkspaceID != params.WorkspaceID || actor.ProjectID != projectID || actor.AppID != appID {
+	if enforceAutomationScope && (actor.WorkspaceID != params.WorkspaceID || actor.ProjectID != projectID || actor.AppID != appID) {
 		return domain.Release{}, false, ErrAutomationAuthorization
 	}
 

@@ -1736,7 +1736,7 @@ type AppEnvironmentWorkloadKind string
 
 // AppEnvironmentCreateInput defines model for AppEnvironmentCreateInput.
 type AppEnvironmentCreateInput struct {
-	Branch        string                                `json:"branch"`
+	Branch        *string                               `json:"branch,omitempty"`
 	ClusterId     string                                `json:"clusterId"`
 	Configuration RuntimeConfiguration                  `json:"configuration"`
 	EnvironmentId string                                `json:"environmentId"`
@@ -1749,7 +1749,7 @@ type AppEnvironmentCreateInputWorkloadKind string
 
 // AppEnvironmentInput defines model for AppEnvironmentInput.
 type AppEnvironmentInput struct {
-	Branch        string               `json:"branch"`
+	Branch        *string              `json:"branch,omitempty"`
 	Configuration RuntimeConfiguration `json:"configuration"`
 }
 
@@ -1772,7 +1772,7 @@ type AppEnvironmentSetupAppMode string
 // AppEnvironmentSetupInput defines model for AppEnvironmentSetupInput.
 type AppEnvironmentSetupInput struct {
 	App           AppEnvironmentSetupApp               `json:"app"`
-	Branch        string                               `json:"branch"`
+	Branch        *string                              `json:"branch,omitempty"`
 	ClusterId     string                               `json:"clusterId"`
 	Configuration RuntimeConfiguration                 `json:"configuration"`
 	EnvironmentId string                               `json:"environmentId"`

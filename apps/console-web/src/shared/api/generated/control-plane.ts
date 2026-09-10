@@ -2180,13 +2180,13 @@ export interface components {
             parameters: components["schemas"]["ParameterBinding"][];
         };
         AppEnvironmentInput: {
-            branch: string;
+            branch?: string;
             configuration: components["schemas"]["RuntimeConfiguration"];
         };
         AppEnvironmentCreateInput: {
             environmentId: string;
             clusterId: string;
-            branch: string;
+            branch?: string;
             /** @enum {string} */
             workloadKind: "Stateless" | "Stateful";
             volume?: components["schemas"]["AppVolumeRequest"];
@@ -2202,7 +2202,7 @@ export interface components {
             app: components["schemas"]["AppEnvironmentSetupApp"];
             environmentId: string;
             clusterId: string;
-            branch: string;
+            branch?: string;
             /** @enum {string} */
             workloadKind: "Stateless" | "Stateful";
             volume?: components["schemas"]["AppVolumeRequest"];

@@ -167,6 +167,11 @@ export const workspaceRoutes = [
   }),
   createRoute({
     getParentRoute: () => protectedRoute,
+    path: "/workspaces/$workspaceId/projects/$projectId/apps/$appId/releases",
+    component: lazyRouteComponent(delivery, "AppReleasesPage"),
+  }),
+  createRoute({
+    getParentRoute: () => protectedRoute,
     path: "/workspaces/$workspaceId/projects/$projectId/apps/$appId/automation",
     component: lazyRouteComponent(externalCI, "AppAutomationPage"),
   }),

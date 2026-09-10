@@ -226,10 +226,10 @@ vi.mock("../delivery/public", async (importOriginal) => ({
     items: [
       {
         id: "rel-aaaaaaaaaaaaaaaaaaaa",
-        appEnvironmentId: target.id,
-        branch: "main",
-        commitSha: "5144c84100edfcc6a5447daca1d7f6a34a393364",
-        commitTitle: "Ship delivery automation",
+        origin: "External",
+        sourceRevision: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        image:
+          "ghcr.io/molejo-platform/testkit@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         availabilityStatus: "Available",
       },
     ],
@@ -325,8 +325,6 @@ describe("Environment-first project experience", () => {
     expect(screen.queryByRole("link", { name: /Worker/ })).toBeNull();
     await user.click(screen.getByRole("button", { name: "Adicionar App" }));
     await user.selectOptions(screen.getByLabelText("App existente"), "app-bbbbbbbbbbbbbbbbbbbb");
-    await user.clear(screen.getByLabelText("Branch"));
-    await user.type(screen.getByLabelText("Branch"), "develop");
     await user.click(screen.getByRole("button", { name: "Continuar" }));
     await user.click(screen.getByText("Ajustar rede, escala e recursos"));
     await user.type(screen.getByLabelText("Variáveis comuns"), "APP_MODE=staging");
@@ -341,7 +339,6 @@ describe("Environment-first project experience", () => {
         expect.objectContaining({
           app: { mode: "Existing", id: "app-bbbbbbbbbbbbbbbbbbbb" },
           environmentId: params.environmentId,
-          branch: "develop",
           configuration: expect.objectContaining({
             variables: [{ name: "APP_MODE", value: "staging" }],
             parameters: [{ name: "API_TOKEN", parameterId: "par-aaaaaaaaaaaaaaaaaaaa", parameterVersion: 2 }],
@@ -357,19 +354,19 @@ describe("Environment-first project experience", () => {
     renderWithQueryClient(<EnvironmentAppsPage />);
 
     await user.click(await screen.findByRole("button", { name: "Adicionar App" }));
-    await user.clear(screen.getByLabelText("Branch"));
+    await user.click(screen.getByRole("button", { name: "Criar novo App" }));
     await user.click(screen.getByRole("button", { name: "Continuar" }));
 
     expect((await screen.findByText("Revise os campos indicados")).parentElement?.textContent).toContain(
-      "Informe a branch usada neste Environment.",
+      "Informe um nome.",
     );
-    const branch = screen.getByLabelText("Branch");
-    expect(branch.getAttribute("aria-invalid")).toBe("true");
-    expect(branch.getAttribute("aria-describedby")).toBe("setup-branch-helper setup-branch-error");
-    const summaryLink = screen.getByRole("link", { name: "Informe a branch usada neste Environment." });
-    expect(summaryLink.getAttribute("href")).toBe("#setup-branch");
+    const name = screen.getByLabelText("Nome do novo App");
+    expect(name.getAttribute("aria-invalid")).toBe("true");
+    expect(name.getAttribute("aria-describedby")).toBe("setup-name-error");
+    const summaryLink = screen.getByRole("link", { name: "Informe um nome." });
+    expect(summaryLink.getAttribute("href")).toBe("#setup-name");
     await user.click(summaryLink);
-    expect(document.activeElement).toBe(branch);
+    expect(document.activeElement).toBe(name);
   });
 
   it("creates a new App and immediately configures it in the active Environment", async () => {

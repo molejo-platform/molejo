@@ -11,6 +11,7 @@ import type {
   DeploymentPreview,
   DeploymentPreviewInput,
   Release,
+  ReleaseRegistrationInput,
 } from "../../shared/api/types";
 
 type ResourceList<T> = { items: T[]; nextCursor: string | null };
@@ -37,6 +38,17 @@ export const listAppReleases = (workspaceId: string, projectId: string, appId: s
   requestAllPages<Release>(`${appBase(workspaceId, projectId, appId)}/releases`, signal) as Promise<
     ResourceList<Release>
   >;
+export const registerAppRelease = (
+  workspaceId: string,
+  projectId: string,
+  appId: string,
+  input: ReleaseRegistrationInput,
+) =>
+  request<Release>(`${appBase(workspaceId, projectId, appId)}/releases`, {
+    method: "POST",
+    headers: { "Idempotency-Key": createIdempotencyKey() },
+    body: JSON.stringify(input),
+  });
 export const listAppEnvironmentDeployments = (
   workspaceId: string,
   projectId: string,

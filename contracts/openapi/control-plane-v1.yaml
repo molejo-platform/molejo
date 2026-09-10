@@ -1349,7 +1349,7 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
     post:
       operationId: registerAppRelease
-      security: [{ automationBearer: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }, { automationBearer: [] }]
       parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
       requestBody:
         required: true
@@ -2851,14 +2851,14 @@ components:
           items: { $ref: '#/components/schemas/ParameterBinding' }
     AppEnvironmentInput:
       type: object
-      required: [branch, configuration]
+      required: [configuration]
       additionalProperties: false
       properties:
         branch: { type: string, minLength: 1, maxLength: 255 }
         configuration: { $ref: '#/components/schemas/RuntimeConfiguration' }
     AppEnvironmentCreateInput:
       type: object
-      required: [environmentId, clusterId, branch, workloadKind, configuration]
+      required: [environmentId, clusterId, workloadKind, configuration]
       additionalProperties: false
       properties:
         environmentId: { type: string, pattern: '^env-[a-z2-7]{20}$' }
@@ -2877,7 +2877,7 @@ components:
         name: { type: string, minLength: 1, maxLength: 80 }
     AppEnvironmentSetupInput:
       type: object
-      required: [app, environmentId, clusterId, branch, workloadKind, configuration]
+      required: [app, environmentId, clusterId, workloadKind, configuration]
       additionalProperties: false
       properties:
         app: { $ref: '#/components/schemas/AppEnvironmentSetupApp' }
@@ -2906,7 +2906,7 @@ components:
         appName: { type: string, minLength: 1, maxLength: 80 }
         environmentId: { type: string, pattern: '^env-[a-z2-7]{20}$' }
         environmentName: { type: string, minLength: 1, maxLength: 80 }
-        branch: { type: string, minLength: 1, maxLength: 255 }
+        branch: { type: string, maxLength: 255 }
         workloadKind: { type: string, enum: [Stateless, Stateful] }
         configuration: { $ref: '#/components/schemas/RuntimeConfiguration' }
         configurationVersion: { type: integer, minimum: 1 }

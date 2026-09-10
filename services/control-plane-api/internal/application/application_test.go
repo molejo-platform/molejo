@@ -37,3 +37,12 @@ func TestGracefulStopGRPCDoesNotWaitForeverForOpenConnection(t *testing.T) {
 		t.Fatal("gRPC Serve did not stop")
 	}
 }
+
+func TestBootstrapWorkspaceUsesItsPublicIDAsNamespace(t *testing.T) {
+	workspaceID := "ws-abcdefghijklmnopqrst"
+	workspace := bootstrapWorkspace(workspaceID)
+
+	if workspace.PublicID != workspaceID || workspace.Namespace != workspaceID {
+		t.Fatalf("bootstrap workspace = %+v", workspace)
+	}
+}

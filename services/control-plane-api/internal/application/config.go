@@ -31,7 +31,6 @@ func loadHTTPConfig() (api.Config, error) {
 	if cfg.PublicTCPMaximumPort, err = int32Env("MOLEJO_PUBLIC_TCP_MAX_PORT", cfg.PublicTCPMaximumPort); err != nil {
 		return api.Config{}, err
 	}
-	cfg.WorkspaceNamespace = env("MOLEJO_WORKSPACE_NAMESPACE", cfg.WorkspaceNamespace)
 	if cfg.MaxReplicas, err = int32Env("MOLEJO_MAX_REPLICAS", cfg.MaxReplicas); err != nil {
 		return api.Config{}, err
 	}

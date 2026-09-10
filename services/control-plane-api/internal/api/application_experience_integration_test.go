@@ -37,7 +37,7 @@ func TestApplicationExperienceCreatesAtomicallyAndExposesWorkspaceFacts(t *testi
 		AppEnvironment domain.AppEnvironment `json:"appEnvironment"`
 	}
 	decodeResponse(t, response, &created)
-	if created.App.Name != "Console API" || created.AppEnvironment.AppPublicID != created.App.PublicID {
+	if created.App.Name != "Console API" || created.AppEnvironment.AppPublicID != created.App.PublicID || created.AppEnvironment.SourceBranch != "" {
 		t.Fatalf("created setup=%+v", created)
 	}
 
@@ -74,5 +74,5 @@ func TestApplicationExperienceCreatesAtomicallyAndExposesWorkspaceFacts(t *testi
 }
 
 func applicationSetupPayload(environmentID, clusterID, name string) string {
-	return fmt.Sprintf(`{"app":{"mode":"New","name":%q},"environmentId":%q,"clusterId":%q,"branch":"main","workloadKind":"Stateless","configuration":{"replicas":1,"ports":[{"name":"http","containerPort":8080,"protocol":"TCP"}],"resources":{"requests":{"cpuMillis":50,"memoryMiB":64},"limits":{"cpuMillis":250,"memoryMiB":128}},"probes":{"startup":{"type":"HTTP","portName":"http","path":"/readyz"},"liveness":{"type":"HTTP","portName":"http","path":"/healthz"},"readiness":{"type":"HTTP","portName":"http","path":"/readyz"}},"publicEndpoints":[],"variables":[],"parameters":[]}}`, name, environmentID, clusterID)
+	return fmt.Sprintf(`{"app":{"mode":"New","name":%q},"environmentId":%q,"clusterId":%q,"workloadKind":"Stateless","configuration":{"replicas":1,"ports":[{"name":"http","containerPort":8080,"protocol":"TCP"}],"resources":{"requests":{"cpuMillis":50,"memoryMiB":64},"limits":{"cpuMillis":250,"memoryMiB":128}},"probes":{"startup":{"type":"HTTP","portName":"http","path":"/readyz"},"liveness":{"type":"HTTP","portName":"http","path":"/healthz"},"readiness":{"type":"HTTP","portName":"http","path":"/readyz"}},"publicEndpoints":[],"variables":[],"parameters":[]}}`, name, environmentID, clusterID)
 }

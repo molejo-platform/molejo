@@ -49,7 +49,7 @@ export function AppOverviewPage() {
               to="/workspaces/$workspaceId/projects/$projectId/apps/$appId/source"
               params={params}
             >
-              <span>Fonte compartilhada</span>
+              <span>GitHub opcional</span>
               <strong className="summary-text">
                 {source.isPending
                   ? "Carregando…"
@@ -59,7 +59,7 @@ export function AppOverviewPage() {
                       ? "Indisponível"
                       : "Não configurada"}
               </strong>
-              <small>Selecionar repositório</small>
+              <small>Conectar código-fonte</small>
             </Link>
             <article className="summary-card static">
               <span>Environments configurados</span>
@@ -71,7 +71,7 @@ export function AppOverviewPage() {
             <div>
               <p className="eyebrow">Uso por Environment</p>
               <h2>Onde este App está configurado</h2>
-              <p className="muted">Branch, runtime, builds e deployments pertencem a cada vínculo abaixo.</p>
+              <p className="muted">Runtime e deployments pertencem a cada vínculo abaixo.</p>
             </div>
             {targets.isPending && !targets.data ? (
               <SkeletonRegion className="data-list" label="Carregando Environments">
@@ -94,7 +94,7 @@ export function AppOverviewPage() {
                   >
                     <span>
                       <strong>{target.environmentName}</strong>
-                      <small>{target.branch}</small>
+                      <small>{target.branch || "Imagem existente"}</small>
                     </span>
                     <span className="row-action">Abrir operação</span>
                   </Link>

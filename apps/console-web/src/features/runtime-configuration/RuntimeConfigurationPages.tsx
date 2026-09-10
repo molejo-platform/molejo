@@ -3,7 +3,7 @@ import { useBlocker, useNavigate } from "@tanstack/react-router";
 import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 
 import { ApiRequestError, userFacingError } from "../../shared/api/errors";
-import type { AppEnvironment, DeliveryPolicy, Parameter, RuntimeConfiguration } from "../../shared/api/types";
+import type { AppEnvironment, Parameter, RuntimeConfiguration } from "../../shared/api/types";
 import { Alert } from "../../shared/ui/Alert";
 import { Button } from "../../shared/ui/Button";
 import { ConfirmAction } from "../../shared/ui/ConfirmAction";
@@ -19,12 +19,19 @@ import {
   updateAppEnvironment,
 } from "../app-environments/public";
 import { useSessionQuery } from "../authentication/public";
-import { deliveryKeys, getAppEnvironmentDeliveryPolicy, replaceAppEnvironmentDeliveryPolicy } from "../delivery/public";
 import { environmentKeys } from "../environments/public";
+import {
+  canUseFeature,
+  FeatureAvailabilityNotice,
+  featureIds,
+  findFeature,
+  useFeatureAvailability,
+} from "../feature-availability/public";
 import { listParameters, parameterKeys } from "../parameters/public";
 import { useOperationTracker } from "../operations/public";
 import { useEffectiveCapabilities } from "../workspace-access/public";
 import { runtimeConfigurationKeys } from "./queries";
+import { DeliveryAutomation } from "./DeliveryAutomation";
 import { ResourceField } from "./ResourceField";
 import { parseRuntimeVariables, runtimeVariablesToText } from "./RuntimeConfigurationForm";
 
@@ -241,7 +248,11 @@ function ConfigurationEditor({
                 Reaplicar minhas alterações
               </Button>
             )}
-            <Button type="submit" loading={save.isPending} disabled={!dirty || !valid || !branch.trim()}>
+            <Button
+              type="submit"
+              loading={save.isPending}
+              disabled={!dirty || !valid || (section === "build" && !branch.trim())}
+            >
               Salvar estado desejado
             </Button>
           </div>
@@ -258,7 +269,8 @@ function mergeInput(latest: AppEnvironment, branch: string, draft: RuntimeConfig
     Object.assign(configuration, { ports: draft.ports, publicEndpoints: draft.publicEndpoints });
   if (section === "health") configuration.probes = draft.probes;
   if (section === "resources") Object.assign(configuration, { replicas: draft.replicas, resources: draft.resources });
-  return { branch: section === "build" ? branch.trim() : latest.branch, configuration };
+  const sourceBranch = section === "build" ? branch.trim() : latest.branch;
+  return { ...(sourceBranch ? { branch: sourceBranch } : {}), configuration };
 }
 
 export const EnvironmentVariablesPage = page(
@@ -826,115 +838,41 @@ function BuildConfigurationContent({
   queryClient: ReturnType<typeof useQueryClient>;
 }) {
   const capabilities = useEffectiveCapabilities(params.workspaceId, "AppEnvironment", target.id);
+  const availability = useFeatureAvailability(params.workspaceId, "AppEnvironment", target.id);
+  const managedBuild = findFeature(availability.data, featureIds.buildManaged);
+  const sourceGitHub = findFeature(availability.data, featureIds.sourceGitHub);
+  const buildUsable = canUseFeature(managedBuild) && canUseFeature(sourceGitHub);
   const canMutate = capabilities.data?.editResources === true;
   return (
     <section className="stack">
       <ConfigurationNav params={params} workloadKind={target.workloadKind} />
       {capabilities.error && <Alert>{userFacingError(capabilities.error)}</Alert>}
-      <ConfigurationEditor
-        target={target}
-        params={params}
-        section="build"
-        title="Build e branch"
-        description="A branch pertence a este App dentro deste Environment; cada build resolve e registra um SHA imutável."
-        render={() => null}
-      />
-      <DeliveryAutomation target={target} params={params} canMutate={canMutate} />
+      {availability.error && <Alert>{userFacingError(availability.error)}</Alert>}
+      {!buildUsable ? (
+        <FeatureAvailabilityNotice
+          feature={!canUseFeature(sourceGitHub) ? sourceGitHub : managedBuild}
+          pending={availability.isPending}
+          title="Build gerenciado indisponível"
+        />
+      ) : (
+        <>
+          <ConfigurationEditor
+            target={target}
+            params={params}
+            section="build"
+            title="Build e branch"
+            description="A branch pertence a este App dentro deste Environment; cada build resolve e registra um SHA imutável."
+            render={() => null}
+          />
+          {target.branch ? (
+            <DeliveryAutomation target={target} params={params} canMutate={canMutate} />
+          ) : (
+            <Alert tone="info">Salve uma branch para habilitar os gatilhos de build deste Environment.</Alert>
+          )}
+        </>
+      )}
       {canMutate && (
         <RemoveFromEnvironment target={target} params={params} navigate={navigate} queryClient={queryClient} />
-      )}
-    </section>
-  );
-}
-
-function DeliveryAutomation({
-  target,
-  params,
-  canMutate,
-}: {
-  target: AppEnvironment;
-  params: EnvironmentParams;
-  canMutate: boolean;
-}) {
-  const queryClient = useQueryClient();
-  const key = deliveryKeys.policy(params.workspaceId, params.projectId, target.appId, target.id);
-  const policy = useQuery({
-    queryKey: key,
-    queryFn: () => getAppEnvironmentDeliveryPolicy(params.workspaceId, params.projectId, target.appId, target.id),
-  });
-  const [draft, setDraft] = useState<Pick<DeliveryPolicy, "pushEnabled" | "releaseEnabled">>({
-    pushEnabled: false,
-    releaseEnabled: false,
-  });
-  const [dirty, setDirty] = useState(false);
-  useEffect(() => {
-    if (policy.data && !dirty)
-      setDraft({ pushEnabled: policy.data.pushEnabled, releaseEnabled: policy.data.releaseEnabled });
-  }, [dirty, policy.data]);
-  const save = useMutation({
-    mutationFn: () =>
-      replaceAppEnvironmentDeliveryPolicy(
-        params.workspaceId,
-        params.projectId,
-        target.appId,
-        target.id,
-        policy.data?.version ?? 0,
-        draft,
-      ),
-    onSuccess: async () => {
-      setDirty(false);
-      await queryClient.invalidateQueries({ queryKey: key });
-    },
-  });
-  if (policy.isPending)
-    return (
-      <p className="muted" role="status">
-        Carregando automação…
-      </p>
-    );
-  if (policy.isError) return <Alert>{userFacingError(policy.error)}</Alert>;
-  return (
-    <section className="panel stack" aria-labelledby="delivery-automation-title">
-      <div>
-        <p className="eyebrow">Continuous Delivery</p>
-        <h2 id="delivery-automation-title">Gatilhos automáticos</h2>
-        <p className="muted">
-          Eventos são distribuídos para todos os Apps no mesmo repositório e branch. A entrega manual permanece sempre
-          disponível.
-        </p>
-      </div>
-      {save.isSuccess && <Alert tone="success">Política de entrega atualizada.</Alert>}
-      {save.isError && <Alert>{userFacingError(save.error)}</Alert>}
-      <Field
-        type="checkbox"
-        label={`Push em ${target.branch}`}
-        helper="Constrói o SHA recebido e implanta a release usando a configuração desejada atual."
-        checked={draft.pushEnabled}
-        onChange={(event) => {
-          setDraft({ ...draft, pushEnabled: event.target.checked });
-          setDirty(true);
-          save.reset();
-        }}
-        disabled={!canMutate}
-      />
-      <Field
-        type="checkbox"
-        label="Release publicada"
-        helper="Drafts e prereleases não disparam entregas; a tag é resolvida para um SHA imutável."
-        checked={draft.releaseEnabled}
-        onChange={(event) => {
-          setDraft({ ...draft, releaseEnabled: event.target.checked });
-          setDirty(true);
-          save.reset();
-        }}
-        disabled={!canMutate}
-      />
-      {canMutate && (
-        <div className="form-actions">
-          <Button type="button" loading={save.isPending} disabled={!dirty} onClick={() => save.mutate()}>
-            Salvar automação
-          </Button>
-        </div>
       )}
     </section>
   );

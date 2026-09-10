@@ -162,16 +162,18 @@ func (h *generatedHandler) appEnvironmentSetupCommand(workspaceID, actorID int64
 	if err := domain.ValidateEnvironmentID(input.EnvironmentID); err != nil {
 		violations = append(violations, errorViolation{Field: "/environmentId", Code: "invalid_environment", Message: err.Error()})
 	}
-	branch, err := domain.NormalizeSourceBranch(input.Branch)
-	if err != nil {
-		violations = append(violations, errorViolation{Field: "/branch", Code: "invalid_branch", Message: err.Error()})
-	} else {
-		command.Branch = branch
+	if input.Branch != "" {
+		branch, err := domain.NormalizeSourceBranch(input.Branch)
+		if err != nil {
+			violations = append(violations, errorViolation{Field: "/branch", Code: "invalid_branch", Message: err.Error()})
+		} else {
+			command.Branch = branch
+		}
 	}
-	if err = domain.ValidateWorkloadConfiguration(command.WorkloadKind, command.Configuration, command.Volume); err != nil {
+	if err := domain.ValidateWorkloadConfiguration(command.WorkloadKind, command.Configuration, command.Volume); err != nil {
 		violations = append(violations, errorViolation{Field: "/workloadKind", Code: "invalid_workload", Message: err.Error()})
 	}
-	if err = domain.ValidateRuntimeConfig(command.Configuration, h.server.config.MaxReplicas, h.server.config.MaxCPU, h.server.config.MaxMemory); err != nil {
+	if err := domain.ValidateRuntimeConfig(command.Configuration, h.server.config.MaxReplicas, h.server.config.MaxCPU, h.server.config.MaxMemory); err != nil {
 		violations = append(violations, errorViolation{Field: "/configuration", Code: "invalid_configuration", Message: err.Error()})
 	}
 	return command, violations

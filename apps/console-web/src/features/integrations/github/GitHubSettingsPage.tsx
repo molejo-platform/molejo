@@ -7,6 +7,13 @@ import { Alert } from "../../../shared/ui/Alert";
 import { Button } from "../../../shared/ui/Button";
 import { ConfirmAction } from "../../../shared/ui/ConfirmAction";
 import { EmptyState } from "../../../shared/ui/Page";
+import {
+  canUseFeature,
+  FeatureAvailabilityNotice,
+  featureIds,
+  findFeature,
+  useFeatureAvailability,
+} from "../../feature-availability/public";
 import { useEffectiveCapabilities } from "../../workspace-access/public";
 import { WorkspaceSettingsLayout } from "../../workspaces/public";
 import { connectGitHubInstallation, disconnectGitHubInstallation, listGitHubInstallations } from "./api";
@@ -16,11 +23,15 @@ export function GitHubSettingsPage() {
   const { workspaceId } = useParams({ from: "/protected/workspaces/$workspaceId/settings/github" });
   const search = useSearch({ from: "/protected/workspaces/$workspaceId/settings/github" });
   const capabilities = useEffectiveCapabilities(workspaceId, "Workspace", workspaceId);
+  const availability = useFeatureAvailability(workspaceId, "Workspace", workspaceId);
+  const github = findFeature(availability.data, featureIds.sourceGitHub);
+  const githubUsable = canUseFeature(github);
   const canMutate = capabilities.data?.manageWorkspace === true;
   const queryClient = useQueryClient();
   const installations = useQuery({
     queryKey: githubKeys.installations(workspaceId),
     queryFn: () => listGitHubInstallations(workspaceId),
+    enabled: githubUsable,
   });
   const connect = useMutation({
     mutationFn: () => connectGitHubInstallation(workspaceId),
@@ -35,10 +46,10 @@ export function GitHubSettingsPage() {
       void queryClient.invalidateQueries({ queryKey: githubKeys.installations(workspaceId) });
   }, [queryClient, search.github, workspaceId]);
 
-  if (installations.isError) {
+  if (availability.isError || installations.isError) {
     return (
       <WorkspaceSettingsLayout workspaceId={workspaceId}>
-        <Alert>{userFacingError(installations.error)}</Alert>
+        <Alert>{userFacingError(availability.error ?? installations.error)}</Alert>
       </WorkspaceSettingsLayout>
     );
   }
@@ -54,7 +65,7 @@ export function GitHubSettingsPage() {
               A instalação permite descobrir repositórios autorizados. Cada App seleciona sua própria fonte.
             </p>
           </div>
-          {canMutate && (
+          {canMutate && githubUsable && (
             <Button onClick={() => connect.mutate()} loading={connect.isPending}>
               Conectar GitHub
             </Button>
@@ -64,10 +75,17 @@ export function GitHubSettingsPage() {
           <Alert>{userFacingError(installations.error ?? connect.error)}</Alert>
         )}
         {search.github === "connected" && <Alert tone="success">Instalação do GitHub conectada.</Alert>}
+        {!githubUsable && (
+          <FeatureAvailabilityNotice
+            feature={github}
+            pending={availability.isPending}
+            title="Integração GitHub indisponível"
+          />
+        )}
         {capabilities.isSuccess && !canMutate && (
           <Alert tone="info">Sua identidade não possui a capacidade de gerenciar integrações do Workspace.</Alert>
         )}
-        {installations.isPending ? (
+        {!githubUsable ? null : installations.isPending ? (
           <p className="muted" role="status">
             Carregando instalações…
           </p>

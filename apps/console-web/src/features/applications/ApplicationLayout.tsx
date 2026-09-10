@@ -62,7 +62,8 @@ export function ApplicationLayout({
         label="Configuração do App"
         items={[
           { label: "Visão geral", to: "/workspaces/$workspaceId/projects/$projectId/apps/$appId", params },
-          { label: "Fonte", to: "/workspaces/$workspaceId/projects/$projectId/apps/$appId/source", params },
+          { label: "Releases", to: "/workspaces/$workspaceId/projects/$projectId/apps/$appId/releases", params },
+          { label: "GitHub", to: "/workspaces/$workspaceId/projects/$projectId/apps/$appId/source", params },
           { label: "Automação", to: "/workspaces/$workspaceId/projects/$projectId/apps/$appId/automation", params },
         ]}
       />

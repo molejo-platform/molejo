@@ -34,6 +34,7 @@ export type BuildInput = components["schemas"]["BuildInput"];
 export type Build = components["schemas"]["Build"];
 export type BuildLog = components["schemas"]["BuildLog"];
 export type Release = components["schemas"]["Release"];
+export type ReleaseRegistrationInput = components["schemas"]["ReleaseRegistrationInput"];
 export type DeliveryPolicy = components["schemas"]["DeliveryPolicy"];
 export type DeliveryPolicyInput = components["schemas"]["DeliveryPolicyInput"];
 export type Variable = components["schemas"]["Variable"];

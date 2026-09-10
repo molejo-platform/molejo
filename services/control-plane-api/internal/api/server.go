@@ -52,7 +52,6 @@ type Config struct {
 	OperationLease                  time.Duration
 	ParameterRetention              time.Duration
 	ParameterMutationTimeout        time.Duration
-	WorkspaceNamespace              string
 	GitHubStateTTL                  time.Duration
 	GitHubCookieName                string
 	ObservabilityLogMaxWindow       time.Duration
@@ -73,7 +72,7 @@ type Config struct {
 }
 
 func DefaultConfig() Config {
-	return Config{Mode: "development", PublicURL: "http://127.0.0.1:8080", CookieName: "molejo_session", AllowedOrigin: "http://127.0.0.1:8080", AllowedHosts: []string{"127.0.0.1:8080", "localhost:8080"}, AllowedRegistries: []string{"ghcr.io"}, MaxReplicas: 5, MaxCPU: 2000, MaxMemory: 2048, SessionTTL: 12 * time.Hour, SessionIdleTTL: 2 * time.Hour, OperationLease: 30 * time.Second, ParameterRetention: 7 * 24 * time.Hour, ParameterMutationTimeout: 5 * time.Minute, WorkspaceNamespace: "molejo-workspaces", GitHubStateTTL: 10 * time.Minute, GitHubCookieName: "molejo_github_state", ObservabilityLogMaxWindow: 24 * time.Hour, ObservabilityMetricMaxWindow: 30 * 24 * time.Hour, ObservabilityEventMaxWindow: 7 * 24 * time.Hour, ObservabilityLiveTTL: 10 * time.Minute, ObservabilityLivePoll: 2 * time.Second, ObservabilityLivePerUser: 3, ObservabilityMetricsLivePoll: 30 * time.Second, ObservabilityMetricsLivePerUser: 2, PublicDomain: "molejo.dev", PublicTCPMinimumPort: 20000, PublicTCPMaximumPort: 20015}
+	return Config{Mode: "development", PublicURL: "http://127.0.0.1:8080", CookieName: "molejo_session", AllowedOrigin: "http://127.0.0.1:8080", AllowedHosts: []string{"127.0.0.1:8080", "localhost:8080"}, AllowedRegistries: []string{"ghcr.io"}, MaxReplicas: 5, MaxCPU: 2000, MaxMemory: 2048, SessionTTL: 12 * time.Hour, SessionIdleTTL: 2 * time.Hour, OperationLease: 30 * time.Second, ParameterRetention: 7 * 24 * time.Hour, ParameterMutationTimeout: 5 * time.Minute, GitHubStateTTL: 10 * time.Minute, GitHubCookieName: "molejo_github_state", ObservabilityLogMaxWindow: 24 * time.Hour, ObservabilityMetricMaxWindow: 30 * 24 * time.Hour, ObservabilityEventMaxWindow: 7 * 24 * time.Hour, ObservabilityLiveTTL: 10 * time.Minute, ObservabilityLivePoll: 2 * time.Second, ObservabilityLivePerUser: 3, ObservabilityMetricsLivePoll: 30 * time.Second, ObservabilityMetricsLivePerUser: 2, PublicDomain: "molejo.dev", PublicTCPMinimumPort: 20000, PublicTCPMaximumPort: 20015}
 }
 
 type Server struct {
