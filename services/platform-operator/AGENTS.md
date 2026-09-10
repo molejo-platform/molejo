@@ -1,10 +1,22 @@
-# Automated tests
-- Use a controller testing ladder: pure decisions, envtest integration, then minimal Kind acceptance.
-- Test deterministic rendering, naming, validation, and condition decisions with focused Go tests.
-- Use envtest as the default proof for reconciliation, CRDs, status, ownership, and idempotency.
-- Use Kind only for behavior requiring real scheduling, rollout, probes, networking, or garbage collection.
-- Judge test need by desired-state risk, retry behavior, ownership, drift, and recovery after interruption.
-- Cover success, failure, retry, concurrency, deletion, orphan prevention, and status sanitization as relevant.
-- Prefer eventual assertions driven by observed state; do not use fixed sleeps as synchronization.
-- When Kind finds controller logic failure, add the smallest envtest or unit regression that proves it.
-- Keep system E2E limited to critical AppDeployment-to-public-workload lifecycle contracts.
+# Platform Operator development
+
+The Platform Operator reconciles closed Molejo Kubernetes APIs into owned runtime
+resources. It does not own product identity, authorization, provider automation,
+or the public API.
+
+## Explore
+
+- Start at `cmd/manager/` for process composition.
+- Controllers and deterministic projections live in `internal/controller/`;
+  namespace and fixed RBAC reconciliation lives in `internal/workspaceboundary/`.
+- Kubernetes API sources live in `../../packages/kubernetes-api/apis/`; generated
+  CRDs live in `../../deploy/crds/`.
+
+## Boundaries
+
+- Keep rendering and status decisions deterministic and separate from controller
+  side effects.
+- Reconcile only resources covered by Molejo contracts and explicit ownership.
+- Read the [Platform Operator guide](../../docs/en/platform/platform-operator.md)
+  before changing projections, and follow the
+  [contribution guide](../../docs/en/CONTRIBUTING.md) for generation and tests.

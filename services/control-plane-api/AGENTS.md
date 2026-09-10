@@ -1,10 +1,23 @@
-# Automated tests
-- Use a Testing Honeycomb: concentrate coverage on controlled service integrations.
-- Test pure domain decisions with fast table-driven or fuzz tests and no external effects.
-- Use real PostgreSQL for transactions, constraints, migrations, concurrency, leases, and idempotency.
-- Test HTTP handlers with the real domain/store boundary; mock only systems outside the process.
-- Test the build worker as a state machine, including timeout, retry, fencing, crash, and sanitization.
-- Use controlled HTTP servers for GitHub; reserve the real GitHub App for an external canary.
-- Judge test need by business risk, ownership, failure recovery, and an unproven contract boundary.
-- Prove each behavior at the lowest layer that can detect it without duplicating assertions above.
-- Add broad E2E only when the behavior uniquely crosses API, database, worker, or Kubernetes processes.
+# Control Plane development
+
+The Control Plane owns product identity, authorization, desired state, provider
+bindings, operations, and the public API. It does not access Kubernetes directly.
+
+## Explore
+
+- Start at `cmd/control-plane-api/` for process composition.
+- Use `internal/api/` for HTTP transport, `internal/application/` for composition,
+  `internal/domain/` for product rules, and `internal/store/` for PostgreSQL.
+- Agent transport lives in `internal/clusteragent/`; background execution stays in
+  the owning worker package.
+- The API contract is [`../../contracts/openapi/control-plane-v1.yaml`](../../contracts/openapi/control-plane-v1.yaml).
+
+## Boundaries
+
+- Keep domain decisions independent from HTTP, PostgreSQL, Kubernetes, and providers.
+- Re-authorize and admit every mutation; runtime observations never grant product
+  permissions.
+- Reach clusters only through the authenticated Cluster Agent contract.
+- Read the [ADR index](../../docs/en/adr/README.md) before changing ownership or
+  public contracts, and follow the [contribution guide](../../docs/en/CONTRIBUTING.md)
+  for generation and tests.
