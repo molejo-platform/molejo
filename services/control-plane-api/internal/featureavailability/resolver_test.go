@@ -141,6 +141,34 @@ func TestHistoricalMetricsRequireExplicitConformantBinding(t *testing.T) {
 	}
 }
 
+func TestUnavailableHistoricalMetricsDoNotAffectApplicationLoop(t *testing.T) {
+	now := time.Now().UTC()
+	features := Resolve(now, Target{}, Facts{
+		ClusterAttached:      true,
+		AgentConnected:       true,
+		ProtocolCapabilities: []string{"runtime.v1alpha1"},
+		Providers: providerbinding.New(providerbinding.Binding{
+			Capability: capabilitycontract.TelemetryMetricsHistorical,
+			Configured: true,
+			Health:     providerbinding.HealthUnavailable,
+			ReasonCode: "metrics_provider_unreachable",
+		}),
+	})
+
+	historical := featureByID(features, capabilitycontract.TelemetryMetricsHistorical)
+	if historical.State != Unavailable || historical.ReasonCode != "metrics_provider_unreachable" {
+		t.Fatalf("historical metrics=%+v", historical)
+	}
+	for _, id := range []capabilitycontract.ID{
+		capabilitycontract.RuntimeWorkloadApply,
+		capabilitycontract.RuntimeWorkloadObserve,
+	} {
+		if runtime := featureByID(features, id); runtime.State != Available {
+			t.Fatalf("%s=%+v, want Available", id, runtime)
+		}
+	}
+}
+
 func TestKubernetesCapabilitiesRequireExplicitHealthyBindings(t *testing.T) {
 	now := time.Now().UTC()
 	for _, capability := range []capabilitycontract.ID{capabilitycontract.StorageRWO, capabilitycontract.PublicationHTTP} {
