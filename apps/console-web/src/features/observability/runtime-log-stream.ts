@@ -5,31 +5,36 @@ import type { RuntimeLogStore } from "./runtime-log-store";
 import { type RuntimeStreamState, transitionRuntimeStream } from "./runtime-stream-state";
 
 type CursorRecord = { cursor: string; expiresAt: number };
+type CursorStorage = Pick<Storage, "getItem" | "removeItem" | "setItem">;
 const cursorTTL = 30 * 60_000;
 
 export function runtimeLogCursorKey(userId: string, workspaceId: string, appEnvironmentId: string) {
   return `molejo.logs.cursor.${userId}.${workspaceId}.${appEnvironmentId}`;
 }
 
-export function readRuntimeLogCursor(key: string, now = Date.now()) {
+export function readRuntimeLogCursor(key: string, now = Date.now(), storage: CursorStorage = sessionStorage) {
   try {
-    const stored = sessionStorage.getItem(key);
+    const stored = storage.getItem(key);
     if (!stored) return undefined;
     const record = JSON.parse(stored) as CursorRecord;
     if (!record.cursor || record.expiresAt <= now) {
-      sessionStorage.removeItem(key);
+      storage.removeItem(key);
       return undefined;
     }
     return record.cursor;
   } catch {
-    sessionStorage.removeItem(key);
+    storage.removeItem(key);
     return undefined;
   }
 }
 
-export function writeRuntimeLogCursor(key: string, cursor: string, now = Date.now()) {
-  if (cursor)
-    sessionStorage.setItem(key, JSON.stringify({ cursor, expiresAt: now + cursorTTL } satisfies CursorRecord));
+export function writeRuntimeLogCursor(
+  key: string,
+  cursor: string,
+  now = Date.now(),
+  storage: CursorStorage = sessionStorage,
+) {
+  if (cursor) storage.setItem(key, JSON.stringify({ cursor, expiresAt: now + cursorTTL } satisfies CursorRecord));
 }
 
 export function useRuntimeLogStream({
