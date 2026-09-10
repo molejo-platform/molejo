@@ -2,12 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { ApiRequestError } from "../../shared/api/errors";
 import type { Operation } from "../../shared/api/types";
-import { getOperation } from "./api";
 import { operationIsActive } from "./model";
-
-export const operationKeys = {
-  detail: (operationId: string) => ["operations", operationId] as const,
-};
+import { operationQueries } from "./queries";
 
 type OperationTrackerOptions = { workspaceId: string; scope: string } | { storageKey: string };
 
@@ -19,13 +15,9 @@ export function useOperationTracker(options?: OperationTrackerOptions) {
     : undefined;
   const [accepted, setAccepted] = useState<Operation>();
   const [operationId, setOperationId] = useState(() => (storageKey ? sessionStorage.getItem(storageKey) : null));
-  const query = useQuery({
-    queryKey: operationKeys.detail(operationId ?? ""),
-    queryFn: ({ signal }) => getOperation(operationId!, signal),
-    enabled: Boolean(operationId),
-    initialData: accepted?.id === operationId ? accepted : undefined,
-    refetchInterval: ({ state }) => (operationIsActive(state.data) ? 1_000 : false),
-  });
+  const query = useQuery(
+    operationQueries.detail(operationId ?? "", accepted?.id === operationId ? accepted : undefined),
+  );
   useEffect(() => {
     if (!(query.error instanceof ApiRequestError) || query.error.status !== 404) return;
     setAccepted(undefined);

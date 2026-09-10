@@ -1,3 +1,3 @@
 export * from "./api";
 export { ApplicationLayout } from "./ApplicationLayout";
-export { applicationKeys } from "./queries";
+export { applicationKeys, applicationQueries } from "./queries";

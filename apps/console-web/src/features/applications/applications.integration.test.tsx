@@ -57,8 +57,8 @@ vi.mock("../feature-availability/public", async (importOriginal) => {
 vi.mock("./ApplicationLayout", () => ({
   ApplicationLayout: ({ children }: { children: (name: string) => React.ReactNode }) => <>{children("Platform")}</>,
 }));
-vi.mock("../integrations/github/public", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../integrations/github/public")>()),
+vi.mock("../integrations/github/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../integrations/github/api")>()),
   listGitHubInstallations: mocks.listGitHubInstallations,
   listGitHubRepositories: mocks.listGitHubRepositories,
 }));

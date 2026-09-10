@@ -41,6 +41,16 @@ containers, global stores, or a generic CRUD/form engine. TanStack Query owns
 server state, the router owns navigable state, and components own transient UI
 state.
 
+Query keys and `queryOptions` belong to the owning feature. Every variable that
+changes a response must be present in its key, GET requests must propagate the
+query cancellation signal, and cache freshness must describe the resource
+lifecycle instead of inheriting one application-wide interval.
+
+Route parents mirror the product hierarchy and keep long-lived layouts mounted
+while sibling pages change. Realtime transport is isolated from page rendering:
+metrics are shared for the active runtime, while live logs remain an explicit,
+page-scoped action and resume from a short-lived session cursor after reload.
+
 ## Molejo boundaries
 
 The Console operates the application loop: Workspaces, Projects, Applications,

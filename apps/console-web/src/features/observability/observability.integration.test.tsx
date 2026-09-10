@@ -6,6 +6,8 @@ const mocks = vi.hoisted(() => ({ listRuntimeLogs: vi.fn() }));
 
 vi.mock("@tanstack/react-router", () => ({
   Link: ({ children }: { children: React.ReactNode }) => <a href="#target">{children}</a>,
+  useNavigate: () => vi.fn(),
+  useSearch: () => ({}),
   useMatchRoute: () => () => false,
 }));
 vi.mock("../feature-availability/public", async (importOriginal) => {

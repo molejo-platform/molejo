@@ -1,5 +1,5 @@
 export * from "./api";
-export { runtimeConfigurationKeys } from "./queries";
+export { runtimeConfigurationKeys, runtimeConfigurationQueries } from "./queries";
 export {
   defaultRuntimeConfiguration,
   parseRuntimeVariables,

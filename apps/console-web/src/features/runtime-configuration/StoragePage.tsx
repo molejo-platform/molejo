@@ -18,13 +18,8 @@ import {
 } from "../feature-availability/public";
 import { useOperationTracker } from "../operations/public";
 import { useEffectiveCapabilities } from "../workspace-access/public";
-import {
-  deleteAppEnvironmentVolume,
-  expandAppEnvironmentVolume,
-  getAppEnvironmentVolume,
-  listStorageProfiles,
-} from "./api";
-import { runtimeConfigurationKeys } from "./queries";
+import { deleteAppEnvironmentVolume, expandAppEnvironmentVolume } from "./api";
+import { runtimeConfigurationKeys, runtimeConfigurationQueries } from "./queries";
 import { ConfigurationNav } from "./RuntimeConfigurationPages";
 
 export function EnvironmentStoragePage() {
@@ -50,13 +45,11 @@ function StorageEditor({ target, params }: { target: AppEnvironment; params: Env
   const queryClient = useQueryClient();
   const key = runtimeConfigurationKeys.volume(params.workspaceId, params.projectId, target.appId, target.id);
   const volume = useQuery({
-    queryKey: key,
-    queryFn: () => getAppEnvironmentVolume(params.workspaceId, params.projectId, target.appId, target.id),
+    ...runtimeConfigurationQueries.volume(params.workspaceId, params.projectId, target.appId, target.id),
     enabled: target.workloadKind === "Stateful",
   });
   const profiles = useQuery({
-    queryKey: runtimeConfigurationKeys.storageProfiles(params.workspaceId),
-    queryFn: () => listStorageProfiles(params.workspaceId),
+    ...runtimeConfigurationQueries.storageProfiles(params.workspaceId),
     enabled: target.workloadKind === "Stateful",
   });
   const [sizeGiB, setSizeGiB] = useState(0);

@@ -2,6 +2,7 @@ import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/r
 
 import { isUnauthenticatedError } from "../../shared/api/errors";
 import { setCsrfToken } from "../../shared/api/http-client";
+import { cachePolicy } from "../../shared/api/cache-policy";
 import type { Session } from "../../shared/api/types";
 import {
   applySessionState,
@@ -44,7 +45,7 @@ export function sessionQueryOptions() {
         throw error;
       }
     },
-    staleTime: 60_000,
+    staleTime: cachePolicy.session,
     retry: false,
   });
 }

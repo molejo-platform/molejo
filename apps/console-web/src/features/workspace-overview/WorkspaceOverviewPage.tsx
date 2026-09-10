@@ -5,7 +5,7 @@ import { Alert } from "../../shared/ui/Alert";
 import { RefreshStatus, RetryAlert, Skeleton, SkeletonRegion } from "../../shared/ui/AsyncState";
 import { Icon } from "../../shared/ui/Icon";
 import { PageHeader } from "../../shared/ui/Page";
-import { githubKeys, listGitHubInstallations } from "../integrations/github/public";
+import { githubQueries } from "../integrations/github/public";
 import { canUseFeature, featureIds, findFeature, useFeatureAvailability } from "../feature-availability/public";
 import { useSelectedWorkspace, useWorkspaceSummaryQuery } from "../workspaces/public";
 
@@ -16,11 +16,7 @@ export function OverviewPage() {
   const availability = useFeatureAvailability(workspaceId, "Workspace", workspaceId);
   const github = findFeature(availability.data, featureIds.sourceGitHub);
   const githubUsable = canUseFeature(github);
-  const installations = useQuery({
-    queryKey: githubKeys.installations(workspaceId),
-    queryFn: () => listGitHubInstallations(workspaceId),
-    enabled: githubUsable,
-  });
+  const installations = useQuery({ ...githubQueries.installations(workspaceId), enabled: githubUsable });
   const tasks = [
     {
       label: "Criar a estrutura do primeiro Project",

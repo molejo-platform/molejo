@@ -11,8 +11,8 @@ export const listApps = (workspaceId: string, projectId: string, signal?: AbortS
   requestAllPages<App>(applicationBase(workspaceId, projectId), signal) as Promise<ResourceList<App>>;
 export const createApp = (workspaceId: string, projectId: string, input: HierarchyInput) =>
   request<App>(applicationBase(workspaceId, projectId), { method: "POST", body: JSON.stringify(input) });
-export const getApp = (workspaceId: string, projectId: string, appId: string) =>
-  request<App>(applicationPath(workspaceId, projectId, appId));
+export const getApp = (workspaceId: string, projectId: string, appId: string, signal?: AbortSignal) =>
+  request<App>(applicationPath(workspaceId, projectId, appId), { signal });
 export const updateApp = (workspaceId: string, projectId: string, app: App, input: HierarchyInput) =>
   request<App>(applicationPath(workspaceId, projectId, app.id), {
     method: "PUT",
@@ -27,8 +27,8 @@ export const archiveApp = (workspaceId: string, projectId: string, app: App) =>
 
 const sourcePath = (workspaceId: string, projectId: string, appId: string) =>
   `${applicationPath(workspaceId, projectId, appId)}/source`;
-export const getAppSource = (workspaceId: string, projectId: string, appId: string) =>
-  request<{ source: GitHubSource | null }>(sourcePath(workspaceId, projectId, appId));
+export const getAppSource = (workspaceId: string, projectId: string, appId: string, signal?: AbortSignal) =>
+  request<{ source: GitHubSource | null }>(sourcePath(workspaceId, projectId, appId), { signal });
 export const setAppSource = (workspaceId: string, projectId: string, appId: string, input: GitHubSourceInput) =>
   request<GitHubSource>(sourcePath(workspaceId, projectId, appId), {
     method: "PUT",

@@ -1,2 +1,2 @@
 export * from "./api";
-export { githubKeys } from "./queries";
+export { githubKeys, githubQueries } from "./queries";

@@ -10,8 +10,7 @@ import { Field, SelectField } from "../../shared/ui/Field";
 import { FormErrorSummary } from "../../shared/ui/FormErrorSummary";
 import { applicationKeys } from "../applications/public";
 import {
-  clusterPlacementKeys,
-  listWorkspaceClusters,
+  clusterPlacementQueries,
   readyWorkspaceClusters,
   reconcileClusterSelection,
 } from "../cluster-placement/public";
@@ -23,14 +22,13 @@ import {
   findFeature,
   useFeatureAvailability,
 } from "../feature-availability/public";
-import { listParameters, parameterKeys } from "../parameters/public";
+import { parameterQueries } from "../parameters/public";
 import { normalizeResourceName, validateResourceName } from "../projects/public";
 import {
   defaultRuntimeConfiguration,
-  listStorageProfiles,
   parseRuntimeVariables,
   RuntimeConfigurationFields,
-  runtimeConfigurationKeys,
+  runtimeConfigurationQueries,
 } from "../runtime-configuration/public";
 import { createProjectAppEnvironment } from "./api";
 import { ApplicationSetupReview } from "./ApplicationSetupReview";
@@ -102,19 +100,12 @@ export function ApplicationSetupFlow({
   const availability = useFeatureAvailability(workspaceId, "Workspace", workspaceId);
   const storageFeature = findFeature(availability.data, featureIds.storageRWO);
   const statefulAvailable = canUseFeature(storageFeature);
-  const parameters = useQuery({
-    queryKey: parameterKeys.list(workspaceId),
-    queryFn: ({ signal }) => listParameters(workspaceId, signal),
-  });
+  const parameters = useQuery(parameterQueries.list(workspaceId));
   const storageProfiles = useQuery({
-    queryKey: runtimeConfigurationKeys.storageProfiles(workspaceId),
-    queryFn: () => listStorageProfiles(workspaceId),
+    ...runtimeConfigurationQueries.storageProfiles(workspaceId),
     enabled: draft.workloadKind === "Stateful" && statefulAvailable,
   });
-  const placements = useQuery({
-    queryKey: clusterPlacementKeys.workspace(workspaceId),
-    queryFn: ({ signal }) => listWorkspaceClusters(workspaceId, signal),
-  });
+  const placements = useQuery(clusterPlacementQueries.workspace(workspaceId));
   const readyClusters = useMemo(() => readyWorkspaceClusters(placements.data?.items), [placements.data?.items]);
   const selectedProfile = storageProfiles.data?.items.find((profile) => profile.id === draft.storageProfileId);
 

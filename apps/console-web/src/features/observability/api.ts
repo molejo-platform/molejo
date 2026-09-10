@@ -29,9 +29,11 @@ export function listRuntimeLogs(
   appId: string,
   appEnvironmentId: string,
   filters: RuntimeLogFilters,
+  signal?: AbortSignal,
 ) {
   return request<RuntimeLogs>(
     withQuery(`${runtimeObservabilityBase(workspaceId, projectId, appId, appEnvironmentId)}/logs`, filters),
+    { signal },
   );
 }
 
@@ -41,9 +43,11 @@ export function getRuntimeMetrics(
   appId: string,
   appEnvironmentId: string,
   filters: RuntimeMetricFilters,
+  signal?: AbortSignal,
 ) {
   return request<RuntimeMetrics>(
     withQuery(`${runtimeObservabilityBase(workspaceId, projectId, appId, appEnvironmentId)}/metrics`, filters),
+    { signal },
   );
 }
 
@@ -53,9 +57,11 @@ export function listRuntimeEvents(
   appId: string,
   appEnvironmentId: string,
   filters: RuntimeEventFilters,
+  signal?: AbortSignal,
 ) {
   return request<RuntimeEvents>(
     withQuery(`${runtimeObservabilityBase(workspaceId, projectId, appId, appEnvironmentId)}/events`, filters),
+    { signal },
   );
 }
 

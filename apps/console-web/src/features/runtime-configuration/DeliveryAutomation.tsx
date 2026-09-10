@@ -6,8 +6,8 @@ import type { AppEnvironment, DeliveryPolicy } from "../../shared/api/types";
 import { Alert } from "../../shared/ui/Alert";
 import { Button } from "../../shared/ui/Button";
 import { Field } from "../../shared/ui/Field";
-import { deliveryKeys, getAppEnvironmentDeliveryPolicy, replaceAppEnvironmentDeliveryPolicy } from "../delivery/public";
 import type { EnvironmentParams } from "../app-environments/public";
+import { deliveryKeys, deliveryQueries, replaceAppEnvironmentDeliveryPolicy } from "../delivery/public";
 
 export function DeliveryAutomation({
   target,
@@ -20,10 +20,7 @@ export function DeliveryAutomation({
 }) {
   const queryClient = useQueryClient();
   const key = deliveryKeys.policy(params.workspaceId, params.projectId, target.appId, target.id);
-  const policy = useQuery({
-    queryKey: key,
-    queryFn: () => getAppEnvironmentDeliveryPolicy(params.workspaceId, params.projectId, target.appId, target.id),
-  });
+  const policy = useQuery(deliveryQueries.policy(params.workspaceId, params.projectId, target.appId, target.id));
   const [draft, setDraft] = useState<Pick<DeliveryPolicy, "pushEnabled" | "releaseEnabled">>({
     pushEnabled: false,
     releaseEnabled: false,

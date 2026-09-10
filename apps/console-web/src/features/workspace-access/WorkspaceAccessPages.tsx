@@ -17,29 +17,18 @@ import {
   createMember,
   deleteAccessGrant,
   deleteMember,
-  getEffectiveCapabilities,
-  listAccessGrants,
-  listAudit,
-  listGroupMembers,
-  listGroups,
-  listMembers,
   removeGroupMember,
   updateMember,
   workspaceAccessKeys,
 } from "./api";
+import { workspaceAccessQueries } from "./queries";
 
 export function WorkspaceMembersPage() {
   const { workspaceId } = useParams({ from: "/protected/workspaces/$workspaceId/settings/members" });
   const queryClient = useQueryClient();
-  const capabilities = useQuery({
-    queryKey: workspaceAccessKeys.capabilities(workspaceId, "Workspace", workspaceId),
-    queryFn: () => getEffectiveCapabilities(workspaceId, "Workspace", workspaceId),
-  });
+  const capabilities = useQuery(workspaceAccessQueries.capabilities(workspaceId, "Workspace", workspaceId));
   const canManage = capabilities.data?.manageMembers === true;
-  const members = useQuery({
-    queryKey: workspaceAccessKeys.members(workspaceId),
-    queryFn: () => listMembers(workspaceId),
-  });
+  const members = useQuery(workspaceAccessQueries.members(workspaceId));
   const [input, setInput] = useState<{ username: string; role: WorkspaceMembership["role"] }>({
     username: "",
     role: "Viewer",
@@ -179,19 +168,10 @@ export function WorkspaceMembersPage() {
 export function WorkspaceGroupsPage() {
   const { workspaceId } = useParams({ from: "/protected/workspaces/$workspaceId/settings/groups" });
   const queryClient = useQueryClient();
-  const capabilities = useQuery({
-    queryKey: workspaceAccessKeys.capabilities(workspaceId, "Workspace", workspaceId),
-    queryFn: () => getEffectiveCapabilities(workspaceId, "Workspace", workspaceId),
-  });
+  const capabilities = useQuery(workspaceAccessQueries.capabilities(workspaceId, "Workspace", workspaceId));
   const canManage = capabilities.data?.manageGroups === true;
-  const groups = useQuery({
-    queryKey: workspaceAccessKeys.groups(workspaceId),
-    queryFn: () => listGroups(workspaceId),
-  });
-  const members = useQuery({
-    queryKey: workspaceAccessKeys.members(workspaceId),
-    queryFn: () => listMembers(workspaceId),
-  });
+  const groups = useQuery(workspaceAccessQueries.groups(workspaceId));
+  const members = useQuery(workspaceAccessQueries.members(workspaceId));
   const [name, setName] = useState("");
   const create = useMutation({
     mutationFn: () => createGroup(workspaceId, name),
@@ -262,10 +242,7 @@ function GroupMembers({
 }) {
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState("");
-  const assigned = useQuery({
-    queryKey: workspaceAccessKeys.groupMembers(workspaceId, group.id),
-    queryFn: () => listGroupMembers(workspaceId, group.id),
-  });
+  const assigned = useQuery(workspaceAccessQueries.groupMembers(workspaceId, group.id));
   const refresh = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: workspaceAccessKeys.groups(workspaceId) }),
@@ -356,23 +333,11 @@ function GroupMembers({
 export function WorkspaceAccessGrantsPage() {
   const { workspaceId } = useParams({ from: "/protected/workspaces/$workspaceId/settings/access" });
   const queryClient = useQueryClient();
-  const capabilities = useQuery({
-    queryKey: workspaceAccessKeys.capabilities(workspaceId, "Workspace", workspaceId),
-    queryFn: () => getEffectiveCapabilities(workspaceId, "Workspace", workspaceId),
-  });
+  const capabilities = useQuery(workspaceAccessQueries.capabilities(workspaceId, "Workspace", workspaceId));
   const canManage = capabilities.data?.manageGroups === true;
-  const grants = useQuery({
-    queryKey: workspaceAccessKeys.accessGrants(workspaceId),
-    queryFn: () => listAccessGrants(workspaceId),
-  });
-  const members = useQuery({
-    queryKey: workspaceAccessKeys.members(workspaceId),
-    queryFn: () => listMembers(workspaceId),
-  });
-  const groups = useQuery({
-    queryKey: workspaceAccessKeys.groups(workspaceId),
-    queryFn: () => listGroups(workspaceId),
-  });
+  const grants = useQuery(workspaceAccessQueries.grants(workspaceId));
+  const members = useQuery(workspaceAccessQueries.members(workspaceId));
+  const groups = useQuery(workspaceAccessQueries.groups(workspaceId));
   const [input, setInput] = useState<{
     subject: string;
     resourceType: AccessGrant["resourceType"];
@@ -527,10 +492,7 @@ export function WorkspaceAccessGrantsPage() {
 
 export function WorkspaceAuditPage() {
   const { workspaceId } = useParams({ from: "/protected/workspaces/$workspaceId/settings/audit" });
-  const audit = useQuery({
-    queryKey: workspaceAccessKeys.audit(workspaceId),
-    queryFn: ({ signal }) => listAudit(workspaceId, signal),
-  });
+  const audit = useQuery(workspaceAccessQueries.audit(workspaceId));
   return (
     <WorkspaceSettingsLayout workspaceId={workspaceId}>
       <section className="panel stack">

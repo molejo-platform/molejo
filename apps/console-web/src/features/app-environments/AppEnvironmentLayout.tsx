@@ -6,8 +6,8 @@ import { userFacingError } from "../../shared/api/errors";
 import { Alert } from "../../shared/ui/Alert";
 import { SelectField } from "../../shared/ui/Field";
 import { PageHeader } from "../../shared/ui/Page";
-import { environmentKeys, getEnvironment, listEnvironments } from "../environments/public";
-import { getProject, projectKeys } from "../projects/public";
+import { environmentQueries } from "../environments/public";
+import { projectQueries } from "../projects/public";
 
 export function AppEnvironmentLayout({
   workspaceId,
@@ -21,18 +21,9 @@ export function AppEnvironmentLayout({
   children: ReactNode;
 }) {
   const navigate = useNavigate();
-  const project = useQuery({
-    queryKey: projectKeys.detail(workspaceId, projectId),
-    queryFn: () => getProject(workspaceId, projectId),
-  });
-  const environments = useQuery({
-    queryKey: environmentKeys.list(workspaceId, projectId),
-    queryFn: ({ signal }) => listEnvironments(workspaceId, projectId, signal),
-  });
-  const environment = useQuery({
-    queryKey: environmentKeys.detail(workspaceId, projectId, environmentId),
-    queryFn: ({ signal }) => getEnvironment(workspaceId, projectId, environmentId, signal),
-  });
+  const project = useQuery(projectQueries.detail(workspaceId, projectId));
+  const environments = useQuery(environmentQueries.list(workspaceId, projectId));
+  const environment = useQuery(environmentQueries.detail(workspaceId, projectId, environmentId));
   const error = project.error ?? environments.error ?? environment.error;
   if (project.isPending || environments.isPending || environment.isPending)
     return (

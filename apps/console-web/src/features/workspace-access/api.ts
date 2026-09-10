@@ -20,8 +20,8 @@ export const workspaceAccessKeys = {
 
 const workspaceBase = (workspaceId: string) => `/api/v1/workspaces/${encodeURIComponent(workspaceId)}`;
 
-export function listMembers(workspaceId: string) {
-  return request<{ items: WorkspaceMembership[] }>(`${workspaceBase(workspaceId)}/members`);
+export function listMembers(workspaceId: string, signal?: AbortSignal) {
+  return request<{ items: WorkspaceMembership[] }>(`${workspaceBase(workspaceId)}/members`, { signal });
 }
 
 export function createMember(
@@ -51,8 +51,8 @@ export function deleteMember(workspaceId: string, userId: string) {
   return request<void>(`${workspaceBase(workspaceId)}/members/${encodeURIComponent(userId)}`, { method: "DELETE" });
 }
 
-export function listGroups(workspaceId: string) {
-  return request<{ items: WorkspaceGroup[] }>(`${workspaceBase(workspaceId)}/groups`);
+export function listGroups(workspaceId: string, signal?: AbortSignal) {
+  return request<{ items: WorkspaceGroup[] }>(`${workspaceBase(workspaceId)}/groups`, { signal });
 }
 
 export function createGroup(workspaceId: string, name: string) {
@@ -62,9 +62,10 @@ export function createGroup(workspaceId: string, name: string) {
   });
 }
 
-export function listGroupMembers(workspaceId: string, groupId: string) {
+export function listGroupMembers(workspaceId: string, groupId: string, signal?: AbortSignal) {
   return request<{ items: WorkspaceMembership[] }>(
     `${workspaceBase(workspaceId)}/groups/${encodeURIComponent(groupId)}/members`,
+    { signal },
   );
 }
 
@@ -86,8 +87,8 @@ export function listAudit(workspaceId: string, signal?: AbortSignal) {
   return requestAllPages<AuditEvent>(`${workspaceBase(workspaceId)}/audit-events`, signal);
 }
 
-export function listAccessGrants(workspaceId: string) {
-  return request<{ items: AccessGrant[] }>(`${workspaceBase(workspaceId)}/access-grants`);
+export function listAccessGrants(workspaceId: string, signal?: AbortSignal) {
+  return request<{ items: AccessGrant[] }>(`${workspaceBase(workspaceId)}/access-grants`, { signal });
 }
 
 export function createAccessGrant(
@@ -114,8 +115,10 @@ export function getEffectiveCapabilities(
   workspaceId: string,
   resourceType: "Workspace" | "Project" | "App" | "AppEnvironment",
   resourceId: string,
+  signal?: AbortSignal,
 ) {
   return request<EffectiveCapabilities>(
     `${workspaceBase(workspaceId)}/authorization/capabilities?resourceType=${resourceType}&resourceId=${encodeURIComponent(resourceId)}`,
+    { signal },
   );
 }

@@ -4,8 +4,7 @@ import type { ReactNode } from "react";
 import { userFacingError } from "../../shared/api/errors";
 import { Alert } from "../../shared/ui/Alert";
 import { PageHeader, TabNav } from "../../shared/ui/Page";
-import { getProject } from "./api";
-import { projectKeys } from "./queries";
+import { projectQueries } from "./queries";
 
 export function ProjectLayout({
   workspaceId,
@@ -16,11 +15,7 @@ export function ProjectLayout({
   projectId: string;
   children: (projectName: string) => ReactNode;
 }) {
-  const project = useQuery({
-    queryKey: projectKeys.detail(workspaceId, projectId),
-    queryFn: () => getProject(workspaceId, projectId),
-    enabled: Boolean(workspaceId && projectId),
-  });
+  const project = useQuery(projectQueries.detail(workspaceId, projectId));
   if (project.isPending)
     return (
       <p className="muted" role="status">

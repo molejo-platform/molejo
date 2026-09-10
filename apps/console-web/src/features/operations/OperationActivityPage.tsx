@@ -6,8 +6,7 @@ import { formatDateTime } from "../../shared/format";
 import { RefreshStatus, RetryAlert, Skeleton, SkeletonRegion } from "../../shared/ui/AsyncState";
 import { EmptyState, PageHeader } from "../../shared/ui/Page";
 import { StatusBadge } from "../../shared/ui/StatusBadge";
-import { listWorkspaceOperations } from "./api";
-import { operationIsActive } from "./model";
+import { operationQueries } from "./queries";
 
 const kindLabels: Record<Operation["kind"], string> = {
   ApplyDeployment: "Aplicar implantação",
@@ -20,11 +19,7 @@ const kindLabels: Record<Operation["kind"], string> = {
 
 export function OperationActivityPage() {
   const { workspaceId } = useParams({ from: "/protected/workspaces/$workspaceId/activity" });
-  const operations = useQuery({
-    queryKey: ["operations", "workspace", workspaceId],
-    queryFn: ({ signal }) => listWorkspaceOperations(workspaceId, signal),
-    refetchInterval: ({ state }) => (state.data?.items.some(operationIsActive) ? 1_000 : false),
-  });
+  const operations = useQuery(operationQueries.workspace(workspaceId));
   return (
     <div className="stack">
       <PageHeader

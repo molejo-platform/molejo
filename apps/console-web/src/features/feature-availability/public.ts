@@ -7,4 +7,4 @@ export {
   findFeature,
   type AvailabilityScope,
 } from "./model";
-export { featureAvailabilityKeys, useFeatureAvailability } from "./queries";
+export { featureAvailabilityKeys, featureAvailabilityQueryOptions, useFeatureAvailability } from "./queries";

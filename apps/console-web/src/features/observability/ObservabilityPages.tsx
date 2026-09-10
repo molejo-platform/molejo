@@ -1,14 +1,13 @@
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { type FormEvent, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { userFacingError } from "../../shared/api/errors";
 import type {
   AppEnvironment,
   RuntimeEvent,
   RuntimeLog,
-  RuntimeLogBatch,
   RuntimeMetricSample,
   RuntimeMetricSeries,
 } from "../../shared/api/types";
@@ -26,18 +25,14 @@ import {
   findFeature,
   useFeatureAvailability,
 } from "../feature-availability/public";
-import {
-  getRuntimeMetrics,
-  listRuntimeEvents,
-  listRuntimeLogs,
-  type RuntimeLogFilters,
-  type RuntimeRange,
-  runtimeLogStreamURL,
-} from "./api";
-import { observabilityKeys } from "./queries";
+import { listRuntimeLogs } from "./api";
+import { observabilityKeys, observabilityQueries } from "./queries";
 import { RuntimeLogBody } from "./RuntimeLogBody";
 import { useRuntimeMetrics } from "./RuntimeMetricsStatus";
-import { RuntimeLogStore } from "./runtime-log-store";
+import { createRuntimeRange } from "./runtime-range";
+import { useRuntimeLogsViewModel } from "./useRuntimeLogsViewModel";
+import { useRuntimeEventsViewModel } from "./useRuntimeEventsViewModel";
+import { useRuntimeMetricsViewModel } from "./useRuntimeMetricsViewModel";
 
 const ranges = [
   { value: "0.25", label: "Últimos 15 minutos" },
@@ -53,11 +48,6 @@ const metricRanges = [
 ] as const;
 
 const eventRanges = [...ranges, { value: "168", label: "Últimos 7 dias" }] as const;
-
-function createRange(hours = 1): RuntimeRange {
-  const to = new Date();
-  return { from: new Date(to.getTime() - hours * 60 * 60 * 1_000).toISOString(), to: to.toISOString() };
-}
 
 function ObservabilityNav({ params }: { params: EnvironmentParams }) {
   const routeParams = {
@@ -104,21 +94,22 @@ export function EnvironmentAppObservabilityPage() {
 }
 
 function ObservabilityOverview({ target, params }: { target: AppEnvironment; params: EnvironmentParams }) {
-  const [range] = useState(() => createRange(1));
+  const [range] = useState(() => createRuntimeRange(1));
   const availability = useFeatureAvailability(params.workspaceId, "AppEnvironment", target.id);
   const historicalLogs = findFeature(availability.data, featureIds.telemetryLogsHistorical);
   const operationalEvents = findFeature(availability.data, featureIds.controlPlaneEvents);
   const logs = useQuery({
     queryKey: observabilityKeys.logs(params.workspaceId, params.projectId, target.appId, target.id, range),
-    queryFn: () =>
-      listRuntimeLogs(params.workspaceId, params.projectId, target.appId, target.id, { ...range, limit: 20 }),
+    queryFn: ({ signal }) =>
+      listRuntimeLogs(params.workspaceId, params.projectId, target.appId, target.id, { ...range, limit: 20 }, signal),
     enabled: canUseFeature(historicalLogs),
   });
   const metrics = useRuntimeMetrics();
   const events = useQuery({
-    queryKey: observabilityKeys.events(params.workspaceId, params.projectId, target.appId, target.id, range),
-    queryFn: () =>
-      listRuntimeEvents(params.workspaceId, params.projectId, target.appId, target.id, { ...range, limit: 20 }),
+    ...observabilityQueries.events(params.workspaceId, params.projectId, target.appId, target.id, {
+      ...range,
+      limit: 20,
+    }),
     enabled: canUseFeature(operationalEvents),
   });
   const errors = [logs.error, events.error].filter(Boolean);
@@ -201,99 +192,9 @@ export function EnvironmentAppLogsPage() {
 }
 
 export function RuntimeLogsPage({ target, params }: { target: AppEnvironment; params: EnvironmentParams }) {
-  const [hours, setHours] = useState("1");
-  const [search, setSearch] = useState("");
-  const [filters, setFilters] = useState<RuntimeLogFilters>(() => ({ ...createRange(1), limit: 300 }));
-  const [live, setLive] = useState(false);
-  const [liveState, setLiveState] = useState<"idle" | "connecting" | "connected" | "reconnecting" | "error">("idle");
-  const store = useMemo(() => new RuntimeLogStore(), [filters, target.id]);
-  const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
-  const availability = useFeatureAvailability(params.workspaceId, "AppEnvironment", target.id);
-  const historicalLogs = findFeature(availability.data, featureIds.telemetryLogsHistorical);
-  const currentLogs = findFeature(availability.data, featureIds.runtimeLogsCurrent);
-  const historicalUsable = canUseFeature(historicalLogs);
-  const liveUsable = canUseFeature(currentLogs);
-  const logs = useInfiniteQuery({
-    queryKey: observabilityKeys.logs(params.workspaceId, params.projectId, target.appId, target.id, filters),
-    queryFn: ({ pageParam }) =>
-      listRuntimeLogs(params.workspaceId, params.projectId, target.appId, target.id, { ...filters, cursor: pageParam }),
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-    enabled: historicalUsable,
-  });
-  const liveCursor = logs.data?.pages[0]?.liveCursor;
-  const streamURL = runtimeLogStreamURL(
-    params.workspaceId,
-    params.projectId,
-    target.appId,
-    target.id,
-    filters,
-    liveCursor,
-  );
-
-  useEffect(() => () => store.dispose(), [store]);
-  useEffect(() => {
-    const historical = logs.data?.pages.flatMap((page) => page.items);
-    if (historical) store.mergeHistory(historical);
-  }, [logs.data?.pages, store]);
-
-  useEffect(() => {
-    if (!liveUsable || !live) return;
-    setLiveState("connecting");
-    const source = new EventSource(streamURL);
-    let reconnectNotice: number | undefined;
-    const clearReconnectNotice = () => {
-      if (reconnectNotice !== undefined) window.clearTimeout(reconnectNotice);
-      reconnectNotice = undefined;
-    };
-    const connected = () => {
-      clearReconnectNotice();
-      setLiveState("connected");
-    };
-    const connectionInterrupted = () => {
-      clearReconnectNotice();
-      reconnectNotice = window.setTimeout(() => setLiveState("reconnecting"), 5_000);
-    };
-    source.onopen = connected;
-    const receive = (event: Event) => {
-      try {
-        const batch = JSON.parse((event as MessageEvent<string>).data) as RuntimeLogBatch;
-        store.appendBatch(batch.items);
-      } catch {
-        setLiveState("error");
-        source.close();
-        setLive(false);
-      }
-    };
-    source.addEventListener("logs", receive);
-    const end = (event: Event) => {
-      try {
-        const reason = (JSON.parse((event as MessageEvent<string>).data) as { reason?: string }).reason;
-        if (reason === "authorization_changed") {
-          setLiveState("error");
-          source.close();
-          setLive(false);
-        }
-      } catch {
-        setLiveState("error");
-      }
-    };
-    source.addEventListener("end", end);
-    source.onerror = connectionInterrupted;
-    return () => {
-      clearReconnectNotice();
-      source.removeEventListener("logs", receive);
-      source.removeEventListener("end", end);
-      source.close();
-    };
-  }, [live, liveUsable, store, streamURL]);
-
-  function applyFilters(event: FormEvent) {
-    event.preventDefault();
-    setLive(false);
-    setLiveState("idle");
-    setFilters({ ...createRange(Number(hours)), search: search.trim() || undefined, limit: 300 });
-  }
+  const viewModel = useRuntimeLogsViewModel(target, params);
+  const { availability, currentLogs, historicalLogs, historicalUsable, live, liveState, liveUsable, logs, snapshot } =
+    viewModel;
 
   return (
     <section className="stack">
@@ -310,16 +211,17 @@ export function RuntimeLogsPage({ target, params }: { target: AppEnvironment; pa
           type="button"
           variant={live ? "danger" : "secondary"}
           disabled={!liveUsable}
-          onClick={() => {
-            setLiveState(live ? "idle" : "connecting");
-            setLive((value) => !value);
-          }}
+          onClick={viewModel.toggleLive}
         >
           {live ? "Parar live" : "Ver ao vivo"}
         </Button>
       </div>
-      <form className="panel observability-filters" onSubmit={applyFilters}>
-        <SelectField label="Período" value={hours} onChange={(event) => setHours(event.target.value)}>
+      <form className="panel observability-filters" onSubmit={viewModel.applyFilters}>
+        <SelectField
+          label="Período"
+          value={viewModel.filters.hours}
+          onChange={(event) => viewModel.setHours(event.target.value)}
+        >
           {ranges.map((range) => (
             <option key={range.value} value={range.value}>
               {range.label}
@@ -328,8 +230,8 @@ export function RuntimeLogsPage({ target, params }: { target: AppEnvironment; pa
         </SelectField>
         <Field
           label="Buscar no conteúdo"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
+          value={viewModel.filters.search}
+          onChange={(event) => viewModel.setSearch(event.target.value)}
           maxLength={200}
         />
         <Button type="submit" loading={logs.isFetching}>
@@ -362,7 +264,9 @@ export function RuntimeLogsPage({ target, params }: { target: AppEnvironment; pa
           Atualização temporariamente interrompida…
         </p>
       )}
-      {liveState === "error" && <Alert>O fluxo ao vivo foi encerrado. A consulta histórica continua disponível.</Alert>}
+      {live && liveState === "unavailable" && (
+        <Alert>O fluxo ao vivo foi encerrado. A consulta histórica continua disponível.</Alert>
+      )}
       {!historicalUsable ? null : logs.isError ? (
         <Alert>{userFacingError(logs.error)}</Alert>
       ) : logs.isPending ? (
@@ -483,27 +387,8 @@ export function EnvironmentAppMetricsPage() {
 }
 
 export function RuntimeMetricsPage({ target, params }: { target: AppEnvironment; params: EnvironmentParams }) {
-  const [hours, setHours] = useState("1");
-  const [range, setRange] = useState(() => createRange(1));
-  const availability = useFeatureAvailability(params.workspaceId, "AppEnvironment", target.id);
-  const historicalMetrics = findFeature(availability.data, featureIds.telemetryMetricsHistorical);
-  const operationEvents = findFeature(availability.data, featureIds.controlPlaneEvents);
-  const metricsUsable = canUseFeature(historicalMetrics);
-  const metrics = useQuery({
-    queryKey: observabilityKeys.metrics(params.workspaceId, params.projectId, target.appId, target.id, range),
-    queryFn: () => getRuntimeMetrics(params.workspaceId, params.projectId, target.appId, target.id, range),
-    enabled: metricsUsable,
-  });
-  const markerRange = boundedRange(range, 168);
-  const events = useQuery({
-    queryKey: observabilityKeys.events(params.workspaceId, params.projectId, target.appId, target.id, markerRange),
-    queryFn: () =>
-      listRuntimeEvents(params.workspaceId, params.projectId, target.appId, target.id, { ...markerRange, limit: 100 }),
-    enabled: canUseFeature(operationEvents),
-  });
-  const series = metrics.data?.series ?? [];
-  const deploymentMarkers =
-    events.data?.items.filter((event) => event.source === "control-plane").map((event) => event.timestamp) ?? [];
+  const viewModel = useRuntimeMetricsViewModel(target, params);
+  const { availability, deploymentMarkers, events, historicalMetrics, metrics, metricsUsable, series } = viewModel;
   return (
     <section className="stack">
       <ObservabilityNav params={params} />
@@ -516,12 +401,7 @@ export function RuntimeMetricsPage({ target, params }: { target: AppEnvironment;
             permanece no placar rápido.
           </p>
         </div>
-        <Button
-          type="button"
-          variant="icon"
-          aria-label="Atualizar métricas"
-          onClick={() => setRange(createRange(Number(hours)))}
-        >
+        <Button type="button" variant="icon" aria-label="Atualizar métricas" onClick={viewModel.applyRange}>
           <Icon name="refresh" />
         </Button>
       </div>
@@ -533,14 +413,18 @@ export function RuntimeMetricsPage({ target, params }: { target: AppEnvironment;
         />
       )}
       <div className="panel observability-toolbar">
-        <SelectField label="Período" value={hours} onChange={(event) => setHours(event.target.value)}>
+        <SelectField
+          label="Período"
+          value={viewModel.hours}
+          onChange={(event) => viewModel.setHours(event.target.value)}
+        >
           {metricRanges.map((item) => (
             <option key={item.value} value={item.value}>
               {item.label}
             </option>
           ))}
         </SelectField>
-        <Button type="button" onClick={() => setRange(createRange(Number(hours)))} loading={metrics.isFetching}>
+        <Button type="button" onClick={viewModel.applyRange} loading={metrics.isFetching}>
           Aplicar período
         </Button>
       </div>
@@ -581,11 +465,6 @@ export function RuntimeMetricsPage({ target, params }: { target: AppEnvironment;
       )}
     </section>
   );
-}
-
-function boundedRange(range: RuntimeRange, maximumHours: number): RuntimeRange {
-  const earliest = Date.parse(range.to) - maximumHours * 60 * 60 * 1_000;
-  return { from: new Date(Math.max(Date.parse(range.from), earliest)).toISOString(), to: range.to };
 }
 
 export function MetricCard({ series, markers = [] }: { series: RuntimeMetricSeries; markers?: string[] }) {
@@ -644,17 +523,8 @@ export function EnvironmentAppEventsPage() {
 }
 
 export function RuntimeEventsPage({ target, params }: { target: AppEnvironment; params: EnvironmentParams }) {
-  const [hours, setHours] = useState("6");
-  const [range, setRange] = useState(() => createRange(6));
-  const availability = useFeatureAvailability(params.workspaceId, "AppEnvironment", target.id);
-  const operationEvents = findFeature(availability.data, featureIds.controlPlaneEvents);
-  const eventsUsable = canUseFeature(operationEvents);
-  const events = useQuery({
-    queryKey: observabilityKeys.events(params.workspaceId, params.projectId, target.appId, target.id, range),
-    queryFn: () =>
-      listRuntimeEvents(params.workspaceId, params.projectId, target.appId, target.id, { ...range, limit: 200 }),
-    enabled: eventsUsable,
-  });
+  const viewModel = useRuntimeEventsViewModel(target, params);
+  const { availability, events, eventsUsable, operationEvents } = viewModel;
   return (
     <section className="stack">
       <ObservabilityNav params={params} />
@@ -671,14 +541,18 @@ export function RuntimeEventsPage({ target, params }: { target: AppEnvironment; 
         />
       )}
       <div className="panel observability-toolbar">
-        <SelectField label="Período" value={hours} onChange={(event) => setHours(event.target.value)}>
+        <SelectField
+          label="Período"
+          value={viewModel.hours}
+          onChange={(event) => viewModel.setHours(event.target.value)}
+        >
           {eventRanges.map((item) => (
             <option key={item.value} value={item.value}>
               {item.label}
             </option>
           ))}
         </SelectField>
-        <Button type="button" onClick={() => setRange(createRange(Number(hours)))} loading={events.isFetching}>
+        <Button type="button" onClick={viewModel.applyRange} loading={events.isFetching}>
           Aplicar período
         </Button>
       </div>
@@ -739,14 +613,17 @@ function observabilityLinks(params: EnvironmentParams) {
     logs: {
       to: "/workspaces/$workspaceId/projects/$projectId/environments/$environmentId/apps/$appEnvironmentId/observability/logs" as const,
       params: routeParams,
+      search: { range: undefined, search: undefined },
     },
     metrics: {
       to: "/workspaces/$workspaceId/projects/$projectId/environments/$environmentId/apps/$appEnvironmentId/observability/metrics" as const,
       params: routeParams,
+      search: { range: undefined, search: undefined },
     },
     events: {
       to: "/workspaces/$workspaceId/projects/$projectId/environments/$environmentId/apps/$appEnvironmentId/observability/events" as const,
       params: routeParams,
+      search: { range: undefined, search: undefined },
     },
   };
 }

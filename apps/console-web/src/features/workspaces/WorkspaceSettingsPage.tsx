@@ -8,7 +8,7 @@ import { Field } from "../../shared/ui/Field";
 import { normalizeResourceName, validateResourceName } from "../projects/public";
 import { useEffectiveCapabilities } from "../workspace-access/public";
 import { updateWorkspace } from "./api";
-import { workspaceQueryKey } from "./queries";
+import { applyWorkspaceUpdate } from "./queries";
 import { useSelectedWorkspace } from "./WorkspaceContext";
 import { WorkspaceSettingsLayout } from "./WorkspaceSettingsLayout";
 
@@ -25,7 +25,7 @@ export function WorkspaceSettingsPage() {
       if (!workspace || workspace.id !== workspaceId) throw new Error("Workspace não encontrado.");
       return updateWorkspace(workspace, { name: nextName });
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: workspaceQueryKey }),
+    onSuccess: (updated) => applyWorkspaceUpdate(queryClient, updated),
   });
 
   function submit(event: FormEvent) {

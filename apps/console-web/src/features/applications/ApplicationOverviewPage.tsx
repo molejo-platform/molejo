@@ -2,23 +2,16 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 
 import { RefreshStatus, RetryAlert, Skeleton, SkeletonRegion } from "../../shared/ui/AsyncState";
-import { appEnvironmentKeys, listAppEnvironments } from "../app-environments/public";
+import { appEnvironmentQueries } from "../app-environments/public";
 import { ApplicationLayout } from "./ApplicationLayout";
-import { getAppSource } from "./api";
-import { applicationKeys } from "./queries";
+import { applicationQueries } from "./queries";
 
 export function AppOverviewPage() {
   const { workspaceId, projectId, appId } = useParams({
     from: "/protected/workspaces/$workspaceId/projects/$projectId/apps/$appId",
   });
-  const source = useQuery({
-    queryKey: applicationKeys.source(workspaceId, projectId, appId),
-    queryFn: () => getAppSource(workspaceId, projectId, appId),
-  });
-  const targets = useQuery({
-    queryKey: appEnvironmentKeys.list(workspaceId, projectId, appId),
-    queryFn: ({ signal }) => listAppEnvironments(workspaceId, projectId, appId, signal),
-  });
+  const source = useQuery(applicationQueries.source(workspaceId, projectId, appId));
+  const targets = useQuery(appEnvironmentQueries.list(workspaceId, projectId, appId));
   const params = { workspaceId, projectId, appId };
   return (
     <ApplicationLayout workspaceId={workspaceId} projectId={projectId} appId={appId}>

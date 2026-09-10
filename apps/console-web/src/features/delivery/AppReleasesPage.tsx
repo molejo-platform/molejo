@@ -18,9 +18,9 @@ import {
   useFeatureAvailability,
 } from "../feature-availability/public";
 import { useEffectiveCapabilities } from "../workspace-access/public";
-import { listAppReleases, registerAppRelease } from "./api";
+import { registerAppRelease } from "./api";
 import { externalReleaseInput, validateOCIImageReference } from "./model";
-import { deliveryKeys } from "./queries";
+import { deliveryKeys, deliveryQueries } from "./queries";
 
 export function AppReleasesPage() {
   const { workspaceId, projectId, appId } = useParams({
@@ -39,10 +39,7 @@ function ReleaseCatalog({ workspaceId, projectId, appId }: { workspaceId: string
   const availability = useFeatureAvailability(workspaceId, "App", appId);
   const externalRelease = findFeature(availability.data, featureIds.releaseExternal);
   const canRegister = capabilities.data?.deploy === true && canUseFeature(externalRelease);
-  const releases = useQuery({
-    queryKey: deliveryKeys.releases(workspaceId, projectId, appId),
-    queryFn: ({ signal }) => listAppReleases(workspaceId, projectId, appId, signal),
-  });
+  const releases = useQuery(deliveryQueries.releases(workspaceId, projectId, appId));
   const [image, setImage] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const validationError = submitted ? validateOCIImageReference(image) : "";

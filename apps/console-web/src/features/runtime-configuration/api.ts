@@ -18,14 +18,17 @@ export const listAppEnvironmentConfigurationVersions = (
     `${runtimeBase(workspaceId, projectId, appId, appEnvironmentId)}/configuration-versions`,
     signal,
   ) as Promise<ResourceList<ConfigurationRevision>>;
-export const listStorageProfiles = (workspaceId: string) =>
-  request<{ items: StorageProfile[] }>(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/storage-profiles`);
+export const listStorageProfiles = (workspaceId: string, signal?: AbortSignal) =>
+  request<{ items: StorageProfile[] }>(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/storage-profiles`, {
+    signal,
+  });
 export const getAppEnvironmentVolume = (
   workspaceId: string,
   projectId: string,
   appId: string,
   appEnvironmentId: string,
-) => request<AppVolume>(volumeBase(workspaceId, projectId, appId, appEnvironmentId));
+  signal?: AbortSignal,
+) => request<AppVolume>(volumeBase(workspaceId, projectId, appId, appEnvironmentId), { signal });
 export const expandAppEnvironmentVolume = (
   workspaceId: string,
   projectId: string,

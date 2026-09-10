@@ -1,2 +1,2 @@
 export * from "./api";
-export { environmentKeys } from "./queries";
+export { environmentKeys, environmentQueries } from "./queries";

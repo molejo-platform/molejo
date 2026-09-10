@@ -1,5 +1,10 @@
-import { createRoute, lazyRouteComponent } from "@tanstack/react-router";
+import { createRoute, lazyRouteComponent, Outlet } from "@tanstack/react-router";
 
+import { ApplicationLayout, applicationQueries } from "../../features/applications/public";
+import { EnvironmentAppLayout } from "../../features/app-environments/public";
+import { environmentQueries } from "../../features/environments/public";
+import { projectQueries } from "../../features/projects/public";
+import { workspaceDetailQueryOptions } from "../../features/workspaces/queries";
 import { protectedRoute, requireInstallationCapability } from "./root";
 
 const workspaces = () => import("../../features/workspaces/routes");
@@ -16,202 +21,266 @@ const workspaceAccess = () => import("../../features/workspace-access/routes");
 const externalCI = () => import("../../features/external-ci/routes");
 const operations = () => import("../../features/operations/routes");
 
-const runtimePath =
-  "/workspaces/$workspaceId/projects/$projectId/environments/$environmentId/apps/$appEnvironmentId" as const;
+const workspaceEntryRoute = createRoute({
+  getParentRoute: () => protectedRoute,
+  path: "/",
+  component: lazyRouteComponent(workspaces, "WorkspaceEntryPage"),
+});
 
-export const workspaceRoutes = [
+const newWorkspaceRoute = createRoute({
+  getParentRoute: () => protectedRoute,
+  path: "/workspaces/new",
+  beforeLoad: ({ context }) => requireInstallationCapability(context, "createWorkspace"),
+  component: lazyRouteComponent(workspaces, "NewWorkspacePage"),
+});
+
+const workspaceRoute = createRoute({
+  getParentRoute: () => protectedRoute,
+  path: "/workspaces/$workspaceId",
+  beforeLoad: ({ context, params }) =>
+    context.queryClient.ensureQueryData(workspaceDetailQueryOptions(params.workspaceId)),
+  component: Outlet,
+});
+
+const projectRoute = createRoute({
+  getParentRoute: () => workspaceRoute,
+  path: "projects/$projectId",
+  beforeLoad: ({ context, params }) =>
+    context.queryClient.ensureQueryData(projectQueries.detail(params.workspaceId, params.projectId)),
+  component: Outlet,
+});
+
+const applicationRoute = createRoute({
+  getParentRoute: () => projectRoute,
+  path: "apps/$appId",
+  beforeLoad: ({ context, params }) =>
+    context.queryClient.ensureQueryData(applicationQueries.detail(params.workspaceId, params.projectId, params.appId)),
+  component: ApplicationRouteLayout,
+});
+
+const environmentRoute = createRoute({
+  getParentRoute: () => projectRoute,
+  path: "environments/$environmentId",
+  beforeLoad: ({ context, params }) =>
+    Promise.all([
+      context.queryClient.ensureQueryData(environmentQueries.list(params.workspaceId, params.projectId)),
+      context.queryClient.ensureQueryData(
+        environmentQueries.detail(params.workspaceId, params.projectId, params.environmentId),
+      ),
+    ]),
+  component: Outlet,
+});
+
+const runtimeRoute = createRoute({
+  getParentRoute: () => environmentRoute,
+  path: "apps/$appEnvironmentId",
+  beforeLoad: ({ context, params }) =>
+    context.queryClient.ensureQueryData(
+      environmentQueries.applications(params.workspaceId, params.projectId, params.environmentId),
+    ),
+  component: RuntimeRouteLayout,
+});
+
+function ApplicationRouteLayout() {
+  const { workspaceId, projectId, appId } = applicationRoute.useParams();
+  return (
+    <ApplicationLayout workspaceId={workspaceId} projectId={projectId} appId={appId}>
+      {() => <Outlet />}
+    </ApplicationLayout>
+  );
+}
+
+function RuntimeRouteLayout() {
+  return <EnvironmentAppLayout>{() => <Outlet />}</EnvironmentAppLayout>;
+}
+
+const allowedObservabilityRanges = new Set(["0.25", "1", "6", "24", "168", "720"]);
+const observabilitySearch = (search: Record<string, unknown>) => ({
+  range: typeof search.range === "string" && allowedObservabilityRanges.has(search.range) ? search.range : undefined,
+  search: typeof search.search === "string" ? search.search.slice(0, 200) : undefined,
+});
+
+const runtimeChildren = [
   createRoute({
-    getParentRoute: () => protectedRoute,
+    getParentRoute: () => runtimeRoute,
     path: "/",
-    component: lazyRouteComponent(workspaces, "WorkspaceEntryPage"),
-  }),
-  createRoute({
-    getParentRoute: () => protectedRoute,
-    path: "/workspaces/$workspaceId/overview",
-    component: lazyRouteComponent(overview, "OverviewPage"),
-  }),
-  createRoute({
-    getParentRoute: () => protectedRoute,
-    path: "/workspaces/$workspaceId/activity",
-    component: lazyRouteComponent(operations, "OperationActivityPage"),
-  }),
-  createRoute({
-    getParentRoute: () => protectedRoute,
-    path: "/workspaces/$workspaceId/projects",
-    component: lazyRouteComponent(projects, "ProjectsPage"),
-  }),
-  createRoute({
-    getParentRoute: () => protectedRoute,
-    path: "/workspaces/$workspaceId/parameters",
-    component: lazyRouteComponent(parameters, "ParametersPage"),
-  }),
-  createRoute({
-    getParentRoute: () => protectedRoute,
-    path: "/workspaces/$workspaceId/projects/$projectId",
-    component: lazyRouteComponent(projects, "ProjectEntryPage"),
-  }),
-  createRoute({
-    getParentRoute: () => protectedRoute,
-    path: "/workspaces/$workspaceId/projects/$projectId/settings",
-    component: lazyRouteComponent(projects, "ProjectOverviewPage"),
-  }),
-  createRoute({
-    getParentRoute: () => protectedRoute,
-    path: "/workspaces/$workspaceId/projects/$projectId/settings/apps",
-    component: lazyRouteComponent(projects, "ProjectAppsPage"),
-  }),
-  createRoute({
-    getParentRoute: () => protectedRoute,
-    path: "/workspaces/$workspaceId/projects/$projectId/settings/environments",
-    component: lazyRouteComponent(projects, "ProjectEnvironmentsPage"),
-  }),
-  createRoute({
-    getParentRoute: () => protectedRoute,
-    path: "/workspaces/$workspaceId/projects/$projectId/environments/$environmentId",
-    component: lazyRouteComponent(runtimes, "EnvironmentAppsPage"),
-  }),
-  createRoute({
-    getParentRoute: () => protectedRoute,
-    path: runtimePath,
     component: lazyRouteComponent(runtimes, "EnvironmentAppOverviewPage"),
   }),
   createRoute({
-    getParentRoute: () => protectedRoute,
-    path: `${runtimePath}/builds`,
+    getParentRoute: () => runtimeRoute,
+    path: "builds",
     component: lazyRouteComponent(runtimes, "EnvironmentAppBuildsPage"),
   }),
   createRoute({
-    getParentRoute: () => protectedRoute,
-    path: `${runtimePath}/builds/$buildId`,
+    getParentRoute: () => runtimeRoute,
+    path: "builds/$buildId",
     component: lazyRouteComponent(runtimes, "EnvironmentBuildDetailPage"),
   }),
   createRoute({
-    getParentRoute: () => protectedRoute,
-    path: `${runtimePath}/deployments`,
+    getParentRoute: () => runtimeRoute,
+    path: "deployments",
     component: lazyRouteComponent(runtimes, "EnvironmentAppDeploymentsPage"),
   }),
   createRoute({
-    getParentRoute: () => protectedRoute,
-    path: `${runtimePath}/releases`,
+    getParentRoute: () => runtimeRoute,
+    path: "releases",
     component: lazyRouteComponent(delivery, "EnvironmentAppReleasesPage"),
   }),
   createRoute({
-    getParentRoute: () => protectedRoute,
-    path: `${runtimePath}/observability`,
+    getParentRoute: () => runtimeRoute,
+    path: "observability",
     component: lazyRouteComponent(observability, "EnvironmentAppObservabilityPage"),
   }),
   createRoute({
-    getParentRoute: () => protectedRoute,
-    path: `${runtimePath}/observability/logs`,
+    getParentRoute: () => runtimeRoute,
+    path: "observability/logs",
+    validateSearch: observabilitySearch,
     component: lazyRouteComponent(observability, "EnvironmentAppLogsPage"),
   }),
   createRoute({
-    getParentRoute: () => protectedRoute,
-    path: `${runtimePath}/observability/metrics`,
+    getParentRoute: () => runtimeRoute,
+    path: "observability/metrics",
+    validateSearch: observabilitySearch,
     component: lazyRouteComponent(observability, "EnvironmentAppMetricsPage"),
   }),
   createRoute({
-    getParentRoute: () => protectedRoute,
-    path: `${runtimePath}/observability/events`,
+    getParentRoute: () => runtimeRoute,
+    path: "observability/events",
+    validateSearch: observabilitySearch,
     component: lazyRouteComponent(observability, "EnvironmentAppEventsPage"),
   }),
+  ...(
+    [
+      ["settings", "EnvironmentVariablesPage"],
+      ["settings/build", "EnvironmentBuildConfigurationPage"],
+      ["settings/secrets", "EnvironmentSecretsPage"],
+      ["settings/network", "EnvironmentNetworkPage"],
+      ["settings/health", "EnvironmentHealthPage"],
+      ["settings/resources", "EnvironmentResourcesPage"],
+      ["settings/storage", "EnvironmentStoragePage"],
+      ["settings/versions", "EnvironmentConfigurationVersionsPage"],
+    ] as const
+  ).map(([path, component]) =>
+    createRoute({
+      getParentRoute: () => runtimeRoute,
+      path,
+      component: lazyRouteComponent(runtimeConfiguration, component),
+    }),
+  ),
+];
+
+const environmentChildren = [
   createRoute({
-    getParentRoute: () => protectedRoute,
-    path: `${runtimePath}/settings`,
-    component: lazyRouteComponent(runtimeConfiguration, "EnvironmentVariablesPage"),
+    getParentRoute: () => environmentRoute,
+    path: "/",
+    component: lazyRouteComponent(runtimes, "EnvironmentAppsPage"),
   }),
+  runtimeRoute.addChildren(runtimeChildren),
+];
+
+const applicationChildren = [
   createRoute({
-    getParentRoute: () => protectedRoute,
-    path: `${runtimePath}/settings/build`,
-    component: lazyRouteComponent(runtimeConfiguration, "EnvironmentBuildConfigurationPage"),
-  }),
-  createRoute({
-    getParentRoute: () => protectedRoute,
-    path: `${runtimePath}/settings/secrets`,
-    component: lazyRouteComponent(runtimeConfiguration, "EnvironmentSecretsPage"),
-  }),
-  createRoute({
-    getParentRoute: () => protectedRoute,
-    path: `${runtimePath}/settings/network`,
-    component: lazyRouteComponent(runtimeConfiguration, "EnvironmentNetworkPage"),
-  }),
-  createRoute({
-    getParentRoute: () => protectedRoute,
-    path: `${runtimePath}/settings/health`,
-    component: lazyRouteComponent(runtimeConfiguration, "EnvironmentHealthPage"),
-  }),
-  createRoute({
-    getParentRoute: () => protectedRoute,
-    path: `${runtimePath}/settings/resources`,
-    component: lazyRouteComponent(runtimeConfiguration, "EnvironmentResourcesPage"),
-  }),
-  createRoute({
-    getParentRoute: () => protectedRoute,
-    path: `${runtimePath}/settings/storage`,
-    component: lazyRouteComponent(runtimeConfiguration, "EnvironmentStoragePage"),
-  }),
-  createRoute({
-    getParentRoute: () => protectedRoute,
-    path: `${runtimePath}/settings/versions`,
-    component: lazyRouteComponent(runtimeConfiguration, "EnvironmentConfigurationVersionsPage"),
-  }),
-  createRoute({
-    getParentRoute: () => protectedRoute,
-    path: "/workspaces/$workspaceId/projects/$projectId/apps/$appId",
+    getParentRoute: () => applicationRoute,
+    path: "/",
     component: lazyRouteComponent(applications, "AppOverviewPage"),
   }),
   createRoute({
-    getParentRoute: () => protectedRoute,
-    path: "/workspaces/$workspaceId/projects/$projectId/apps/$appId/source",
+    getParentRoute: () => applicationRoute,
+    path: "source",
     component: lazyRouteComponent(applications, "AppSourcePage"),
   }),
   createRoute({
-    getParentRoute: () => protectedRoute,
-    path: "/workspaces/$workspaceId/projects/$projectId/apps/$appId/releases",
+    getParentRoute: () => applicationRoute,
+    path: "releases",
     component: lazyRouteComponent(delivery, "AppReleasesPage"),
   }),
   createRoute({
-    getParentRoute: () => protectedRoute,
-    path: "/workspaces/$workspaceId/projects/$projectId/apps/$appId/automation",
+    getParentRoute: () => applicationRoute,
+    path: "automation",
     component: lazyRouteComponent(externalCI, "AppAutomationPage"),
   }),
+];
+
+const projectChildren = [
   createRoute({
-    getParentRoute: () => protectedRoute,
-    path: "/workspaces/$workspaceId/settings",
+    getParentRoute: () => projectRoute,
+    path: "/",
+    component: lazyRouteComponent(projects, "ProjectEntryPage"),
+  }),
+  createRoute({
+    getParentRoute: () => projectRoute,
+    path: "settings",
+    component: lazyRouteComponent(projects, "ProjectOverviewPage"),
+  }),
+  createRoute({
+    getParentRoute: () => projectRoute,
+    path: "settings/apps",
+    component: lazyRouteComponent(projects, "ProjectAppsPage"),
+  }),
+  createRoute({
+    getParentRoute: () => projectRoute,
+    path: "settings/environments",
+    component: lazyRouteComponent(projects, "ProjectEnvironmentsPage"),
+  }),
+  applicationRoute.addChildren(applicationChildren),
+  environmentRoute.addChildren(environmentChildren),
+];
+
+const workspaceChildren = [
+  createRoute({
+    getParentRoute: () => workspaceRoute,
+    path: "overview",
+    component: lazyRouteComponent(overview, "OverviewPage"),
+  }),
+  createRoute({
+    getParentRoute: () => workspaceRoute,
+    path: "activity",
+    component: lazyRouteComponent(operations, "OperationActivityPage"),
+  }),
+  createRoute({
+    getParentRoute: () => workspaceRoute,
+    path: "projects",
+    component: lazyRouteComponent(projects, "ProjectsPage"),
+  }),
+  createRoute({
+    getParentRoute: () => workspaceRoute,
+    path: "parameters",
+    component: lazyRouteComponent(parameters, "ParametersPage"),
+  }),
+  projectRoute.addChildren(projectChildren),
+  createRoute({
+    getParentRoute: () => workspaceRoute,
+    path: "settings",
     component: lazyRouteComponent(workspaces, "WorkspaceSettingsPage"),
   }),
   createRoute({
-    getParentRoute: () => protectedRoute,
-    path: "/workspaces/$workspaceId/settings/github",
+    getParentRoute: () => workspaceRoute,
+    path: "settings/github",
     validateSearch: (search: Record<string, unknown>) => ({
       github: search.github === "connected" ? ("connected" as const) : undefined,
     }),
     component: lazyRouteComponent(github, "GitHubSettingsPage"),
   }),
   createRoute({
-    getParentRoute: () => protectedRoute,
-    path: "/workspaces/$workspaceId/settings/members",
+    getParentRoute: () => workspaceRoute,
+    path: "settings/members",
     component: lazyRouteComponent(workspaceAccess, "WorkspaceMembersPage"),
   }),
   createRoute({
-    getParentRoute: () => protectedRoute,
-    path: "/workspaces/$workspaceId/settings/groups",
+    getParentRoute: () => workspaceRoute,
+    path: "settings/groups",
     component: lazyRouteComponent(workspaceAccess, "WorkspaceGroupsPage"),
   }),
   createRoute({
-    getParentRoute: () => protectedRoute,
-    path: "/workspaces/$workspaceId/settings/access",
+    getParentRoute: () => workspaceRoute,
+    path: "settings/access",
     component: lazyRouteComponent(workspaceAccess, "WorkspaceAccessGrantsPage"),
   }),
   createRoute({
-    getParentRoute: () => protectedRoute,
-    path: "/workspaces/$workspaceId/settings/audit",
+    getParentRoute: () => workspaceRoute,
+    path: "settings/audit",
     component: lazyRouteComponent(workspaceAccess, "WorkspaceAuditPage"),
   }),
-  createRoute({
-    getParentRoute: () => protectedRoute,
-    path: "/workspaces/new",
-    beforeLoad: ({ context }) => requireInstallationCapability(context, "createWorkspace"),
-    component: lazyRouteComponent(workspaces, "NewWorkspacePage"),
-  }),
 ];
+
+export const workspaceRoutes = [workspaceEntryRoute, newWorkspaceRoute, workspaceRoute.addChildren(workspaceChildren)];

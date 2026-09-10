@@ -8,8 +8,8 @@ export const listProjects = (workspaceId: string, signal?: AbortSignal) =>
   requestAllPages<Project>(projectBase(workspaceId), signal) as Promise<ResourceList<Project>>;
 export const createProject = (workspaceId: string, input: HierarchyInput) =>
   request<Project>(projectBase(workspaceId), { method: "POST", body: JSON.stringify(input) });
-export const getProject = (workspaceId: string, projectId: string) =>
-  request<Project>(`${projectBase(workspaceId)}/${encodeURIComponent(projectId)}`);
+export const getProject = (workspaceId: string, projectId: string, signal?: AbortSignal) =>
+  request<Project>(`${projectBase(workspaceId)}/${encodeURIComponent(projectId)}`, { signal });
 export const updateProject = (workspaceId: string, project: Project, input: HierarchyInput) =>
   request<Project>(`${projectBase(workspaceId)}/${encodeURIComponent(project.id)}`, {
     method: "PUT",

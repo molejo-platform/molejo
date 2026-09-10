@@ -106,4 +106,26 @@ describe("runtime metrics stream", () => {
     });
     expect(FakeEventSource.instances).toHaveLength(2);
   });
+
+  it("reuses the transport when sibling route content remounts", () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("EventSource", FakeEventSource);
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
+    const siblingTarget = Object.assign({}, target, { id: "aev-bbbbbbbbbbbbbbbbbbbb" }) as never;
+    const first = renderWithQueryClient(
+      <RuntimeMetricsProvider target={siblingTarget} params={params}>
+        <RuntimeStatusStrip target={siblingTarget} />
+      </RuntimeMetricsProvider>,
+    );
+    expect(FakeEventSource.instances).toHaveLength(1);
+
+    first.unmount();
+    renderWithQueryClient(
+      <RuntimeMetricsProvider target={siblingTarget} params={params}>
+        <RuntimeStatusStrip target={siblingTarget} />
+      </RuntimeMetricsProvider>,
+    );
+
+    expect(FakeEventSource.instances).toHaveLength(1);
+  });
 });

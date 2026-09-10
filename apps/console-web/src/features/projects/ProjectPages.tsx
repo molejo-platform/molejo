@@ -9,29 +9,34 @@ import { Button } from "../../shared/ui/Button";
 import { ConfirmAction } from "../../shared/ui/ConfirmAction";
 import { Field } from "../../shared/ui/Field";
 import { EmptyState, PageHeader } from "../../shared/ui/Page";
-import { applicationKeys, archiveApp, createApp, listApps, updateApp } from "../applications/public";
+import {
+  applicationKeys,
+  applicationQueries,
+  archiveApp,
+  createApp,
+  listApps,
+  updateApp,
+} from "../applications/public";
 import {
   archiveEnvironment,
   createEnvironment,
   environmentKeys,
+  environmentQueries,
   listEnvironments,
   updateEnvironment,
 } from "../environments/public";
 import { useEffectiveCapabilities } from "../workspace-access/public";
-import { archiveProject, createProject, getProject, listProjects, updateProject } from "./api";
+import { archiveProject, createProject, updateProject } from "./api";
 import { normalizeResourceName, validateResourceName } from "./model";
 import { ProjectLayout } from "./ProjectLayout";
-import { projectKeys } from "./queries";
+import { projectKeys, projectQueries } from "./queries";
 
 export function ProjectsPage() {
   const { workspaceId } = useParams({ from: "/protected/workspaces/$workspaceId/projects" });
   const capabilities = useEffectiveCapabilities(workspaceId, "Workspace", workspaceId);
   const canMutate = capabilities.data?.editResources === true;
   const queryClient = useQueryClient();
-  const projects = useQuery({
-    queryKey: projectKeys.list(workspaceId),
-    queryFn: ({ signal }) => listProjects(workspaceId, signal),
-  });
+  const projects = useQuery(projectQueries.list(workspaceId));
   const create = useMutation({
     mutationFn: (name: string) => createProject(workspaceId, { name }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: projectKeys.list(workspaceId) }),
@@ -104,18 +109,9 @@ export function ProjectOverviewPage() {
   const navigate = useNavigate();
   const capabilities = useEffectiveCapabilities(workspaceId, "Project", projectId);
   const canMutate = capabilities.data?.editResources === true;
-  const apps = useQuery({
-    queryKey: applicationKeys.list(workspaceId, projectId),
-    queryFn: ({ signal }) => listApps(workspaceId, projectId, signal),
-  });
-  const environments = useQuery({
-    queryKey: environmentKeys.list(workspaceId, projectId),
-    queryFn: ({ signal }) => listEnvironments(workspaceId, projectId, signal),
-  });
-  const project = useQuery({
-    queryKey: projectKeys.detail(workspaceId, projectId),
-    queryFn: () => getProject(workspaceId, projectId),
-  });
+  const apps = useQuery(applicationQueries.list(workspaceId, projectId));
+  const environments = useQuery(environmentQueries.list(workspaceId, projectId));
+  const project = useQuery(projectQueries.detail(workspaceId, projectId));
   const update = useMutation({
     mutationFn: (name: string) => updateProject(workspaceId, project.data!, { name }),
     onSuccess: async () => {

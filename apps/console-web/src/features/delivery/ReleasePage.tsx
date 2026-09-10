@@ -9,9 +9,9 @@ import { Button } from "../../shared/ui/Button";
 import { EmptyState } from "../../shared/ui/Page";
 import { EnvironmentAppLayout, type EnvironmentParams } from "../app-environments/public";
 import { useEffectiveCapabilities } from "../workspace-access/public";
-import { createAppBuild, listAppReleases } from "./api";
+import { createAppBuild } from "./api";
 import { DeliveryNav } from "./DeliveryNav";
-import { deliveryKeys } from "./queries";
+import { deliveryKeys, deliveryQueries } from "./queries";
 
 function releaseRevision(release: Release) {
   return release.commitSha ?? release.sourceRevision;
@@ -37,10 +37,7 @@ function TargetReleases({
 }) {
   const capabilities = useEffectiveCapabilities(params.workspaceId, "AppEnvironment", target.id);
   const canMutate = capabilities.data?.deploy === true;
-  const releases = useQuery({
-    queryKey: deliveryKeys.releases(params.workspaceId, params.projectId, target.appId),
-    queryFn: ({ signal }) => listAppReleases(params.workspaceId, params.projectId, target.appId, signal),
-  });
+  const releases = useQuery(deliveryQueries.releases(params.workspaceId, params.projectId, target.appId));
   const items = releases.data?.items ?? [];
   const rebuild = useMutation({
     mutationFn: (commitSha: string) =>

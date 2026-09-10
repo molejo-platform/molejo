@@ -129,8 +129,7 @@ vi.mock("../workspace-access/public", () => ({
     isSuccess: true,
   }),
 }));
-vi.mock("../cluster-placement/public", () => ({
-  clusterPlacementKeys: { workspace: (workspaceId: string) => ["workspaces", workspaceId, "clusters"] },
+vi.mock("../cluster-placement/api", () => ({
   listWorkspaceClusters: vi.fn().mockResolvedValue({
     items: [
       {
@@ -142,10 +141,6 @@ vi.mock("../cluster-placement/public", () => ({
       },
     ],
   }),
-  readyWorkspaceClusters: (items: Array<{ state: string }> | undefined) =>
-    items?.filter((item) => item.state === "Ready") ?? [],
-  reconcileClusterSelection: (ids: string[], selected: string) =>
-    ids.includes(selected) ? selected : ids.length === 1 ? ids[0] : "",
 }));
 vi.mock("../operations/public", () => ({
   useOperationTracker: () => ({
@@ -158,8 +153,8 @@ vi.mock("../operations/public", () => ({
     error: undefined,
   }),
 }));
-vi.mock("../parameters/public", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../parameters/public")>()),
+vi.mock("../parameters/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../parameters/api")>()),
   listParameters: vi.fn().mockResolvedValue({
     items: [
       {
@@ -195,15 +190,15 @@ vi.mock("./RuntimeLayout", () => ({
 vi.mock("../projects/api", () => ({
   getProject: vi.fn().mockResolvedValue({ id: params.projectId, name: "Platform", version: 1 }),
 }));
-vi.mock("../environments/public", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../environments/public")>()),
+vi.mock("../environments/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../environments/api")>()),
   listEnvironments: vi
     .fn()
     .mockResolvedValue({ items: [{ id: params.environmentId, name: "Production", version: 1 }], nextCursor: null }),
   listEnvironmentApps: mocks.listEnvironmentApps,
 }));
-vi.mock("../applications/public", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../applications/public")>()),
+vi.mock("../applications/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../applications/api")>()),
   listApps: mocks.listApps,
   getAppSource: vi.fn().mockResolvedValue({ source: { repository: { fullName: "molejo/api" } } }),
 }));
@@ -215,8 +210,8 @@ vi.mock("./api", async (importOriginal) => ({
 vi.mock("../application-setup/api", () => ({
   createProjectAppEnvironment: mocks.createProjectAppEnvironment,
 }));
-vi.mock("../delivery/public", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../delivery/public")>()),
+vi.mock("../delivery/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../delivery/api")>()),
   createAppBuild: mocks.createAppBuild,
   createAppEnvironmentDeployment: mocks.createAppEnvironmentDeployment,
   getAppBuild: mocks.getAppBuild,

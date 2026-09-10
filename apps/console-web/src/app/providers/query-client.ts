@@ -20,7 +20,7 @@ export function createQueryClient() {
     mutationCache,
     defaultOptions: {
       queries: {
-        staleTime: 5_000,
+        staleTime: 0,
         retry: (failureCount, error) => {
           if (error instanceof Error && "status" in error && [401, 403, 409].includes(Number(error.status)))
             return false;

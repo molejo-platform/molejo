@@ -17,8 +17,8 @@ import {
   useFeatureAvailability,
 } from "../feature-availability/public";
 import { useEffectiveCapabilities } from "../workspace-access/public";
-import { archiveParameter, createParameter, listParameters, replaceParameter } from "./api";
-import { parameterKeys } from "./queries";
+import { archiveParameter, createParameter, replaceParameter } from "./api";
+import { parameterKeys, parameterQueries } from "./queries";
 
 const emptyInput: ParameterInput = { path: "", type: "PlainText", description: "", value: "" };
 
@@ -32,10 +32,7 @@ export function ParametersPage() {
   const queryClient = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<Parameter>();
-  const query = useQuery({
-    queryKey: parameterKeys.list(workspaceId),
-    queryFn: ({ signal }) => listParameters(workspaceId, signal),
-  });
+  const query = useQuery(parameterQueries.list(workspaceId));
   const create = useMutation({
     mutationFn: (input: ParameterInput) => createParameter(workspaceId, input),
     onSuccess: async () => {

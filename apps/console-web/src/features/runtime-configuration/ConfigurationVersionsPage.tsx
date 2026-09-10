@@ -6,8 +6,7 @@ import { formatDateTime } from "../../shared/format";
 import { Alert } from "../../shared/ui/Alert";
 import { EmptyState } from "../../shared/ui/Page";
 import { EnvironmentAppLayout, type EnvironmentParams } from "../app-environments/public";
-import { listAppEnvironmentConfigurationVersions } from "./api";
-import { runtimeConfigurationKeys } from "./queries";
+import { runtimeConfigurationQueries } from "./queries";
 import { ConfigurationNav } from "./RuntimeConfigurationPages";
 
 export function EnvironmentConfigurationVersionsPage() {
@@ -19,11 +18,9 @@ export function EnvironmentConfigurationVersionsPage() {
 }
 
 function ConfigurationVersions({ target, params }: { target: AppEnvironment; params: EnvironmentParams }) {
-  const revisions = useQuery({
-    queryKey: runtimeConfigurationKeys.versions(params.workspaceId, params.projectId, target.appId, target.id),
-    queryFn: ({ signal }) =>
-      listAppEnvironmentConfigurationVersions(params.workspaceId, params.projectId, target.appId, target.id, signal),
-  });
+  const revisions = useQuery(
+    runtimeConfigurationQueries.versions(params.workspaceId, params.projectId, target.appId, target.id),
+  );
   const errorMessage = revisions.error ? userFacingError(revisions.error) : "";
   if (errorMessage)
     return (

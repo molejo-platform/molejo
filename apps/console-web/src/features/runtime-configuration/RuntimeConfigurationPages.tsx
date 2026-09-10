@@ -1,8 +1,8 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useBlocker, useNavigate } from "@tanstack/react-router";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 
-import { ApiRequestError, userFacingError } from "../../shared/api/errors";
+import { userFacingError } from "../../shared/api/errors";
 import type { AppEnvironment, Parameter, RuntimeConfiguration } from "../../shared/api/types";
 import { Alert } from "../../shared/ui/Alert";
 import { Button } from "../../shared/ui/Button";
@@ -10,13 +10,11 @@ import { ConfirmAction } from "../../shared/ui/ConfirmAction";
 import { Field, SelectField, TextareaField } from "../../shared/ui/Field";
 import { EmptyState, TabNav } from "../../shared/ui/Page";
 import {
-  appEnvironmentKeys,
   deleteAppEnvironment,
   EnvironmentAppLayout,
   type EnvironmentParams,
   publicationDomains,
   publicationSuffix,
-  updateAppEnvironment,
 } from "../app-environments/public";
 import { useSessionQuery } from "../authentication/public";
 import { environmentKeys } from "../environments/public";
@@ -27,15 +25,14 @@ import {
   findFeature,
   useFeatureAvailability,
 } from "../feature-availability/public";
-import { listParameters, parameterKeys } from "../parameters/public";
 import { useOperationTracker } from "../operations/public";
 import { useEffectiveCapabilities } from "../workspace-access/public";
-import { runtimeConfigurationKeys } from "./queries";
 import { DeliveryAutomation } from "./DeliveryAutomation";
 import { ResourceField } from "./ResourceField";
 import { parseRuntimeVariables, runtimeVariablesToText } from "./RuntimeConfigurationForm";
+import { type RuntimeConfigurationSection, useRuntimeConfigurationEditor } from "./useRuntimeConfigurationEditor";
 
-type Section = "build" | "variables" | "secrets" | "network" | "health" | "resources";
+type Section = RuntimeConfigurationSection;
 
 export function ConfigurationNav({
   params,
@@ -121,72 +118,11 @@ function ConfigurationEditor({
     target: AppEnvironment,
   ) => ReactNode;
 }) {
-  const capabilities = useEffectiveCapabilities(params.workspaceId, "AppEnvironment", target.id);
-  const canMutate = capabilities.data?.editResources === true;
-  const queryClient = useQueryClient();
-  const parameters = useQuery({
-    queryKey: parameterKeys.list(params.workspaceId),
-    queryFn: ({ signal }) => listParameters(params.workspaceId, signal),
-  });
-  const [branch, setBranch] = useState(target.branch);
-  const [draft, setDraft] = useState(target.configuration);
-  const [dirty, setDirty] = useState(false);
-  const [valid, setValid] = useState(true);
-  useBlocker({
-    shouldBlockFn: () => !window.confirm("Descartar as alterações não salvas?"),
-    enableBeforeUnload: dirty,
-    disabled: !dirty,
-  });
-  useEffect(() => {
-    if (!dirty) {
-      setBranch(target.branch);
-      setDraft(target.configuration);
-    }
-  }, [dirty, target.branch, target.configuration, target.version]);
-  const save = useMutation({
-    mutationFn: ({ version, latest }: { version: number; latest: AppEnvironment }) =>
-      updateAppEnvironment(
-        params.workspaceId,
-        params.projectId,
-        target.appId,
-        target.id,
-        version,
-        mergeInput(latest, branch, draft, section),
-      ),
-    onSuccess: async () => {
-      setDirty(false);
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: environmentKeys.applications(params.workspaceId, params.projectId, params.environmentId),
-        }),
-        queryClient.invalidateQueries({
-          queryKey: appEnvironmentKeys.list(params.workspaceId, params.projectId, target.appId),
-        }),
-        queryClient.invalidateQueries({
-          queryKey: runtimeConfigurationKeys.versions(params.workspaceId, params.projectId, target.appId, target.id),
-        }),
-      ]);
-    },
-    onError: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: environmentKeys.applications(params.workspaceId, params.projectId, params.environmentId),
-      });
-    },
-  });
-  const conflict = save.error instanceof ApiRequestError && save.error.status === 409;
-  const updateDraft = (value: RuntimeConfiguration) => {
-    setDraft(value);
-    setDirty(true);
-    save.reset();
-  };
-  const updateBranch = (value: string) => {
-    setBranch(value);
-    setDirty(true);
-    save.reset();
-  };
+  const viewModel = useRuntimeConfigurationEditor(target, params, section);
+  const { branch, canMutate, capabilities, conflict, dirty, draft, parameters, save, valid } = viewModel;
   function submit(event: FormEvent) {
     event.preventDefault();
-    if (valid) save.mutate({ version: target.version, latest: target });
+    if (valid) viewModel.saveDesired();
   }
   return (
     <section className="stack">
@@ -215,13 +151,13 @@ function ConfigurationEditor({
             label="Branch principal deste Environment"
             helper="Novos builds resolvem um SHA desta branch."
             value={branch}
-            onChange={(event) => updateBranch(event.target.value)}
+            onChange={(event) => viewModel.updateBranch(event.target.value)}
             maxLength={255}
             disabled={!canMutate}
             required
           />
         ) : (
-          render(draft, updateDraft, parameters.data?.items ?? [], !canMutate, setValid, target)
+          render(draft, viewModel.updateDraft, parameters.data?.items ?? [], !canMutate, viewModel.setValid, target)
         )}
         {canMutate && (
           <div className="form-actions">
@@ -230,21 +166,14 @@ function ConfigurationEditor({
                 type="button"
                 variant="secondary"
                 onClick={() => {
-                  setBranch(target.branch);
-                  setDraft(target.configuration);
-                  setDirty(false);
-                  save.reset();
+                  viewModel.reset();
                 }}
               >
                 Usar versão atual
               </Button>
             )}
             {conflict && (
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => save.mutate({ version: target.version, latest: target })}
-              >
+              <Button type="button" variant="secondary" onClick={viewModel.saveDesired}>
                 Reaplicar minhas alterações
               </Button>
             )}
@@ -261,18 +190,6 @@ function ConfigurationEditor({
     </section>
   );
 }
-function mergeInput(latest: AppEnvironment, branch: string, draft: RuntimeConfiguration, section: Section) {
-  const configuration = { ...latest.configuration };
-  if (section === "variables") configuration.variables = draft.variables;
-  if (section === "secrets") configuration.parameters = draft.parameters;
-  if (section === "network")
-    Object.assign(configuration, { ports: draft.ports, publicEndpoints: draft.publicEndpoints });
-  if (section === "health") configuration.probes = draft.probes;
-  if (section === "resources") Object.assign(configuration, { replicas: draft.replicas, resources: draft.resources });
-  const sourceBranch = section === "build" ? branch.trim() : latest.branch;
-  return { ...(sourceBranch ? { branch: sourceBranch } : {}), configuration };
-}
-
 export const EnvironmentVariablesPage = page(
   "variables",
   "Variáveis",

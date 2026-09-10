@@ -1,17 +1,15 @@
-import { createContext, type ReactNode, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
 
-import type { AppEnvironment, RuntimeMetricSample, RuntimeMetricSnapshot } from "../../shared/api/types";
+import type { AppEnvironment, RuntimeMetricSample } from "../../shared/api/types";
 import { StatusBadge } from "../../shared/ui/StatusBadge";
 import { runtimeMetricStreamURL } from "./api";
+import { useRuntimeMetricStream, type RuntimeMetricsValue } from "./runtime-metric-stream";
 
 type RuntimeTargetRef = {
   workspaceId: string;
   projectId: string;
   appEnvironmentId: string;
 };
-
-export type RuntimeMetricsStreamState = "connecting" | "connected" | "reconnecting" | "paused" | "unavailable";
-type RuntimeMetricsValue = { snapshot?: RuntimeMetricSnapshot; state: RuntimeMetricsStreamState };
 
 const RuntimeMetricsContext = createContext<RuntimeMetricsValue>({ state: "unavailable" });
 
@@ -39,94 +37,10 @@ export function useRuntimeMetricsStream(
   params: RuntimeTargetRef,
   enabled = true,
 ): RuntimeMetricsValue {
-  const [snapshot, setSnapshot] = useState<RuntimeMetricSnapshot>();
-  const [state, setState] = useState<RuntimeMetricsStreamState>(() =>
-    typeof EventSource === "undefined"
-      ? "unavailable"
-      : document.visibilityState === "hidden"
-        ? "paused"
-        : "connecting",
-  );
-
-  useEffect(() => {
-    if (!enabled || typeof EventSource === "undefined") {
-      setState("unavailable");
-      return;
-    }
-    let source: EventSource | undefined;
-    let reconnectNotice: number | undefined;
-    const clearReconnectNotice = () => {
-      if (reconnectNotice !== undefined) window.clearTimeout(reconnectNotice);
-      reconnectNotice = undefined;
-    };
-    const connected = () => {
-      clearReconnectNotice();
-      setState("connected");
-    };
-    const connectionInterrupted = () => {
-      clearReconnectNotice();
-      reconnectNotice = window.setTimeout(() => setState("reconnecting"), 5_000);
-    };
-    const connect = () => {
-      if (document.visibilityState === "hidden" || source) {
-        setState(document.visibilityState === "hidden" ? "paused" : "connecting");
-        return;
-      }
-      setState("connecting");
-      source = new EventSource(runtimeMetricStreamURL(params.workspaceId, params.projectId, target.appId, target.id));
-      source.onopen = connected;
-      source.onerror = connectionInterrupted;
-      source.addEventListener("metrics", receiveMetrics);
-      source.addEventListener("end", receiveEnd);
-    };
-    const disconnect = (nextState: RuntimeMetricsStreamState) => {
-      clearReconnectNotice();
-      if (source) {
-        source.onopen = null;
-        source.onerror = null;
-      }
-      source?.removeEventListener("metrics", receiveMetrics);
-      source?.removeEventListener("end", receiveEnd);
-      source?.close();
-      source = undefined;
-      setState(nextState);
-    };
-    function receiveMetrics(event: Event) {
-      try {
-        setSnapshot(JSON.parse((event as MessageEvent<string>).data) as RuntimeMetricSnapshot);
-        connected();
-      } catch {
-        disconnect("unavailable");
-      }
-    }
-    function receiveEnd(event: Event) {
-      try {
-        const reason = (JSON.parse((event as MessageEvent<string>).data) as { reason?: string }).reason;
-        if (reason === "authorization_changed") disconnect("unavailable");
-      } catch {
-        disconnect("unavailable");
-      }
-    }
-    function visibilityChanged() {
-      if (document.visibilityState === "hidden") disconnect("paused");
-      else connect();
-    }
-    document.addEventListener("visibilitychange", visibilityChanged);
-    connect();
-    return () => {
-      document.removeEventListener("visibilitychange", visibilityChanged);
-      clearReconnectNotice();
-      if (source) {
-        source.onopen = null;
-        source.onerror = null;
-      }
-      source?.removeEventListener("metrics", receiveMetrics);
-      source?.removeEventListener("end", receiveEnd);
-      source?.close();
-    };
-  }, [enabled, params.projectId, params.workspaceId, target.appId, target.id]);
-
-  return useMemo(() => ({ snapshot, state }), [snapshot, state]);
+  const url = enabled
+    ? runtimeMetricStreamURL(params.workspaceId, params.projectId, target.appId, target.id)
+    : undefined;
+  return useRuntimeMetricStream(url);
 }
 
 export function RuntimeStatusStrip({ target }: { target: AppEnvironment }) {

@@ -16,8 +16,8 @@ import {
 } from "../../feature-availability/public";
 import { useEffectiveCapabilities } from "../../workspace-access/public";
 import { WorkspaceSettingsLayout } from "../../workspaces/public";
-import { connectGitHubInstallation, disconnectGitHubInstallation, listGitHubInstallations } from "./api";
-import { githubKeys } from "./queries";
+import { connectGitHubInstallation, disconnectGitHubInstallation } from "./api";
+import { githubKeys, githubQueries } from "./queries";
 
 export function GitHubSettingsPage() {
   const { workspaceId } = useParams({ from: "/protected/workspaces/$workspaceId/settings/github" });
@@ -28,11 +28,7 @@ export function GitHubSettingsPage() {
   const githubUsable = canUseFeature(github);
   const canMutate = capabilities.data?.manageWorkspace === true;
   const queryClient = useQueryClient();
-  const installations = useQuery({
-    queryKey: githubKeys.installations(workspaceId),
-    queryFn: () => listGitHubInstallations(workspaceId),
-    enabled: githubUsable,
-  });
+  const installations = useQuery({ ...githubQueries.installations(workspaceId), enabled: githubUsable });
   const connect = useMutation({
     mutationFn: () => connectGitHubInstallation(workspaceId),
     onSuccess: ({ authorizationUrl }) => window.location.assign(authorizationUrl),

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { userFacingError } from "../../shared/api/errors";
 import type { AppEnvironment, Release, RuntimeConfiguration } from "../../shared/api/types";
 import { formatDateTime, shortSha } from "../../shared/format";
@@ -10,22 +10,11 @@ import { SelectField } from "../../shared/ui/Field";
 import { Icon } from "../../shared/ui/Icon";
 import { EmptyState } from "../../shared/ui/Page";
 import { StatusBadge } from "../../shared/ui/StatusBadge";
-import { applicationKeys, getAppSource, listApps } from "../applications/public";
+import { applicationQueries } from "../applications/public";
 import { ApplicationSetupFlow } from "../application-setup/public";
 import { useSessionQuery } from "../authentication/public";
-import {
-  createAppBuild,
-  createAppEnvironmentDeployment,
-  DeliveryNav,
-  deliveryKeys,
-  getAppBuild,
-  listAppBuildLogs,
-  listAppBuilds,
-  listAppEnvironmentDeployments,
-  listAppReleases,
-  previewAppEnvironmentDeployment,
-} from "../delivery/public";
-import { environmentKeys, listEnvironmentApps } from "../environments/public";
+import { createAppBuild, DeliveryNav, deliveryKeys, deliveryQueries } from "../delivery/public";
+import { environmentKeys, environmentQueries } from "../environments/public";
 import {
   canUseFeature,
   FeatureAvailabilityNotice,
@@ -33,14 +22,12 @@ import {
   findFeature,
   useFeatureAvailability,
 } from "../feature-availability/public";
-import { useOperationTracker } from "../operations/public";
-import { listAppEnvironmentConfigurationVersions, runtimeConfigurationKeys } from "../runtime-configuration/public";
 import { useEffectiveCapabilities } from "../workspace-access/public";
 import { AppEnvironmentLayout } from "./AppEnvironmentLayout";
-import { appEnvironmentKeys } from "./queries";
 import { publicationAddress } from "./publication";
 import { EnvironmentAppLayout } from "./RuntimeLayout";
 import type { EnvironmentParams } from "./runtime-ref";
+import { useDeploymentViewModel } from "./useDeploymentViewModel";
 
 function runtimeAddresses(configuration: RuntimeConfiguration, session: ReturnType<typeof useSessionQuery>["data"]) {
   return configuration.publicEndpoints.map((endpoint) => publicationAddress(session, endpoint));
@@ -59,16 +46,8 @@ export function EnvironmentAppsPage() {
   const canMutate = capabilities.data?.editResources === true;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const targets = useQuery({
-    queryKey: environmentKeys.applications(workspaceId, projectId, environmentId),
-    queryFn: ({ signal }) => listEnvironmentApps(workspaceId, projectId, environmentId, signal),
-    refetchInterval: (query) =>
-      query.state.data?.items.some((target) => target.state === "Progressing") ? 2_000 : false,
-  });
-  const apps = useQuery({
-    queryKey: applicationKeys.list(workspaceId, projectId),
-    queryFn: ({ signal }) => listApps(workspaceId, projectId, signal),
-  });
+  const targets = useQuery(environmentQueries.applications(workspaceId, projectId, environmentId));
+  const apps = useQuery(applicationQueries.list(workspaceId, projectId));
   const [showAdd, setShowAdd] = useState(false);
   const linkedApps = useMemo(() => new Set(targets.data?.items.map((target) => target.appId)), [targets.data?.items]);
   const availableApps = apps.data?.items.filter((app) => !linkedApps.has(app.id)) ?? [];
@@ -271,15 +250,9 @@ function TargetBuilds({
   const sourceGitHub = findFeature(availability.data, featureIds.sourceGitHub);
   const managedBuildUsable = canUseFeature(managedBuild) && canUseFeature(sourceGitHub);
   const canMutate = capabilities.data?.deploy === true && managedBuildUsable && Boolean(target.branch);
-  const builds = useQuery({
-    queryKey: deliveryKeys.builds(params.workspaceId, params.projectId, target.appId),
-    queryFn: ({ signal }) => listAppBuilds(params.workspaceId, params.projectId, target.appId, signal),
-    refetchInterval: (query) =>
-      query.state.data?.items.some((build) => build.status === "Pending" || build.status === "Running") ? 2_000 : false,
-  });
+  const builds = useQuery(deliveryQueries.builds(params.workspaceId, params.projectId, target.appId));
   const source = useQuery({
-    queryKey: applicationKeys.source(params.workspaceId, params.projectId, target.appId),
-    queryFn: () => getAppSource(params.workspaceId, params.projectId, target.appId),
+    ...applicationQueries.source(params.workspaceId, params.projectId, target.appId),
     enabled: managedBuildUsable,
   });
   const items = builds.data?.items.filter((build) => build.appEnvironmentId === target.id) ?? [];
@@ -396,17 +369,11 @@ function TargetBuildDetail({ target, params }: { target: AppEnvironment; params:
   const { buildId } = useParams({
     from: "/protected/workspaces/$workspaceId/projects/$projectId/environments/$environmentId/apps/$appEnvironmentId/builds/$buildId",
   });
-  const build = useQuery({
-    queryKey: deliveryKeys.build(params.workspaceId, params.projectId, target.appId, buildId),
-    queryFn: () => getAppBuild(params.workspaceId, params.projectId, target.appId, buildId),
-    refetchInterval: (query) =>
-      query.state.data?.status === "Pending" || query.state.data?.status === "Running" ? 2_000 : false,
-  });
-  const logs = useQuery({
-    queryKey: deliveryKeys.buildLogs(params.workspaceId, params.projectId, target.appId, buildId),
-    queryFn: () => listAppBuildLogs(params.workspaceId, params.projectId, target.appId, buildId),
-    refetchInterval: build.data?.status === "Pending" || build.data?.status === "Running" ? 2_000 : false,
-  });
+  const build = useQuery(deliveryQueries.build(params.workspaceId, params.projectId, target.appId, buildId));
+  const buildActive = build.data?.status === "Pending" || build.data?.status === "Running";
+  const logs = useQuery(
+    deliveryQueries.buildLogs(params.workspaceId, params.projectId, target.appId, buildId, buildActive),
+  );
   const error = build.error ?? logs.error;
   if (build.isPending)
     return (
@@ -494,109 +461,35 @@ function TargetBuildDetail({ target, params }: { target: AppEnvironment; params:
 }
 
 export function EnvironmentAppDeploymentsPage() {
-  const queryClient = useQueryClient();
   return (
     <EnvironmentAppLayout>
       {(target, params) => (
         <section className="stack">
           <DeliveryNav params={params} />
-          <TargetDeployments target={target} params={params} queryClient={queryClient} />
+          <TargetDeployments target={target} params={params} />
         </section>
       )}
     </EnvironmentAppLayout>
   );
 }
 
-function TargetDeployments({
-  target,
-  params,
-  queryClient,
-}: {
-  target: AppEnvironment;
-  params: EnvironmentParams;
-  queryClient: ReturnType<typeof useQueryClient>;
-}) {
-  const capabilities = useEffectiveCapabilities(params.workspaceId, "AppEnvironment", target.id);
-  const availability = useFeatureAvailability(params.workspaceId, "AppEnvironment", target.id);
-  const runtimeApply = findFeature(availability.data, featureIds.runtimeWorkloadApply);
-  const canMutate = capabilities.data?.deploy === true && canUseFeature(runtimeApply);
-  const deployments = useQuery({
-    queryKey: deliveryKeys.deployments(params.workspaceId, params.projectId, target.appId, target.id),
-    queryFn: ({ signal }) =>
-      listAppEnvironmentDeployments(params.workspaceId, params.projectId, target.appId, target.id, signal),
-  });
-  const releases = useQuery({
-    queryKey: deliveryKeys.releases(params.workspaceId, params.projectId, target.appId),
-    queryFn: ({ signal }) => listAppReleases(params.workspaceId, params.projectId, target.appId, signal),
-  });
-  const availableReleases = useMemo(
-    () => releases.data?.items.filter((release) => release.availabilityStatus === "Available") ?? [],
-    [releases.data?.items],
-  );
-  const revisions = useQuery({
-    queryKey: runtimeConfigurationKeys.versions(params.workspaceId, params.projectId, target.appId, target.id),
-    queryFn: ({ signal }) =>
-      listAppEnvironmentConfigurationVersions(params.workspaceId, params.projectId, target.appId, target.id, signal),
-  });
-  const [releaseId, setReleaseId] = useState("");
-  const [configurationVersion, setConfigurationVersion] = useState(target.configurationVersion);
-  useEffect(() => {
-    if (!availableReleases.some((release) => release.id === releaseId)) setReleaseId(availableReleases[0]?.id ?? "");
-  }, [availableReleases, releaseId]);
-  useEffect(() => {
-    if (!revisions.data?.items.some((revision) => revision.version === configurationVersion))
-      setConfigurationVersion(revisions.data?.items[0]?.version ?? target.configurationVersion);
-  }, [configurationVersion, revisions.data?.items, target.configurationVersion]);
-  const preview = useQuery({
-    queryKey: ["deployment-preview", target.id, releaseId, configurationVersion],
-    queryFn: () =>
-      previewAppEnvironmentDeployment(params.workspaceId, params.projectId, target.appId, target.id, {
-        releaseId,
-        configurationVersion,
-      }),
-    enabled: !!releaseId && configurationVersion > 0,
-  });
-  const operation = useOperationTracker({ workspaceId: params.workspaceId, scope: `deployment:${target.id}` });
-  useEffect(() => {
-    if (!operation.isSucceeded) return;
-    void Promise.all([
-      queryClient.invalidateQueries({
-        queryKey: deliveryKeys.deployments(params.workspaceId, params.projectId, target.appId, target.id),
-      }),
-      queryClient.invalidateQueries({
-        queryKey: appEnvironmentKeys.detail(params.workspaceId, params.projectId, target.appId, target.id),
-      }),
-      queryClient.invalidateQueries({
-        queryKey: environmentKeys.applications(params.workspaceId, params.projectId, params.environmentId),
-      }),
-    ]);
-  }, [
-    operation.isSucceeded,
-    params.environmentId,
-    params.projectId,
-    params.workspaceId,
-    queryClient,
-    target.appId,
-    target.id,
-  ]);
-  const deploy = useMutation({
-    mutationFn: () =>
-      createAppEnvironmentDeployment(params.workspaceId, params.projectId, target.appId, target.id, target.version, {
-        releaseId,
-        configurationVersion,
-        currentDeploymentId: target.currentDeploymentId ?? null,
-      }),
-    onSuccess: (accepted) => operation.track(accepted.operation),
-  });
-  const error =
-    capabilities.error ??
-    availability.error ??
-    deployments.error ??
-    releases.error ??
-    revisions.error ??
-    preview.error ??
-    deploy.error ??
-    operation.error;
+function TargetDeployments({ target, params }: { target: AppEnvironment; params: EnvironmentParams }) {
+  const viewModel = useDeploymentViewModel(target, params);
+  const {
+    availability,
+    availableReleases,
+    canMutate,
+    configurationVersion,
+    deploy,
+    deployments,
+    error,
+    operation,
+    preview,
+    releaseId,
+    releases,
+    revisions,
+    runtimeApply,
+  } = viewModel;
   const labels: Record<string, string> = {
     InitialDeployment: "Primeira implantação",
     Release: "Nova release",
@@ -651,7 +544,7 @@ function TargetDeployments({
             <SelectField
               label="Release imutável"
               value={releaseId}
-              onChange={(event) => setReleaseId(event.target.value)}
+              onChange={(event) => viewModel.setReleaseId(event.target.value)}
               required
             >
               <option value="">Selecione</option>
@@ -665,7 +558,7 @@ function TargetDeployments({
             <SelectField
               label="Versão da configuração"
               value={configurationVersion}
-              onChange={(event) => setConfigurationVersion(Number(event.target.value))}
+              onChange={(event) => viewModel.setConfigurationVersion(Number(event.target.value))}
               required
             >
               {revisions.data?.items.map((revision) => (

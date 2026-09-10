@@ -8,7 +8,7 @@ import { Button } from "../../shared/ui/Button";
 import { ConfirmAction } from "../../shared/ui/ConfirmAction";
 import { SelectField } from "../../shared/ui/Field";
 import { EmptyState } from "../../shared/ui/Page";
-import { githubKeys, listGitHubInstallations, listGitHubRepositories } from "../integrations/github/public";
+import { githubQueries } from "../integrations/github/public";
 import {
   canUseFeature,
   FeatureAvailabilityNotice,
@@ -18,8 +18,8 @@ import {
 } from "../feature-availability/public";
 import { useEffectiveCapabilities } from "../workspace-access/public";
 import { ApplicationLayout } from "./ApplicationLayout";
-import { clearAppSource, getAppSource, setAppSource } from "./api";
-import { applicationKeys } from "./queries";
+import { clearAppSource, setAppSource } from "./api";
+import { applicationKeys, applicationQueries } from "./queries";
 
 export function AppSourcePage() {
   const { workspaceId, projectId, appId } = useParams({
@@ -33,20 +33,12 @@ export function AppSourcePage() {
   const queryClient = useQueryClient();
   const [installationId, setInstallationId] = useState("");
   const [repositoryId, setRepositoryId] = useState("");
-  const installations = useQuery({
-    queryKey: githubKeys.installations(workspaceId),
-    queryFn: () => listGitHubInstallations(workspaceId),
-    enabled: githubUsable,
-  });
-  const source = useQuery({
-    queryKey: applicationKeys.source(workspaceId, projectId, appId),
-    queryFn: () => getAppSource(workspaceId, projectId, appId),
-  });
+  const installations = useQuery({ ...githubQueries.installations(workspaceId), enabled: githubUsable });
+  const source = useQuery(applicationQueries.source(workspaceId, projectId, appId));
   const selectedInstallation =
     installations.data?.items.find((item) => item.id === installationId) ?? installations.data?.items[0];
   const repositories = useQuery({
-    queryKey: githubKeys.repositories(workspaceId, selectedInstallation?.id ?? ""),
-    queryFn: () => listGitHubRepositories(workspaceId, selectedInstallation?.id ?? ""),
+    ...githubQueries.repositories(workspaceId, selectedInstallation?.id ?? ""),
     enabled: githubUsable && Boolean(selectedInstallation),
   });
   useEffect(() => {

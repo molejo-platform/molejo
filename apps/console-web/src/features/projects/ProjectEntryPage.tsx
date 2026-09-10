@@ -3,27 +3,17 @@ import { Link, useParams } from "@tanstack/react-router";
 
 import { RefreshStatus, RetryAlert, Skeleton, SkeletonRegion } from "../../shared/ui/AsyncState";
 import { EmptyState, PageHeader } from "../../shared/ui/Page";
-import { applicationKeys, listApps } from "../applications/public";
-import { environmentKeys, listEnvironments } from "../environments/public";
-import { getProject } from "./api";
-import { projectKeys } from "./queries";
+import { applicationQueries } from "../applications/public";
+import { environmentQueries } from "../environments/public";
+import { projectQueries } from "./queries";
 
 export function ProjectEntryPage() {
   const { workspaceId, projectId } = useParams({
     from: "/protected/workspaces/$workspaceId/projects/$projectId",
   });
-  const project = useQuery({
-    queryKey: projectKeys.detail(workspaceId, projectId),
-    queryFn: () => getProject(workspaceId, projectId),
-  });
-  const environments = useQuery({
-    queryKey: environmentKeys.list(workspaceId, projectId),
-    queryFn: ({ signal }) => listEnvironments(workspaceId, projectId, signal),
-  });
-  const apps = useQuery({
-    queryKey: applicationKeys.list(workspaceId, projectId),
-    queryFn: ({ signal }) => listApps(workspaceId, projectId, signal),
-  });
+  const project = useQuery(projectQueries.detail(workspaceId, projectId));
+  const environments = useQuery(environmentQueries.list(workspaceId, projectId));
+  const apps = useQuery(applicationQueries.list(workspaceId, projectId));
   if (project.isPending && !project.data)
     return (
       <SkeletonRegion className="stack" label="Carregando Project">

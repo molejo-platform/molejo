@@ -30,10 +30,23 @@ export const createAppBuild = (workspaceId: string, projectId: string, appId: st
     headers: { "Idempotency-Key": createIdempotencyKey() },
     body: JSON.stringify(input),
   });
-export const getAppBuild = (workspaceId: string, projectId: string, appId: string, buildId: string) =>
-  request<Build>(`${buildBase(workspaceId, projectId, appId)}/${encodeURIComponent(buildId)}`);
-export const listAppBuildLogs = (workspaceId: string, projectId: string, appId: string, buildId: string) =>
-  request<{ items: BuildLog[] }>(`${buildBase(workspaceId, projectId, appId)}/${encodeURIComponent(buildId)}/logs`);
+export const getAppBuild = (
+  workspaceId: string,
+  projectId: string,
+  appId: string,
+  buildId: string,
+  signal?: AbortSignal,
+) => request<Build>(`${buildBase(workspaceId, projectId, appId)}/${encodeURIComponent(buildId)}`, { signal });
+export const listAppBuildLogs = (
+  workspaceId: string,
+  projectId: string,
+  appId: string,
+  buildId: string,
+  signal?: AbortSignal,
+) =>
+  request<{ items: BuildLog[] }>(`${buildBase(workspaceId, projectId, appId)}/${encodeURIComponent(buildId)}/logs`, {
+    signal,
+  });
 export const listAppReleases = (workspaceId: string, projectId: string, appId: string, signal?: AbortSignal) =>
   requestAllPages<Release>(`${appBase(workspaceId, projectId, appId)}/releases`, signal) as Promise<
     ResourceList<Release>
@@ -89,7 +102,11 @@ export const getAppEnvironmentDeliveryPolicy = (
   projectId: string,
   appId: string,
   appEnvironmentId: string,
-) => request<DeliveryPolicy>(`${runtimeBase(workspaceId, projectId, appId, appEnvironmentId)}/delivery-policy`);
+  signal?: AbortSignal,
+) =>
+  request<DeliveryPolicy>(`${runtimeBase(workspaceId, projectId, appId, appEnvironmentId)}/delivery-policy`, {
+    signal,
+  });
 export const replaceAppEnvironmentDeliveryPolicy = (
   workspaceId: string,
   projectId: string,

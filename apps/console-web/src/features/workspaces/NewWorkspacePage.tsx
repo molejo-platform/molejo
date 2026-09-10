@@ -9,12 +9,7 @@ import { Button } from "../../shared/ui/Button";
 import { Field, SelectField } from "../../shared/ui/Field";
 import { PageHeader } from "../../shared/ui/Page";
 import { useSessionQuery } from "../authentication/public";
-import {
-  activeClusters,
-  clusterPlacementKeys,
-  listClusters,
-  reconcileClusterSelection,
-} from "../cluster-placement/public";
+import { activeClusters, clusterPlacementQueries, reconcileClusterSelection } from "../cluster-placement/public";
 import { useOperationTracker } from "../operations/public";
 import { normalizeResourceName, validateResourceName } from "../projects/public";
 import { createWorkspace } from "./api";
@@ -33,8 +28,7 @@ export function NewWorkspacePage() {
   const [clusterId, setClusterId] = useState("");
   const [validation, setValidation] = useState("");
   const clusters = useQuery({
-    queryKey: clusterPlacementKeys.installation,
-    queryFn: ({ signal }) => listClusters(signal),
+    ...clusterPlacementQueries.installation(),
     enabled: canCreateWorkspace(session.data),
   });
   const availableClusters = useMemo(() => activeClusters(clusters.data?.items), [clusters.data?.items]);
