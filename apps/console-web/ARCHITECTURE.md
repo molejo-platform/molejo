@@ -79,6 +79,8 @@ utility framework, preprocessor, or runtime theme provider.
   viewport-level responsive changes.
 - A feature owns layouts that express its product vocabulary and imports its own
   stylesheet in the `features` cascade layer.
+- A visual component exported to another feature imports its styles directly;
+  route-level stylesheets cannot provide the visual contract of public components.
 - Interactive behavior that is difficult to implement accessibly may use Base UI,
   but only behind a contract in `shared/ui`. Features must not import Base UI.
 - Icons use the local `Icon` contract. Lucide is an implementation detail and must

@@ -4,6 +4,7 @@ import type { AppEnvironment, RuntimeMetricSample } from "../../shared/api/types
 import { StatusBadge } from "../../shared/ui/StatusBadge";
 import { runtimeMetricStreamURL } from "./api";
 import { type RuntimeMetricsValue, useRuntimeMetricStream } from "./runtime-metric-stream";
+import styles from "./RuntimeMetricsStatus.module.css";
 
 type RuntimeTargetRef = {
   workspaceId: string;
@@ -76,10 +77,10 @@ export function RuntimeStatusStrip({ target }: { target: AppEnvironment }) {
   const freshness = latestTimestamp > 0 ? formatFreshness(now - latestTimestamp) : "Aguardando primeira amostra";
 
   return (
-    <section className="runtime-scoreboard" aria-label="Saúde operacional">
-      <div className="runtime-scoreboard-heading">
+    <section className={styles.scoreboard} aria-label="Saúde operacional">
+      <div className={styles.heading}>
         <StatusBadge status={target.state} />
-        <span className={`telemetry-state ${state}${stale ? " stale" : ""}`}>
+        <span className={styles.telemetry} data-state={state} data-stale={stale ? "true" : undefined}>
           <strong>{connectionLabel}</strong>
           <small>{freshness}</small>
         </span>

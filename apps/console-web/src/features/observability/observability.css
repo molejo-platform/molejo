@@ -1,71 +1,4 @@
 @layer features {
-  .runtime-scoreboard {
-    background: var(--ui-inverse-surface);
-    border-radius: var(--radius-lg);
-    color: var(--ui-inverse-text);
-    display: grid;
-    gap: var(--space-4);
-    padding: var(--space-4) var(--space-6);
-  }
-  .runtime-scoreboard-heading {
-    align-items: center;
-    display: flex;
-    gap: var(--space-3);
-    justify-content: space-between;
-  }
-  .runtime-scoreboard .status-badge {
-    background: var(--ui-inverse-interaction-strong);
-    color: var(--ui-inverse-text);
-  }
-  .telemetry-state {
-    color: var(--ui-inverse-text-muted);
-    display: grid;
-    font-size: var(--font-size-xs);
-    font-weight: 700;
-    text-align: right;
-  }
-  .telemetry-state strong {
-    font: inherit;
-  }
-  .runtime-scoreboard .telemetry-state small {
-    color: inherit;
-    font-size: var(--font-size-2xs);
-    font-weight: 600;
-    opacity: 0.8;
-  }
-  .telemetry-state.connected {
-    color: var(--ui-inverse-success);
-  }
-  .telemetry-state.reconnecting,
-  .telemetry-state.stale {
-    color: var(--ui-inverse-warning);
-  }
-  .runtime-scoreboard dl {
-    display: grid;
-    gap: var(--space-4);
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-    margin: 0;
-  }
-  .runtime-scoreboard dl > div {
-    border-left: 1px solid var(--ui-inverse-divider);
-    display: grid;
-    min-width: 0;
-    padding-left: var(--space-3);
-  }
-  .runtime-scoreboard dt,
-  .runtime-scoreboard small {
-    color: var(--ui-inverse-text-subtle);
-    font-size: var(--font-size-2xs);
-  }
-  .runtime-scoreboard dd {
-    font-size: var(--font-size-sm);
-    font-weight: 700;
-    margin: 0.1rem 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
   .build-logs {
     background: var(--ui-inverse-surface-strong);
     border-radius: var(--radius-md);
@@ -361,22 +294,10 @@
     margin: 0;
   }
 
-  @media (max-width: 960px) {
-    .runtime-scoreboard dl {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-  }
-
   @media (max-width: 720px) {
     .observability-filters button,
     .observability-toolbar button {
       width: 100%;
-    }
-    .runtime-scoreboard {
-      padding: var(--space-4);
-    }
-    .runtime-scoreboard dl {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
 }
