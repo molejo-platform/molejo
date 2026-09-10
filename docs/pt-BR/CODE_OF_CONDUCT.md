@@ -8,7 +8,7 @@ Esta é uma tradução informativa. A versão canônica está em
 
 ## Nosso Compromisso
 
-Temos o compromisso de tornar a participação na comunidade Fruto Platform uma
+Temos o compromisso de tornar a participação na comunidade Molejo uma
 experiência acolhedora, segura e respeitosa para todas as pessoas.
 
 ## Comportamento Esperado

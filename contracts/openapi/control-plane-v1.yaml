@@ -1,0 +1,3334 @@
+openapi: 3.1.0
+info:
+  title: Molejo Control Plane API
+  version: 1.0.0
+  description: Molejo Control Plane contract. Session-authenticated mutations require the CSRF security scheme and an allowed Origin.
+servers:
+  - url: /
+paths:
+  /api/v1/session:
+    post:
+      operationId: login
+      security: []
+      parameters: [{ $ref: '#/components/parameters/Origin' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Authenticated session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '202':
+          description: A second factor is required
+          content: { application/json: { schema: { $ref: '#/components/schemas/MFAChallenge' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+    get:
+      operationId: getSession
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Current session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    delete:
+      operationId: logout
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Origin' }
+        - { $ref: '#/components/parameters/CSRFToken' }
+      responses:
+        '204': { description: Session revoked }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /api/v1/auth/capabilities:
+    get:
+      operationId: getAuthenticationCapabilities
+      security: []
+      responses:
+        '200':
+          description: Authentication methods enabled for this installation
+          content: { application/json: { schema: { $ref: '#/components/schemas/AuthenticationCapabilities' } } }
+  /api/v1/session/mfa/totp:
+    post:
+      operationId: completeTOTPLogin
+      security: []
+      parameters: [{ $ref: '#/components/parameters/Origin' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/TOTPChallengeInput' } } }
+      responses:
+        '200': { description: Authenticated session at AAL2, content: { application/json: { schema: { $ref: '#/components/schemas/Session' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/v1/users/me:
+    get:
+      operationId: getOwnProfile
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { description: Current user profile, content: { application/json: { schema: { $ref: '#/components/schemas/User' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    put:
+      operationId: updateOwnProfile
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/IfMatch' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ProfileInput' } } }
+      responses:
+        '200': { description: Updated profile, content: { application/json: { schema: { $ref: '#/components/schemas/User' } } } }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/users/me/password:
+    put:
+      operationId: changeOwnPassword
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/CSRFToken' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/PasswordChangeInput' } } }
+      responses:
+        '204': { description: Password changed and all sessions revoked }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/v1/users/me/sessions:
+    get:
+      operationId: listOwnSessions
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Active sessions
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties: { items: { type: array, items: { $ref: '#/components/schemas/UserSession' } } }
+  /api/v1/users/me/sessions/{userSessionId}:
+    parameters: [{ $ref: '#/components/parameters/UserSessionId' }]
+    delete:
+      operationId: revokeOwnSession
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '204': { description: Session revoked }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/users/me/mfa:
+    get:
+      operationId: getOwnMFA
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { description: Current MFA state, content: { application/json: { schema: { $ref: '#/components/schemas/MFAStatus' } } } }
+  /api/v1/users/me/mfa/totp/enrollment:
+    post:
+      operationId: beginTOTPEnrollment
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/CSRFToken' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/PasswordConfirmation' } } }
+      responses:
+        '201': { description: Enrollment secret shown once, content: { application/json: { schema: { $ref: '#/components/schemas/TOTPEnrollment' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+    put:
+      operationId: confirmTOTPEnrollment
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/CSRFToken' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/TOTPEnrollmentConfirmation' } } }
+      responses:
+        '200': { description: TOTP enabled and recovery codes shown once, content: { application/json: { schema: { $ref: '#/components/schemas/MFARecoveryCodes' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+    delete:
+      operationId: disableOwnTOTP
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/CSRFToken' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/PasswordConfirmation' } } }
+      responses:
+        '204': { description: TOTP disabled }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /api/v1/password-resets/request:
+    post:
+      operationId: requestPasswordReset
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/PasswordResetRequest' } } }
+      responses:
+        '202': { description: Request accepted regardless of user existence }
+  /api/v1/password-resets/verify:
+    post:
+      operationId: verifyPasswordReset
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/PasswordResetVerification' } } }
+      responses:
+        '200':
+          description: Code verified
+          content: { application/json: { schema: { $ref: '#/components/schemas/PasswordResetTicket' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /api/v1/password-resets/complete:
+    put:
+      operationId: completePasswordReset
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/PasswordResetCompletion' } } }
+      responses:
+        '204': { description: Password replaced and sessions revoked }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /api/v1/user-invitations/accept:
+    put:
+      operationId: acceptUserInvitation
+      security: []
+      parameters: [{ $ref: '#/components/parameters/Origin' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/UserInvitationAcceptance' } } }
+      responses:
+        '204': { description: Invitation accepted and local password created }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/v1/admin/users:
+    get:
+      operationId: listUsers
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Installation users
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/InstallationUser' } }
+                  nextCursor: { type: [string, 'null'] }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      operationId: createUser
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/UserCreateInput' } } }
+      responses:
+        '201': { description: Invited user and one-time activation credential, content: { application/json: { schema: { $ref: '#/components/schemas/UserInvitation' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/admin/users/{userId}:
+    parameters: [{ $ref: '#/components/parameters/UserId' }]
+    put:
+      operationId: updateUserStatus
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/IfMatch' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/UserStatusInput' } } }
+      responses:
+        '200': { description: User updated, content: { application/json: { schema: { $ref: '#/components/schemas/InstallationUser' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/admin/users/{userId}/password-reset:
+    parameters: [{ $ref: '#/components/parameters/UserId' }]
+    post:
+      operationId: createPasswordResetGrant
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '201':
+          description: One-time reset code; returned only on creation
+          content: { application/json: { schema: { $ref: '#/components/schemas/PasswordResetGrant' } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/admin/users/{userId}/installation-role:
+    parameters: [{ $ref: '#/components/parameters/UserId' }]
+    put:
+      operationId: updateUserInstallationRole
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/IfMatch' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/InstallationRoleInput' } } }
+      responses:
+        '200': { description: Installation role updated, content: { application/json: { schema: { $ref: '#/components/schemas/InstallationUser' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/admin/users/{userId}/invitation:
+    parameters: [{ $ref: '#/components/parameters/UserId' }]
+    post:
+      operationId: createUserInvitation
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '201': { description: Replacement one-time activation credential, content: { application/json: { schema: { $ref: '#/components/schemas/UserInvitationCredential' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/admin/audit-events:
+    get:
+      operationId: listInstallationAuditEvents
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Append-only installation audit trail
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/AuditEvent' } }
+                  nextCursor: { type: [string, 'null'] }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/v1/admin/clusters:
+    get:
+      operationId: listClusters
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Registered runtime clusters
+          content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/Cluster' } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      operationId: createCluster
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ClusterCreateInput' } } }
+      responses:
+        '201':
+          description: One-time cluster enrollment invitation
+          content: { application/json: { schema: { $ref: '#/components/schemas/AgentEnrollmentInvitation' } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/admin/clusters/{clusterId}:
+    parameters: [{ $ref: '#/components/parameters/ClusterId' }]
+    get:
+      operationId: getCluster
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { description: Runtime cluster, content: { application/json: { schema: { $ref: '#/components/schemas/Cluster' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      operationId: revokeCluster
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ClusterRevocationInput' } } }
+      responses:
+        '204': { description: Cluster access revoked }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/admin/clusters/{clusterId}/enrollment-invitations:
+    parameters: [{ $ref: '#/components/parameters/ClusterId' }]
+    post:
+      operationId: createClusterEnrollmentInvitation
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '201': { description: Replacement one-time enrollment invitation, content: { application/json: { schema: { $ref: '#/components/schemas/AgentEnrollmentInvitation' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/admin/clusters/{clusterId}/bindings/historical-metrics:
+    parameters: [{ $ref: '#/components/parameters/ClusterId' }]
+    get:
+      operationId: getHistoricalMetricBinding
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { description: Historical metric provider binding, content: { application/json: { schema: { $ref: '#/components/schemas/HistoricalMetricBinding' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      operationId: putHistoricalMetricBinding
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/OptionalIfMatch' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/HistoricalMetricBindingInput' } } }
+      responses:
+        '200': { description: Historical metric provider binding updated and reverified, content: { application/json: { schema: { $ref: '#/components/schemas/HistoricalMetricBinding' } } } }
+        '201': { description: Historical metric provider binding created and verified, content: { application/json: { schema: { $ref: '#/components/schemas/HistoricalMetricBinding' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      operationId: deleteHistoricalMetricBinding
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/IfMatch' }]
+      responses:
+        '204': { description: Historical metric provider binding removed }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/admin/clusters/{clusterId}/bindings/storage:
+    parameters: [{ $ref: '#/components/parameters/ClusterId' }]
+    get:
+      operationId: listClusterStorageBindings
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Storage profile bindings selected for the cluster
+          content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/ClusterStorageBinding' } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/admin/clusters/{clusterId}/bindings/storage/{storageProfileId}:
+    parameters:
+      - { $ref: '#/components/parameters/ClusterId' }
+      - { name: storageProfileId, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 63, pattern: '^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$' } }
+    get:
+      operationId: getClusterStorageBinding
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { description: Storage profile binding, content: { application/json: { schema: { $ref: '#/components/schemas/ClusterStorageBinding' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      operationId: putClusterStorageBinding
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/OptionalIfMatch' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ClusterStorageBindingInput' } } }
+      responses:
+        '200': { description: Storage profile binding updated, content: { application/json: { schema: { $ref: '#/components/schemas/ClusterStorageBinding' } } } }
+        '201': { description: Storage profile binding created, content: { application/json: { schema: { $ref: '#/components/schemas/ClusterStorageBinding' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      operationId: deleteClusterStorageBinding
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/IfMatch' }]
+      responses:
+        '204': { description: Storage profile binding removed }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/admin/clusters/{clusterId}/bindings/publication/http:
+    parameters: [{ $ref: '#/components/parameters/ClusterId' }]
+    get:
+      operationId: getClusterPublicationBinding
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { description: HTTP publication binding, content: { application/json: { schema: { $ref: '#/components/schemas/ClusterPublicationBinding' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      operationId: putClusterPublicationBinding
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/OptionalIfMatch' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ClusterPublicationBindingInput' } } }
+      responses:
+        '200': { description: HTTP publication binding updated, content: { application/json: { schema: { $ref: '#/components/schemas/ClusterPublicationBinding' } } } }
+        '201': { description: HTTP publication binding created, content: { application/json: { schema: { $ref: '#/components/schemas/ClusterPublicationBinding' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      operationId: deleteClusterPublicationBinding
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/IfMatch' }]
+      responses:
+        '204': { description: HTTP publication binding removed }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/admin/agent-installations:
+    post:
+      operationId: createAgentInstallation
+      deprecated: true
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AgentInstallationCreateInput' } } }
+      responses:
+        '201':
+          description: One-time Agent enrollment invitation
+          content: { application/json: { schema: { $ref: '#/components/schemas/AgentEnrollmentInvitation' } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /agent/v1/enroll:
+    post:
+      operationId: enrollAgent
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AgentEnrollmentInput' } } }
+      responses:
+        '200':
+          description: Signed Agent client identity
+          content: { application/json: { schema: { $ref: '#/components/schemas/AgentEnrollmentResult' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/workspaces/{workspaceId}/members:
+    parameters: [{ $ref: '#/components/parameters/WorkspaceId' }]
+    get:
+      operationId: listWorkspaceMembers
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Workspace memberships
+          content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/WorkspaceMembership' } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      operationId: createWorkspaceMember
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/WorkspaceMemberCreateInput' } } }
+      responses:
+        '201': { description: Membership created, content: { application/json: { schema: { $ref: '#/components/schemas/WorkspaceMembership' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/workspaces/{workspaceId}/members/{userId}:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/UserId' }
+    put:
+      operationId: putWorkspaceMember
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/OptionalIfMatch' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/WorkspaceMembershipInput' } } }
+      responses:
+        '200': { description: Membership saved, content: { application/json: { schema: { $ref: '#/components/schemas/WorkspaceMembership' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      operationId: deleteWorkspaceMember
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '204': { description: Membership deleted }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/workspaces/{workspaceId}/groups:
+    parameters: [{ $ref: '#/components/parameters/WorkspaceId' }]
+    get:
+      operationId: listWorkspaceGroups
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Workspace groups
+          content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/WorkspaceGroup' } } } } } }
+    post:
+      operationId: createWorkspaceGroup
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/WorkspaceGroupInput' } } }
+      responses:
+        '201': { description: Group created, content: { application/json: { schema: { $ref: '#/components/schemas/WorkspaceGroup' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/workspaces/{workspaceId}/groups/{groupId}/members/{userId}:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/GroupId' }
+      - { $ref: '#/components/parameters/UserId' }
+    put:
+      operationId: addWorkspaceGroupMember
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '204': { description: Group member added }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      operationId: removeWorkspaceGroupMember
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '204': { description: Group member removed }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/workspaces/{workspaceId}/groups/{groupId}/members:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/GroupId' }
+    get:
+      operationId: listWorkspaceGroupMembers
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Current members of the workspace group
+          content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/WorkspaceMembership' } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/workspaces/{workspaceId}/audit-events:
+    parameters: [{ $ref: '#/components/parameters/WorkspaceId' }]
+    get:
+      operationId: listAuditEvents
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Append-only workspace audit trail
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/AuditEvent' } }
+                  nextCursor: { type: [string, 'null'] }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/v1/workspaces/{workspaceId}/access-grants:
+    parameters: [{ $ref: '#/components/parameters/WorkspaceId' }]
+    get:
+      operationId: listWorkspaceAccessGrants
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Explicit ReBAC relations in this Workspace
+          content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/AccessGrant' } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      operationId: createWorkspaceAccessGrant
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AccessGrantInput' } } }
+      responses:
+        '201': { description: Relation granted, content: { application/json: { schema: { $ref: '#/components/schemas/AccessGrant' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/workspaces/{workspaceId}/access-grants/{accessGrantId}:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/AccessGrantId' }
+    delete:
+      operationId: deleteWorkspaceAccessGrant
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '204': { description: Relation revoked }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/workspaces/{workspaceId}/authorization/capabilities:
+    parameters: [{ $ref: '#/components/parameters/WorkspaceId' }]
+    get:
+      operationId: getEffectiveCapabilities
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: resourceType
+          in: query
+          required: true
+          schema: { type: string, enum: [Workspace, Project, App, AppEnvironment] }
+        - name: resourceId
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 64 }
+      responses:
+        '200': { description: Effective capabilities for the current user and resource, content: { application/json: { schema: { $ref: '#/components/schemas/EffectiveCapabilities' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/workspaces/{workspaceId}/feature-availability:
+    parameters: [{ $ref: '#/components/parameters/WorkspaceId' }]
+    get:
+      operationId: getFeatureAvailability
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: scopeType
+          in: query
+          required: true
+          schema: { type: string, enum: [Workspace, App, AppEnvironment] }
+        - name: scopeId
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 64 }
+      responses:
+        '200':
+          description: Structural feature availability for the selected scope
+          content: { application/json: { schema: { $ref: '#/components/schemas/FeatureAvailabilityResponse' } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/workspaces/current:
+    get:
+      operationId: getCurrentWorkspace
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Authorized workspace
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Workspace' }
+  /api/v1/workspaces:
+    get:
+      operationId: listWorkspaces
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Authorized workspaces
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Workspace' } }
+                  nextCursor: { type: [string, 'null'] }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      operationId: createWorkspace
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WorkspaceCreateInput' }
+      responses:
+        '202':
+          description: Workspace creation accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [workspace, operation]
+                properties:
+                  workspace: { $ref: '#/components/schemas/Workspace' }
+                  operation: { $ref: '#/components/schemas/Operation' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/workspaces/{workspaceId}:
+    parameters: [{ $ref: '#/components/parameters/WorkspaceId' }]
+    get:
+      operationId: getWorkspace
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Authorized workspace
+          content: { application/json: { schema: { $ref: '#/components/schemas/Workspace' } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      operationId: updateWorkspace
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/IfMatch' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/HierarchyInput' } } }
+      responses:
+        '200':
+          description: Updated workspace
+          content: { application/json: { schema: { $ref: '#/components/schemas/Workspace' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/workspaces/{workspaceId}/summary:
+    parameters: [{ $ref: '#/components/parameters/WorkspaceId' }]
+    get:
+      operationId: getWorkspaceSummary
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Application-loop facts for Workspace orientation
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkspaceSummary' } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/workspaces/{workspaceId}/operations:
+    parameters: [{ $ref: '#/components/parameters/WorkspaceId' }]
+    get:
+      operationId: listWorkspaceOperations
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+        - name: status
+          in: query
+          schema: { type: string, enum: [Pending, Running, Succeeded, Failed] }
+        - name: kind
+          in: query
+          schema: { type: string, enum: [ApplyDeployment, DeleteAppEnvironment, EnsureWorkspace, EnsureVolume, ExpandVolume, DeleteVolume] }
+        - name: appEnvironmentId
+          in: query
+          schema: { type: string, pattern: '^aev-[a-z2-7]{20}$' }
+      responses:
+        '200':
+          description: Workspace operations ordered from newest to oldest
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Operation' } }
+                  nextCursor: { type: [string, 'null'] }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/workspaces/{workspaceId}/clusters:
+    parameters: [{ $ref: '#/components/parameters/WorkspaceId' }]
+    get:
+      operationId: listWorkspaceClusters
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { description: Workspace runtime placements, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/WorkspaceCluster' } } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      operationId: attachWorkspaceCluster
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/WorkspaceClusterInput' } } }
+      responses:
+        '202':
+          description: Workspace placement accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [workspaceCluster, operation]
+                properties:
+                  workspaceCluster: { $ref: '#/components/schemas/WorkspaceCluster' }
+                  operation: { $ref: '#/components/schemas/Operation' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/workspaces/{workspaceId}/parameters:
+    parameters: [{ $ref: '#/components/parameters/WorkspaceId' }]
+    get:
+      operationId: listParameters
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Workspace parameters
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Parameter' } }
+                  nextCursor: { type: [string, 'null'] }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      operationId: createParameter
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ParameterInput' } } }
+      responses:
+        '201':
+          description: Created parameter
+          content: { application/json: { schema: { $ref: '#/components/schemas/Parameter' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/v1/workspaces/{workspaceId}/parameters/{parameterId}:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ParameterId' }
+    get:
+      operationId: getParameter
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Parameter metadata and current PlainText value
+          content: { application/json: { schema: { $ref: '#/components/schemas/Parameter' } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      operationId: replaceParameter
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/OptionalIdempotencyKey' }
+        - { $ref: '#/components/parameters/IfMatch' }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ParameterInput' } } }
+      responses:
+        '200':
+          description: Replaced parameter and immutable value version
+          content: { application/json: { schema: { $ref: '#/components/schemas/Parameter' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+    delete:
+      operationId: archiveParameter
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/IfMatch' }]
+      responses:
+        '204': { description: Parameter archived }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/workspaces/{workspaceId}/projects:
+    parameters: [{ $ref: '#/components/parameters/WorkspaceId' }]
+    get:
+      operationId: listProjects
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/IncludeArchived' }
+      responses:
+        '200':
+          description: Projects
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Project' } }
+                  nextCursor: { type: [string, 'null'] }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      operationId: createProject
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/HierarchyInput' } } }
+      responses:
+        '201':
+          description: Created project
+          content: { application/json: { schema: { $ref: '#/components/schemas/Project' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+    get:
+      operationId: getProject
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Project
+          content: { application/json: { schema: { $ref: '#/components/schemas/Project' } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      operationId: updateProject
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/IfMatch' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/HierarchyInput' } } }
+      responses:
+        '200':
+          description: Updated project
+          content: { application/json: { schema: { $ref: '#/components/schemas/Project' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      operationId: archiveProject
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/IfMatch' }]
+      responses:
+        '204': { description: Project archived }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/environments:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+    get:
+      operationId: listEnvironments
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/IncludeArchived' }
+      responses:
+        '200':
+          description: Environments
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Environment' } }
+                  nextCursor: { type: [string, 'null'] }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      operationId: createEnvironment
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/HierarchyInput' } } }
+      responses:
+        '201':
+          description: Created environment
+          content: { application/json: { schema: { $ref: '#/components/schemas/Environment' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/environments/{environmentId}:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/EnvironmentId' }
+    get:
+      operationId: getEnvironment
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Environment
+          content: { application/json: { schema: { $ref: '#/components/schemas/Environment' } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      operationId: updateEnvironment
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/IfMatch' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/HierarchyInput' } } }
+      responses:
+        '200':
+          description: Updated environment
+          content: { application/json: { schema: { $ref: '#/components/schemas/Environment' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      operationId: archiveEnvironment
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/IfMatch' }]
+      responses:
+        '204': { description: Environment archived }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/environments/{environmentId}/apps:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/EnvironmentId' }
+    get:
+      operationId: listEnvironmentApps
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Apps configured in the Environment
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/AppEnvironment' } }
+                  nextCursor: { type: [string, 'null'] }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/app-environments:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+    post:
+      operationId: createProjectAppEnvironment
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AppEnvironmentSetupInput' } } }
+      responses:
+        '201':
+          description: App and App Environment committed atomically
+          content: { application/json: { schema: { $ref: '#/components/schemas/AppEnvironmentSetup' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+    get:
+      operationId: listApps
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/IncludeArchived' }
+      responses:
+        '200':
+          description: Apps
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/App' } }
+                  nextCursor: { type: [string, 'null'] }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      operationId: createApp
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/HierarchyInput' } } }
+      responses:
+        '201':
+          description: Created app
+          content: { application/json: { schema: { $ref: '#/components/schemas/App' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/AppId' }
+    get:
+      operationId: getApp
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: App
+          content: { application/json: { schema: { $ref: '#/components/schemas/App' } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      operationId: updateApp
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/IfMatch' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/HierarchyInput' } } }
+      responses:
+        '200':
+          description: Updated app
+          content: { application/json: { schema: { $ref: '#/components/schemas/App' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      operationId: archiveApp
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/IfMatch' }]
+      responses:
+        '204': { description: App archived }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/workspaces/{workspaceId}/github/installations/connect:
+    parameters: [{ $ref: '#/components/parameters/WorkspaceId' }]
+    post:
+      operationId: connectGitHubInstallation
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '200':
+          description: Short-lived GitHub App installation URL
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [authorizationUrl]
+                properties:
+                  authorizationUrl: { type: string, format: uri }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/v1/github/installations/callback:
+    get:
+      operationId: completeGitHubInstallation
+      parameters:
+        - name: installation_id
+          in: query
+          required: true
+          schema: { type: integer, format: int64, minimum: 1 }
+        - name: state
+          in: query
+          required: true
+          schema: { type: string, minLength: 32, maxLength: 256 }
+      responses:
+        '302': { description: Continue with GitHub user authorization }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/v1/github/callback:
+    get:
+      operationId: completeGitHubAuthorization
+      parameters:
+        - name: code
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 512 }
+        - name: state
+          in: query
+          required: true
+          schema: { type: string, minLength: 32, maxLength: 256 }
+      responses:
+        '302': { description: Return to the Console }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/v1/github/webhooks:
+    post:
+      operationId: receiveGitHubWebhook
+      security: []
+      responses:
+        '200': { description: GitHub ping accepted }
+        '202': { description: Authenticated GitHub delivery accepted for asynchronous processing }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { description: Webhook payload exceeds the bounded receiver limit }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/v1/workspaces/{workspaceId}/github/installations:
+    parameters: [{ $ref: '#/components/parameters/WorkspaceId' }]
+    get:
+      operationId: listGitHubInstallations
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: GitHub App installations connected to the Workspace
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/GitHubInstallation' } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/workspaces/{workspaceId}/github/installations/{githubInstallationId}:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/GitHubInstallationId' }
+    delete:
+      operationId: disconnectGitHubInstallation
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '204': { description: GitHub App installation disconnected and uninstalled }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/v1/workspaces/{workspaceId}/github/installations/{githubInstallationId}/repositories:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/GitHubInstallationId' }
+    get:
+      operationId: listGitHubRepositories
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Repositories accessible to the installation
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/GitHubRepository' } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/source:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/AppId' }
+    get:
+      operationId: getAppSource
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Optional GitHub source configured for the App
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [source]
+                properties:
+                  source:
+                    oneOf:
+                      - { $ref: '#/components/schemas/GitHubSource' }
+                      - { type: 'null' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      operationId: setAppSource
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GitHubSourceInput' }
+      responses:
+        '200':
+          description: GitHub source selected for the App
+          content: { application/json: { schema: { $ref: '#/components/schemas/GitHubSource' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+    delete:
+      operationId: clearAppSource
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '204': { description: GitHub source removed from the App }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/builds:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/AppId' }
+    get:
+      operationId: listAppBuilds
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Builds for the App
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Build' } }
+                  nextCursor: { type: [string, 'null'] }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      operationId: createAppBuild
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BuildInput' }
+      responses:
+        '202':
+          description: Build of the selected branch commit accepted
+          content: { application/json: { schema: { $ref: '#/components/schemas/Build' } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/builds/{buildId}:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/AppId' }
+      - { $ref: '#/components/parameters/BuildId' }
+    get:
+      operationId: getAppBuild
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Build state
+          content: { application/json: { schema: { $ref: '#/components/schemas/Build' } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/builds/{buildId}/logs:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/AppId' }
+      - { $ref: '#/components/parameters/BuildId' }
+    get:
+      operationId: listAppBuildLogs
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Sanitized bounded build logs
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/BuildLog' } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/releases:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/AppId' }
+    get:
+      operationId: listAppReleases
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Immutable releases for the App
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Release' } }
+                  nextCursor: { type: [string, 'null'] }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      operationId: registerAppRelease
+      security: [{ sessionCookie: [], csrfHeader: [] }, { automationBearer: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ReleaseRegistrationInput' } } }
+      responses:
+        '200': { description: Existing release returned for an idempotent replay, content: { application/json: { schema: { $ref: '#/components/schemas/Release' } } } }
+        '201': { description: External release registered, content: { application/json: { schema: { $ref: '#/components/schemas/Release' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/service-accounts:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/AppId' }
+    get:
+      operationId: listAppServiceAccounts
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { description: App automation identities, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/ServiceAccount' } } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      operationId: createAppServiceAccount
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ServiceAccountCreateInput' } } }
+      responses:
+        '201': { description: Durable App service account, content: { application/json: { schema: { $ref: '#/components/schemas/ServiceAccount' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/service-accounts/{serviceAccountId}/tokens:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/AppId' }
+      - { $ref: '#/components/parameters/ServiceAccountId' }
+    get:
+      operationId: listAppServiceAccountTokens
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { description: Credential metadata without bearer secrets, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/ServiceAccountToken' } } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      operationId: createAppServiceAccountToken
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ServiceAccountTokenCreateInput' } } }
+      responses:
+        '201': { description: One-time credential; the bearer token is never returned again, content: { application/json: { schema: { $ref: '#/components/schemas/ServiceAccountCredential' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/service-accounts/{serviceAccountId}/tokens/{tokenId}:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/AppId' }
+      - { $ref: '#/components/parameters/ServiceAccountId' }
+      - { $ref: '#/components/parameters/ServiceAccountTokenId' }
+    delete:
+      operationId: revokeAppServiceAccountToken
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '204': { description: Service account credential revoked }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/service-accounts/{serviceAccountId}:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/AppId' }
+      - { $ref: '#/components/parameters/ServiceAccountId' }
+    delete:
+      operationId: revokeAppServiceAccount
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '204': { description: Service account revoked }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/AppId' }
+    get:
+      operationId: listAppEnvironments
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Configured Environments for the App
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/AppEnvironment' } }
+                  nextCursor: { type: [string, 'null'] }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      operationId: createAppEnvironment
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AppEnvironmentCreateInput' } } }
+      responses:
+        '201':
+          description: App Environment created
+          content: { application/json: { schema: { $ref: '#/components/schemas/AppEnvironment' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/AppId' }
+      - { $ref: '#/components/parameters/AppEnvironmentId' }
+    get:
+      operationId: getAppEnvironment
+      security: [{ sessionCookie: [] }, { automationBearer: [] }]
+      responses:
+        '200':
+          description: App Environment
+          content: { application/json: { schema: { $ref: '#/components/schemas/AppEnvironment' } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      operationId: updateAppEnvironment
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/IfMatch' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AppEnvironmentInput' } } }
+      responses:
+        '200':
+          description: App Environment updated
+          content: { application/json: { schema: { $ref: '#/components/schemas/AppEnvironment' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      operationId: deleteAppEnvironment
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+        - { $ref: '#/components/parameters/IfMatch' }
+      responses:
+        '202':
+          description: Runtime removal accepted
+          content: { application/json: { schema: { $ref: '#/components/schemas/Operation' } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/workspaces/{workspaceId}/storage-profiles:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+    get:
+      operationId: listStorageProfiles
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: clusterId, in: query, required: true, schema: { type: string, pattern: '^(cls|agi)-[a-z2-7]{20}$' } }
+      responses:
+        '200':
+          description: Portable storage profiles available to the Workspace
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                additionalProperties: false
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/StorageProfile' } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/volume:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/AppId' }
+      - { $ref: '#/components/parameters/AppEnvironmentId' }
+    get:
+      operationId: getAppEnvironmentVolume
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Persistent volume attached to this App Environment
+          content: { application/json: { schema: { $ref: '#/components/schemas/AppVolume' } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      operationId: expandAppEnvironmentVolume
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+        - { $ref: '#/components/parameters/IfMatch' }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AppVolumeExpansionInput' } } }
+      responses:
+        '202':
+          description: Volume expansion accepted
+          content: { application/json: { schema: { $ref: '#/components/schemas/AppVolumeMutation' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      operationId: deleteAppEnvironmentVolume
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+        - { $ref: '#/components/parameters/IfMatch' }
+      responses:
+        '202':
+          description: Volume retention accepted after runtime detach
+          content: { application/json: { schema: { $ref: '#/components/schemas/AppVolumeMutation' } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/delivery-policy:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/AppId' }
+      - { $ref: '#/components/parameters/AppEnvironmentId' }
+    get:
+      operationId: getAppEnvironmentDeliveryPolicy
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Continuous delivery policy for this App Environment
+          content: { application/json: { schema: { $ref: '#/components/schemas/DeliveryPolicy' } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      operationId: replaceAppEnvironmentDeliveryPolicy
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/DeliveryPolicyIfMatch' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/DeliveryPolicyInput' } } }
+      responses:
+        '200':
+          description: Replaced continuous delivery policy
+          content: { application/json: { schema: { $ref: '#/components/schemas/DeliveryPolicy' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/deployments:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/AppId' }
+      - { $ref: '#/components/parameters/AppEnvironmentId' }
+    get:
+      operationId: listAppEnvironmentDeployments
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Immutable Deployment history
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Deployment' } }
+                  nextCursor: { type: [string, 'null'] }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      operationId: createAppEnvironmentDeployment
+      security: [{ sessionCookie: [], csrfHeader: [] }, { automationBearer: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+        - { $ref: '#/components/parameters/IfMatch' }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/DeploymentInput' } } }
+      responses:
+        '202': { $ref: '#/components/responses/MutationAccepted' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/deployment-preview:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/AppId' }
+      - { $ref: '#/components/parameters/AppEnvironmentId' }
+    post:
+      operationId: previewAppEnvironmentDeployment
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/DeploymentPreviewInput' } } }
+      responses:
+        '200':
+          description: Semantic impact of the selected immutable target
+          content: { application/json: { schema: { $ref: '#/components/schemas/DeploymentPreview' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/configuration-versions:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/AppId' }
+      - { $ref: '#/components/parameters/AppEnvironmentId' }
+    get:
+      operationId: listAppEnvironmentConfigurationVersions
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Immutable runtime configuration history
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/ConfigurationRevision' } }
+                  nextCursor: { type: [string, 'null'] }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/observability/logs:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/AppId' }
+      - { $ref: '#/components/parameters/AppEnvironmentId' }
+    get:
+      operationId: listAppEnvironmentRuntimeLogs
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - { name: search, in: query, schema: { type: string, maxLength: 200 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 1000, default: 200 } }
+        - { name: cursor, in: query, description: Opaque keyset cursor returned by the previous page, schema: { type: string, maxLength: 1024 } }
+      responses:
+        '200':
+          description: Bounded sanitized runtime logs
+          content: { application/json: { schema: { $ref: '#/components/schemas/RuntimeLogs' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/observability/logs/live:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/AppId' }
+      - { $ref: '#/components/parameters/AppEnvironmentId' }
+    get:
+      operationId: streamAppEnvironmentRuntimeLogs
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: search, in: query, schema: { type: string, maxLength: 200 } }
+        - { name: cursor, in: query, description: Opaque live cursor returned with the historical snapshot, schema: { type: string, maxLength: 1024 } }
+      responses:
+        '200':
+          description: Bounded server-sent stream of sanitized runtime logs
+          content: { text/event-stream: { schema: { type: string } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/observability/metrics:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/AppId' }
+      - { $ref: '#/components/parameters/AppEnvironmentId' }
+    get:
+      operationId: getAppEnvironmentRuntimeMetrics
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+      responses:
+        '200':
+          description: Bounded aggregate runtime metrics with a server-selected resolution
+          content: { application/json: { schema: { $ref: '#/components/schemas/RuntimeMetrics' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/observability/metrics/live:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/AppId' }
+      - { $ref: '#/components/parameters/AppEnvironmentId' }
+    get:
+      operationId: streamAppEnvironmentRuntimeMetrics
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Server-sent stream of current runtime metric snapshots
+          content: { text/event-stream: { schema: { type: string } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/observability/events:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/AppId' }
+      - { $ref: '#/components/parameters/AppEnvironmentId' }
+    get:
+      operationId: listAppEnvironmentRuntimeEvents
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 500, default: 100 } }
+      responses:
+        '200':
+          description: Durable control-plane and Kubernetes runtime events
+          content: { application/json: { schema: { $ref: '#/components/schemas/RuntimeEvents' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/v1/workspaces/{workspaceId}/projects/{projectId}/apps/{appId}/environments/{appEnvironmentId}/deployments/{deploymentId}:
+    parameters:
+      - { $ref: '#/components/parameters/WorkspaceId' }
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/AppId' }
+      - { $ref: '#/components/parameters/AppEnvironmentId' }
+      - { $ref: '#/components/parameters/DeploymentId' }
+    get:
+      operationId: getAppEnvironmentDeployment
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Immutable Deployment
+          content: { application/json: { schema: { $ref: '#/components/schemas/Deployment' } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/operations/{operationId}:
+    get:
+      operationId: getOperation
+      security: [{ sessionCookie: [] }, { automationBearer: [] }]
+      parameters:
+        - name: operationId
+          in: path
+          required: true
+          schema: { type: string, pattern: '^op-[a-z2-7]{20}$' }
+      responses:
+        '200':
+          description: Operation
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Operation' }
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: molejo_session
+    csrfHeader:
+      type: apiKey
+      in: header
+      name: X-CSRF-Token
+      description: Required with session-cookie authentication for state-changing requests; browsers must also send an allowed Origin.
+    automationBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: Molejo service account token
+      description: When Authorization is present on a dual-authentication operation, bearer authentication is authoritative and the server never falls back to a session cookie.
+  parameters:
+    Cursor:
+      name: cursor
+      in: query
+      schema: { type: string, minLength: 1, maxLength: 64 }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+    IncludeArchived:
+      name: includeArchived
+      in: query
+      schema: { type: boolean, default: false }
+    WorkspaceId:
+      name: workspaceId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^ws-[a-z2-7]{20}$' }
+    ProjectId:
+      name: projectId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^prj-[a-z2-7]{20}$' }
+    EnvironmentId:
+      name: environmentId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^env-[a-z2-7]{20}$' }
+    AppId:
+      name: appId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^app-[a-z2-7]{20}$' }
+    AppEnvironmentId:
+      name: appEnvironmentId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^aev-[a-z2-7]{20}$' }
+    ParameterId:
+      name: parameterId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^par-[a-z2-7]{20}$' }
+    DeploymentId:
+      name: deploymentId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^dpl-[a-z2-7]{20}$' }
+    GitHubInstallationId:
+      name: githubInstallationId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^ghi-[a-z2-7]{20}$' }
+    BuildId:
+      name: buildId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^bld-[a-z2-7]{20}$' }
+    ReleaseId:
+      name: releaseId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^rel-[a-z2-7]{20}$' }
+    ServiceAccountId:
+      name: serviceAccountId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^svc-[a-z2-7]{20}$' }
+    ServiceAccountTokenId:
+      name: tokenId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^sat-[a-z2-7]{20}$' }
+    UserId:
+      name: userId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^usr-[a-z2-7]{20}$' }
+    UserSessionId:
+      name: userSessionId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^ses-[a-z2-7]{20}$' }
+    GroupId:
+      name: groupId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^grp-[a-z2-7]{20}$' }
+    AccessGrantId:
+      name: accessGrantId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^agr-[a-z2-7]{20}$' }
+    ClusterId:
+      name: clusterId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^(cls|agi)-[a-z2-7]{20}$' }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, minLength: 1, maxLength: 128 }
+    OptionalIdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: Required for Secret parameter mutations; ignored for PlainText mutations.
+      schema: { type: string, minLength: 1, maxLength: 128 }
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      schema: { type: integer, minimum: 1 }
+    OptionalIfMatch:
+      name: If-Match
+      in: header
+      required: false
+      schema: { type: integer, minimum: 1 }
+    DeliveryPolicyIfMatch:
+      name: If-Match
+      in: header
+      required: true
+      schema: { type: integer, minimum: 0 }
+    Origin:
+      name: Origin
+      in: header
+      required: true
+      schema: { type: string, format: uri }
+    CSRFToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      schema: { type: string, minLength: 1 }
+  responses:
+    Unauthorized:
+      description: Authentication required
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Forbidden:
+      description: Authenticated user cannot perform this action
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    BadRequest:
+      description: Invalid request
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Conflict:
+      description: Version or idempotency conflict
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    NotFound:
+      description: Resource not found
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Unavailable:
+      description: External integration is not configured or unavailable
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    TooManyRequests:
+      description: Concurrent request limit reached
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    InternalError:
+      description: Request failed unexpectedly
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    MutationAccepted:
+      description: Mutation accepted for asynchronous execution
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [operation]
+            properties:
+              deployment: { $ref: '#/components/schemas/Deployment' }
+              operation: { $ref: '#/components/schemas/Operation' }
+  schemas:
+    LoginRequest:
+      type: object
+      required: [username, password]
+      additionalProperties: false
+      properties:
+        username: { type: string, minLength: 3, maxLength: 64 }
+        password: { type: string, minLength: 1, maxLength: 1024, writeOnly: true }
+    Session:
+      type: object
+      required: [user, assuranceLevel, csrfToken, installationCapabilities, workspaceMemberships]
+      additionalProperties: false
+      properties:
+        user: { $ref: '#/components/schemas/User' }
+        assuranceLevel: { type: string, enum: [AAL1, AAL2] }
+        csrfToken: { type: string, readOnly: true }
+        installationCapabilities:
+          type: object
+          required: [manageUsers, manageBindings, createWorkspace, publicTCP]
+          additionalProperties: false
+          properties:
+            manageUsers: { type: boolean }
+            manageBindings: { type: boolean }
+            createWorkspace: { type: boolean }
+            publicTCP:
+              type: object
+              required: [enabled]
+              additionalProperties: false
+              properties:
+                enabled: { type: boolean }
+                address: { type: string, maxLength: 253 }
+                minimumPort: { type: integer, minimum: 1, maximum: 65535 }
+                maximumPort: { type: integer, minimum: 1, maximum: 65535 }
+            publicationDomains:
+              type: array
+              items:
+                type: object
+                required: [id, suffix, workloadKinds, endpointTypes]
+                additionalProperties: false
+                properties:
+                  id: { type: string, minLength: 1, maxLength: 63, pattern: '^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$' }
+                  suffix: { type: string, minLength: 1, maxLength: 253 }
+                  workloadKinds:
+                    type: array
+                    items: { type: string, enum: [Stateless, Stateful] }
+                  endpointTypes:
+                    type: array
+                    items: { type: string, enum: [HTTP, TCP] }
+        workspaceMemberships:
+          type: array
+          items:
+            type: object
+            required: [workspaceId, role]
+            additionalProperties: false
+            properties:
+              workspaceId: { type: string, pattern: '^ws-[a-z2-7]{20}$' }
+              role: { type: string, enum: [Owner, Member, Viewer] }
+    AuthenticationCapabilities:
+      type: object
+      required: [password, totp, passkey]
+      additionalProperties: false
+      properties:
+        password: { type: boolean }
+        totp: { type: boolean }
+        passkey: { type: boolean }
+    MFAChallenge:
+      type: object
+      required: [mfaRequired, method, challengeToken]
+      additionalProperties: false
+      properties:
+        mfaRequired: { type: boolean, const: true }
+        method: { type: string, enum: [TOTP] }
+        challengeToken: { type: string, readOnly: true }
+    TOTPChallengeInput:
+      type: object
+      required: [challengeToken, code]
+      additionalProperties: false
+      properties:
+        challengeToken: { type: string, writeOnly: true }
+        code: { type: string, pattern: '^([0-9]{6}|[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4})$', writeOnly: true }
+    MFAStatus:
+      type: object
+      required: [totpEnabled, passkeyCount]
+      additionalProperties: false
+      properties:
+        totpEnabled: { type: boolean }
+        passkeyCount: { type: integer, minimum: 0 }
+    TOTPEnrollment:
+      type: object
+      required: [challengeToken, secret, otpAuthUrl]
+      additionalProperties: false
+      properties:
+        challengeToken: { type: string, readOnly: true }
+        secret: { type: string, readOnly: true }
+        otpAuthUrl: { type: string, readOnly: true }
+    TOTPEnrollmentConfirmation:
+      type: object
+      required: [challengeToken, code]
+      additionalProperties: false
+      properties:
+        challengeToken: { type: string, writeOnly: true }
+        code: { type: string, pattern: '^[0-9]{6}$', writeOnly: true }
+    MFARecoveryCodes:
+      type: object
+      required: [recoveryCodes]
+      additionalProperties: false
+      properties:
+        recoveryCodes: { type: array, minItems: 8, maxItems: 10, readOnly: true, items: { type: string } }
+    PasswordConfirmation:
+      type: object
+      required: [password]
+      additionalProperties: false
+      properties:
+        password: { type: string, minLength: 1, maxLength: 1024, writeOnly: true }
+    User:
+      type: object
+      required: [id, username, displayName, status, version, createdAt, updatedAt]
+      additionalProperties: false
+      properties:
+        id: { type: string, pattern: '^usr-[a-z2-7]{20}$' }
+        username: { type: string, minLength: 3, maxLength: 64 }
+        displayName: { type: string, minLength: 1, maxLength: 120 }
+        status: { type: string, enum: [Invited, Active, Disabled, Locked] }
+        version: { type: integer, minimum: 1 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ProfileInput:
+      type: object
+      required: [displayName]
+      additionalProperties: false
+      properties:
+        displayName: { type: string, minLength: 1, maxLength: 120 }
+    PasswordChangeInput:
+      type: object
+      required: [currentPassword, newPassword]
+      additionalProperties: false
+      properties:
+        currentPassword: { type: string, minLength: 1, maxLength: 1024, writeOnly: true }
+        newPassword: { type: string, minLength: 15, maxLength: 1024, writeOnly: true }
+    PasswordResetRequest:
+      type: object
+      required: [username]
+      additionalProperties: false
+      properties:
+        username: { type: string, minLength: 3, maxLength: 64 }
+    PasswordResetVerification:
+      type: object
+      required: [username, code]
+      additionalProperties: false
+      properties:
+        username: { type: string, minLength: 3, maxLength: 64 }
+        code: { type: string, minLength: 12, maxLength: 14, writeOnly: true }
+    PasswordResetTicket:
+      type: object
+      required: [ticket]
+      additionalProperties: false
+      properties:
+        ticket: { type: string, pattern: '^prg-[a-z2-7]{20}$', writeOnly: true }
+    PasswordResetCompletion:
+      type: object
+      required: [username, ticket, newPassword]
+      additionalProperties: false
+      properties:
+        username: { type: string, minLength: 3, maxLength: 64 }
+        ticket: { type: string, pattern: '^prg-[a-z2-7]{20}$', writeOnly: true }
+        newPassword: { type: string, minLength: 15, maxLength: 1024, writeOnly: true }
+    PasswordResetGrant:
+      type: object
+      required: [code, expiresAt]
+      additionalProperties: false
+      properties:
+        code: { type: string, writeOnly: true }
+        expiresAt: { type: string, format: date-time }
+    UserCreateInput:
+      type: object
+      required: [username, displayName]
+      additionalProperties: false
+      properties:
+        username: { type: string, minLength: 3, maxLength: 64 }
+        displayName: { type: string, minLength: 1, maxLength: 120 }
+        installationAdministrator: { type: boolean, default: false }
+    InstallationUser:
+      allOf:
+        - { $ref: '#/components/schemas/User' }
+        - type: object
+          required: [installationAdministrator]
+          properties:
+            installationAdministrator: { type: boolean }
+    InstallationRoleInput:
+      type: object
+      required: [administrator]
+      additionalProperties: false
+      properties:
+        administrator: { type: boolean }
+    UserInvitationCredential:
+      type: object
+      required: [token, expiresAt]
+      additionalProperties: false
+      properties:
+        token: { type: string, minLength: 43, maxLength: 64, writeOnly: true }
+        expiresAt: { type: string, format: date-time }
+    UserInvitation:
+      type: object
+      required: [user, token, expiresAt]
+      additionalProperties: false
+      properties:
+        user: { $ref: '#/components/schemas/InstallationUser' }
+        token: { type: string, minLength: 43, maxLength: 64, writeOnly: true }
+        expiresAt: { type: string, format: date-time }
+    UserInvitationAcceptance:
+      type: object
+      required: [token, password]
+      additionalProperties: false
+      properties:
+        token: { type: string, minLength: 43, maxLength: 64, writeOnly: true }
+        password: { type: string, minLength: 15, maxLength: 1024, writeOnly: true }
+    AgentInstallationCreateInput:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+    ClusterCreateInput:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+    ClusterRevocationInput:
+      type: object
+      required: [reason]
+      additionalProperties: false
+      properties:
+        reason: { type: string, minLength: 1, maxLength: 500 }
+    HistoricalMetricBindingInput:
+      type: object
+      required: [provider, endpoint]
+      additionalProperties: false
+      properties:
+        provider: { type: string, enum: [PrometheusCompatible] }
+        endpoint: { type: string, format: uri, maxLength: 2048, writeOnly: true, description: Control Plane-reachable Prometheus HTTP query endpoint. Never returned by the API. }
+    HistoricalMetricBinding:
+      type: object
+      required: [clusterId, provider, health, conformant, reasonCode, limitations, version, createdAt, updatedAt]
+      additionalProperties: false
+      properties:
+        clusterId: { type: string, pattern: '^(cls|agi)-[a-z2-7]{20}$' }
+        provider: { type: string, enum: [PrometheusCompatible] }
+        health: { type: string, enum: [Unknown, Healthy, Degraded, Unavailable] }
+        conformant: { type: boolean }
+        reasonCode: { type: string, maxLength: 128 }
+        limitations:
+          type: array
+          maxItems: 16
+          items: { type: string, maxLength: 128 }
+        observedAt: { type: string, format: date-time }
+        version: { type: integer, minimum: 1 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ClusterStorageBindingInput:
+      type: object
+      required: [storageClassName]
+      additionalProperties: false
+      properties:
+        storageClassName: { type: string, minLength: 1, maxLength: 253 }
+    ClusterStorageBinding:
+      type: object
+      required: [clusterId, storageProfileId, storageClassName, provisioner, accessModes, allowExpansion, volumeBindingMode, health, reasonCode, version, createdAt, updatedAt]
+      additionalProperties: false
+      properties:
+        clusterId: { type: string, pattern: '^(cls|agi)-[a-z2-7]{20}$' }
+        storageProfileId: { type: string, minLength: 1, maxLength: 63 }
+        storageClassName: { type: string, minLength: 1, maxLength: 253 }
+        provisioner: { type: string, maxLength: 253 }
+        accessModes: { type: array, maxItems: 8, items: { type: string, maxLength: 64 } }
+        allowExpansion: { type: boolean }
+        volumeBindingMode: { type: string, maxLength: 64 }
+        health: { type: string, enum: [Unknown, Healthy, Degraded, Unavailable] }
+        reasonCode: { type: string, maxLength: 128 }
+        observedAt: { type: string, format: date-time }
+        version: { type: integer, minimum: 1 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ClusterPublicationBindingInput:
+      type: object
+      required: [gatewayNamespace, gatewayName, sectionName]
+      additionalProperties: false
+      properties:
+        gatewayNamespace: { type: string, minLength: 1, maxLength: 63 }
+        gatewayName: { type: string, minLength: 1, maxLength: 253 }
+        sectionName: { type: string, minLength: 1, maxLength: 63 }
+    ClusterPublicationBinding:
+      type: object
+      required: [clusterId, gatewayNamespace, gatewayName, sectionName, gatewayClassName, gatewayClassAccepted, gatewayProgrammed, listenerReady, supportedRouteKinds, health, reasonCode, version, createdAt, updatedAt]
+      additionalProperties: false
+      properties:
+        clusterId: { type: string, pattern: '^(cls|agi)-[a-z2-7]{20}$' }
+        gatewayNamespace: { type: string, minLength: 1, maxLength: 63 }
+        gatewayName: { type: string, minLength: 1, maxLength: 253 }
+        sectionName: { type: string, minLength: 1, maxLength: 63 }
+        gatewayClassName: { type: string, maxLength: 253 }
+        gatewayClassAccepted: { type: boolean }
+        gatewayProgrammed: { type: boolean }
+        listenerReady: { type: boolean }
+        supportedRouteKinds: { type: array, maxItems: 8, items: { type: string, maxLength: 64 } }
+        health: { type: string, enum: [Unknown, Healthy, Degraded, Unavailable] }
+        reasonCode: { type: string, maxLength: 128 }
+        observedAt: { type: string, format: date-time }
+        version: { type: integer, minimum: 1 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    Cluster:
+      type: object
+      required: [id, name, status, capabilities, createdAt, updatedAt]
+      additionalProperties: false
+      properties:
+        id: { type: string, pattern: '^(cls|agi)-[a-z2-7]{20}$' }
+        name: { type: string, minLength: 1, maxLength: 80 }
+        status: { type: string, enum: [Pending, Active, Revoked] }
+        clusterUid: { type: string }
+        agentVersion: { type: string }
+        kubernetesVersion: { type: string }
+        capabilities: { type: array, items: { type: string } }
+        certificateExpiresAt: { type: string, format: date-time }
+        lastSeenAt: { type: string, format: date-time }
+        revokedAt: { type: string, format: date-time }
+        revocationReason: { type: string }
+        trustBundleId: { type: string, pattern: '^[0-9a-f]{64}$' }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    AgentEnrollmentInvitation:
+      type: object
+      required: [clusterId, installationId, enrollmentToken, expiresAt]
+      additionalProperties: false
+      properties:
+        clusterId: { type: string, pattern: '^(cls|agi)-[a-z2-7]{20}$' }
+        installationId: { type: string, pattern: '^(cls|agi)-[a-z2-7]{20}$', deprecated: true }
+        enrollmentToken: { type: string, minLength: 64, maxLength: 64, writeOnly: true }
+        expiresAt: { type: string, format: date-time }
+    AgentEnrollmentInput:
+      type: object
+      required: [enrollmentToken, attemptId, csrPem]
+      additionalProperties: false
+      properties:
+        enrollmentToken: { type: string, minLength: 64, maxLength: 64, writeOnly: true }
+        attemptId: { type: string, pattern: '^ena-[a-z2-7]{26}$' }
+        csrPem: { type: string, minLength: 1, maxLength: 4096, writeOnly: true }
+    AgentEnrollmentResult:
+      type: object
+      required: [installationId, certificatePem, caCertificatePem, serverCaCertificatePem, trustBundleId, expiresAt]
+      additionalProperties: false
+      properties:
+        installationId: { type: string, pattern: '^(cls|agi)-[a-z2-7]{20}$' }
+        certificatePem: { type: string, writeOnly: true }
+        caCertificatePem: { type: string }
+        serverCaCertificatePem: { type: string }
+        trustBundleId: { type: string, pattern: '^[0-9a-f]{64}$' }
+        expiresAt: { type: string, format: date-time }
+    UserStatusInput:
+      type: object
+      required: [status]
+      additionalProperties: false
+      properties:
+        status: { type: string, enum: [Active, Disabled, Locked] }
+    UserSession:
+      type: object
+      required: [id, assuranceLevel, lastSeenAt, expiresAt, current]
+      additionalProperties: false
+      properties:
+        id: { type: string, pattern: '^ses-[a-z2-7]{20}$' }
+        assuranceLevel: { type: string, enum: [AAL1, AAL2] }
+        lastSeenAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        current: { type: boolean }
+    WorkspaceMembership:
+      type: object
+      required: [workspaceId, userId, username, displayName, role, status, version, createdAt, updatedAt]
+      additionalProperties: false
+      properties:
+        workspaceId: { type: string, pattern: '^ws-[a-z2-7]{20}$' }
+        userId: { type: string, pattern: '^usr-[a-z2-7]{20}$' }
+        username: { type: string }
+        displayName: { type: string }
+        role: { type: string, enum: [Owner, Member, Viewer] }
+        status: { type: string, enum: [Active, Suspended] }
+        version: { type: integer, minimum: 1 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    WorkspaceMembershipInput:
+      type: object
+      required: [role, status]
+      additionalProperties: false
+      properties:
+        role: { type: string, enum: [Owner, Member, Viewer] }
+        status: { type: string, enum: [Active, Suspended] }
+    WorkspaceMemberCreateInput:
+      type: object
+      required: [username, role, status]
+      additionalProperties: false
+      properties:
+        username: { type: string, minLength: 3, maxLength: 64 }
+        role: { type: string, enum: [Owner, Member, Viewer] }
+        status: { type: string, enum: [Active, Suspended] }
+    WorkspaceGroup:
+      type: object
+      required: [id, name, version, memberCount, createdAt, updatedAt]
+      additionalProperties: false
+      properties:
+        id: { type: string, pattern: '^grp-[a-z2-7]{20}$' }
+        name: { type: string, minLength: 1, maxLength: 80 }
+        version: { type: integer, minimum: 1 }
+        memberCount: { type: integer, minimum: 0 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    WorkspaceGroupInput:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+    AccessGrant:
+      type: object
+      required: [id, subjectType, subjectId, subjectName, resourceType, resourceId, relation, createdAt]
+      additionalProperties: false
+      properties:
+        id: { type: string, pattern: '^agr-[a-z2-7]{20}$' }
+        subjectType: { type: string, enum: [User, Group] }
+        subjectId: { type: string }
+        subjectName: { type: string }
+        resourceType: { type: string, enum: [Workspace, Project, App, AppEnvironment] }
+        resourceId: { type: string }
+        relation: { type: string, enum: [Viewer, Editor, Deployer, Manager] }
+        createdAt: { type: string, format: date-time }
+    AccessGrantInput:
+      type: object
+      required: [subjectType, subjectId, resourceType, resourceId, relation]
+      additionalProperties: false
+      properties:
+        subjectType: { type: string, enum: [User, Group] }
+        subjectId: { type: string }
+        resourceType: { type: string, enum: [Workspace, Project, App, AppEnvironment] }
+        resourceId: { type: string }
+        relation: { type: string, enum: [Viewer, Editor, Deployer, Manager] }
+    EffectiveCapabilities:
+      type: object
+      required: [readWorkspace, manageWorkspace, manageMembers, manageGroups, readAudit, manageAutomation, editResources, deploy]
+      additionalProperties: false
+      properties:
+        readWorkspace: { type: boolean }
+        manageWorkspace: { type: boolean }
+        manageMembers: { type: boolean }
+        manageGroups: { type: boolean }
+        readAudit: { type: boolean }
+        manageAutomation: { type: boolean }
+        editResources: { type: boolean }
+        deploy: { type: boolean }
+    FeatureAvailability:
+      type: object
+      required: [id, contractVersion, state, limitations]
+      additionalProperties: false
+      properties:
+        id: { type: string, minLength: 1, maxLength: 128 }
+        contractVersion: { type: string, minLength: 1, maxLength: 32 }
+        state: { type: string, enum: [Available, Limited, NotConfigured, Unavailable, Unsupported, Unknown] }
+        reasonCode: { type: string, maxLength: 128 }
+        limitations:
+          type: array
+          maxItems: 16
+          items: { type: string, maxLength: 128 }
+        observedAt: { type: string, format: date-time }
+    FeatureAvailabilityResponse:
+      type: object
+      required: [scopeType, scopeId, features]
+      additionalProperties: false
+      properties:
+        scopeType: { type: string, enum: [Workspace, App, AppEnvironment] }
+        scopeId: { type: string }
+        features:
+          type: array
+          items: { $ref: '#/components/schemas/FeatureAvailability' }
+    AuditEvent:
+      type: object
+      required: [id, occurredAt, action, targetType, outcome, metadata]
+      additionalProperties: false
+      properties:
+        id: { type: string, pattern: '^aud-[a-z2-7]{20}$' }
+        occurredAt: { type: string, format: date-time }
+        actorUserId: { type: string, pattern: '^usr-[a-z2-7]{20}$' }
+        actorId: { type: string, pattern: '^(usr|svc|sys)-[a-z2-7]{20}$' }
+        actorKind: { type: string, enum: [User, ServiceAccount, System] }
+        action: { type: string }
+        targetType: { type: string }
+        targetId: { type: string }
+        outcome: { type: string, enum: [Succeeded, Failed, Denied] }
+        reason: { type: string }
+        requestId: { type: string }
+        metadata: { type: object, additionalProperties: true }
+    Workspace:
+      type: object
+      required: [id, name, version, state, createdAt, updatedAt]
+      additionalProperties: false
+      properties:
+        id: { type: string, pattern: '^ws-[a-z2-7]{20}$' }
+        name: { type: string, minLength: 1, maxLength: 80 }
+        version: { type: integer, minimum: 1 }
+        state: { type: string, enum: [Pending, Running, Ready, Failed] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    HierarchyInput:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+    WorkspaceCreateInput:
+      type: object
+      required: [name, clusterId]
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        clusterId: { type: string, pattern: '^(cls|agi)-[a-z2-7]{20}$' }
+    WorkspaceClusterInput:
+      type: object
+      required: [clusterId]
+      additionalProperties: false
+      properties:
+        clusterId: { type: string, pattern: '^(cls|agi)-[a-z2-7]{20}$' }
+    WorkspaceCluster:
+      type: object
+      required: [clusterId, clusterName, namespace, state, observedGeneration, createdAt, updatedAt]
+      additionalProperties: false
+      properties:
+        clusterId: { type: string, pattern: '^(cls|agi)-[a-z2-7]{20}$' }
+        clusterName: { type: string }
+        namespace: { type: string }
+        state: { type: string, enum: [Pending, Running, Ready, Failed] }
+        message: { type: string }
+        observedGeneration: { type: integer, minimum: 0 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    WorkspaceSummary:
+      type: object
+      required: [counts, clusters, runtime, operations]
+      additionalProperties: false
+      properties:
+        counts:
+          type: object
+          required: [projects, environments, apps, appEnvironments, appsWithSource, appsWithRelease, deployedAppEnvironments]
+          additionalProperties: false
+          properties:
+            projects: { type: integer, minimum: 0 }
+            environments: { type: integer, minimum: 0 }
+            apps: { type: integer, minimum: 0 }
+            appEnvironments: { type: integer, minimum: 0 }
+            appsWithSource: { type: integer, minimum: 0 }
+            appsWithRelease: { type: integer, minimum: 0 }
+            deployedAppEnvironments: { type: integer, minimum: 0 }
+        clusters:
+          type: object
+          required: [total, ready]
+          additionalProperties: false
+          properties:
+            total: { type: integer, minimum: 0 }
+            ready: { type: integer, minimum: 0 }
+        runtime:
+          type: object
+          required: [ready, progressing, degraded]
+          additionalProperties: false
+          properties:
+            ready: { type: integer, minimum: 0 }
+            progressing: { type: integer, minimum: 0 }
+            degraded: { type: integer, minimum: 0 }
+        operations:
+          type: object
+          required: [active, failed]
+          additionalProperties: false
+          properties:
+            active: { type: integer, minimum: 0 }
+            failed: { type: integer, minimum: 0 }
+    Project:
+      type: object
+      required: [id, name, version, createdAt, updatedAt]
+      additionalProperties: false
+      properties:
+        id: { type: string, pattern: '^prj-[a-z2-7]{20}$' }
+        name: { type: string, minLength: 1, maxLength: 80 }
+        version: { type: integer, minimum: 1 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        archivedAt: { type: [string, 'null'], format: date-time }
+    Environment:
+      type: object
+      required: [id, name, version, createdAt, updatedAt]
+      additionalProperties: false
+      properties:
+        id: { type: string, pattern: '^env-[a-z2-7]{20}$' }
+        name: { type: string, minLength: 1, maxLength: 80 }
+        version: { type: integer, minimum: 1 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        archivedAt: { type: [string, 'null'], format: date-time }
+    App:
+      type: object
+      required: [id, name, version, createdAt, updatedAt]
+      additionalProperties: false
+      properties:
+        id: { type: string, pattern: '^app-[a-z2-7]{20}$' }
+        name: { type: string, minLength: 1, maxLength: 80 }
+        version: { type: integer, minimum: 1 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        archivedAt: { type: [string, 'null'], format: date-time }
+    GitHubInstallation:
+      type: object
+      required: [id, accountLogin, accountType, repositorySelection, createdAt]
+      additionalProperties: false
+      properties:
+        id: { type: string, pattern: '^ghi-[a-z2-7]{20}$' }
+        accountLogin: { type: string, minLength: 1 }
+        accountType: { type: string, enum: [User, Organization, Enterprise] }
+        repositorySelection: { type: string, enum: [all, selected] }
+        createdAt: { type: string, format: date-time }
+    GitHubRepository:
+      type: object
+      required: [id, name, fullName, private, defaultBranch]
+      additionalProperties: false
+      properties:
+        id: { type: string, pattern: '^[1-9][0-9]*$' }
+        name: { type: string, minLength: 1 }
+        fullName: { type: string, minLength: 3 }
+        private: { type: boolean }
+        defaultBranch: { type: string, minLength: 1 }
+    GitHubSourceInput:
+      type: object
+      required: [installationId, repositoryId]
+      additionalProperties: false
+      properties:
+        installationId: { type: string, pattern: '^ghi-[a-z2-7]{20}$' }
+        repositoryId: { type: string, pattern: '^[1-9][0-9]*$' }
+    GitHubSource:
+      type: object
+      required: [installationId, repository, connectedAt]
+      additionalProperties: false
+      properties:
+        installationId: { type: string, pattern: '^ghi-[a-z2-7]{20}$' }
+        repository: { $ref: '#/components/schemas/GitHubRepository' }
+        connectedAt: { type: string, format: date-time }
+    BuildInput:
+      type: object
+      required: [appEnvironmentId]
+      additionalProperties: false
+      properties:
+        appEnvironmentId: { type: string, pattern: '^aev-[a-z2-7]{20}$' }
+        commitSha: { type: string, pattern: '^[a-f0-9]{40}$', description: Optional immutable historical commit to rebuild. }
+    Build:
+      type: object
+      required: [id, projectId, appId, appEnvironmentId, repository, branch, commitSha, commitTitle, commitAuthorName, commitAuthorLogin, trigger, platform, status, attempts, createdAt, updatedAt]
+      additionalProperties: false
+      properties:
+        id: { type: string, pattern: '^bld-[a-z2-7]{20}$' }
+        projectId: { type: string, pattern: '^prj-[a-z2-7]{20}$' }
+        appId: { type: string, pattern: '^app-[a-z2-7]{20}$' }
+        appEnvironmentId: { type: string, pattern: '^aev-[a-z2-7]{20}$' }
+        repository: { type: string, minLength: 3 }
+        branch: { type: string, minLength: 1, maxLength: 255 }
+        commitSha: { type: string, pattern: '^[a-f0-9]{40}$' }
+        commitTitle: { type: string, maxLength: 500 }
+        commitAuthorName: { type: string, maxLength: 255 }
+        commitAuthorLogin: { type: string, maxLength: 255 }
+        committedAt: { type: string, format: date-time }
+        trigger: { type: string, enum: [Manual, Push, Release] }
+        platform: { type: string, enum: [linux/amd64] }
+        status: { type: string, enum: [Pending, Running, Succeeded, Failed, Superseded, TimedOut] }
+        attempts: { type: integer, minimum: 0, maximum: 3 }
+        errorCode: { type: string }
+        errorMessage: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    BuildLog:
+      type: object
+      required: [sequence, message, createdAt]
+      additionalProperties: false
+      properties:
+        sequence: { type: integer, minimum: 1 }
+        message: { type: string, minLength: 1, maxLength: 4000 }
+        createdAt: { type: string, format: date-time }
+    Release:
+      type: object
+      required: [id, projectId, appId, origin, sourceProvider, sourceRepository, sourceRevision, producer, provenanceStatus, createdBy, image, availabilityStatus, createdAt]
+      additionalProperties: false
+      properties:
+        id: { type: string, pattern: '^rel-[a-z2-7]{20}$' }
+        projectId: { type: string, pattern: '^prj-[a-z2-7]{20}$' }
+        appId: { type: string, pattern: '^app-[a-z2-7]{20}$' }
+        appEnvironmentId: { type: string, pattern: '^aev-[a-z2-7]{20}$' }
+        buildId: { type: string, pattern: '^bld-[a-z2-7]{20}$' }
+        origin: { type: string, enum: [ManagedBuild, External] }
+        sourceProvider: { type: string, minLength: 1, maxLength: 255 }
+        sourceRepository: { type: string, minLength: 1, maxLength: 255 }
+        sourceRevision: { type: string, minLength: 1, maxLength: 255 }
+        sourceRef: { type: string, minLength: 1, maxLength: 255 }
+        producer: { type: string, minLength: 1, maxLength: 255 }
+        producerExternalId: { type: string, minLength: 1, maxLength: 255 }
+        producerUrl: { type: string, format: uri }
+        provenanceStatus: { type: string, enum: [Declared], description: Source and producer metadata were declared by the authenticated caller and were not cryptographically attested. }
+        createdBy: { $ref: '#/components/schemas/ActorReference' }
+        branch: { type: string, minLength: 1, maxLength: 255 }
+        commitSha: { type: string, pattern: '^[a-f0-9]{40}$' }
+        commitTitle: { type: string, maxLength: 500 }
+        commitAuthorName: { type: string, maxLength: 255 }
+        commitAuthorLogin: { type: string, maxLength: 255 }
+        committedAt: { type: string, format: date-time }
+        trigger: { type: string, enum: [Manual, Push, Release] }
+        image: { type: string, pattern: '^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$' }
+        platform: { type: string, enum: [linux/amd64] }
+        availabilityStatus: { type: string, enum: [Available, Expired] }
+        expiredAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+    ReleaseRegistrationInput:
+      type: object
+      required: [artifact, source, provenance]
+      additionalProperties: false
+      properties:
+        artifact:
+          type: object
+          required: [kind, reference]
+          additionalProperties: false
+          properties:
+            kind: { type: string, enum: [OCIImage] }
+            reference: { type: string, pattern: '^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$' }
+        source:
+          type: object
+          required: [provider, repository, revision]
+          additionalProperties: false
+          properties:
+            provider: { type: string, minLength: 1, maxLength: 255 }
+            repository: { type: string, minLength: 1, maxLength: 255 }
+            revision: { type: string, minLength: 1, maxLength: 255 }
+            ref: { type: string, minLength: 1, maxLength: 255 }
+        provenance:
+          type: object
+          required: [producer]
+          additionalProperties: false
+          properties:
+            producer: { type: string, minLength: 1, maxLength: 255 }
+            externalRunId: { type: string, minLength: 1, maxLength: 255 }
+            url: { type: string, format: uri, maxLength: 2048 }
+    ServiceAccountCreateInput:
+      type: object
+      required: [name, deploymentEnvironmentIds]
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        deploymentEnvironmentIds:
+          type: array
+          uniqueItems: true
+          maxItems: 20
+          items: { type: string, pattern: '^aev-[a-z2-7]{20}$' }
+    ServiceAccount:
+      type: object
+      required: [id, workspaceId, projectId, appId, name, status, deploymentEnvironmentIds, createdAt, updatedAt]
+      additionalProperties: false
+      properties:
+        id: { type: string, pattern: '^svc-[a-z2-7]{20}$' }
+        workspaceId: { type: string, pattern: '^ws-[a-z2-7]{20}$' }
+        projectId: { type: string, pattern: '^prj-[a-z2-7]{20}$' }
+        appId: { type: string, pattern: '^app-[a-z2-7]{20}$' }
+        name: { type: string, minLength: 1, maxLength: 80 }
+        status: { type: string, enum: [Active, Disabled] }
+        deploymentEnvironmentIds: { type: array, items: { type: string, pattern: '^aev-[a-z2-7]{20}$' } }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ServiceAccountCredential:
+      type: object
+      required: [tokenId, token, expiresAt]
+      additionalProperties: false
+      properties:
+        tokenId: { type: string, pattern: '^sat-[a-z2-7]{20}$' }
+        token: { type: string, minLength: 64 }
+        expiresAt: { type: string, format: date-time }
+    ServiceAccountTokenCreateInput:
+      type: object
+      additionalProperties: false
+      properties:
+        expiresAt: { type: string, format: date-time }
+    ServiceAccountToken:
+      type: object
+      required: [id, expiresAt, createdAt]
+      additionalProperties: false
+      properties:
+        id: { type: string, pattern: '^sat-[a-z2-7]{20}$' }
+        expiresAt: { type: string, format: date-time }
+        revokedAt: { type: string, format: date-time }
+        lastUsedAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+    ActorReference:
+      type: object
+      required: [id, kind, displayName]
+      additionalProperties: false
+      properties:
+        id: { type: string, pattern: '^(usr|svc|sys)-[a-z2-7]{20}$' }
+        kind: { type: string, enum: [User, ServiceAccount, System] }
+        displayName: { type: string, minLength: 1, maxLength: 120, description: Current display label; id is the stable historical identity. }
+    DeliveryPolicyInput:
+      type: object
+      required: [pushEnabled, releaseEnabled]
+      additionalProperties: false
+      properties:
+        pushEnabled: { type: boolean }
+        releaseEnabled: { type: boolean }
+    DeliveryPolicy:
+      type: object
+      required: [appEnvironmentId, pushEnabled, releaseEnabled, version, updatedAt]
+      additionalProperties: false
+      properties:
+        appEnvironmentId: { type: string, pattern: '^aev-[a-z2-7]{20}$' }
+        pushEnabled: { type: boolean }
+        releaseEnabled: { type: boolean }
+        version: { type: integer, minimum: 0 }
+        updatedAt: { type: string, format: date-time }
+    Variable:
+      type: object
+      required: [name, value]
+      additionalProperties: false
+      properties:
+        name: { type: string, maxLength: 253, pattern: '^[A-Za-z_][A-Za-z0-9_]*$' }
+        value: { type: string, maxLength: 4096 }
+    ParameterBinding:
+      type: object
+      required: [name, parameterId, parameterVersion]
+      additionalProperties: false
+      properties:
+        name: { type: string, maxLength: 253, pattern: '^[A-Za-z_][A-Za-z0-9_]*$' }
+        parameterId: { type: string, pattern: '^par-[a-z2-7]{20}$' }
+        parameterVersion: { type: integer, minimum: 1 }
+    ParameterInput:
+      type: object
+      required: [path, type, value]
+      additionalProperties: false
+      properties:
+        path: { type: string, minLength: 2, maxLength: 255, pattern: '^/[a-zA-Z0-9._/-]+$' }
+        type: { type: string, enum: [PlainText, Secret] }
+        description: { type: string, maxLength: 500, default: '' }
+        value: { type: string, minLength: 1, maxLength: 65536 }
+    Parameter:
+      type: object
+      required: [id, path, type, description, currentVersion, version, configured, createdAt, updatedAt]
+      additionalProperties: false
+      properties:
+        id: { type: string, pattern: '^par-[a-z2-7]{20}$' }
+        path: { type: string, minLength: 2, maxLength: 255 }
+        type: { type: string, enum: [PlainText, Secret] }
+        description: { type: string, maxLength: 500 }
+        currentVersion: { type: integer, minimum: 1 }
+        version: { type: integer, minimum: 1 }
+        configured: { type: boolean }
+        value: { type: string, maxLength: 65536, description: Present only for PlainText parameters. }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    RuntimeConfiguration:
+      type: object
+      required: [replicas, ports, resources, probes, publicEndpoints, variables, parameters]
+      additionalProperties: false
+      properties:
+        replicas: { type: integer, minimum: 1, maximum: 5, default: 1 }
+        ports:
+          type: array
+          minItems: 1
+          maxItems: 8
+          items: { $ref: '#/components/schemas/RuntimePort' }
+        resources:
+          type: object
+          required: [requests, limits]
+          additionalProperties: false
+          properties:
+            requests: { $ref: '#/components/schemas/ResourceValues' }
+            limits: { $ref: '#/components/schemas/ResourceValues' }
+        probes:
+          type: object
+          required: [startup, liveness, readiness]
+          additionalProperties: false
+          properties:
+            startup: { $ref: '#/components/schemas/Probe' }
+            liveness: { $ref: '#/components/schemas/Probe' }
+            readiness: { $ref: '#/components/schemas/Probe' }
+        publicEndpoints:
+          type: array
+          maxItems: 2
+          items: { $ref: '#/components/schemas/PublicEndpoint' }
+        variables:
+          type: array
+          maxItems: 100
+          items: { $ref: '#/components/schemas/Variable' }
+        parameters:
+          type: array
+          maxItems: 100
+          items: { $ref: '#/components/schemas/ParameterBinding' }
+    AppEnvironmentInput:
+      type: object
+      required: [configuration]
+      additionalProperties: false
+      properties:
+        branch: { type: string, minLength: 1, maxLength: 255 }
+        configuration: { $ref: '#/components/schemas/RuntimeConfiguration' }
+    AppEnvironmentCreateInput:
+      type: object
+      required: [environmentId, clusterId, workloadKind, configuration]
+      additionalProperties: false
+      properties:
+        environmentId: { type: string, pattern: '^env-[a-z2-7]{20}$' }
+        clusterId: { type: string, pattern: '^(cls|agi)-[a-z2-7]{20}$' }
+        branch: { type: string, minLength: 1, maxLength: 255 }
+        workloadKind: { type: string, enum: [Stateless, Stateful] }
+        volume: { $ref: '#/components/schemas/AppVolumeRequest' }
+        configuration: { $ref: '#/components/schemas/RuntimeConfiguration' }
+    AppEnvironmentSetupApp:
+      type: object
+      required: [mode]
+      additionalProperties: false
+      properties:
+        mode: { type: string, enum: [Existing, New] }
+        id: { type: string, pattern: '^app-[a-z2-7]{20}$' }
+        name: { type: string, minLength: 1, maxLength: 80 }
+    AppEnvironmentSetupInput:
+      type: object
+      required: [app, environmentId, clusterId, workloadKind, configuration]
+      additionalProperties: false
+      properties:
+        app: { $ref: '#/components/schemas/AppEnvironmentSetupApp' }
+        environmentId: { type: string, pattern: '^env-[a-z2-7]{20}$' }
+        clusterId: { type: string, pattern: '^(cls|agi)-[a-z2-7]{20}$' }
+        branch: { type: string, minLength: 1, maxLength: 255 }
+        workloadKind: { type: string, enum: [Stateless, Stateful] }
+        volume: { $ref: '#/components/schemas/AppVolumeRequest' }
+        configuration: { $ref: '#/components/schemas/RuntimeConfiguration' }
+    AppEnvironmentSetup:
+      type: object
+      required: [app, appEnvironment]
+      additionalProperties: false
+      properties:
+        app: { $ref: '#/components/schemas/App' }
+        appEnvironment: { $ref: '#/components/schemas/AppEnvironment' }
+    AppEnvironment:
+      type: object
+      required: [id, clusterId, projectId, appId, appName, environmentId, environmentName, branch, workloadKind, configuration, configurationVersion, version, state, createdAt, updatedAt]
+      additionalProperties: false
+      properties:
+        id: { type: string, pattern: '^aev-[a-z2-7]{20}$' }
+        clusterId: { type: string, pattern: '^(cls|agi)-[a-z2-7]{20}$' }
+        projectId: { type: string, pattern: '^prj-[a-z2-7]{20}$' }
+        appId: { type: string, pattern: '^app-[a-z2-7]{20}$' }
+        appName: { type: string, minLength: 1, maxLength: 80 }
+        environmentId: { type: string, pattern: '^env-[a-z2-7]{20}$' }
+        environmentName: { type: string, minLength: 1, maxLength: 80 }
+        branch: { type: string, maxLength: 255 }
+        workloadKind: { type: string, enum: [Stateless, Stateful] }
+        configuration: { $ref: '#/components/schemas/RuntimeConfiguration' }
+        configurationVersion: { type: integer, minimum: 1 }
+        version: { type: integer, minimum: 1 }
+        desiredDeploymentId: { type: string, pattern: '^dpl-[a-z2-7]{20}$' }
+        currentDeploymentId: { type: string, pattern: '^dpl-[a-z2-7]{20}$' }
+        currentReleaseId: { type: string, pattern: '^rel-[a-z2-7]{20}$' }
+        desiredConfigurationVersion: { type: integer, minimum: 1 }
+        currentConfigurationVersion: { type: integer, minimum: 1 }
+        runtimeObservedGeneration: { type: integer, minimum: 0 }
+        runtimeObservedAt: { type: string, format: date-time }
+        state: { type: string, enum: [Pending, Progressing, Ready, Degraded, Unknown] }
+        message: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    AppVolumeRequest:
+      type: object
+      required: [storageProfileId, sizeGiB, mountPath]
+      additionalProperties: false
+      properties:
+        storageProfileId: { type: string, minLength: 1, maxLength: 63, pattern: '^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$' }
+        sizeGiB: { type: integer, minimum: 1 }
+        mountPath: { type: string, minLength: 2, maxLength: 255, pattern: '^/[^[:cntrl:]]+$' }
+    AppVolumeExpansionInput:
+      type: object
+      required: [sizeGiB]
+      additionalProperties: false
+      properties:
+        sizeGiB: { type: integer, minimum: 1 }
+    StorageProfile:
+      type: object
+      required: [id, name, minimumSizeGiB, maximumSizeGiB, availableGiB, expandable, snapshots, automaticBackup, durability]
+      additionalProperties: false
+      properties:
+        id: { type: string, minLength: 1, maxLength: 63 }
+        name: { type: string, minLength: 1, maxLength: 80 }
+        minimumSizeGiB: { type: integer, minimum: 1 }
+        maximumSizeGiB: { type: integer, minimum: 1 }
+        availableGiB: { type: integer, minimum: 0 }
+        expandable: { type: boolean }
+        snapshots: { type: boolean }
+        automaticBackup: { type: boolean }
+        durability: { type: string, enum: [NodeLocal, Replicated, ProviderManaged] }
+    AppVolume:
+      type: object
+      required: [id, appEnvironmentId, storageProfileId, sizeGiB, mountPath, retentionPolicy, desiredState, state, attached, version, createdAt, updatedAt]
+      additionalProperties: false
+      properties:
+        id: { type: string, pattern: '^vol-[a-z2-7]{20}$' }
+        appEnvironmentId: { type: string, pattern: '^aev-[a-z2-7]{20}$' }
+        storageProfileId: { type: string, minLength: 1, maxLength: 63 }
+        sizeGiB: { type: integer, minimum: 1 }
+        mountPath: { type: string, minLength: 2, maxLength: 255 }
+        retentionPolicy: { type: string, enum: [Preserve] }
+        desiredState: { type: string, enum: [Ready, Deleted] }
+        state: { type: string, enum: [Pending, Provisioning, Ready, Expanding, Retained, Degraded] }
+        message: { type: string }
+        attached: { type: boolean }
+        version: { type: integer, minimum: 1 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    AppVolumeMutation:
+      type: object
+      required: [volume, operation]
+      additionalProperties: false
+      properties:
+        volume: { $ref: '#/components/schemas/AppVolume' }
+        operation: { $ref: '#/components/schemas/Operation' }
+    DeploymentInput:
+      type: object
+      required: [releaseId, configurationVersion, currentDeploymentId]
+      additionalProperties: false
+      properties:
+        releaseId: { type: string, pattern: '^rel-[a-z2-7]{20}$' }
+        configurationVersion: { type: integer, minimum: 1 }
+        currentDeploymentId:
+          type: [string, 'null']
+          pattern: '^dpl-[a-z2-7]{20}$'
+    DeploymentPreviewInput:
+      type: object
+      required: [releaseId, configurationVersion]
+      additionalProperties: false
+      properties:
+        releaseId: { type: string, pattern: '^rel-[a-z2-7]{20}$' }
+        configurationVersion: { type: integer, minimum: 1 }
+    DeploymentTarget:
+      type: object
+      required: [releaseId, configurationVersion]
+      additionalProperties: false
+      properties:
+        releaseId: { type: string, pattern: '^rel-[a-z2-7]{20}$' }
+        configurationVersion: { type: integer, minimum: 1 }
+    DeploymentPreview:
+      type: object
+      required: [target, changes, rolloutRequired]
+      additionalProperties: false
+      properties:
+        current: { $ref: '#/components/schemas/DeploymentTarget' }
+        target: { $ref: '#/components/schemas/DeploymentTarget' }
+        changes:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            enum: [InitialDeployment, Release, Scale, Network, HealthChecks, Resources, Variables, Secrets]
+        rolloutRequired: { type: boolean }
+    ConfigurationRevision:
+      type: object
+      required: [appEnvironmentId, version, configuration, createdBy, createdAt]
+      additionalProperties: false
+      properties:
+        appEnvironmentId: { type: string, pattern: '^aev-[a-z2-7]{20}$' }
+        version: { type: integer, minimum: 1 }
+        configuration: { $ref: '#/components/schemas/RuntimeConfiguration' }
+        createdBy: { type: string, minLength: 1 }
+        createdAt: { type: string, format: date-time }
+    ResourceValues:
+      type: object
+      required: [cpuMillis, memoryMiB]
+      additionalProperties: false
+      properties:
+        cpuMillis: { type: integer, minimum: 1, maximum: 2000 }
+        memoryMiB: { type: integer, minimum: 1, maximum: 2048 }
+    Probe:
+      type: object
+      required: [type, portName]
+      additionalProperties: false
+      properties:
+        type: { type: string, enum: [HTTP, TCP] }
+        portName: { type: string, minLength: 1, maxLength: 15, pattern: '^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$' }
+        path: { type: string, maxLength: 2048, pattern: '^/' }
+    RuntimePort:
+      type: object
+      required: [name, containerPort, protocol]
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 15, pattern: '^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$' }
+        containerPort: { type: integer, minimum: 1, maximum: 65535 }
+        protocol: { type: string, enum: [TCP] }
+    PublicEndpoint:
+      type: object
+      required: [name, type, portName, domainId, hostnameLabel]
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 15, pattern: '^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$' }
+        type: { type: string, enum: [HTTP, TCP] }
+        portName: { type: string, minLength: 1, maxLength: 15, pattern: '^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$' }
+        domainId: { type: string, minLength: 1, maxLength: 63, pattern: '^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$' }
+        hostnameLabel: { type: string, minLength: 1, maxLength: 63, pattern: '^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$' }
+        externalPort: { type: integer, minimum: 1, maximum: 65535, readOnly: true }
+    Deployment:
+      type: object
+      required: [id, appEnvironmentId, releaseId, workloadKind, configurationVersion, configuration, requestedBy, state, createdAt, updatedAt]
+      additionalProperties: false
+      properties:
+        id: { type: string, pattern: '^dpl-[a-z2-7]{20}$' }
+        appEnvironmentId: { type: string, pattern: '^aev-[a-z2-7]{20}$' }
+        releaseId: { type: string, pattern: '^rel-[a-z2-7]{20}$' }
+        workloadKind: { type: string, enum: [Stateless, Stateful] }
+        appVolumeId: { type: string, pattern: '^vol-[a-z2-7]{20}$' }
+        configurationVersion: { type: integer, minimum: 1 }
+        configuration: { $ref: '#/components/schemas/RuntimeConfiguration' }
+        requestedBy: { $ref: '#/components/schemas/ActorReference' }
+        state: { type: string, enum: [Pending, Progressing, Ready, Degraded] }
+        message: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    Operation:
+      type: object
+      required: [id, kind, status, desiredVersion, attempts]
+      properties:
+        id: { type: string, pattern: '^op-' }
+        appEnvironmentId: { type: string, pattern: '^aev-[a-z2-7]{20}$' }
+        deploymentId: { type: string, pattern: '^dpl-[a-z2-7]{20}$' }
+        appVolumeId: { type: string, pattern: '^vol-[a-z2-7]{20}$' }
+        kind: { type: string, enum: [ApplyDeployment, DeleteAppEnvironment, EnsureWorkspace, EnsureVolume, ExpandVolume, DeleteVolume] }
+        status: { type: string, enum: [Pending, Running, Succeeded, Failed] }
+        desiredVersion: { type: integer, minimum: 1 }
+        attempts: { type: integer, minimum: 0 }
+        errorCode: { type: string }
+        errorMessage: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    RuntimeLog:
+      type: object
+      required: [id, timestamp, body, severity]
+      additionalProperties: false
+      properties:
+        id: { type: string, pattern: '^log-[a-f0-9]{32}$' }
+        timestamp: { type: string, format: date-time }
+        body: { type: string, maxLength: 65536 }
+        severity: { type: string, maxLength: 253 }
+    RuntimeLogs:
+      type: object
+      required: [from, to, liveCursor, items]
+      additionalProperties: false
+      properties:
+        from: { type: string, format: date-time }
+        to: { type: string, format: date-time }
+        liveCursor: { type: string }
+        nextCursor: { type: [string, 'null'] }
+        items: { type: array, items: { $ref: '#/components/schemas/RuntimeLog' } }
+    RuntimeLogBatch:
+      type: object
+      required: [cursor, items]
+      additionalProperties: false
+      properties:
+        cursor: { type: string }
+        items: { type: array, items: { $ref: '#/components/schemas/RuntimeLog' } }
+    RuntimeMetricPoint:
+      type: object
+      required: [timestamp, value]
+      additionalProperties: false
+      properties:
+        timestamp: { type: string, format: date-time }
+        value: { type: number }
+    RuntimeMetricSeries:
+      type: object
+      required: [name, unit, points]
+      additionalProperties: false
+      properties:
+        name: { type: string, enum: [cpu, memory, restarts, available, desired] }
+        unit: { type: string, enum: [cores, bytes, count, replicas] }
+        points: { type: array, items: { $ref: '#/components/schemas/RuntimeMetricPoint' } }
+    RuntimeMetrics:
+      type: object
+      required: [from, to, step, resolutionSeconds, partial, unavailable, series]
+      additionalProperties: false
+      properties:
+        from: { type: string, format: date-time }
+        to: { type: string, format: date-time }
+        step: { type: string }
+        resolutionSeconds: { type: integer, minimum: 15, maximum: 3600 }
+        partial: { type: boolean }
+        unavailable: { type: array, items: { type: string, enum: [cpu, memory, restarts, available, desired] } }
+        series: { type: array, items: { $ref: '#/components/schemas/RuntimeMetricSeries' } }
+    RuntimeMetricSample:
+      type: object
+      required: [name, unit, timestamp, value]
+      additionalProperties: false
+      properties:
+        name: { type: string, enum: [cpu, memory, restarts, available, desired] }
+        unit: { type: string, enum: [cores, bytes, count, replicas] }
+        timestamp: { type: string, format: date-time }
+        value: { type: number }
+    RuntimeMetricSnapshot:
+      type: object
+      required: [observedAt, partial, unavailable, samples]
+      additionalProperties: false
+      properties:
+        observedAt: { type: string, format: date-time }
+        partial: { type: boolean }
+        unavailable: { type: array, items: { type: string, enum: [cpu, memory, restarts, available, desired] } }
+        samples: { type: array, items: { $ref: '#/components/schemas/RuntimeMetricSample' } }
+    RuntimeEvent:
+      type: object
+      required: [timestamp, source, type, reason, message]
+      additionalProperties: false
+      properties:
+        timestamp: { type: string, format: date-time }
+        source: { type: string, enum: [control-plane, kubernetes] }
+        type: { type: string, maxLength: 253 }
+        reason: { type: string, maxLength: 253 }
+        message: { type: string, maxLength: 65536 }
+    RuntimeEvents:
+      type: object
+      required: [from, to, partial, unavailable, items]
+      additionalProperties: false
+      properties:
+        from: { type: string, format: date-time }
+        to: { type: string, format: date-time }
+        partial: { type: boolean }
+        unavailable: { type: array, items: { type: string, enum: [kubernetes] } }
+        items: { type: array, items: { $ref: '#/components/schemas/RuntimeEvent' } }
+    Error:
+      type: object
+      required: [code, message, requestId]
+      additionalProperties: false
+      properties:
+        code: { type: string }
+        message: { type: string }
+        requestId: { type: string }
+        retryable: { type: boolean }
+        violations:
+          type: array
+          items:
+            type: object
+            required: [field, code, message]
+            additionalProperties: false
+            properties:
+              field: { type: string, pattern: '^/' }
+              code: { type: string }
+              message: { type: string }

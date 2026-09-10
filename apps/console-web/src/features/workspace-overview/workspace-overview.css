@@ -1,0 +1,49 @@
+@layer features {
+  .task-list {
+    display: grid;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .task-list li {
+    align-items: center;
+    border-top: 1px solid var(--ui-border);
+    display: grid;
+    gap: var(--space-3);
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    min-height: 72px;
+    padding: var(--space-3) 0;
+  }
+
+  .task-list li > span:nth-child(2) {
+    display: grid;
+    min-width: 0;
+  }
+
+  .task-state {
+    align-items: center;
+    color: var(--ui-text-muted);
+    display: flex;
+  }
+
+  .task-list li.done .task-state {
+    color: var(--ui-success);
+  }
+
+  .task-list a {
+    font-weight: 700;
+  }
+
+  @media (max-width: 720px) {
+    .task-list li {
+      align-items: start;
+      grid-template-columns: auto minmax(0, 1fr);
+    }
+
+    .task-list li > a {
+      grid-column: 2;
+      justify-self: start;
+    }
+  }
+}

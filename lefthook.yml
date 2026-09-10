@@ -1,0 +1,25 @@
+min_version: 2.1.12
+
+pre-commit:
+  parallel: true
+  jobs:
+    - name: staged-whitespace
+      run: git diff --cached --check
+      fail_text: The staged diff contains whitespace errors.
+
+    - name: go-format
+      glob: "*.go"
+      run: |
+        unformatted="$(
+          go tool -modfile=tools/go.mod gofumpt -l {staged_files} |
+            while IFS= read -r file; do
+              grep -q '^// Code generated .* DO NOT EDIT\.$' "$file" || printf '%s\n' "$file"
+            done
+        )"
+        test -z "$unformatted"
+      fail_text: Go files are not formatted. Run `just fmt` and stage them again.
+
+    - name: go-imports
+      glob: "*.go"
+      run: test -z "$(go tool -modfile=tools/go.mod gci list --skip-generated -s standard -s default -s localmodule {staged_files})"
+      fail_text: Go imports are not organized. Run `just fmt` and stage them again.

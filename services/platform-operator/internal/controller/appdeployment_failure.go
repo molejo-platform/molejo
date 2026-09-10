@@ -1,0 +1,141 @@
+package controller
+
+import (
+	"context"
+	"errors"
+	"time"
+
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	ctrl "sigs.k8s.io/controller-runtime"
+
+	platformv1alpha1 "github.com/molejo-platform/molejo/packages/kubernetes-api/apis/platform/v1alpha1"
+)
+
+const (
+	ownershipConflictRequeueAfter = 5 * time.Minute
+	persistentFailureRequeueAfter = 5 * time.Minute
+)
+
+var (
+	errOwnershipConflict = errors.New("required child is not controlled by the AppDeployment")
+	errHostnameConflict  = errors.New("public hostname is already owned by another AppDeployment")
+)
+
+type projectionFailure struct {
+	decision workloadDecision
+	requeue  time.Duration
+	report   bool
+}
+
+func classifyProjectionFailure(err error) (projectionFailure, bool) {
+	switch {
+	case errors.Is(err, errHostnameConflict):
+		return projectionFailure{decision: workloadDecision{
+			state:   workloadStateDegraded,
+			reason:  platformv1alpha1.ReasonHostnameConflict,
+			message: "The requested public hostname is not available.",
+		}, requeue: ownershipConflictRequeueAfter}, true
+	case errors.Is(err, errOwnershipConflict):
+		return projectionFailure{decision: workloadDecision{
+			state:   workloadStateDegraded,
+			reason:  platformv1alpha1.ReasonOwnershipConflict,
+			message: "A required Kubernetes child is not controlled by this AppDeployment.",
+		}, requeue: ownershipConflictRequeueAfter}, true
+	case isPersistentReconcileError(err):
+		return projectionFailure{decision: workloadDecision{
+			state:   workloadStateDegraded,
+			reason:  platformv1alpha1.ReasonReconcileFailed,
+			message: "A required Kubernetes child could not be reconciled.",
+		}, requeue: persistentFailureRequeueAfter, report: true}, true
+	default:
+		return projectionFailure{}, false
+	}
+}
+
+func (r *AppDeploymentReconciler) handleProjectionFailure(
+	ctx context.Context,
+	span trace.Span,
+	appDeployment *platformv1alpha1.AppDeployment,
+	err error,
+) (ctrl.Result, error) {
+	if markCanceledReconciliation(ctx, span, err) {
+		return ctrl.Result{}, nil
+	}
+	failure, handled := classifyProjectionFailure(err)
+	if handled {
+		if failure.report {
+			markReconcileFailure(span, err)
+			logReconcileFailure(ctx, appDeployment, err)
+		} else {
+			span.SetAttributes(
+				attribute.String("molejo.reconciliation.state", string(failure.decision.state)),
+				attribute.String("molejo.reconciliation.reason", failure.decision.reason),
+			)
+		}
+		if statusErr := r.updateFailureStatus(ctx, appDeployment, failure.decision); statusErr != nil {
+			if markCanceledReconciliation(ctx, span, statusErr) {
+				return ctrl.Result{}, nil
+			}
+			markReconcileFailure(span, statusErr)
+			logReconcileFailure(ctx, appDeployment, statusErr)
+			return ctrl.Result{}, statusErr
+		}
+		return ctrl.Result{RequeueAfter: failure.requeue}, nil
+	}
+	markReconcileFailure(span, err)
+	logReconcileFailure(ctx, appDeployment, err)
+	return ctrl.Result{}, err
+}
+
+func finishSpan(span trace.Span, err error) {
+	if err != nil && !apierrors.IsNotFound(err) {
+		markSpanError(span, err)
+	}
+	span.End()
+}
+
+func markSpanError(span trace.Span, err error) {
+	span.RecordError(err)
+	span.SetStatus(codes.Error, "operation failed")
+}
+
+func markCanceledReconciliation(ctx context.Context, span trace.Span, err error) bool {
+	if !isCanceledReconciliation(ctx, err) {
+		return false
+	}
+	span.SetAttributes(attribute.String("molejo.reconciliation.outcome", "canceled"))
+	return true
+}
+
+func markReconcileFailure(span trace.Span, err error) {
+	span.SetAttributes(
+		attribute.String("molejo.reconciliation.state", string(workloadStateDegraded)),
+		attribute.String("molejo.reconciliation.reason", platformv1alpha1.ReasonReconcileFailed),
+	)
+	markSpanError(span, err)
+}
+
+func logReconcileFailure(
+	ctx context.Context,
+	appDeployment *platformv1alpha1.AppDeployment,
+	err error,
+) {
+	ctrl.LoggerFrom(ctx).Error(err, "AppDeployment reconciliation failed",
+		"uid", appDeployment.UID,
+		"generation", appDeployment.Generation,
+		"observedGeneration", appDeployment.Status.ObservedGeneration,
+		"state", workloadStateDegraded,
+		"reason", platformv1alpha1.ReasonReconcileFailed,
+	)
+}
+
+func isPersistentReconcileError(err error) bool {
+	return apierrors.IsInvalid(err) ||
+		apierrors.IsBadRequest(err) ||
+		apierrors.IsForbidden(err) ||
+		apierrors.IsUnauthorized(err) ||
+		apierrors.IsMethodNotSupported(err)
+}

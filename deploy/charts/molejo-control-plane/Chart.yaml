@@ -1,0 +1,13 @@
+apiVersion: v2
+name: molejo-control-plane
+description: Molejo control plane for a Kubernetes cluster
+type: application
+version: 0.0.0-dev
+appVersion: "devel"
+kubeVersion: ">=1.31.0-0 <1.37.0-0"
+home: https://github.com/molejo-platform/fruto
+sources:
+  - https://github.com/molejo-platform/fruto
+annotations:
+  org.opencontainers.image.source: https://github.com/molejo-platform/fruto
+  org.opencontainers.image.description: Molejo control plane distribution

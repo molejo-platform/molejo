@@ -5,16 +5,20 @@
 
 English is the canonical version of this policy.
 
+The public architecture [security threat model](docs/en/architecture/security-threat-model.md)
+documents current trust boundaries, accepted alpha risks, and verification
+requirements. It does not replace private vulnerability reporting.
+
 ## Supported Versions
 
-Fruto Platform is an experimental pre-alpha project and has no supported release
-or production-ready version. Security fixes are applied to the default branch on
-a best-effort basis.
+Molejo publishes experimental alpha releases and has no supported or
+production-ready version. Security fixes are applied to the default branch on a
+best-effort basis.
 
 ## Reporting a Vulnerability
 
 Report suspected vulnerabilities through
-[GitHub private vulnerability reporting](https://github.com/fruto-platform/fruto/security/advisories/new).
+[GitHub private vulnerability reporting](https://github.com/molejo-platform/fruto/security/advisories/new).
 Do not disclose the vulnerability in a public issue, discussion, or pull request.
 
 Include, when possible:
@@ -25,7 +29,7 @@ Include, when possible:
 - any known mitigations.
 
 The maintainers will acknowledge and assess reports as capacity permits. Because
-the project is pre-alpha, no response or remediation service-level agreement is
+the project is in alpha, no response or remediation service-level agreement is
 currently provided.
 
 ## Disclosure

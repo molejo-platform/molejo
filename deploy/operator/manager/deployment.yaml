@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: platform-operator
+  namespace: molejo-system
+  labels:
+    app.kubernetes.io/name: platform-operator
+    app.kubernetes.io/part-of: molejo-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: platform-operator
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: platform-operator
+        app.kubernetes.io/part-of: molejo-platform
+    spec:
+      serviceAccountName: platform-operator
+      imagePullSecrets:
+        - name: registry-molejo
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: manager
+          image: ghcr.io/molejo-platform/platform-operator@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          imagePullPolicy: IfNotPresent
+          args:
+            - --leader-elect=false
+          env:
+            - name: OTEL_TRACES_EXPORTER
+              value: none
+          ports:
+            - name: metrics
+              containerPort: 8443
+              protocol: TCP
+            - name: health
+              containerPort: 8081
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+          resources:
+            requests:
+              cpu: 25m
+              memory: 48Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+      # Allows controller drain and trace export before forced termination.
+      terminationGracePeriodSeconds: 30

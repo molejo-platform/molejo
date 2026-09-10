@@ -1,0 +1,13 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata: { name: molejo-platform-operator-discovery }
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: molejo-platform-operator-discovery }
+subjects:
+  - { kind: ServiceAccount, name: platform-operator, namespace: molejo-system }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata: { name: molejo-workspace-boundary }
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: molejo-workspace-boundary }
+subjects:
+  - { kind: ServiceAccount, name: workspace-boundary-controller, namespace: molejo-system }

@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cluster-agent
+  namespace: molejo-system
+  labels:
+    app.kubernetes.io/name: cluster-agent
+    app.kubernetes.io/part-of: molejo-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cluster-agent
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cluster-agent
+        app.kubernetes.io/part-of: molejo-platform
+    spec:
+      serviceAccountName: cluster-agent
+      imagePullSecrets:
+        - name: registry-molejo
+      automountServiceAccountToken: false
+      # Keeps the Pod alive longer than the Agent's bounded lifecycle shutdown.
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: agent
+          image: ghcr.io/molejo-platform/cluster-agent@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef: { name: cluster-agent-config }
+            - configMapRef: { name: cluster-agent-connection, optional: true }
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef: { apiVersion: v1, fieldPath: metadata.namespace }
+          ports:
+            - { name: health, containerPort: 8081, protocol: TCP }
+          readinessProbe:
+            httpGet: { path: /readyz, port: health }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: health }
+            periodSeconds: 10
+          volumeMounts:
+            - { name: kube-api, mountPath: /var/run/secrets/kubernetes.io/serviceaccount, readOnly: true }
+            - { name: control-plane-ca, mountPath: /var/run/secrets/molejo/control-plane, readOnly: true }
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { cpu: 100m, memory: 64Mi }
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
+            readOnlyRootFilesystem: true
+      volumes:
+        - name: control-plane-ca
+          configMap:
+            name: cluster-agent-control-plane-ca
+            optional: true
+        - name: kube-api
+          projected:
+            defaultMode: 0440
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  expirationSeconds: 3600
+              - configMap:
+                  name: kube-root-ca.crt
+                  items:
+                    - { key: ca.crt, path: ca.crt }
+              - downwardAPI:
+                  items:
+                    - path: namespace
+                      fieldRef: { apiVersion: v1, fieldPath: metadata.namespace }

@@ -1,0 +1,134 @@
+:root {
+  color-scheme: light;
+
+  /* Molejo brand primitives. Shared UI must consume the semantic roles below. */
+  --color-molejo-petroleum: #12333f;
+  --color-molejo-petroleum-strong: #0b252e;
+  --color-molejo-graphite: #172126;
+  --color-molejo-teal: #0e8f82;
+  --color-molejo-teal-strong: #087267;
+  --color-molejo-lime: #b7c83a;
+  --color-molejo-paper: #f5f4ee;
+
+  /* Content and surfaces. */
+  --ui-canvas: var(--color-molejo-paper);
+  --ui-surface: #ffffff;
+  --ui-surface-subtle: #f1f3ef;
+  --ui-surface-hover: #e5e9e5;
+  --ui-text: var(--color-molejo-graphite);
+  --ui-text-muted: #56666b;
+  --ui-heading: var(--color-molejo-petroleum);
+  --ui-border: #d7ddd8;
+  --ui-control-border: #71827a;
+
+  /* Actions and focus. */
+  --ui-action-primary: var(--color-molejo-teal-strong);
+  --ui-action-primary-hover: var(--color-molejo-petroleum);
+  --ui-on-action-primary: #ffffff;
+  --ui-action-secondary: var(--ui-surface-subtle);
+  --ui-action-secondary-hover: var(--ui-surface-hover);
+  --ui-on-action-secondary: var(--color-molejo-petroleum);
+  --ui-action-quiet: transparent;
+  --ui-action-quiet-hover: var(--ui-surface-subtle);
+  --ui-action-quiet-text: var(--color-molejo-teal-strong);
+  --ui-action-quiet-text-hover: var(--color-molejo-petroleum);
+  --ui-link: var(--color-molejo-teal-strong);
+  --ui-link-hover: var(--color-molejo-petroleum);
+  --ui-accent: var(--color-molejo-teal-strong);
+  --ui-focus-ring: var(--color-molejo-teal);
+  --ui-active-indicator: var(--color-molejo-lime);
+
+  /* Inverse surfaces. */
+  --ui-inverse-surface: var(--color-molejo-petroleum);
+  --ui-inverse-surface-strong: var(--color-molejo-petroleum-strong);
+  --ui-inverse-text: #ffffff;
+  --ui-inverse-text-soft: rgb(255 255 255 / 78%);
+  --ui-inverse-text-muted: rgb(255 255 255 / 68%);
+  --ui-inverse-text-subtle: rgb(255 255 255 / 62%);
+  --ui-inverse-border: rgb(255 255 255 / 24%);
+  --ui-inverse-divider: rgb(255 255 255 / 16%);
+  --ui-inverse-interaction: rgb(255 255 255 / 11%);
+  --ui-inverse-interaction-strong: rgb(255 255 255 / 13%);
+
+  /* Feedback. */
+  --ui-danger: #a43f35;
+  --ui-danger-strong: #7e2d25;
+  --ui-danger-surface: #fff0ed;
+  --ui-danger-surface-hover: #ffe1dc;
+  --ui-danger-border: var(--ui-danger);
+  --ui-success: #176a47;
+  --ui-success-surface: #e5f5ea;
+  --ui-success-border: var(--ui-success);
+  --ui-warning: #7c5514;
+  --ui-warning-surface: #fff3dc;
+  --ui-warning-border: var(--ui-warning);
+  --ui-info: #245b73;
+  --ui-info-surface: #e8f3f7;
+  --ui-info-border: var(--ui-info);
+  --ui-inverse-success: #ccefd9;
+  --ui-inverse-warning: #ffe0a8;
+
+  /* Observability. */
+  --ui-code-text: #e8f2ec;
+  --ui-code-muted: #a9c8c4;
+  --ui-code-control: #d8e7e4;
+  --ui-code-border: rgb(255 255 255 / 25%);
+  --ui-code-border-hover: rgb(255 255 255 / 45%);
+  --ui-code-surface-hover: rgb(255 255 255 / 8%);
+  --ui-code-focus: #9fddd5;
+  --ui-code-focus-soft: rgb(159 221 213 / 40%);
+  --ui-code-bracket-0: #f5cf7a;
+  --ui-code-bracket-1: #9fddd5;
+  --ui-code-bracket-2: #b9cef5;
+  --ui-code-bracket-3: #d8bdf0;
+  --ui-code-bracket-4: #f1b6c4;
+  --ui-code-bracket-5: #b9dfa0;
+  --ui-code-key: #aee8df;
+  --ui-code-string: #dce9a9;
+  --ui-code-number: #f5c980;
+  --ui-code-literal: #efb2c2;
+  --ui-chart-accent-fill: rgb(14 143 130 / 10%);
+  --ui-data-primary: var(--color-molejo-teal-strong);
+
+  /* Effects. */
+  --ui-shadow-sm: 0 1px 2px rgb(18 51 63 / 8%);
+  --ui-shadow-card-hover: 0 10px 28px rgb(18 51 63 / 10%);
+  --ui-shadow-summary-hover: 0 6px 20px rgb(18 51 63 / 9%);
+  --ui-shadow-dialog: 0 24px 70px rgb(18 51 63 / 18%);
+  --ui-scrim: rgb(18 33 38 / 55%);
+  --ui-scrim-soft: rgb(18 33 38 / 48%);
+
+  /* Typography. */
+  --font-family-heading: "Space Grotesk Variable", "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-family-body: "IBM Plex Sans Variable", "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-family-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-size-2xs: 0.6875rem;
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-md: 1rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.25rem;
+  --font-size-2xl: 1.5rem;
+  --font-size-3xl: 2rem;
+
+  /* Shape, spacing, interaction, and layers. */
+  --radius-sm: 0.5rem;
+  --radius-md: 0.8rem;
+  --radius-lg: 1rem;
+  --radius-pill: 999px;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-12: 3rem;
+  --control-min-size: 2.75rem;
+  --motion-fast: 180ms;
+  --motion-medium: 200ms;
+  --layer-sidebar: 20;
+  --layer-mobile-header: 30;
+  --layer-scrim: 40;
+  --layer-drawer: 50;
+  --layer-skip-link: 1000;
+}

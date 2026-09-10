@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cluster-agent-config
+  namespace: molejo-system
+data:
+  MOLEJO_AGENT_IDENTITY_SECRET: molejo-agent-identity
+  MOLEJO_AGENT_ENROLLMENT_SECRET: molejo-agent-enrollment
+  MOLEJO_WORKSPACE_PROVISIONING_MODE: Namespaced

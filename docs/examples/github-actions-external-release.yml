@@ -1,0 +1,107 @@
+name: Build and deploy with Molejo
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY_HOST: registry.example.com
+  IMAGE_REPOSITORY: team/app
+  MOLEJO_API_URL: https://cloud.example.com
+  MOLEJO_WORKSPACE_ID: ws-replace-me
+  MOLEJO_PROJECT_ID: prj-replace-me
+  MOLEJO_APP_ID: app-replace-me
+  MOLEJO_APP_ENVIRONMENT_ID: aev-replace-me
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY_HOST }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ env.REGISTRY_HOST }}/${{ env.IMAGE_REPOSITORY }}:${{ github.sha }}
+
+      - id: release
+        name: Register immutable Molejo release
+        env:
+          MOLEJO_TOKEN: ${{ secrets.MOLEJO_AUTOMATION_TOKEN }}
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          base="$MOLEJO_API_URL/api/v1/workspaces/$MOLEJO_WORKSPACE_ID/projects/$MOLEJO_PROJECT_ID/apps/$MOLEJO_APP_ID"
+          jq -n \
+            --arg image "$REGISTRY_HOST/$IMAGE_REPOSITORY@$IMAGE_DIGEST" \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg revision "$GITHUB_SHA" \
+            --arg ref "$GITHUB_REF" \
+            --arg runId "$GITHUB_RUN_ID" \
+            --arg runUrl "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            '{artifact:{kind:"OCIImage",reference:$image},source:{provider:"GitHub",repository:$repository,revision:$revision,ref:$ref},provenance:{producer:"github-actions",externalRunId:$runId,url:$runUrl}}' \
+            > "$RUNNER_TEMP/molejo-release-input.json"
+          curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer $MOLEJO_TOKEN" \
+            -H "Idempotency-Key: release-$GITHUB_RUN_ID" \
+            -H "Content-Type: application/json" \
+            --data-binary "@$RUNNER_TEMP/molejo-release-input.json" \
+            "$base/releases" > "$RUNNER_TEMP/molejo-release.json"
+          echo "id=$(jq -r .id "$RUNNER_TEMP/molejo-release.json")" >> "$GITHUB_OUTPUT"
+
+      - id: deploy
+        name: Select release for deployment
+        env:
+          MOLEJO_TOKEN: ${{ secrets.MOLEJO_AUTOMATION_TOKEN }}
+          RELEASE_ID: ${{ steps.release.outputs.id }}
+        run: |
+          base="$MOLEJO_API_URL/api/v1/workspaces/$MOLEJO_WORKSPACE_ID/projects/$MOLEJO_PROJECT_ID/apps/$MOLEJO_APP_ID"
+          curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer $MOLEJO_TOKEN" \
+            "$base/environments/$MOLEJO_APP_ENVIRONMENT_ID" > "$RUNNER_TEMP/molejo-environment.json"
+          version=$(jq -r .version "$RUNNER_TEMP/molejo-environment.json")
+          configuration_version=$(jq -r .configurationVersion "$RUNNER_TEMP/molejo-environment.json")
+          current_deployment=$(jq '.currentDeploymentId // null' "$RUNNER_TEMP/molejo-environment.json")
+          jq -n \
+            --arg releaseId "$RELEASE_ID" \
+            --argjson configurationVersion "$configuration_version" \
+            --argjson currentDeploymentId "$current_deployment" \
+            '{releaseId:$releaseId,configurationVersion:$configurationVersion,currentDeploymentId:$currentDeploymentId}' \
+            > "$RUNNER_TEMP/molejo-deployment-input.json"
+          curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer $MOLEJO_TOKEN" \
+            -H "Idempotency-Key: deployment-$GITHUB_RUN_ID" \
+            -H "If-Match: $version" \
+            -H "Content-Type: application/json" \
+            --data-binary "@$RUNNER_TEMP/molejo-deployment-input.json" \
+            "$base/environments/$MOLEJO_APP_ENVIRONMENT_ID/deployments" \
+            > "$RUNNER_TEMP/molejo-deployment.json"
+          echo "operation_id=$(jq -r .operation.id "$RUNNER_TEMP/molejo-deployment.json")" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for Molejo operation
+        env:
+          MOLEJO_TOKEN: ${{ secrets.MOLEJO_AUTOMATION_TOKEN }}
+          OPERATION_ID: ${{ steps.deploy.outputs.operation_id }}
+        run: |
+          for attempt in $(seq 1 60); do
+            operation=$(curl --fail-with-body --silent --show-error \
+              -H "Authorization: Bearer $MOLEJO_TOKEN" \
+              "$MOLEJO_API_URL/api/v1/operations/$OPERATION_ID")
+            status=$(jq -r .status <<<"$operation")
+            case "$status" in
+              Succeeded) exit 0 ;;
+              Failed) jq . <<<"$operation"; exit 1 ;;
+            esac
+            sleep 5
+          done
+          echo "Molejo operation timed out" >&2
+          exit 1

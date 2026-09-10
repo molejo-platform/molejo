@@ -1,0 +1,57 @@
+.backdrop {
+  background: var(--ui-scrim);
+  inset: 0;
+  position: fixed;
+  z-index: var(--layer-scrim);
+}
+
+.popup {
+  background: var(--ui-surface);
+  border: 0;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--ui-shadow-dialog);
+  color: var(--ui-text);
+  left: 50%;
+  max-height: calc(100dvh - 2rem);
+  max-width: 30rem;
+  overflow-y: auto;
+  padding: var(--space-6);
+  position: fixed;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: calc(100% - 2rem);
+  z-index: var(--layer-drawer);
+}
+
+.title {
+  color: var(--ui-heading);
+  font-family: var(--font-family-heading);
+  font-size: var(--font-size-xl);
+  line-height: 1.25;
+  margin: 0 0 var(--space-3);
+}
+
+.drawerBackdrop {
+  background: var(--ui-scrim-soft);
+  inset: 0;
+  position: fixed;
+  z-index: var(--layer-scrim);
+}
+
+.drawer {
+  background: var(--ui-inverse-surface);
+  color: var(--ui-inverse-text);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  height: 100dvh;
+  inset: 0 auto 0 0;
+  max-width: 310px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-6) var(--space-4);
+  position: fixed;
+  scrollbar-gutter: stable;
+  width: 86vw;
+  z-index: var(--layer-drawer);
+}

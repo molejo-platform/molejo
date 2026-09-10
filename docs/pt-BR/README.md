@@ -1,28 +1,26 @@
-# Fruto Platform
+# Molejo
 
 [Início do projeto](../../README.md) | [English](../en/README.md) |
 [Español (Argentina)](../es-AR/README.md)
 
-> Projeto experimental em pre-alpha. A Fruto Platform ainda não está pronta
+> Projeto experimental em alpha. A Molejo ainda não está pronta
 > para produção.
 
-A Fruto Platform é uma Kubernetes Application Platform pública e portátil. Seu
+A Molejo é uma Kubernetes Application Platform pública e portátil. Seu
 objetivo é permitir que pessoas criem, publiquem e operem aplicações sem precisar
 conhecer Kubernetes, `kubectl`, YAML ou a infraestrutura subjacente.
 
 Kubernetes é o substrato de execução, não a API do produto. Usuários declaram a
-intenção de produto por contratos da Fruto, e controllers confiáveis reconciliam
+intenção de produto por contratos da Molejo, e controllers confiáveis reconciliam
 essa intenção em recursos Kubernetes.
 
 ## Estado
 
-O repositório está em sua etapa de fundação. O trabalho é intencionalmente
-incremental: a menor capacidade útil é implementada, observada em execução,
-corrigida a partir de evidências reais e somente então ampliada.
-
-O escopo atual está limitado a convenções de engenharia, decisões de arquitetura e
-aos primeiros contratos versionados. Ainda não existe plataforma funcional, API
-pública, controller ou interface web.
+O repositório permanece experimental e em alpha. Sua implementação atual
+inclui contratos Kubernetes versionados, o Platform Operator, um backend de
+control plane e o fluxo de pairing do Cluster Agent outbound. Esses componentes
+não constituem uma plataforma suportada para produção. Releases alpha podem alterar
+contratos sem compromisso de compatibilidade ou migração.
 
 ## Modelo do Produto
 
@@ -41,20 +39,15 @@ runtime e nunca concedem permissões de produto.
 
 ## Monorepo
 
-Este repositório é o monorepo público da Fruto Platform. Ele conterá os contratos
-versionados e os componentes que implementam o produto público.
+Este repositório é o monorepo público da Molejo. Sua estrutura atual é:
 
-A estrutura será introduzida apenas quando cada componente possuir um consumidor
-real:
+- `contracts/` — contratos versionados neutros de linguagem e gerados;
+- `packages/` — bibliotecas compartilhadas com consumidores concretos;
+- `services/` — Platform Operator, control plane e Cluster Agent;
+- `deploy/` — artefatos de instalação Kubernetes gerados e mantidos;
+- `docs/` — documentação pública de arquitetura e operações.
 
-- `api/` — tipos da API Kubernetes e contratos versionados;
-- `cmd/` — entry points Go para controllers, APIs e outros binários;
-- `internal/` — implementação Go compartilhada e privada;
-- `web/` — interface web do produto;
-- `config/` — artefatos de instalação Kubernetes gerados e mantidos;
-- `docs/` — documentação pública de arquitetura e do projeto.
-
-O código Go inicial usará um único módulo na raiz do repositório. Novos módulos
+O código Go usa um único módulo na raiz do repositório. Novos módulos
 Go e um arquivo `go.work` serão introduzidos somente quando um componente, como um
 SDK público, exigir versionamento e compatibilidade de release independentes.
 
@@ -62,7 +55,7 @@ SDK público, exigir versionamento e compatibilidade de release independentes.
 
 - Go, Kubebuilder e `controller-runtime` para controllers Kubernetes;
 - Go, `net/http` e Chi para APIs HTTP;
-- TypeScript, React, Vite, Tailwind CSS, shadcn/ui e Lineicons para a interface web;
+- Protocol Buffers e gRPC para o canal autenticado do Cluster Agent;
 - Buildx e BuildKit para builds de containers;
 - um `justfile` na raiz para comandos de desenvolvimento local.
 
@@ -75,9 +68,28 @@ Inglês é o idioma canônico da documentação. Versões em português (`pt-BR`
 espanhol da Argentina (`es-AR`) são mantidas em conjunto, e outros idiomas podem
 ser acrescentados futuramente.
 
-Os Architecture Decision Records ficam em [`adr`](adr/README.md). Os
-arquivos de ADR usam o mesmo identificador, nome de arquivo e headings em inglês
-em todos os idiomas; somente o conteúdo é localizado.
+Guias atuais de arquitetura e componentes:
+
+- [Modelo operacional](architecture/operational-model.md)
+- [Inspeção da foundation](foundation/inspect.md)
+- [Ciclo de vida da plataforma](platform/lifecycle.md)
+- [Platform Operator](platform/platform-operator.md)
+- [Cluster Agent outbound](platform/cluster-agent.md)
+- [Capacidades do cluster](capabilities/README.md)
+- [Application loop](application-loop/README.md)
+- [Releases por CI externa](application-loop/external-ci.md)
+- [Threat model de segurança](architecture/threat-model-de-seguranca.md)
+- [ADR de identidade e pairing do Cluster Agent outbound](adr/0013-outbound-cluster-agent-identity-and-pairing.md)
+- [ADR do limite de Release e deploy por CI externa](adr/0014-limite-de-release-e-deploy-por-ci-externa.md)
+- [ADR de ownership de capacidades](adr/0015-ownership-de-capacidades.md)
+- [ADR da política de ciclo de vida alpha](adr/0016-politica-de-ciclo-de-vida-alpha.md)
+- [ADR do limite da identidade humana](adr/0017-limite-da-identidade-humana.md)
+- [ADR de observação de capacidades e disponibilidade](adr/0018-observacao-de-capacidades-e-disponibilidade-de-features.md)
+- [ADR de provisionamento de Workspace e namespace](adr/0019-provisionamento-de-workspace-e-limite-de-namespace.md)
+- [ADR de custódia de secrets e entrega](adr/0020-custodia-de-secrets-e-entrega-ao-runtime.md)
+- [ADR de bindings explícitos gerenciados pelo operador](adr/0021-bindings-explicitos-gerenciados-pelo-operador.md)
+- [ADR de métricas neutras com consulta Prometheus-compatible](adr/0022-metricas-neutras-com-consulta-prometheus.md)
+- [ADR do limite da stack frontend do Console](adr/0023-limite-da-stack-frontend-do-console.md)
 
 ## Contribuição
 

@@ -1,0 +1,51 @@
+import type { ApiError } from "./types";
+
+export class ApiRequestError extends Error {
+  readonly status: number;
+  readonly details?: ApiError;
+
+  constructor(status: number, details?: ApiError) {
+    super(details?.message ?? "The request could not be completed.");
+    this.name = "ApiRequestError";
+    this.status = status;
+    this.details = details;
+  }
+}
+
+export function isUnauthenticatedError(error: unknown): boolean {
+  return error instanceof ApiRequestError && error.status === 401 && error.details?.code === "unauthenticated";
+}
+
+export function isRetryableError(error: unknown): boolean {
+  return error instanceof ApiRequestError && error.details?.retryable === true;
+}
+
+export function userFacingError(error: unknown) {
+  if (error instanceof ApiRequestError) {
+    if (error.details?.code === "invalid_credentials") return "Credenciais inválidas.";
+    if (error.details?.code === "current_password_invalid") return "A senha atual está incorreta.";
+    if (isUnauthenticatedError(error)) return "Sua sessão expirou. Entre novamente.";
+    if (error.details?.code === "version_conflict")
+      return "O recurso mudou. Recarregue os dados antes de tentar novamente.";
+    if (error.details?.code === "name_conflict") return "Já existe um recurso ativo com esse nome.";
+    if (error.details?.code === "dependency_conflict")
+      return "O recurso possui dependências ativas e não pode ser arquivado.";
+    if (error.details?.code === "idempotency_conflict")
+      return "Esta tentativa já foi usada com dados diferentes. Recarregue a página e tente novamente.";
+    if (error.details?.code === "cluster_not_ready") return "O cluster selecionado ainda não está pronto.";
+    if (error.details?.code === "cluster_unavailable") return "O cluster selecionado não está disponível.";
+    if (error.details?.code === "validation_failed") return "Revise os campos indicados e tente novamente.";
+    if (error.status >= 500) return withRequestId("O serviço está temporariamente indisponível.", error);
+    return withRequestId(error.message, error);
+  }
+  return "Não foi possível concluir a operação.";
+}
+
+export function errorViolations(error: unknown) {
+  if (!(error instanceof ApiRequestError)) return [];
+  return error.details?.violations ?? [];
+}
+
+function withRequestId(message: string, error: ApiRequestError) {
+  return error.details?.requestId ? `${message} Referência: ${error.details.requestId}.` : message;
+}

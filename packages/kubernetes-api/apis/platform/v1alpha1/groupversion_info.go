@@ -1,0 +1,20 @@
+// Package v1alpha1 contains the first Kubernetes API contract for Molejo.
+// +kubebuilder:object:generate=true
+// +groupName=platform.molejo.dev
+package v1alpha1
+
+import (
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/controller-runtime/pkg/scheme"
+)
+
+var (
+	// GroupVersion identifies this API group and version.
+	GroupVersion = schema.GroupVersion{Group: "platform.molejo.dev", Version: "v1alpha1"}
+
+	// SchemeBuilder registers this API group and version.
+	SchemeBuilder = &scheme.Builder{GroupVersion: GroupVersion}
+
+	// AddToScheme adds this API group and version to a runtime scheme.
+	AddToScheme = SchemeBuilder.AddToScheme
+)

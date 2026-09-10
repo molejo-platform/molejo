@@ -1,0 +1,80 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata: { name: cluster-agent-identity, namespace: molejo-system }
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [molejo-agent-identity, molejo-agent-enrollment]
+    verbs: [get, update, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: { name: cluster-agent-identity, namespace: molejo-system }
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: cluster-agent-identity }
+subjects:
+  - { kind: ServiceAccount, name: cluster-agent, namespace: molejo-system }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata: { name: molejo-cluster-agent-runtime }
+rules:
+  - apiGroups: [""]
+    resources: [configmaps]
+    verbs: [get, list, create, delete]
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [get, create, delete]
+  - apiGroups: [platform.molejo.dev]
+    resources: [appdeployments, appvolumes]
+    verbs: [get, list, watch, create, update, patch, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata: { name: molejo-cluster-agent-observer }
+rules:
+  - apiGroups: [""]
+    resources: [pods, pods/log, events]
+    verbs: [get, list]
+  - apiGroups: [apps]
+    resources: [deployments, statefulsets, replicasets]
+    verbs: [get, list]
+  - apiGroups: [events.k8s.io]
+    resources: [events]
+    verbs: [get, list]
+  - apiGroups: [metrics.k8s.io]
+    resources: [pods]
+    verbs: [get, list]
+  - apiGroups: [gateway.networking.k8s.io]
+    resources: [gateways, httproutes, tcproutes]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata: { name: molejo-cluster-agent-discovery }
+rules:
+  - apiGroups: [""]
+    resources: [namespaces]
+    resourceNames: [kube-system]
+    verbs: [get]
+  - apiGroups: [platform.molejo.dev]
+    resources: [workspaceplacements]
+    verbs: [get, list, watch, create, update, patch]
+  - apiGroups: [platform.molejo.dev]
+    resources: [appdeployments, appvolumes]
+    verbs: [get, list, watch]
+  - apiGroups: [storage.k8s.io]
+    resources: [storageclasses]
+    verbs: [get, list]
+  - apiGroups: [gateway.networking.k8s.io]
+    resources: [gatewayclasses, gateways, httproutes, tcproutes]
+    verbs: [get, list]
+  - apiGroups: [authorization.k8s.io]
+    resources: [selfsubjectaccessreviews]
+    verbs: [create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata: { name: molejo-cluster-agent-discovery }
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: molejo-cluster-agent-discovery }
+subjects:
+  - { kind: ServiceAccount, name: cluster-agent, namespace: molejo-system }

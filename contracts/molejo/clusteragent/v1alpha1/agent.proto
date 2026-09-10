@@ -1,0 +1,300 @@
+syntax = "proto3";
+
+package molejo.clusteragent.v1alpha1;
+
+option go_package = "github.com/molejo-platform/molejo/contracts/molejo/clusteragent/v1alpha1;clusteragentv1alpha1";
+
+service ClusterAgentService {
+  rpc Connect(stream ConnectRequest) returns (stream ConnectResponse);
+  rpc OpenRuntimeQueryChannel(stream OpenRuntimeQueryChannelRequest) returns (stream OpenRuntimeQueryChannelResponse);
+  rpc RenewCertificate(RenewCertificateRequest) returns (RenewCertificateResponse);
+}
+
+message ConnectRequest {
+  oneof payload {
+    AgentHello hello = 1;
+    Heartbeat heartbeat = 2;
+    RuntimeResult runtime_result = 3;
+  }
+}
+
+message ConnectResponse {
+  oneof payload {
+    ControlPlaneHello hello = 1;
+    HeartbeatAck heartbeat_ack = 2;
+    RuntimeCommand runtime_command = 3;
+  }
+}
+
+message AgentHello {
+  string installation_id = 1;
+  string agent_version = 2;
+  string cluster_uid = 3;
+  string kubernetes_version = 4;
+  repeated string capabilities = 5;
+  repeated string supported_protocol_versions = 6;
+  string trust_bundle_id = 7;
+  string workspace_provisioning_mode = 8;
+}
+
+message ControlPlaneHello {
+  string protocol_version = 1;
+  int32 heartbeat_interval_seconds = 2;
+  int64 server_time_unix = 3;
+  repeated string capabilities = 4;
+  string session_id = 5;
+  string trust_bundle_id = 6;
+}
+
+message Heartbeat {
+  uint64 sequence = 1;
+  int64 sent_at_unix = 2;
+  repeated RuntimeObservation observations = 3;
+  bool observation_snapshot_complete = 4;
+  string session_id = 5;
+  repeated CapabilityObservation capability_observations = 6;
+  bool capability_snapshot_complete = 7;
+  repeated BindingObservation binding_observations = 8;
+  bool binding_snapshot_complete = 9;
+}
+
+message CapabilityObservation {
+  string capability_id = 1;
+  string contract_version = 2;
+  string support = 3;
+  string health = 4;
+  string provider_kind = 5;
+  string reason_code = 6;
+  string sanitized_message = 7;
+  repeated string limitations = 8;
+  int64 sampled_at_unix = 9;
+}
+
+message RuntimeObservation {
+  string kind = 1;
+  string namespace = 2;
+  string name = 3;
+  string state = 4;
+  string message = 5;
+  int64 generation = 6;
+  int64 observed_generation = 7;
+  string observed_release = 8;
+  int64 observed_size_gib = 9;
+  int64 desired_version = 10;
+  string spec_hash = 11;
+}
+
+message HeartbeatAck {
+  uint64 sequence = 1;
+  int64 received_at_unix = 2;
+  repeated BindingTarget binding_targets = 3;
+}
+
+message BindingTarget {
+  string id = 1;
+  string kind = 2;
+  int64 version = 3;
+  oneof target {
+    StorageBindingTarget storage = 4;
+    PublicationBindingTarget publication = 5;
+  }
+}
+
+message StorageBindingTarget {
+  string storage_class_name = 1;
+}
+
+message PublicationBindingTarget {
+  string gateway_namespace = 1;
+  string gateway_name = 2;
+  string section_name = 3;
+}
+
+message BindingObservation {
+  string id = 1;
+  string kind = 2;
+  int64 version = 3;
+  string health = 4;
+  string reason_code = 5;
+  int64 sampled_at_unix = 6;
+  oneof observation {
+    StorageBindingObservation storage = 7;
+    PublicationBindingObservation publication = 8;
+  }
+}
+
+message StorageBindingObservation {
+  string storage_class_name = 1;
+  string provisioner = 2;
+  repeated string access_modes = 3;
+  bool allow_expansion = 4;
+  string volume_binding_mode = 5;
+}
+
+message PublicationBindingObservation {
+  string gateway_namespace = 1;
+  string gateway_name = 2;
+  string section_name = 3;
+  string gateway_class_name = 4;
+  bool gateway_class_accepted = 5;
+  bool gateway_programmed = 6;
+  bool listener_ready = 7;
+  repeated string supported_route_kinds = 8;
+}
+
+message RuntimeCommand {
+  string command_id = 1;
+  string operation_id = 2;
+  int64 desired_version = 3;
+  int64 fencing_token = 4;
+  int64 deadline_unix = 5;
+  string kind = 6;
+  bytes payload_json = 7;
+  string payload_schema_version = 8;
+}
+
+message RuntimeResult {
+  string command_id = 1;
+  int64 fencing_token = 2;
+  string state = 3;
+  string message = 4;
+  string observed_release = 5;
+  string volume_state = 6;
+  string volume_message = 7;
+  int64 observed_size_gib = 8;
+  string error_code = 9;
+  bool retryable = 10;
+  int64 desired_version = 11;
+  string spec_hash = 12;
+}
+
+message OpenRuntimeQueryChannelRequest {
+  oneof payload {
+    RuntimeQueryHello hello = 1;
+    RuntimeQueryChunk chunk = 2;
+    RuntimeQueryComplete complete = 3;
+  }
+}
+
+message OpenRuntimeQueryChannelResponse {
+  oneof payload {
+    RuntimeQueryHello hello = 1;
+    RuntimeQueryRequest request = 2;
+    RuntimeQueryCancel cancel = 3;
+  }
+}
+
+message RuntimeQueryHello {
+  string installation_id = 1;
+  string session_id = 2;
+  string protocol_version = 3;
+}
+
+message RuntimeQueryRequest {
+  string request_id = 1;
+  int64 deadline_unix_milli = 2;
+  string app_environment_id = 3;
+  oneof query {
+    PodLogsQuery pod_logs = 4;
+    CurrentPodMetricsQuery current_pod_metrics = 5;
+    KubernetesEventsQuery kubernetes_events = 6;
+  }
+}
+
+message PodLogsQuery {
+  string namespace = 1;
+  string runtime_name = 2;
+  string container = 3;
+  int64 since_unix_nano = 4;
+  int32 tail_lines = 5;
+  int64 limit_bytes = 6;
+  bool previous = 7;
+}
+
+message CurrentPodMetricsQuery {
+  string namespace = 1;
+  string runtime_name = 2;
+}
+
+message KubernetesEventsQuery {
+  string namespace = 1;
+  string runtime_name = 2;
+  int64 since_unix_nano = 3;
+  int32 limit = 4;
+}
+
+message RuntimeQueryCancel {
+  string request_id = 1;
+}
+
+message RuntimeQueryChunk {
+  string request_id = 1;
+  uint32 sequence = 2;
+  oneof payload {
+    PodLogsResult pod_logs = 3;
+    CurrentPodMetricsResult current_pod_metrics = 4;
+    KubernetesEventsResult kubernetes_events = 5;
+  }
+}
+
+message PodLogsResult {
+  repeated RuntimeLogEntry items = 1;
+  bool truncated = 2;
+}
+
+message RuntimeLogEntry {
+  string id = 1;
+  int64 timestamp_unix_nano = 2;
+  string body = 3;
+  string severity = 4;
+}
+
+message CurrentPodMetricsResult {
+  int64 observed_at_unix_nano = 1;
+  bool partial = 2;
+  repeated string unavailable = 3;
+  repeated RuntimeMetricSample samples = 4;
+}
+
+message RuntimeMetricSample {
+  string name = 1;
+  string unit = 2;
+  int64 timestamp_unix_nano = 3;
+  double value = 4;
+}
+
+message KubernetesEventsResult {
+  repeated RuntimeEvent items = 1;
+  bool partial = 2;
+  repeated string unavailable = 3;
+}
+
+message RuntimeEvent {
+  int64 timestamp_unix_nano = 1;
+  string type = 2;
+  string reason = 3;
+  string message = 4;
+}
+
+message RuntimeQueryComplete {
+  string request_id = 1;
+  string state = 2;
+  string error_code = 3;
+  string sanitized_message = 4;
+  bool retryable = 5;
+}
+
+message RenewCertificateRequest {
+  string installation_id = 1;
+  string attempt_id = 2;
+  bytes csr_pem = 3;
+}
+
+message RenewCertificateResponse {
+  string installation_id = 1;
+  bytes certificate_pem = 2;
+  bytes ca_certificate_pem = 3;
+  int64 expires_at_unix = 4;
+  bytes server_ca_certificate_pem = 5;
+  string trust_bundle_id = 6;
+}

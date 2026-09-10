@@ -1,0 +1,113 @@
+@layer features {
+  .environment-actions {
+    align-items: flex-end;
+    display: flex;
+    gap: var(--space-3);
+  }
+
+  .environment-actions .field {
+    min-width: 190px;
+  }
+
+  .service-grid {
+    display: grid;
+    gap: var(--space-4);
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  }
+
+  .service-card {
+    background: var(--ui-surface);
+    border: 1px solid var(--ui-border);
+    border-radius: var(--radius-lg);
+    color: var(--ui-text);
+    display: grid;
+    gap: var(--space-6);
+    min-height: 230px;
+    padding: var(--space-6);
+    text-decoration: none;
+    transition:
+      border-color var(--motion-fast) ease,
+      box-shadow var(--motion-fast) ease,
+      transform var(--motion-fast) ease;
+  }
+
+  a.service-card:hover {
+    border-color: var(--ui-accent);
+    box-shadow: var(--ui-shadow-card-hover);
+    color: var(--ui-text);
+    transform: translateY(-2px);
+  }
+
+  .service-card-heading {
+    align-items: center;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .service-mark {
+    align-items: center;
+    background: var(--ui-inverse-surface);
+    border-radius: var(--radius-sm);
+    color: var(--ui-inverse-text);
+    display: inline-flex;
+    font-family: var(--font-family-heading);
+    font-weight: 700;
+    height: 2.5rem;
+    justify-content: center;
+    width: 2.5rem;
+  }
+
+  .service-card h3,
+  .service-card p {
+    margin-bottom: 0;
+  }
+
+  .service-card p {
+    color: var(--ui-text-muted);
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-sm);
+  }
+
+  .service-card dl {
+    border-top: 1px solid var(--ui-border);
+    display: grid;
+    gap: var(--space-3);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin: 0;
+    padding-top: var(--space-4);
+  }
+
+  .service-card dt {
+    color: var(--ui-text-muted);
+    font-size: var(--font-size-xs);
+  }
+
+  .service-card dd {
+    font-size: var(--font-size-sm);
+    margin: 0.1rem 0 0;
+    overflow-wrap: anywhere;
+  }
+
+  .deployment-composer {
+    align-items: flex-end;
+    display: grid;
+    gap: var(--space-3);
+    grid-template-columns: minmax(min(100%, 15rem), 1fr) auto;
+  }
+
+  @media (max-width: 720px) {
+    .environment-actions {
+      align-items: stretch;
+      flex-direction: column;
+      width: 100%;
+    }
+
+    .environment-actions .field {
+      min-width: 0;
+    }
+
+    .deployment-composer {
+      grid-template-columns: 1fr;
+    }
+  }
+}
