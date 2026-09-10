@@ -69,6 +69,18 @@ func TestControlPlaneInstallPassesPublicGateway(t *testing.T) {
 	}
 }
 
+func TestControlPlaneInstallPassesLocalChart(t *testing.T) {
+	installer := &fakeControlPlaneInstaller{}
+	_, err := executeControlPlaneInstall(t, "devel", installer,
+		"--kube-context", "molejo-k3s", "--version", "0.1.0-alpha.3", "--chart-path", "/tmp/molejo-control-plane")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if installer.options.ChartPath != "/tmp/molejo-control-plane" {
+		t.Fatalf("chart path=%q", installer.options.ChartPath)
+	}
+}
+
 func TestControlPlaneInstallReturnsExecutorFailure(t *testing.T) {
 	installer := &fakeControlPlaneInstaller{err: errors.New("storage unavailable")}
 	_, err := executeControlPlaneInstall(t, "v0.1.0-alpha.3", installer, "--kube-context", "molejo-k3s")

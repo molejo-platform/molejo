@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"helm.sh/helm/v4/pkg/action"
-	"helm.sh/helm/v4/pkg/chart/loader"
+	"helm.sh/helm/v4/pkg/chart"
 	"helm.sh/helm/v4/pkg/kube"
 	"helm.sh/helm/v4/pkg/storage/driver"
 	batchv1 "k8s.io/api/batch/v1"
@@ -56,6 +56,7 @@ type Options struct {
 	GatewayNamespace string
 	GatewayName      string
 	GatewaySection   string
+	ChartPath        string
 }
 
 // Check is one readiness observation produced after installation.
@@ -84,6 +85,13 @@ func (*Installer) Install(ctx context.Context, options Options) (Report, error) 
 	options, err := normalizeAndValidateOptions(options)
 	if err != nil {
 		return Report{}, err
+	}
+	var preparedChart chart.Charter
+	if options.ChartPath != "" {
+		preparedChart, err = helmclient.LoadChart(options.ChartPath, controlPlaneRelease, options.Version)
+		if err != nil {
+			return Report{}, err
+		}
 	}
 	client, err := kubernetesClientForContext(options.ContextName)
 	if err != nil {
@@ -159,7 +167,7 @@ func (*Installer) Install(ctx context.Context, options Options) (Report, error) 
 		}
 	}
 	if plan.installChart {
-		if err = installControlPlaneChart(ctx, options, storageClass); err != nil {
+		if err = installControlPlaneChart(ctx, options, storageClass, preparedChart); err != nil {
 			return Report{}, err
 		}
 	}
@@ -241,7 +249,7 @@ func inspectControlPlaneRelease(contextName string, options Options) (controlPla
 	}, nil
 }
 
-func installControlPlaneChart(ctx context.Context, options Options, storageClass string) error {
+func installControlPlaneChart(ctx context.Context, options Options, storageClass string, preparedChart chart.Charter) error {
 	helm, err := helmclient.New(options.ContextName, controlPlaneNamespace, nil)
 	if err != nil {
 		return err
@@ -255,15 +263,17 @@ func installControlPlaneChart(ctx context.Context, options Options, storageClass
 	install.RollbackOnFailure = true
 	install.Version = options.Version
 	install.SetRegistryClient(helm.Registry)
-	chartPath, err := install.LocateChart(controlPlaneChart, helm.Settings)
-	if err != nil {
-		return fmt.Errorf("locate chart %s:%s: %w", controlPlaneChart, options.Version, err)
+	if preparedChart == nil {
+		chartPath, locateErr := install.LocateChart(controlPlaneChart, helm.Settings)
+		if locateErr != nil {
+			return fmt.Errorf("locate chart %s:%s: %w", controlPlaneChart, options.Version, locateErr)
+		}
+		preparedChart, err = helmclient.LoadChart(chartPath, controlPlaneRelease, options.Version)
+		if err != nil {
+			return err
+		}
 	}
-	chart, err := loader.Load(chartPath)
-	if err != nil {
-		return fmt.Errorf("load control plane chart: %w", err)
-	}
-	if _, err = install.RunWithContext(ctx, chart, controlPlaneChartValues(options, storageClass)); err != nil {
+	if _, err = install.RunWithContext(ctx, preparedChart, controlPlaneChartValues(options, storageClass)); err != nil {
 		return fmt.Errorf("run control plane Helm install: %w", err)
 	}
 	return nil

@@ -16,6 +16,7 @@ func normalizeAndValidateOptions(options Options) (Options, error) {
 	options.GatewayNamespace = strings.TrimSpace(options.GatewayNamespace)
 	options.GatewayName = strings.TrimSpace(options.GatewayName)
 	options.GatewaySection = strings.TrimSpace(options.GatewaySection)
+	options.ChartPath = strings.TrimSpace(options.ChartPath)
 	if options.PublicHost == "" {
 		return options, nil
 	}

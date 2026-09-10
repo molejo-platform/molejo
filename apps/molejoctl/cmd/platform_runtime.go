@@ -14,13 +14,13 @@ import (
 type runtimeInstallResult = runtimeinstall.Result
 
 type runtimeInstaller interface {
-	Install(context.Context, string, string) (runtimeinstall.Result, error)
+	Install(context.Context, runtimeinstall.Options) (runtimeinstall.Result, error)
 }
 
 func newHelmInstaller() runtimeInstaller { return runtimeinstall.New() }
 
 func newRuntimeInstallCommand(cliVersion string, installer runtimeInstaller, doctor doctorRunner) *cobra.Command {
-	var contextName, requestedVersion string
+	var contextName, requestedVersion, chartPath string
 	command := &cobra.Command{
 		Use:   "install",
 		Short: "Install Molejo in a Kubernetes cluster",
@@ -35,7 +35,11 @@ func newRuntimeInstallCommand(cliVersion string, installer runtimeInstaller, doc
 				return err
 			}
 
-			result, err := installer.Install(command.Context(), contextName, version)
+			result, err := installer.Install(command.Context(), runtimeinstall.Options{
+				ContextName: contextName,
+				Version:     version,
+				ChartPath:   strings.TrimSpace(chartPath),
+			})
 			if err != nil {
 				return fmt.Errorf("install Molejo: %w", err)
 			}
@@ -55,6 +59,7 @@ func newRuntimeInstallCommand(cliVersion string, installer runtimeInstaller, doc
 	}
 	command.Flags().StringVar(&contextName, "kube-context", "", "kubeconfig context to install into")
 	command.Flags().StringVar(&requestedVersion, "version", "", "Molejo chart version (required for development builds)")
+	command.Flags().StringVar(&chartPath, "chart-path", "", "prepared local Helm chart directory or archive; overrides the published OCI chart")
 	_ = command.MarkFlagRequired("kube-context")
 	return command
 }

@@ -28,7 +28,7 @@ func newControlPlaneCommand(cliVersion string, installer controlPlaneInstaller) 
 }
 
 func newControlPlaneInstallCommand(cliVersion string, installer controlPlaneInstaller) *cobra.Command {
-	var contextName, requestedVersion, storageClass, publicHost, gatewayReference, gatewaySection string
+	var contextName, requestedVersion, storageClass, publicHost, gatewayReference, gatewaySection, chartPath string
 	var showGeneratedCredentials bool
 	command := &cobra.Command{
 		Use:   "install",
@@ -52,7 +52,7 @@ func newControlPlaneInstallCommand(cliVersion string, installer controlPlaneInst
 			}
 			report, err := installer.Install(command.Context(), controlplaneinstall.Options{
 				ContextName: contextName, Version: version, StorageClass: strings.TrimSpace(storageClass), PublicHost: strings.TrimSpace(publicHost),
-				GatewayNamespace: gatewayNamespace, GatewayName: gatewayName, GatewaySection: strings.TrimSpace(gatewaySection),
+				GatewayNamespace: gatewayNamespace, GatewayName: gatewayName, GatewaySection: strings.TrimSpace(gatewaySection), ChartPath: strings.TrimSpace(chartPath),
 			})
 			if err != nil {
 				return fmt.Errorf("install Molejo control plane: %w", err)
@@ -82,6 +82,7 @@ func newControlPlaneInstallCommand(cliVersion string, installer controlPlaneInst
 	command.Flags().StringVar(&publicHost, "public-host", "", "public console DNS hostname")
 	command.Flags().StringVar(&gatewayReference, "gateway", "molejo-system/molejo", "Gateway as namespace/name")
 	command.Flags().StringVar(&gatewaySection, "gateway-section", "https-molejo", "Gateway HTTPS listener name")
+	command.Flags().StringVar(&chartPath, "chart-path", "", "prepared local Helm chart directory or archive; overrides the published OCI chart")
 	command.Flags().BoolVar(&showGeneratedCredentials, "show-generated-credentials", false, "print the generated database and owner credentials")
 	_ = command.MarkFlagRequired("kube-context")
 	return command

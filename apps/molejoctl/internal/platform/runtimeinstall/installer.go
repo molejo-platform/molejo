@@ -6,10 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"helm.sh/helm/v4/pkg/action"
-	"helm.sh/helm/v4/pkg/chart/loader"
+	"helm.sh/helm/v4/pkg/chart"
 	"helm.sh/helm/v4/pkg/kube"
 	"helm.sh/helm/v4/pkg/storage/driver"
 
@@ -28,6 +29,13 @@ type Result struct {
 	AlreadyInstalled bool
 }
 
+// Options identifies the target and release selected by the CLI.
+type Options struct {
+	ContextName string
+	Version     string
+	ChartPath   string
+}
+
 // Installer installs the Molejo cluster chart.
 type Installer struct {
 	output io.Writer
@@ -37,15 +45,28 @@ type Installer struct {
 func New() *Installer { return &Installer{output: io.Discard} }
 
 // Install converges one exact chart version in the selected context.
-func (h *Installer) Install(ctx context.Context, contextName, version string) (Result, error) {
-	helm, err := helmclient.New(contextName, systemNamespace, h.output)
+func (h *Installer) Install(ctx context.Context, options Options) (Result, error) {
+	options.ContextName = strings.TrimSpace(options.ContextName)
+	options.Version = strings.TrimSpace(options.Version)
+	options.ChartPath = strings.TrimSpace(options.ChartPath)
+
+	var preparedChart chart.Charter
+	var err error
+	if options.ChartPath != "" {
+		preparedChart, err = helmclient.LoadChart(options.ChartPath, clusterRelease, options.Version)
+		if err != nil {
+			return Result{}, err
+		}
+	}
+
+	helm, err := helmclient.New(options.ContextName, systemNamespace, h.output)
 	if err != nil {
 		return Result{}, err
 	}
 
 	metadata, err := action.NewGetMetadata(helm.Configuration).Run(clusterRelease)
 	if err == nil {
-		return ExistingReleaseResult(metadata.Version, version)
+		return ExistingReleaseResult(metadata.Version, options.Version)
 	}
 	if !errors.Is(err, driver.ErrReleaseNotFound) {
 		return Result{}, fmt.Errorf("inspect Helm release: %w", err)
@@ -58,18 +79,20 @@ func (h *Installer) Install(ctx context.Context, contextName, version string) (R
 	install.Timeout = clusterInstallWait
 	install.WaitStrategy = kube.StatusWatcherStrategy
 	install.RollbackOnFailure = true
-	install.Version = version
+	install.Version = options.Version
 	install.SetRegistryClient(helm.Registry)
 
-	chartPath, err := install.LocateChart(clusterChart, helm.Settings)
-	if err != nil {
-		return Result{}, fmt.Errorf("locate chart %s:%s: %w", clusterChart, version, err)
+	if preparedChart == nil {
+		chartPath, locateErr := install.LocateChart(clusterChart, helm.Settings)
+		if locateErr != nil {
+			return Result{}, fmt.Errorf("locate chart %s:%s: %w", clusterChart, options.Version, locateErr)
+		}
+		preparedChart, err = helmclient.LoadChart(chartPath, clusterRelease, options.Version)
+		if err != nil {
+			return Result{}, err
+		}
 	}
-	chart, err := loader.Load(chartPath)
-	if err != nil {
-		return Result{}, fmt.Errorf("load chart: %w", err)
-	}
-	if _, err = install.RunWithContext(ctx, chart, map[string]any{}); err != nil {
+	if _, err = install.RunWithContext(ctx, preparedChart, map[string]any{}); err != nil {
 		return Result{}, fmt.Errorf("run Helm install: %w", err)
 	}
 	return Result{}, nil

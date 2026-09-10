@@ -13,13 +13,11 @@ import (
 type fakeInstaller struct {
 	result  runtimeInstallResult
 	err     error
-	context string
-	version string
+	options runtimeinstall.Options
 }
 
-func (f *fakeInstaller) Install(_ context.Context, contextName, version string) (runtimeInstallResult, error) {
-	f.context = contextName
-	f.version = version
+func (f *fakeInstaller) Install(_ context.Context, options runtimeinstall.Options) (runtimeInstallResult, error) {
+	f.options = options
 	return f.result, f.err
 }
 
@@ -38,8 +36,8 @@ func TestInstallUsesPublishedCLIVersion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("execute install: %v", err)
 	}
-	if installer.context != "molejo-k3s" || installer.version != "0.1.0-alpha.2" {
-		t.Fatalf("install called with context %q version %q", installer.context, installer.version)
+	if installer.options.ContextName != "molejo-k3s" || installer.options.Version != "0.1.0-alpha.2" {
+		t.Fatalf("install called with options %+v", installer.options)
 	}
 	if !strings.Contains(output, "Installed Molejo 0.1.0-alpha.2") || !strings.Contains(output, "Result: healthy") {
 		t.Fatalf("unexpected output: %q", output)
@@ -65,8 +63,20 @@ func TestInstallDevelopmentBuildAcceptsVersion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("execute install: %v", err)
 	}
-	if installer.version != "0.1.0-alpha.2" {
-		t.Fatalf("version = %q", installer.version)
+	if installer.options.Version != "0.1.0-alpha.2" {
+		t.Fatalf("version = %q", installer.options.Version)
+	}
+}
+
+func TestInstallDevelopmentBuildAcceptsLocalChart(t *testing.T) {
+	installer := &fakeInstaller{}
+	_, err := executeInstall(t, "devel", installer, fakeDoctor{report: healthyDoctorReport()},
+		"--kube-context", "molejo-k3s", "--version", "0.1.0-alpha.3", "--chart-path", "/tmp/molejo-cluster")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if installer.options.ChartPath != "/tmp/molejo-cluster" {
+		t.Fatalf("chart path=%q", installer.options.ChartPath)
 	}
 }
 
