@@ -32,7 +32,7 @@ export const protectedRoute = createRoute({
 
 export async function requireInstallationCapability(
   context: RouterContext,
-  capability: "manageUsers" | "createWorkspace",
+  capability: "manageUsers" | "manageBindings" | "createWorkspace",
 ) {
   const session = await context.queryClient.ensureQueryData(sessionQueryOptions());
   if (!session) throw redirect({ to: "/login", search: { returnTo: "/" } });

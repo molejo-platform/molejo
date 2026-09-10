@@ -461,6 +461,54 @@ func (e ClusterStatus) Valid() bool {
 	}
 }
 
+// Defines values for ClusterPublicationBindingHealth.
+const (
+	ClusterPublicationBindingHealthDegraded    ClusterPublicationBindingHealth = "Degraded"
+	ClusterPublicationBindingHealthHealthy     ClusterPublicationBindingHealth = "Healthy"
+	ClusterPublicationBindingHealthUnavailable ClusterPublicationBindingHealth = "Unavailable"
+	ClusterPublicationBindingHealthUnknown     ClusterPublicationBindingHealth = "Unknown"
+)
+
+// Valid indicates whether the value is a known member of the ClusterPublicationBindingHealth enum.
+func (e ClusterPublicationBindingHealth) Valid() bool {
+	switch e {
+	case ClusterPublicationBindingHealthDegraded:
+		return true
+	case ClusterPublicationBindingHealthHealthy:
+		return true
+	case ClusterPublicationBindingHealthUnavailable:
+		return true
+	case ClusterPublicationBindingHealthUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ClusterStorageBindingHealth.
+const (
+	ClusterStorageBindingHealthDegraded    ClusterStorageBindingHealth = "Degraded"
+	ClusterStorageBindingHealthHealthy     ClusterStorageBindingHealth = "Healthy"
+	ClusterStorageBindingHealthUnavailable ClusterStorageBindingHealth = "Unavailable"
+	ClusterStorageBindingHealthUnknown     ClusterStorageBindingHealth = "Unknown"
+)
+
+// Valid indicates whether the value is a known member of the ClusterStorageBindingHealth enum.
+func (e ClusterStorageBindingHealth) Valid() bool {
+	switch e {
+	case ClusterStorageBindingHealthDegraded:
+		return true
+	case ClusterStorageBindingHealthHealthy:
+		return true
+	case ClusterStorageBindingHealthUnavailable:
+		return true
+	case ClusterStorageBindingHealthUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for DeploymentState.
 const (
 	DeploymentStateDegraded    DeploymentState = "Degraded"
@@ -1929,9 +1977,63 @@ type ClusterCreateInput struct {
 	Name string `json:"name"`
 }
 
+// ClusterPublicationBinding defines model for ClusterPublicationBinding.
+type ClusterPublicationBinding struct {
+	ClusterId            string                          `json:"clusterId"`
+	CreatedAt            time.Time                       `json:"createdAt"`
+	GatewayClassAccepted bool                            `json:"gatewayClassAccepted"`
+	GatewayClassName     string                          `json:"gatewayClassName"`
+	GatewayName          string                          `json:"gatewayName"`
+	GatewayNamespace     string                          `json:"gatewayNamespace"`
+	GatewayProgrammed    bool                            `json:"gatewayProgrammed"`
+	Health               ClusterPublicationBindingHealth `json:"health"`
+	ListenerReady        bool                            `json:"listenerReady"`
+	ObservedAt           *time.Time                      `json:"observedAt,omitempty"`
+	ReasonCode           string                          `json:"reasonCode"`
+	SectionName          string                          `json:"sectionName"`
+	SupportedRouteKinds  []string                        `json:"supportedRouteKinds"`
+	UpdatedAt            time.Time                       `json:"updatedAt"`
+	Version              int                             `json:"version"`
+}
+
+// ClusterPublicationBindingHealth defines model for ClusterPublicationBinding.Health.
+type ClusterPublicationBindingHealth string
+
+// ClusterPublicationBindingInput defines model for ClusterPublicationBindingInput.
+type ClusterPublicationBindingInput struct {
+	GatewayName      string `json:"gatewayName"`
+	GatewayNamespace string `json:"gatewayNamespace"`
+	SectionName      string `json:"sectionName"`
+}
+
 // ClusterRevocationInput defines model for ClusterRevocationInput.
 type ClusterRevocationInput struct {
 	Reason string `json:"reason"`
+}
+
+// ClusterStorageBinding defines model for ClusterStorageBinding.
+type ClusterStorageBinding struct {
+	AccessModes       []string                    `json:"accessModes"`
+	AllowExpansion    bool                        `json:"allowExpansion"`
+	ClusterId         string                      `json:"clusterId"`
+	CreatedAt         time.Time                   `json:"createdAt"`
+	Health            ClusterStorageBindingHealth `json:"health"`
+	ObservedAt        *time.Time                  `json:"observedAt,omitempty"`
+	Provisioner       string                      `json:"provisioner"`
+	ReasonCode        string                      `json:"reasonCode"`
+	StorageClassName  string                      `json:"storageClassName"`
+	StorageProfileId  string                      `json:"storageProfileId"`
+	UpdatedAt         time.Time                   `json:"updatedAt"`
+	Version           int                         `json:"version"`
+	VolumeBindingMode string                      `json:"volumeBindingMode"`
+}
+
+// ClusterStorageBindingHealth defines model for ClusterStorageBinding.Health.
+type ClusterStorageBindingHealth string
+
+// ClusterStorageBindingInput defines model for ClusterStorageBindingInput.
+type ClusterStorageBindingInput struct {
+	StorageClassName string `json:"storageClassName"`
 }
 
 // ConfigurationRevision defines model for ConfigurationRevision.
@@ -2585,6 +2687,7 @@ type Session struct {
 	CsrfToken                string                `json:"csrfToken"`
 	InstallationCapabilities struct {
 		CreateWorkspace bool `json:"createWorkspace"`
+		ManageBindings  bool `json:"manageBindings"`
 		ManageUsers     bool `json:"manageUsers"`
 		PublicTCP       struct {
 			Address     *string `json:"address,omitempty"`
@@ -2970,6 +3073,26 @@ type PutHistoricalMetricBindingParams struct {
 	IfMatch *OptionalIfMatch `json:"If-Match,omitempty"`
 }
 
+// DeleteClusterPublicationBindingParams defines parameters for DeleteClusterPublicationBinding.
+type DeleteClusterPublicationBindingParams struct {
+	IfMatch IfMatch `json:"If-Match"`
+}
+
+// PutClusterPublicationBindingParams defines parameters for PutClusterPublicationBinding.
+type PutClusterPublicationBindingParams struct {
+	IfMatch *OptionalIfMatch `json:"If-Match,omitempty"`
+}
+
+// DeleteClusterStorageBindingParams defines parameters for DeleteClusterStorageBinding.
+type DeleteClusterStorageBindingParams struct {
+	IfMatch IfMatch `json:"If-Match"`
+}
+
+// PutClusterStorageBindingParams defines parameters for PutClusterStorageBinding.
+type PutClusterStorageBindingParams struct {
+	IfMatch *OptionalIfMatch `json:"If-Match,omitempty"`
+}
+
 // ListUsersParams defines parameters for ListUsers.
 type ListUsersParams struct {
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
@@ -3300,6 +3423,11 @@ type ListEnvironmentAppsParams struct {
 	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
+// ListStorageProfilesParams defines parameters for ListStorageProfiles.
+type ListStorageProfilesParams struct {
+	ClusterId string `form:"clusterId" json:"clusterId"`
+}
+
 // EnrollAgentJSONRequestBody defines body for EnrollAgent for application/json ContentType.
 type EnrollAgentJSONRequestBody = AgentEnrollmentInput
 
@@ -3316,6 +3444,12 @@ type RevokeClusterJSONRequestBody = ClusterRevocationInput
 
 // PutHistoricalMetricBindingJSONRequestBody defines body for PutHistoricalMetricBinding for application/json ContentType.
 type PutHistoricalMetricBindingJSONRequestBody = HistoricalMetricBindingInput
+
+// PutClusterPublicationBindingJSONRequestBody defines body for PutClusterPublicationBinding for application/json ContentType.
+type PutClusterPublicationBindingJSONRequestBody = ClusterPublicationBindingInput
+
+// PutClusterStorageBindingJSONRequestBody defines body for PutClusterStorageBinding for application/json ContentType.
+type PutClusterStorageBindingJSONRequestBody = ClusterStorageBindingInput
 
 // CreateUserJSONRequestBody defines body for CreateUser for application/json ContentType.
 type CreateUserJSONRequestBody = UserCreateInput
@@ -3474,6 +3608,27 @@ type ServerInterface interface {
 
 	// (PUT /api/v1/admin/clusters/{clusterId}/bindings/historical-metrics)
 	PutHistoricalMetricBinding(w http.ResponseWriter, r *http.Request, clusterId ClusterId, params PutHistoricalMetricBindingParams)
+
+	// (DELETE /api/v1/admin/clusters/{clusterId}/bindings/publication/http)
+	DeleteClusterPublicationBinding(w http.ResponseWriter, r *http.Request, clusterId ClusterId, params DeleteClusterPublicationBindingParams)
+
+	// (GET /api/v1/admin/clusters/{clusterId}/bindings/publication/http)
+	GetClusterPublicationBinding(w http.ResponseWriter, r *http.Request, clusterId ClusterId)
+
+	// (PUT /api/v1/admin/clusters/{clusterId}/bindings/publication/http)
+	PutClusterPublicationBinding(w http.ResponseWriter, r *http.Request, clusterId ClusterId, params PutClusterPublicationBindingParams)
+
+	// (GET /api/v1/admin/clusters/{clusterId}/bindings/storage)
+	ListClusterStorageBindings(w http.ResponseWriter, r *http.Request, clusterId ClusterId)
+
+	// (DELETE /api/v1/admin/clusters/{clusterId}/bindings/storage/{storageProfileId})
+	DeleteClusterStorageBinding(w http.ResponseWriter, r *http.Request, clusterId ClusterId, storageProfileId string, params DeleteClusterStorageBindingParams)
+
+	// (GET /api/v1/admin/clusters/{clusterId}/bindings/storage/{storageProfileId})
+	GetClusterStorageBinding(w http.ResponseWriter, r *http.Request, clusterId ClusterId, storageProfileId string)
+
+	// (PUT /api/v1/admin/clusters/{clusterId}/bindings/storage/{storageProfileId})
+	PutClusterStorageBinding(w http.ResponseWriter, r *http.Request, clusterId ClusterId, storageProfileId string, params PutClusterStorageBindingParams)
 
 	// (POST /api/v1/admin/clusters/{clusterId}/enrollment-invitations)
 	CreateClusterEnrollmentInvitation(w http.ResponseWriter, r *http.Request, clusterId ClusterId)
@@ -3815,7 +3970,7 @@ type ServerInterface interface {
 	ListEnvironmentApps(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, environmentId EnvironmentId, params ListEnvironmentAppsParams)
 
 	// (GET /api/v1/workspaces/{workspaceId}/storage-profiles)
-	ListStorageProfiles(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId)
+	ListStorageProfiles(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, params ListStorageProfilesParams)
 
 	// (GET /api/v1/workspaces/{workspaceId}/summary)
 	GetWorkspaceSummary(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId)
@@ -3874,6 +4029,41 @@ func (_ Unimplemented) GetHistoricalMetricBinding(w http.ResponseWriter, r *http
 
 // (PUT /api/v1/admin/clusters/{clusterId}/bindings/historical-metrics)
 func (_ Unimplemented) PutHistoricalMetricBinding(w http.ResponseWriter, r *http.Request, clusterId ClusterId, params PutHistoricalMetricBindingParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (DELETE /api/v1/admin/clusters/{clusterId}/bindings/publication/http)
+func (_ Unimplemented) DeleteClusterPublicationBinding(w http.ResponseWriter, r *http.Request, clusterId ClusterId, params DeleteClusterPublicationBindingParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /api/v1/admin/clusters/{clusterId}/bindings/publication/http)
+func (_ Unimplemented) GetClusterPublicationBinding(w http.ResponseWriter, r *http.Request, clusterId ClusterId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (PUT /api/v1/admin/clusters/{clusterId}/bindings/publication/http)
+func (_ Unimplemented) PutClusterPublicationBinding(w http.ResponseWriter, r *http.Request, clusterId ClusterId, params PutClusterPublicationBindingParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /api/v1/admin/clusters/{clusterId}/bindings/storage)
+func (_ Unimplemented) ListClusterStorageBindings(w http.ResponseWriter, r *http.Request, clusterId ClusterId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (DELETE /api/v1/admin/clusters/{clusterId}/bindings/storage/{storageProfileId})
+func (_ Unimplemented) DeleteClusterStorageBinding(w http.ResponseWriter, r *http.Request, clusterId ClusterId, storageProfileId string, params DeleteClusterStorageBindingParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /api/v1/admin/clusters/{clusterId}/bindings/storage/{storageProfileId})
+func (_ Unimplemented) GetClusterStorageBinding(w http.ResponseWriter, r *http.Request, clusterId ClusterId, storageProfileId string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (PUT /api/v1/admin/clusters/{clusterId}/bindings/storage/{storageProfileId})
+func (_ Unimplemented) PutClusterStorageBinding(w http.ResponseWriter, r *http.Request, clusterId ClusterId, storageProfileId string, params PutClusterStorageBindingParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -4443,7 +4633,7 @@ func (_ Unimplemented) ListEnvironmentApps(w http.ResponseWriter, r *http.Reques
 }
 
 // (GET /api/v1/workspaces/{workspaceId}/storage-profiles)
-func (_ Unimplemented) ListStorageProfiles(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId) {
+func (_ Unimplemented) ListStorageProfiles(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, params ListStorageProfilesParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -4736,6 +4926,319 @@ func (siw *ServerInterfaceWrapper) PutHistoricalMetricBinding(w http.ResponseWri
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.PutHistoricalMetricBinding(w, r, clusterId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteClusterPublicationBinding operation middleware
+func (siw *ServerInterfaceWrapper) DeleteClusterPublicationBinding(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "clusterId" -------------
+	var clusterId ClusterId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "clusterId", chi.URLParam(r, "clusterId"), &clusterId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "clusterId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeleteClusterPublicationBindingParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch IfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "integer", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteClusterPublicationBinding(w, r, clusterId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetClusterPublicationBinding operation middleware
+func (siw *ServerInterfaceWrapper) GetClusterPublicationBinding(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "clusterId" -------------
+	var clusterId ClusterId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "clusterId", chi.URLParam(r, "clusterId"), &clusterId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "clusterId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetClusterPublicationBinding(w, r, clusterId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PutClusterPublicationBinding operation middleware
+func (siw *ServerInterfaceWrapper) PutClusterPublicationBinding(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "clusterId" -------------
+	var clusterId ClusterId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "clusterId", chi.URLParam(r, "clusterId"), &clusterId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "clusterId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PutClusterPublicationBindingParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch OptionalIfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "integer", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = &IfMatch
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PutClusterPublicationBinding(w, r, clusterId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListClusterStorageBindings operation middleware
+func (siw *ServerInterfaceWrapper) ListClusterStorageBindings(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "clusterId" -------------
+	var clusterId ClusterId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "clusterId", chi.URLParam(r, "clusterId"), &clusterId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "clusterId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListClusterStorageBindings(w, r, clusterId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteClusterStorageBinding operation middleware
+func (siw *ServerInterfaceWrapper) DeleteClusterStorageBinding(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "clusterId" -------------
+	var clusterId ClusterId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "clusterId", chi.URLParam(r, "clusterId"), &clusterId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "clusterId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "storageProfileId" -------------
+	var storageProfileId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "storageProfileId", chi.URLParam(r, "storageProfileId"), &storageProfileId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "storageProfileId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeleteClusterStorageBindingParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch IfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "integer", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteClusterStorageBinding(w, r, clusterId, storageProfileId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetClusterStorageBinding operation middleware
+func (siw *ServerInterfaceWrapper) GetClusterStorageBinding(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "clusterId" -------------
+	var clusterId ClusterId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "clusterId", chi.URLParam(r, "clusterId"), &clusterId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "clusterId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "storageProfileId" -------------
+	var storageProfileId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "storageProfileId", chi.URLParam(r, "storageProfileId"), &storageProfileId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "storageProfileId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetClusterStorageBinding(w, r, clusterId, storageProfileId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PutClusterStorageBinding operation middleware
+func (siw *ServerInterfaceWrapper) PutClusterStorageBinding(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "clusterId" -------------
+	var clusterId ClusterId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "clusterId", chi.URLParam(r, "clusterId"), &clusterId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "clusterId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "storageProfileId" -------------
+	var storageProfileId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "storageProfileId", chi.URLParam(r, "storageProfileId"), &storageProfileId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "storageProfileId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PutClusterStorageBindingParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch OptionalIfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "integer", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = &IfMatch
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PutClusterStorageBinding(w, r, clusterId, storageProfileId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -10441,8 +10944,24 @@ func (siw *ServerInterfaceWrapper) ListStorageProfiles(w http.ResponseWriter, r 
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListStorageProfilesParams
+
+	// ------------- Required query parameter "clusterId" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "clusterId", r.URL.Query(), &params.ClusterId, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "clusterId"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "clusterId", Err: err})
+		}
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListStorageProfiles(w, r, workspaceId)
+		siw.Handler.ListStorageProfiles(w, r, workspaceId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -10689,6 +11208,27 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Put(options.BaseURL+"/api/v1/admin/clusters/{clusterId}/bindings/historical-metrics", wrapper.PutHistoricalMetricBinding)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/admin/clusters/{clusterId}/bindings/storage", wrapper.ListClusterStorageBindings)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/api/v1/admin/clusters/{clusterId}/bindings/storage/{storageProfileId}", wrapper.DeleteClusterStorageBinding)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/admin/clusters/{clusterId}/bindings/storage/{storageProfileId}", wrapper.GetClusterStorageBinding)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/api/v1/admin/clusters/{clusterId}/bindings/storage/{storageProfileId}", wrapper.PutClusterStorageBinding)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/api/v1/admin/clusters/{clusterId}/bindings/publication/http", wrapper.DeleteClusterPublicationBinding)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/admin/clusters/{clusterId}/bindings/publication/http", wrapper.GetClusterPublicationBinding)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/api/v1/admin/clusters/{clusterId}/bindings/publication/http", wrapper.PutClusterPublicationBinding)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/admin/agent-installations", wrapper.CreateAgentInstallation)
@@ -11546,6 +12086,467 @@ func (response PutHistoricalMetricBinding404JSONResponse) VisitPutHistoricalMetr
 type PutHistoricalMetricBinding409JSONResponse struct{ ConflictJSONResponse }
 
 func (response PutHistoricalMetricBinding409JSONResponse) VisitPutHistoricalMetricBindingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteClusterPublicationBindingRequestObject struct {
+	ClusterId ClusterId `json:"clusterId"`
+	Params    DeleteClusterPublicationBindingParams
+}
+
+type DeleteClusterPublicationBindingResponseObject interface {
+	VisitDeleteClusterPublicationBindingResponse(w http.ResponseWriter) error
+}
+
+type DeleteClusterPublicationBinding204Response struct {
+}
+
+func (response DeleteClusterPublicationBinding204Response) VisitDeleteClusterPublicationBindingResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteClusterPublicationBinding403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response DeleteClusterPublicationBinding403JSONResponse) VisitDeleteClusterPublicationBindingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteClusterPublicationBinding404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response DeleteClusterPublicationBinding404JSONResponse) VisitDeleteClusterPublicationBindingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteClusterPublicationBinding409JSONResponse struct{ ConflictJSONResponse }
+
+func (response DeleteClusterPublicationBinding409JSONResponse) VisitDeleteClusterPublicationBindingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetClusterPublicationBindingRequestObject struct {
+	ClusterId ClusterId `json:"clusterId"`
+}
+
+type GetClusterPublicationBindingResponseObject interface {
+	VisitGetClusterPublicationBindingResponse(w http.ResponseWriter) error
+}
+
+type GetClusterPublicationBinding200JSONResponse ClusterPublicationBinding
+
+func (response GetClusterPublicationBinding200JSONResponse) VisitGetClusterPublicationBindingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetClusterPublicationBinding403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response GetClusterPublicationBinding403JSONResponse) VisitGetClusterPublicationBindingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetClusterPublicationBinding404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response GetClusterPublicationBinding404JSONResponse) VisitGetClusterPublicationBindingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutClusterPublicationBindingRequestObject struct {
+	ClusterId ClusterId `json:"clusterId"`
+	Params    PutClusterPublicationBindingParams
+	Body      *PutClusterPublicationBindingJSONRequestBody
+}
+
+type PutClusterPublicationBindingResponseObject interface {
+	VisitPutClusterPublicationBindingResponse(w http.ResponseWriter) error
+}
+
+type PutClusterPublicationBinding200JSONResponse ClusterPublicationBinding
+
+func (response PutClusterPublicationBinding200JSONResponse) VisitPutClusterPublicationBindingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutClusterPublicationBinding201JSONResponse ClusterPublicationBinding
+
+func (response PutClusterPublicationBinding201JSONResponse) VisitPutClusterPublicationBindingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutClusterPublicationBinding400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response PutClusterPublicationBinding400JSONResponse) VisitPutClusterPublicationBindingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutClusterPublicationBinding403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response PutClusterPublicationBinding403JSONResponse) VisitPutClusterPublicationBindingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutClusterPublicationBinding404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response PutClusterPublicationBinding404JSONResponse) VisitPutClusterPublicationBindingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutClusterPublicationBinding409JSONResponse struct{ ConflictJSONResponse }
+
+func (response PutClusterPublicationBinding409JSONResponse) VisitPutClusterPublicationBindingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListClusterStorageBindingsRequestObject struct {
+	ClusterId ClusterId `json:"clusterId"`
+}
+
+type ListClusterStorageBindingsResponseObject interface {
+	VisitListClusterStorageBindingsResponse(w http.ResponseWriter) error
+}
+
+type ListClusterStorageBindings200JSONResponse struct {
+	Items []ClusterStorageBinding `json:"items"`
+}
+
+func (response ListClusterStorageBindings200JSONResponse) VisitListClusterStorageBindingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListClusterStorageBindings403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response ListClusterStorageBindings403JSONResponse) VisitListClusterStorageBindingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListClusterStorageBindings404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ListClusterStorageBindings404JSONResponse) VisitListClusterStorageBindingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteClusterStorageBindingRequestObject struct {
+	ClusterId        ClusterId `json:"clusterId"`
+	StorageProfileId string    `json:"storageProfileId"`
+	Params           DeleteClusterStorageBindingParams
+}
+
+type DeleteClusterStorageBindingResponseObject interface {
+	VisitDeleteClusterStorageBindingResponse(w http.ResponseWriter) error
+}
+
+type DeleteClusterStorageBinding204Response struct {
+}
+
+func (response DeleteClusterStorageBinding204Response) VisitDeleteClusterStorageBindingResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteClusterStorageBinding403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response DeleteClusterStorageBinding403JSONResponse) VisitDeleteClusterStorageBindingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteClusterStorageBinding404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response DeleteClusterStorageBinding404JSONResponse) VisitDeleteClusterStorageBindingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteClusterStorageBinding409JSONResponse struct{ ConflictJSONResponse }
+
+func (response DeleteClusterStorageBinding409JSONResponse) VisitDeleteClusterStorageBindingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetClusterStorageBindingRequestObject struct {
+	ClusterId        ClusterId `json:"clusterId"`
+	StorageProfileId string    `json:"storageProfileId"`
+}
+
+type GetClusterStorageBindingResponseObject interface {
+	VisitGetClusterStorageBindingResponse(w http.ResponseWriter) error
+}
+
+type GetClusterStorageBinding200JSONResponse ClusterStorageBinding
+
+func (response GetClusterStorageBinding200JSONResponse) VisitGetClusterStorageBindingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetClusterStorageBinding403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response GetClusterStorageBinding403JSONResponse) VisitGetClusterStorageBindingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetClusterStorageBinding404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response GetClusterStorageBinding404JSONResponse) VisitGetClusterStorageBindingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutClusterStorageBindingRequestObject struct {
+	ClusterId        ClusterId `json:"clusterId"`
+	StorageProfileId string    `json:"storageProfileId"`
+	Params           PutClusterStorageBindingParams
+	Body             *PutClusterStorageBindingJSONRequestBody
+}
+
+type PutClusterStorageBindingResponseObject interface {
+	VisitPutClusterStorageBindingResponse(w http.ResponseWriter) error
+}
+
+type PutClusterStorageBinding200JSONResponse ClusterStorageBinding
+
+func (response PutClusterStorageBinding200JSONResponse) VisitPutClusterStorageBindingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutClusterStorageBinding201JSONResponse ClusterStorageBinding
+
+func (response PutClusterStorageBinding201JSONResponse) VisitPutClusterStorageBindingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutClusterStorageBinding400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response PutClusterStorageBinding400JSONResponse) VisitPutClusterStorageBindingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutClusterStorageBinding403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response PutClusterStorageBinding403JSONResponse) VisitPutClusterStorageBindingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutClusterStorageBinding404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response PutClusterStorageBinding404JSONResponse) VisitPutClusterStorageBindingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutClusterStorageBinding409JSONResponse struct{ ConflictJSONResponse }
+
+func (response PutClusterStorageBinding409JSONResponse) VisitPutClusterStorageBindingResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -18043,6 +19044,7 @@ func (response ListEnvironmentApps404JSONResponse) VisitListEnvironmentAppsRespo
 
 type ListStorageProfilesRequestObject struct {
 	WorkspaceId WorkspaceId `json:"workspaceId"`
+	Params      ListStorageProfilesParams
 }
 
 type ListStorageProfilesResponseObject interface {
@@ -18177,6 +19179,27 @@ type StrictServerInterface interface {
 
 	// (PUT /api/v1/admin/clusters/{clusterId}/bindings/historical-metrics)
 	PutHistoricalMetricBinding(ctx context.Context, request PutHistoricalMetricBindingRequestObject) (PutHistoricalMetricBindingResponseObject, error)
+
+	// (DELETE /api/v1/admin/clusters/{clusterId}/bindings/publication/http)
+	DeleteClusterPublicationBinding(ctx context.Context, request DeleteClusterPublicationBindingRequestObject) (DeleteClusterPublicationBindingResponseObject, error)
+
+	// (GET /api/v1/admin/clusters/{clusterId}/bindings/publication/http)
+	GetClusterPublicationBinding(ctx context.Context, request GetClusterPublicationBindingRequestObject) (GetClusterPublicationBindingResponseObject, error)
+
+	// (PUT /api/v1/admin/clusters/{clusterId}/bindings/publication/http)
+	PutClusterPublicationBinding(ctx context.Context, request PutClusterPublicationBindingRequestObject) (PutClusterPublicationBindingResponseObject, error)
+
+	// (GET /api/v1/admin/clusters/{clusterId}/bindings/storage)
+	ListClusterStorageBindings(ctx context.Context, request ListClusterStorageBindingsRequestObject) (ListClusterStorageBindingsResponseObject, error)
+
+	// (DELETE /api/v1/admin/clusters/{clusterId}/bindings/storage/{storageProfileId})
+	DeleteClusterStorageBinding(ctx context.Context, request DeleteClusterStorageBindingRequestObject) (DeleteClusterStorageBindingResponseObject, error)
+
+	// (GET /api/v1/admin/clusters/{clusterId}/bindings/storage/{storageProfileId})
+	GetClusterStorageBinding(ctx context.Context, request GetClusterStorageBindingRequestObject) (GetClusterStorageBindingResponseObject, error)
+
+	// (PUT /api/v1/admin/clusters/{clusterId}/bindings/storage/{storageProfileId})
+	PutClusterStorageBinding(ctx context.Context, request PutClusterStorageBindingRequestObject) (PutClusterStorageBindingResponseObject, error)
 
 	// (POST /api/v1/admin/clusters/{clusterId}/enrollment-invitations)
 	CreateClusterEnrollmentInvitation(ctx context.Context, request CreateClusterEnrollmentInvitationRequestObject) (CreateClusterEnrollmentInvitationResponseObject, error)
@@ -18845,6 +19868,209 @@ func (sh *strictHandler) PutHistoricalMetricBinding(w http.ResponseWriter, r *ht
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(PutHistoricalMetricBindingResponseObject); ok {
 		if err := validResponse.VisitPutHistoricalMetricBindingResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteClusterPublicationBinding operation middleware
+func (sh *strictHandler) DeleteClusterPublicationBinding(w http.ResponseWriter, r *http.Request, clusterId ClusterId, params DeleteClusterPublicationBindingParams) {
+	var request DeleteClusterPublicationBindingRequestObject
+
+	request.ClusterId = clusterId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteClusterPublicationBinding(ctx, request.(DeleteClusterPublicationBindingRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteClusterPublicationBinding")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteClusterPublicationBindingResponseObject); ok {
+		if err := validResponse.VisitDeleteClusterPublicationBindingResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetClusterPublicationBinding operation middleware
+func (sh *strictHandler) GetClusterPublicationBinding(w http.ResponseWriter, r *http.Request, clusterId ClusterId) {
+	var request GetClusterPublicationBindingRequestObject
+
+	request.ClusterId = clusterId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetClusterPublicationBinding(ctx, request.(GetClusterPublicationBindingRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetClusterPublicationBinding")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetClusterPublicationBindingResponseObject); ok {
+		if err := validResponse.VisitGetClusterPublicationBindingResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PutClusterPublicationBinding operation middleware
+func (sh *strictHandler) PutClusterPublicationBinding(w http.ResponseWriter, r *http.Request, clusterId ClusterId, params PutClusterPublicationBindingParams) {
+	var request PutClusterPublicationBindingRequestObject
+
+	request.ClusterId = clusterId
+	request.Params = params
+
+	var body PutClusterPublicationBindingJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PutClusterPublicationBinding(ctx, request.(PutClusterPublicationBindingRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PutClusterPublicationBinding")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PutClusterPublicationBindingResponseObject); ok {
+		if err := validResponse.VisitPutClusterPublicationBindingResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListClusterStorageBindings operation middleware
+func (sh *strictHandler) ListClusterStorageBindings(w http.ResponseWriter, r *http.Request, clusterId ClusterId) {
+	var request ListClusterStorageBindingsRequestObject
+
+	request.ClusterId = clusterId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListClusterStorageBindings(ctx, request.(ListClusterStorageBindingsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListClusterStorageBindings")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListClusterStorageBindingsResponseObject); ok {
+		if err := validResponse.VisitListClusterStorageBindingsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteClusterStorageBinding operation middleware
+func (sh *strictHandler) DeleteClusterStorageBinding(w http.ResponseWriter, r *http.Request, clusterId ClusterId, storageProfileId string, params DeleteClusterStorageBindingParams) {
+	var request DeleteClusterStorageBindingRequestObject
+
+	request.ClusterId = clusterId
+	request.StorageProfileId = storageProfileId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteClusterStorageBinding(ctx, request.(DeleteClusterStorageBindingRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteClusterStorageBinding")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteClusterStorageBindingResponseObject); ok {
+		if err := validResponse.VisitDeleteClusterStorageBindingResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetClusterStorageBinding operation middleware
+func (sh *strictHandler) GetClusterStorageBinding(w http.ResponseWriter, r *http.Request, clusterId ClusterId, storageProfileId string) {
+	var request GetClusterStorageBindingRequestObject
+
+	request.ClusterId = clusterId
+	request.StorageProfileId = storageProfileId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetClusterStorageBinding(ctx, request.(GetClusterStorageBindingRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetClusterStorageBinding")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetClusterStorageBindingResponseObject); ok {
+		if err := validResponse.VisitGetClusterStorageBindingResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PutClusterStorageBinding operation middleware
+func (sh *strictHandler) PutClusterStorageBinding(w http.ResponseWriter, r *http.Request, clusterId ClusterId, storageProfileId string, params PutClusterStorageBindingParams) {
+	var request PutClusterStorageBindingRequestObject
+
+	request.ClusterId = clusterId
+	request.StorageProfileId = storageProfileId
+	request.Params = params
+
+	var body PutClusterStorageBindingJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PutClusterStorageBinding(ctx, request.(PutClusterStorageBindingRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PutClusterStorageBinding")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PutClusterStorageBindingResponseObject); ok {
+		if err := validResponse.VisitPutClusterStorageBindingResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -22228,10 +23454,11 @@ func (sh *strictHandler) ListEnvironmentApps(w http.ResponseWriter, r *http.Requ
 }
 
 // ListStorageProfiles operation middleware
-func (sh *strictHandler) ListStorageProfiles(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId) {
+func (sh *strictHandler) ListStorageProfiles(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, params ListStorageProfilesParams) {
 	var request ListStorageProfilesRequestObject
 
 	request.WorkspaceId = workspaceId
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.ListStorageProfiles(ctx, request.(ListStorageProfilesRequestObject))

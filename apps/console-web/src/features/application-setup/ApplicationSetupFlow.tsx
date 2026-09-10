@@ -90,8 +90,8 @@ export function ApplicationSetupFlow({
   const statefulAvailable = canUseFeature(storageFeature);
   const parameters = useQuery(parameterQueries.list(workspaceId));
   const storageProfiles = useQuery({
-    ...runtimeConfigurationQueries.storageProfiles(workspaceId),
-    enabled: draft.workloadKind === "Stateful" && statefulAvailable,
+    ...runtimeConfigurationQueries.storageProfiles(workspaceId, draft.clusterId),
+    enabled: draft.workloadKind === "Stateful" && statefulAvailable && draft.clusterId !== "",
   });
   const placements = useQuery(clusterPlacementQueries.workspace(workspaceId));
   const readyClusters = useMemo(() => readyWorkspaceClusters(placements.data?.items), [placements.data?.items]);

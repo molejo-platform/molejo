@@ -52,13 +52,16 @@ func (s *Store) ConfigureStorageProfile(ctx context.Context, profile StorageProf
 	return err
 }
 
-func (s *Store) ListStorageProfiles(ctx context.Context, workspaceID int64) ([]domain.StorageProfile, error) {
+func (s *Store) ListStorageProfiles(ctx context.Context, workspaceID int64, clusterPublicID string) ([]domain.StorageProfile, error) {
 	rows, err := s.Pool.Query(ctx, `SELECT sp.id,sp.display_name,sp.minimum_size_gib,sp.maximum_size_gib,sp.expandable,sp.snapshots,sp.automatic_backup,sp.durability,
 		GREATEST(0,LEAST(sp.total_capacity_gib-COALESCE(all_usage.used,0),sp.workspace_quota_gib-COALESCE(workspace_usage.used,0)))
 		FROM storage_profiles sp
+		JOIN cluster_storage_bindings csb ON csb.storage_profile_id=sp.id
+		JOIN agent_installations ai ON ai.id=csb.cluster_id AND ai.public_id=$2 AND ai.status='Active'
+		JOIN workspace_clusters wc ON wc.installation_id=ai.id AND wc.workspace_id=$1 AND wc.state='Ready'
 		LEFT JOIN (SELECT storage_profile_id,SUM(requested_size_gib) used FROM app_volumes GROUP BY storage_profile_id) all_usage ON all_usage.storage_profile_id=sp.id
 		LEFT JOIN (SELECT storage_profile_id,SUM(requested_size_gib) used FROM app_volumes WHERE workspace_id=$1 GROUP BY storage_profile_id) workspace_usage ON workspace_usage.storage_profile_id=sp.id
-		WHERE sp.enabled ORDER BY sp.id`, workspaceID)
+		WHERE sp.enabled AND csb.health='Healthy' AND csb.expires_at>now() ORDER BY sp.id`, workspaceID, clusterPublicID)
 	if err != nil {
 		return nil, err
 	}
@@ -85,6 +88,13 @@ func createAppVolume(ctx context.Context, tx pgx.Tx, workspaceID, actorID int64,
 	if !profile.Enabled || request.SizeGiB < profile.MinimumSizeGiB || request.SizeGiB > profile.MaximumSizeGiB {
 		return domain.AppVolume{}, ErrStorageProfileUnavailable
 	}
+	var runtimeStorageClass string
+	var storageBindingVersion int64
+	if err := tx.QueryRow(ctx, `SELECT storage_class_name,version FROM cluster_storage_bindings WHERE cluster_id=$1 AND storage_profile_id=$2 AND health='Healthy' AND expires_at>now() FOR SHARE`, appEnvironment.ClusterID, profile.ID).Scan(&runtimeStorageClass, &storageBindingVersion); errors.Is(err, pgx.ErrNoRows) {
+		return domain.AppVolume{}, ErrStorageProfileUnavailable
+	} else if err != nil {
+		return domain.AppVolume{}, err
+	}
 	var globalUsed, workspaceUsed int64
 	if err := tx.QueryRow(ctx, `SELECT COALESCE(SUM(requested_size_gib),0),COALESCE(SUM(requested_size_gib) FILTER (WHERE workspace_id=$1),0) FROM app_volumes WHERE storage_profile_id=$2`, workspaceID, profile.ID).Scan(&globalUsed, &workspaceUsed); err != nil {
 		return domain.AppVolume{}, err
@@ -97,10 +107,10 @@ func createAppVolume(ctx context.Context, tx pgx.Tx, workspaceID, actorID int64,
 		return domain.AppVolume{}, err
 	}
 	var volume domain.AppVolume
-	err = tx.QueryRow(ctx, `INSERT INTO app_volumes(public_id,workspace_id,app_environment_id,storage_profile_id,requested_size_gib,mount_path)
-		VALUES($1,$2,$3,$4,$5,$6)
+	err = tx.QueryRow(ctx, `INSERT INTO app_volumes(public_id,workspace_id,app_environment_id,storage_profile_id,requested_size_gib,mount_path,runtime_storage_class_name,storage_binding_version)
+		VALUES($1,$2,$3,$4,$5,$6,$7,$8)
 		RETURNING id,public_id,workspace_id,app_environment_id,storage_profile_id,requested_size_gib,mount_path,retention_policy,desired_state,observed_state,message,false,version,created_at,updated_at,deletion_requested_at`,
-		publicID, workspaceID, appEnvironment.ID, request.StorageProfileID, request.SizeGiB, request.MountPath).
+		publicID, workspaceID, appEnvironment.ID, request.StorageProfileID, request.SizeGiB, request.MountPath, runtimeStorageClass, storageBindingVersion).
 		Scan(&volume.ID, &volume.PublicID, &volume.WorkspaceID, &volume.AppEnvironmentID, &volume.StorageProfileID, &volume.SizeGiB, &volume.MountPath, &volume.RetentionPolicy, &volume.DesiredState, &volume.State, &volume.Message, &volume.Attached, &volume.Version, &volume.CreatedAt, &volume.UpdatedAt, &volume.DeletionRequestedAt)
 	if err != nil {
 		return domain.AppVolume{}, translateDBError(err)
@@ -130,8 +140,8 @@ func (s *Store) VolumeRuntime(ctx context.Context, workspaceID, volumeID int64) 
 	var item VolumeRuntime
 	var attached bool
 	err := s.Pool.QueryRow(ctx, `SELECT av.id,av.public_id,av.workspace_id,av.app_environment_id,ae.public_id,av.storage_profile_id,av.requested_size_gib,av.mount_path,av.retention_policy,av.desired_state,av.observed_state,av.message,
-		(ae.archived_at IS NULL AND EXISTS(SELECT 1 FROM deployments d WHERE d.app_volume_id=av.id AND d.status IN ('Pending','Progressing','Ready'))),av.version,av.created_at,av.updated_at,av.deletion_requested_at,sp.runtime_binding
-		FROM app_volumes av JOIN app_environments ae ON ae.id=av.app_environment_id JOIN storage_profiles sp ON sp.id=av.storage_profile_id WHERE av.workspace_id=$1 AND av.id=$2`, workspaceID, volumeID).
+		(ae.archived_at IS NULL AND EXISTS(SELECT 1 FROM deployments d WHERE d.app_volume_id=av.id AND d.status IN ('Pending','Progressing','Ready'))),av.version,av.created_at,av.updated_at,av.deletion_requested_at,av.runtime_storage_class_name
+		FROM app_volumes av JOIN app_environments ae ON ae.id=av.app_environment_id WHERE av.workspace_id=$1 AND av.id=$2`, workspaceID, volumeID).
 		Scan(&item.Volume.ID, &item.Volume.PublicID, &item.Volume.WorkspaceID, &item.Volume.AppEnvironmentID, &item.Volume.AppEnvironmentPublicID, &item.Volume.StorageProfileID, &item.Volume.SizeGiB, &item.Volume.MountPath, &item.Volume.RetentionPolicy, &item.Volume.DesiredState, &item.Volume.State, &item.Volume.Message, &attached, &item.Volume.Version, &item.Volume.CreatedAt, &item.Volume.UpdatedAt, &item.Volume.DeletionRequestedAt, &item.RuntimeBinding)
 	item.Volume.Attached = attached
 	if errors.Is(err, pgx.ErrNoRows) {

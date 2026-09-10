@@ -23,7 +23,7 @@ func New(version, commit, buildDate string) *cobra.Command {
 	command.AddCommand(
 		newFoundationCommand(newFoundationInspector()),
 		newPlatformCommand(version, newKubernetesDoctor(), newHelmInstaller(), newControlPlaneInstaller()),
-		newCapabilityCommand(newGatewayRunner(), newKubernetesTLSOperator(), newRegistryRunner()),
+		newCapabilityCommand(newGatewayRunner(), newKubernetesTLSOperator(), newRegistryRunner(), newStorageRunner()),
 	)
 	return command
 }

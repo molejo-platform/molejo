@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import type { Session } from "../api/types";
-import { canCreateWorkspace, canEditWorkspace, canManageUsers, canManageWorkspace } from "./permissions";
+import {
+  canCreateWorkspace,
+  canEditWorkspace,
+  canManageBindings,
+  canManageUsers,
+  canManageWorkspace,
+} from "./permissions";
 
 const session = {
   user: {
@@ -15,7 +21,12 @@ const session = {
   },
   assuranceLevel: "AAL1",
   csrfToken: "csrf",
-  installationCapabilities: { createWorkspace: true, manageUsers: false, publicTCP: { enabled: false } },
+  installationCapabilities: {
+    createWorkspace: true,
+    manageBindings: true,
+    manageUsers: false,
+    publicTCP: { enabled: false },
+  },
   workspaceMemberships: [
     { workspaceId: "ws-owner", role: "Owner" },
     { workspaceId: "ws-member", role: "Member" },
@@ -26,6 +37,7 @@ const session = {
 describe("session permissions", () => {
   it("separates installation capabilities from workspace roles", () => {
     expect(canCreateWorkspace(session)).toBe(true);
+    expect(canManageBindings(session)).toBe(true);
     expect(canManageUsers(session)).toBe(false);
     expect(canManageWorkspace(session, "ws-owner")).toBe(true);
     expect(canManageWorkspace(session, "ws-member")).toBe(false);

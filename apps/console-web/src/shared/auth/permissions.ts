@@ -18,3 +18,7 @@ export function canCreateWorkspace(session: Session | null | undefined) {
 export function canManageUsers(session: Session | null | undefined) {
   return session?.installationCapabilities?.manageUsers === true;
 }
+
+export function canManageBindings(session: Session | null | undefined) {
+  return session?.installationCapabilities?.manageBindings === true;
+}

@@ -80,6 +80,10 @@ distribution-test:
 script-check:
     bash -n tools/testing/*.sh
 
+# Run one explicit Kubernetes conformance profile against a selected context.
+kubernetes-conformance profile context storage_class="" gateway_file="":
+    tools/testing/kubernetes-conformance.sh "{{ profile }}" --context "{{ context }}" --storage-class "{{ storage_class }}" --gateway-file "{{ gateway_file }}"
+
 # Run the fast automated suite without Docker.
 test: operator-test cluster-agent-test control-plane-test contract-test distribution-test frontend-test script-check
 

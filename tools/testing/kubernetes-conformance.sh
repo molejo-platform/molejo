@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  echo "usage: $0 <core|metrics-current|storage-rwo|publication-http> --context <name> [--storage-class <name>] [--gateway-file <path>]" >&2
+  exit 2
+}
+
+[[ $# -ge 1 ]] || usage
+profile="$1"
+shift
+context_name=""
+storage_class=""
+gateway_file=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --context)
+      [[ $# -ge 2 ]] || usage
+      context_name="$2"
+      shift 2
+      ;;
+    --storage-class)
+      [[ $# -ge 2 ]] || usage
+      storage_class="$2"
+      shift 2
+      ;;
+    --gateway-file)
+      [[ $# -ge 2 ]] || usage
+      gateway_file="$2"
+      shift 2
+      ;;
+    *) usage ;;
+  esac
+done
+
+[[ -n "$context_name" ]] || usage
+kubectl config get-contexts "$context_name" >/dev/null
+repository_root="$(git rev-parse --show-toplevel)"
+
+molejoctl() {
+  if [[ -n "${MOLEJOCTL_BIN:-}" ]]; then
+    "$MOLEJOCTL_BIN" "$@"
+    return
+  fi
+  (
+    cd "$repository_root"
+    go run ./apps/molejoctl "$@"
+  )
+}
+
+case "$profile" in
+  core)
+    "$repository_root/tools/testing/control-plane-k3s.sh" verify --context "$context_name"
+    molejoctl platform doctor --kube-context "$context_name"
+    ;;
+  metrics-current)
+    kubectl --context "$context_name" get --raw /apis/metrics.k8s.io/v1beta1/nodes >/dev/null
+    echo "Kubernetes Metrics API is queryable in context $context_name"
+    ;;
+  storage-rwo)
+    [[ -n "$storage_class" ]] || {
+      echo "storage-rwo requires --storage-class" >&2
+      exit 2
+    }
+    molejoctl capability storage smoke --kube-context "$context_name" --storage-class "$storage_class"
+    ;;
+  publication-http)
+    [[ -n "$gateway_file" ]] || {
+      echo "publication-http requires --gateway-file" >&2
+      exit 2
+    }
+    molejoctl capability gateway verify --kube-context "$context_name" --file "$gateway_file"
+    ;;
+  *) usage ;;
+esac
+
+echo "Conformance profile $profile passed in context $context_name"

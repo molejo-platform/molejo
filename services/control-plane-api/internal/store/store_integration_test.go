@@ -161,6 +161,7 @@ func TestStatefulAppEnvironmentCreatesIndependentVolumeIntent(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	configureTestStorageBinding(t, storage, actorID, "persistent-standard")
 	project, app, environment := createHierarchy(t, storage, workspaceID)
 	target, volume, err := storage.CreateAppEnvironmentWithWorkload(
 		ctx, workspaceID, actorID, newID(t, "aev"), project.PublicID, app.PublicID,
@@ -193,6 +194,7 @@ func TestStatefulCapacityReservationRejectsWorkspaceQuotaOverflow(t *testing.T) 
 	}); err != nil {
 		t.Fatal(err)
 	}
+	configureTestStorageBinding(t, storage, actorID, "persistent-standard")
 	project, firstApp, firstEnvironment := createHierarchy(t, storage, workspaceID)
 	secondApp, err := storage.CreateApp(ctx, workspaceID, project.PublicID, newID(t, "app"), "Second", "second")
 	if err != nil {
@@ -222,6 +224,7 @@ func TestConcurrentStatefulReservationsRespectQuotaAndWorkspaceIsolation(t *test
 	}); err != nil {
 		t.Fatal(err)
 	}
+	configureTestStorageBinding(t, storage, actorID, "persistent-standard")
 	project, firstApp, firstEnvironment := createHierarchy(t, storage, workspaceID)
 	secondApp, err := storage.CreateApp(ctx, workspaceID, project.PublicID, newID(t, "app"), "Second", "second")
 	if err != nil {
@@ -294,6 +297,7 @@ func TestVolumeExpansionRetryReturnsTheOriginalOperation(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	configureTestStorageBinding(t, storage, actorID, "persistent-standard")
 	project, app, environment := createHierarchy(t, storage, workspaceID)
 	target, volume, err := storage.CreateAppEnvironmentWithWorkload(ctx, workspaceID, actorID, newID(t, "aev"), project.PublicID, app.PublicID, environment.PublicID, "main", domain.WorkloadStateful, integrationConfiguration("stateful-retry"), &domain.VolumeRequest{StorageProfileID: "persistent-standard", SizeGiB: 1, MountPath: "/data"})
 	if err != nil {
@@ -750,6 +754,15 @@ func newIntegrationFixture(t *testing.T) (*Store, int64, int64) {
 		t.Fatal(err)
 	}
 	return storage, workspaceID, actorID
+}
+
+func configureTestStorageBinding(t *testing.T, storage *Store, actorID int64, profileID string) {
+	t.Helper()
+	if _, err := storage.Pool.Exec(t.Context(), `INSERT INTO cluster_storage_bindings(cluster_id,storage_profile_id,storage_class_name,provisioner,access_modes_json,allow_expansion,volume_binding_mode,health,reason_code,observed_at,expires_at,created_by,updated_by)
+		SELECT id,$1,'test-storage','test.provisioner','["ReadWriteOnce"]'::jsonb,true,'WaitForFirstConsumer','Healthy','',now(),now()+interval '10 minutes',$2,$2
+		FROM agent_installations WHERE status='Active'`, profileID, actorID); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func newID(t *testing.T, prefix string) string {

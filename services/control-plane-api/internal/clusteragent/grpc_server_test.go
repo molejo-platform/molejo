@@ -23,6 +23,7 @@ import (
 
 	clusteragentv1alpha1 "github.com/molejo-platform/molejo/contracts/molejo/clusteragent/v1alpha1"
 	"github.com/molejo-platform/molejo/packages/capabilitycontract"
+	"github.com/molejo-platform/molejo/packages/kubernetesbinding"
 	"github.com/molejo-platform/molejo/packages/workspacecontract"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/audit"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/store"
@@ -40,6 +41,9 @@ type recordingAgentRegistry struct {
 	complete           bool
 	capabilities       []capabilitycontract.Observation
 	capabilityComplete bool
+	bindingTargets     []kubernetesbinding.Target
+	bindings           []kubernetesbinding.Observation
+	bindingComplete    bool
 }
 
 func (r *recordingAgentRegistry) ActivateAgent(_ context.Context, publicID string, fingerprint []byte, _, _, _ string, _ []string, mode workspacecontract.ProvisioningMode, _, sessionID string, _ time.Time, _ audit.Event) (bool, error) {
@@ -63,6 +67,15 @@ func (r *recordingAgentRegistry) ReconcileAgentObservations(_ context.Context, _
 
 func (r *recordingAgentRegistry) ReconcileCapabilityObservations(_ context.Context, _, _ string, _ uint64, observations []capabilitycontract.Observation, complete bool, _ time.Time) error {
 	r.capabilities, r.capabilityComplete = observations, complete
+	return nil
+}
+
+func (r *recordingAgentRegistry) BindingObservationTargets(context.Context, string) ([]kubernetesbinding.Target, error) {
+	return append([]kubernetesbinding.Target{}, r.bindingTargets...), nil
+}
+
+func (r *recordingAgentRegistry) ReconcileBindingObservations(_ context.Context, _, _ string, _ uint64, observations []kubernetesbinding.Observation, complete bool, _ time.Time) error {
+	r.bindings, r.bindingComplete = append([]kubernetesbinding.Observation{}, observations...), complete
 	return nil
 }
 
@@ -207,6 +220,42 @@ func TestGRPCServiceAcceptsNegotiatedCapabilitySnapshot(t *testing.T) {
 	}
 	if !registry.capabilityComplete || len(registry.capabilities) != 1 || registry.capabilities[0].ID != capabilitycontract.StorageRWO {
 		t.Fatalf("capability snapshot=%+v complete=%v", registry.capabilities, registry.capabilityComplete)
+	}
+}
+
+func TestGRPCServiceExchangesOnlyNegotiatedBindingTargetsAndObservations(t *testing.T) {
+	const installationID = "agi-abcdefghijklmnopqrst"
+	registry := &recordingAgentRegistry{bindingTargets: []kubernetesbinding.Target{{ID: "storage:persistent-standard", Kind: kubernetesbinding.KindStorage, Version: 3, Storage: &kubernetesbinding.StorageTarget{StorageClassName: "local-path"}}}}
+	stream := authenticatedTestStream(t, registry, installationID)
+	hello := testAgentHello(installationID)
+	hello.Capabilities = append(hello.Capabilities, "binding-observation.v1alpha1")
+	if err := stream.Send(&clusteragentv1alpha1.ConnectRequest{Payload: &clusteragentv1alpha1.ConnectRequest_Hello{Hello: hello}}); err != nil {
+		t.Fatal(err)
+	}
+	response, err := stream.Recv()
+	if err != nil || !hasCapability(response.GetHello().GetCapabilities(), "binding-observation.v1alpha1") {
+		t.Fatalf("hello=%+v err=%v", response, err)
+	}
+	first := &clusteragentv1alpha1.Heartbeat{Sequence: 1, SentAtUnix: time.Now().Unix(), SessionId: response.GetHello().GetSessionId()}
+	if err = stream.Send(&clusteragentv1alpha1.ConnectRequest{Payload: &clusteragentv1alpha1.ConnectRequest_Heartbeat{Heartbeat: first}}); err != nil {
+		t.Fatal(err)
+	}
+	ack, err := stream.Recv()
+	if err != nil || len(ack.GetHeartbeatAck().GetBindingTargets()) != 1 || ack.GetHeartbeatAck().GetBindingTargets()[0].GetStorage().GetStorageClassName() != "local-path" {
+		t.Fatalf("ack=%+v err=%v", ack, err)
+	}
+	second := &clusteragentv1alpha1.Heartbeat{
+		Sequence: 2, SentAtUnix: time.Now().Unix(), SessionId: response.GetHello().GetSessionId(), BindingSnapshotComplete: true,
+		BindingObservations: []*clusteragentv1alpha1.BindingObservation{{Id: "storage:persistent-standard", Kind: string(kubernetesbinding.KindStorage), Version: 3, Health: string(kubernetesbinding.HealthHealthy), SampledAtUnix: time.Now().Unix(), Observation: &clusteragentv1alpha1.BindingObservation_Storage{Storage: &clusteragentv1alpha1.StorageBindingObservation{StorageClassName: "local-path", Provisioner: "rancher.io/local-path", AccessModes: []string{"ReadWriteOnce"}}}}},
+	}
+	if err = stream.Send(&clusteragentv1alpha1.ConnectRequest{Payload: &clusteragentv1alpha1.ConnectRequest_Heartbeat{Heartbeat: second}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = stream.Recv(); err != nil {
+		t.Fatal(err)
+	}
+	if !registry.bindingComplete || len(registry.bindings) != 1 || registry.bindings[0].Version != 3 {
+		t.Fatalf("bindings=%+v complete=%t", registry.bindings, registry.bindingComplete)
 	}
 }
 

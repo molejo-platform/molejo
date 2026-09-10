@@ -9,7 +9,8 @@ Molejo. Cada capacidad tiene ownership explícito:
 - `provider-managed`: el proveedor Kubernetes o cloud administra su ciclo de vida.
 
 Los runbooks actuales son [Gateway con Traefik](gateway-traefik.md),
-[TLS con cert-manager](tls-cert-manager.md) y [acceso al registry](registry.md).
+[TLS con cert-manager](tls-cert-manager.md), [acceso al registry](registry.md) y
+[verificación de almacenamiento Kubernetes](storage.md).
 Usan `init`, `plan`, `apply`, `verify` y, cuando corresponde, `smoke`. Un runbook no
 es una API de plugins, no se convierte en recurso del control plane y nunca entrega
 credenciales del proveedor al Platform Operator o Cluster Agent.

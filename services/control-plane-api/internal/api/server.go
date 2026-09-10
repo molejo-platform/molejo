@@ -379,6 +379,7 @@ func (s *Server) writeSession(w http.ResponseWriter, user identity.User, assuran
 		"csrfToken":      csrf,
 		"installationCapabilities": map[string]any{
 			"manageUsers":        installationAdmin,
+			"manageBindings":     installationAdmin,
 			"createWorkspace":    installationAdmin,
 			"publicTCP":          map[string]any{"enabled": s.config.PublicTCPEnabled, "address": s.config.PublicTCPAddress, "minimumPort": s.config.PublicTCPMinimumPort, "maximumPort": s.config.PublicTCPMaximumPort},
 			"publicationDomains": publicationDomains,

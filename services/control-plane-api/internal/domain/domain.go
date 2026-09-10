@@ -90,6 +90,8 @@ type AppVolume struct {
 	AppEnvironmentID       int64      `json:"-"`
 	AppEnvironmentPublicID string     `json:"appEnvironmentId"`
 	StorageProfileID       string     `json:"storageProfileId"`
+	RuntimeStorageClass    string     `json:"-"`
+	StorageBindingVersion  int64      `json:"-"`
 	SizeGiB                int64      `json:"sizeGiB"`
 	MountPath              string     `json:"mountPath"`
 	RetentionPolicy        string     `json:"retentionPolicy"`

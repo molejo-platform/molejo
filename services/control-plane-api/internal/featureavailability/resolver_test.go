@@ -35,12 +35,12 @@ func TestResolveRuntimePrecedence(t *testing.T) {
 func TestResolveProviderAndCopiesInputs(t *testing.T) {
 	now := time.Now().UTC()
 	limitations := []string{"single replica"}
-	facts := Facts{AgentConnected: true, Providers: providerbinding.New(providerbinding.Binding{Capability: capabilitycontract.SourceGitHub, Configured: true}), Observations: []capabilitycontract.Observation{{ID: capabilitycontract.StorageRWO, ContractVersion: capabilitycontract.ContractVersion, Support: capabilitycontract.SupportSupported, Health: capabilitycontract.HealthHealthy, Limitations: limitations, SampledAt: now, ReceivedAt: now, ExpiresAt: now.Add(time.Minute)}}}
+	facts := Facts{AgentConnected: true, Providers: providerbinding.New(providerbinding.Binding{Capability: capabilitycontract.SourceGitHub, Configured: true}), Observations: []capabilitycontract.Observation{{ID: capabilitycontract.PublicationTCP, ContractVersion: capabilitycontract.ContractVersion, Support: capabilitycontract.SupportSupported, Health: capabilitycontract.HealthHealthy, Limitations: limitations, SampledAt: now, ReceivedAt: now, ExpiresAt: now.Add(time.Minute)}}}
 	got := Resolve(now, Target{}, facts)
 	if featureByID(got, capabilitycontract.SourceGitHub).State != Unknown {
 		t.Fatal("configured provider without health proof must be Unknown")
 	}
-	storage := featureByID(got, capabilitycontract.StorageRWO)
+	storage := featureByID(got, capabilitycontract.PublicationTCP)
 	if storage.State != Limited || !reflect.DeepEqual(storage.Limitations, limitations) {
 		t.Fatalf("unexpected storage projection: %#v", storage)
 	}
@@ -83,7 +83,7 @@ func TestResolveObservationAlwaysReturnsLimitationsArray(t *testing.T) {
 	facts := Facts{
 		AgentConnected: true,
 		Observations: []capabilitycontract.Observation{{
-			ID:              capabilitycontract.StorageRWO,
+			ID:              capabilitycontract.PublicationTCP,
 			ContractVersion: capabilitycontract.ContractVersion,
 			Support:         capabilitycontract.SupportSupported,
 			Health:          capabilitycontract.HealthUnavailable,
@@ -93,7 +93,7 @@ func TestResolveObservationAlwaysReturnsLimitationsArray(t *testing.T) {
 		}},
 	}
 
-	feature := featureByID(Resolve(now, Target{}, facts), capabilitycontract.StorageRWO)
+	feature := featureByID(Resolve(now, Target{}, facts), capabilitycontract.PublicationTCP)
 	if feature.Limitations == nil {
 		t.Fatal("observation-backed feature returned nil limitations")
 	}
@@ -136,6 +136,28 @@ func TestHistoricalMetricsRequireExplicitConformantBinding(t *testing.T) {
 			feature := featureByID(Resolve(now, Target{}, Facts{AgentConnected: true, Observations: []capabilitycontract.Observation{observed}, Providers: inventory}), capabilitycontract.TelemetryMetricsHistorical)
 			if feature.State != test.want || feature.ReasonCode != test.reason {
 				t.Fatalf("got %s/%s, want %s/%s", feature.State, feature.ReasonCode, test.want, test.reason)
+			}
+		})
+	}
+}
+
+func TestKubernetesCapabilitiesRequireExplicitHealthyBindings(t *testing.T) {
+	now := time.Now().UTC()
+	for _, capability := range []capabilitycontract.ID{capabilitycontract.StorageRWO, capabilitycontract.PublicationHTTP} {
+		t.Run(string(capability), func(t *testing.T) {
+			observed := capabilitycontract.Observation{
+				ID: capability, ContractVersion: capabilitycontract.ContractVersion,
+				Support: capabilitycontract.SupportSupported, Health: capabilitycontract.HealthHealthy,
+				SampledAt: now, ReceivedAt: now, ExpiresAt: now.Add(time.Minute),
+			}
+			withoutBinding := featureByID(Resolve(now, Target{}, Facts{AgentConnected: true, Observations: []capabilitycontract.Observation{observed}}), capability)
+			if withoutBinding.State != NotConfigured || withoutBinding.ReasonCode != ReasonBindingMissing {
+				t.Fatalf("observation activated %s without binding: %+v", capability, withoutBinding)
+			}
+			providers := providerbinding.New(providerbinding.Binding{Capability: capability, Configured: true, Health: providerbinding.HealthHealthy})
+			withBinding := featureByID(Resolve(now, Target{}, Facts{AgentConnected: true, Providers: providers}), capability)
+			if withBinding.State != Available {
+				t.Fatalf("healthy binding did not activate %s: %+v", capability, withBinding)
 			}
 		})
 	}

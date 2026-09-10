@@ -49,7 +49,7 @@ function StorageEditor({ target, params }: { target: AppEnvironment; params: Env
     enabled: target.workloadKind === "Stateful",
   });
   const profiles = useQuery({
-    ...runtimeConfigurationQueries.storageProfiles(params.workspaceId),
+    ...runtimeConfigurationQueries.storageProfiles(params.workspaceId, target.clusterId),
     enabled: target.workloadKind === "Stateful",
   });
   const [sizeGiB, setSizeGiB] = useState(0);

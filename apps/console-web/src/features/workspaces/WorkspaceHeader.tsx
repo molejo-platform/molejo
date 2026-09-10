@@ -108,6 +108,11 @@ export function WorkspaceHeader() {
               Usuários
             </Link>
           )}
+          {session.data?.installationCapabilities.manageBindings && (
+            <Link to="/admin/clusters" onClick={() => setMenuOpen(false)}>
+              Clusters
+            </Link>
+          )}
           <Link to="/account" onClick={() => setMenuOpen(false)}>
             Minha conta
           </Link>

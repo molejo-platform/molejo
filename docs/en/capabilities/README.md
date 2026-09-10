@@ -9,7 +9,8 @@ Every capability has explicit ownership:
 - `provider-managed`: the Kubernetes or cloud provider owns its lifecycle.
 
 Current runbooks are [Gateway with Traefik](gateway-traefik.md),
-[TLS with cert-manager](tls-cert-manager.md), and [registry access](registry.md).
+[TLS with cert-manager](tls-cert-manager.md), [registry access](registry.md), and
+[Kubernetes storage verification](storage.md).
 They use `init`, `plan`, `apply`, `verify`, and, when meaningful, `smoke`. A runbook
 is not a plugin API, does not become a control-plane resource, and never transfers
 provider credentials to the Platform Operator or Cluster Agent.

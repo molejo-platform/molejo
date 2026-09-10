@@ -10,12 +10,12 @@ import (
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/store"
 )
 
-func (h *generatedHandler) ListStorageProfiles(w http.ResponseWriter, r *http.Request, workspaceID generated.WorkspaceId) {
+func (h *generatedHandler) ListStorageProfiles(w http.ResponseWriter, r *http.Request, workspaceID generated.WorkspaceId, params generated.ListStorageProfilesParams) {
 	_, workspace, ok := h.authorizeWorkspace(w, r, string(workspaceID), false)
 	if !ok {
 		return
 	}
-	items, err := h.server.store.ListStorageProfiles(r.Context(), workspace.ID)
+	items, err := h.server.store.ListStorageProfiles(r.Context(), workspace.ID, string(params.ClusterId))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "storage_failed", "storage profiles could not be listed", r)
 		return

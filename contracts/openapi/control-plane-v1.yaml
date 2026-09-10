@@ -395,6 +395,83 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/admin/clusters/{clusterId}/bindings/storage:
+    parameters: [{ $ref: '#/components/parameters/ClusterId' }]
+    get:
+      operationId: listClusterStorageBindings
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Storage profile bindings selected for the cluster
+          content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/ClusterStorageBinding' } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/admin/clusters/{clusterId}/bindings/storage/{storageProfileId}:
+    parameters:
+      - { $ref: '#/components/parameters/ClusterId' }
+      - { name: storageProfileId, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 63, pattern: '^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$' } }
+    get:
+      operationId: getClusterStorageBinding
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { description: Storage profile binding, content: { application/json: { schema: { $ref: '#/components/schemas/ClusterStorageBinding' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      operationId: putClusterStorageBinding
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/OptionalIfMatch' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ClusterStorageBindingInput' } } }
+      responses:
+        '200': { description: Storage profile binding updated, content: { application/json: { schema: { $ref: '#/components/schemas/ClusterStorageBinding' } } } }
+        '201': { description: Storage profile binding created, content: { application/json: { schema: { $ref: '#/components/schemas/ClusterStorageBinding' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      operationId: deleteClusterStorageBinding
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/IfMatch' }]
+      responses:
+        '204': { description: Storage profile binding removed }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/admin/clusters/{clusterId}/bindings/publication/http:
+    parameters: [{ $ref: '#/components/parameters/ClusterId' }]
+    get:
+      operationId: getClusterPublicationBinding
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { description: HTTP publication binding, content: { application/json: { schema: { $ref: '#/components/schemas/ClusterPublicationBinding' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      operationId: putClusterPublicationBinding
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/OptionalIfMatch' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ClusterPublicationBindingInput' } } }
+      responses:
+        '200': { description: HTTP publication binding updated, content: { application/json: { schema: { $ref: '#/components/schemas/ClusterPublicationBinding' } } } }
+        '201': { description: HTTP publication binding created, content: { application/json: { schema: { $ref: '#/components/schemas/ClusterPublicationBinding' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      operationId: deleteClusterPublicationBinding
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/IfMatch' }]
+      responses:
+        '204': { description: HTTP publication binding removed }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
   /api/v1/admin/agent-installations:
     post:
       operationId: createAgentInstallation
@@ -1522,6 +1599,8 @@ paths:
     get:
       operationId: listStorageProfiles
       security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: clusterId, in: query, required: true, schema: { type: string, pattern: '^(cls|agi)-[a-z2-7]{20}$' } }
       responses:
         '200':
           description: Portable storage profiles available to the Workspace
@@ -2023,10 +2102,11 @@ components:
         csrfToken: { type: string, readOnly: true }
         installationCapabilities:
           type: object
-          required: [manageUsers, createWorkspace, publicTCP]
+          required: [manageUsers, manageBindings, createWorkspace, publicTCP]
           additionalProperties: false
           properties:
             manageUsers: { type: boolean }
+            manageBindings: { type: boolean }
             createWorkspace: { type: boolean }
             publicTCP:
               type: object
@@ -2259,6 +2339,58 @@ components:
           type: array
           maxItems: 16
           items: { type: string, maxLength: 128 }
+        observedAt: { type: string, format: date-time }
+        version: { type: integer, minimum: 1 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ClusterStorageBindingInput:
+      type: object
+      required: [storageClassName]
+      additionalProperties: false
+      properties:
+        storageClassName: { type: string, minLength: 1, maxLength: 253 }
+    ClusterStorageBinding:
+      type: object
+      required: [clusterId, storageProfileId, storageClassName, provisioner, accessModes, allowExpansion, volumeBindingMode, health, reasonCode, version, createdAt, updatedAt]
+      additionalProperties: false
+      properties:
+        clusterId: { type: string, pattern: '^(cls|agi)-[a-z2-7]{20}$' }
+        storageProfileId: { type: string, minLength: 1, maxLength: 63 }
+        storageClassName: { type: string, minLength: 1, maxLength: 253 }
+        provisioner: { type: string, maxLength: 253 }
+        accessModes: { type: array, maxItems: 8, items: { type: string, maxLength: 64 } }
+        allowExpansion: { type: boolean }
+        volumeBindingMode: { type: string, maxLength: 64 }
+        health: { type: string, enum: [Unknown, Healthy, Degraded, Unavailable] }
+        reasonCode: { type: string, maxLength: 128 }
+        observedAt: { type: string, format: date-time }
+        version: { type: integer, minimum: 1 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ClusterPublicationBindingInput:
+      type: object
+      required: [gatewayNamespace, gatewayName, sectionName]
+      additionalProperties: false
+      properties:
+        gatewayNamespace: { type: string, minLength: 1, maxLength: 63 }
+        gatewayName: { type: string, minLength: 1, maxLength: 253 }
+        sectionName: { type: string, minLength: 1, maxLength: 63 }
+    ClusterPublicationBinding:
+      type: object
+      required: [clusterId, gatewayNamespace, gatewayName, sectionName, gatewayClassName, gatewayClassAccepted, gatewayProgrammed, listenerReady, supportedRouteKinds, health, reasonCode, version, createdAt, updatedAt]
+      additionalProperties: false
+      properties:
+        clusterId: { type: string, pattern: '^(cls|agi)-[a-z2-7]{20}$' }
+        gatewayNamespace: { type: string, minLength: 1, maxLength: 63 }
+        gatewayName: { type: string, minLength: 1, maxLength: 253 }
+        sectionName: { type: string, minLength: 1, maxLength: 63 }
+        gatewayClassName: { type: string, maxLength: 253 }
+        gatewayClassAccepted: { type: boolean }
+        gatewayProgrammed: { type: boolean }
+        listenerReady: { type: boolean }
+        supportedRouteKinds: { type: array, maxItems: 8, items: { type: string, maxLength: 64 } }
+        health: { type: string, enum: [Unknown, Healthy, Degraded, Unavailable] }
+        reasonCode: { type: string, maxLength: 128 }
         observedAt: { type: string, format: date-time }
         version: { type: integer, minimum: 1 }
         createdAt: { type: string, format: date-time }

@@ -16,6 +16,7 @@ import (
 
 	clusteragentv1alpha1 "github.com/molejo-platform/molejo/contracts/molejo/clusteragent/v1alpha1"
 	"github.com/molejo-platform/molejo/packages/capabilitycontract"
+	"github.com/molejo-platform/molejo/packages/kubernetesbinding"
 	"github.com/molejo-platform/molejo/packages/workspacecontract"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/audit"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/domain"
@@ -36,6 +37,11 @@ type CertificateSigner interface {
 	Sign(string, []byte, time.Time) (IssuedCertificate, error)
 }
 
+type BindingRegistry interface {
+	BindingObservationTargets(context.Context, string) ([]kubernetesbinding.Target, error)
+	ReconcileBindingObservations(context.Context, string, string, uint64, []kubernetesbinding.Observation, bool, time.Time) error
+}
+
 type RuntimeDispatcher interface {
 	NextCommand(context.Context, string) (*clusteragentv1alpha1.RuntimeCommand, bool, error)
 	HandleResult(context.Context, string, *clusteragentv1alpha1.RuntimeResult) error
@@ -54,6 +60,7 @@ type GRPCService struct {
 	serverCAPEM       []byte
 	trustBundleID     string
 	runtimeQueries    *RuntimeQueryBroker
+	bindings          BindingRegistry
 }
 
 func (s *GRPCService) ConfigureRuntimeQueries(broker *RuntimeQueryBroker) {
@@ -73,7 +80,9 @@ func NewGRPCService(registry AgentRegistry, dispatcher RuntimeDispatcher, heartb
 	if heartbeatInterval <= 0 {
 		heartbeatInterval = 30 * time.Second
 	}
-	return &GRPCService{registry: registry, dispatcher: dispatcher, heartbeatInterval: heartbeatInterval, now: func() time.Time { return time.Now().UTC() }, eventID: func() (string, error) { return domain.NewPublicID("aud") }, sessionID: func() (string, error) { return domain.NewPublicID("ags") }}
+	service := &GRPCService{registry: registry, dispatcher: dispatcher, heartbeatInterval: heartbeatInterval, now: func() time.Time { return time.Now().UTC() }, eventID: func() (string, error) { return domain.NewPublicID("aud") }, sessionID: func() (string, error) { return domain.NewPublicID("ags") }}
+	service.bindings, _ = registry.(BindingRegistry)
+	return service
 }
 
 func (s *GRPCService) Connect(stream grpc.BidiStreamingServer[clusteragentv1alpha1.ConnectRequest, clusteragentv1alpha1.ConnectResponse]) error {
@@ -108,7 +117,8 @@ func (s *GRPCService) Connect(stream grpc.BidiStreamingServer[clusteragentv1alph
 		return status.Error(codes.PermissionDenied, "Agent identity was rejected")
 	}
 	capabilityObservationsEnabled := hasCapability(hello.GetCapabilities(), "capability-observation.v1alpha1")
-	if err = stream.Send(&clusteragentv1alpha1.ConnectResponse{Payload: &clusteragentv1alpha1.ConnectResponse_Hello{Hello: &clusteragentv1alpha1.ControlPlaneHello{ProtocolVersion: "v1alpha1", HeartbeatIntervalSeconds: int32(s.heartbeatInterval / time.Second), ServerTimeUnix: now.Unix(), Capabilities: []string{"runtime.v1alpha1", "runtime-observation.v1alpha1", "runtime-query.v1alpha1", "certificate-renewal.v1alpha1", "capability-observation.v1alpha1"}, SessionId: sessionID, TrustBundleId: s.trustBundleID}}}); err != nil {
+	bindingObservationsEnabled := s.bindings != nil && hasCapability(hello.GetCapabilities(), "binding-observation.v1alpha1")
+	if err = stream.Send(&clusteragentv1alpha1.ConnectResponse{Payload: &clusteragentv1alpha1.ConnectResponse_Hello{Hello: &clusteragentv1alpha1.ControlPlaneHello{ProtocolVersion: "v1alpha1", HeartbeatIntervalSeconds: int32(s.heartbeatInterval / time.Second), ServerTimeUnix: now.Unix(), Capabilities: []string{"runtime.v1alpha1", "runtime-observation.v1alpha1", "runtime-query.v1alpha1", "certificate-renewal.v1alpha1", "capability-observation.v1alpha1", "binding-observation.v1alpha1"}, SessionId: sessionID, TrustBundleId: s.trustBundleID}}}); err != nil {
 		return err
 	}
 	for {
@@ -173,6 +183,21 @@ func (s *GRPCService) Connect(stream grpc.BidiStreamingServer[clusteragentv1alph
 				return status.Error(codes.InvalidArgument, "capability observations were rejected")
 			}
 		}
+		if len(heartbeat.GetBindingObservations()) > 0 || heartbeat.GetBindingSnapshotComplete() {
+			if !bindingObservationsEnabled {
+				return status.Error(codes.InvalidArgument, "binding observations were not negotiated")
+			}
+			observations, mapErr := bindingObservationsFromProto(heartbeat.GetBindingObservations())
+			if mapErr != nil {
+				return status.Error(codes.InvalidArgument, "binding observations were rejected")
+			}
+			if err = s.bindings.ReconcileBindingObservations(stream.Context(), installationID, sessionID, heartbeat.GetSequence(), observations, heartbeat.GetBindingSnapshotComplete(), now); err != nil {
+				if errors.Is(err, store.ErrAgentIdentityMismatch) {
+					return status.Error(codes.PermissionDenied, "Agent identity was rejected")
+				}
+				return status.Error(codes.InvalidArgument, "binding observations were rejected")
+			}
+		}
 		if s.dispatcher != nil {
 			command, ok, dispatchErr := s.dispatcher.NextCommand(stream.Context(), installationID)
 			if dispatchErr != nil {
@@ -198,10 +223,51 @@ func (s *GRPCService) Connect(stream grpc.BidiStreamingServer[clusteragentv1alph
 				}
 			}
 		}
-		if err = stream.Send(&clusteragentv1alpha1.ConnectResponse{Payload: &clusteragentv1alpha1.ConnectResponse_HeartbeatAck{HeartbeatAck: &clusteragentv1alpha1.HeartbeatAck{Sequence: heartbeat.GetSequence(), ReceivedAtUnix: now.Unix()}}}); err != nil {
+		ack := &clusteragentv1alpha1.HeartbeatAck{Sequence: heartbeat.GetSequence(), ReceivedAtUnix: now.Unix()}
+		if bindingObservationsEnabled {
+			targets, targetErr := s.bindings.BindingObservationTargets(stream.Context(), installationID)
+			if targetErr != nil {
+				return status.Error(codes.Unavailable, "binding observation targets are unavailable")
+			}
+			ack.BindingTargets = bindingTargetsToProto(targets)
+		}
+		if err = stream.Send(&clusteragentv1alpha1.ConnectResponse{Payload: &clusteragentv1alpha1.ConnectResponse_HeartbeatAck{HeartbeatAck: ack}}); err != nil {
 			return err
 		}
 	}
+}
+
+func bindingTargetsToProto(targets []kubernetesbinding.Target) []*clusteragentv1alpha1.BindingTarget {
+	result := make([]*clusteragentv1alpha1.BindingTarget, 0, len(targets))
+	for _, target := range targets {
+		item := &clusteragentv1alpha1.BindingTarget{Id: target.ID, Kind: string(target.Kind), Version: target.Version}
+		switch target.Kind {
+		case kubernetesbinding.KindStorage:
+			item.Target = &clusteragentv1alpha1.BindingTarget_Storage{Storage: &clusteragentv1alpha1.StorageBindingTarget{StorageClassName: target.Storage.StorageClassName}}
+		case kubernetesbinding.KindPublicationHTTP:
+			item.Target = &clusteragentv1alpha1.BindingTarget_Publication{Publication: &clusteragentv1alpha1.PublicationBindingTarget{GatewayNamespace: target.Publication.GatewayNamespace, GatewayName: target.Publication.GatewayName, SectionName: target.Publication.SectionName}}
+		}
+		result = append(result, item)
+	}
+	return result
+}
+
+func bindingObservationsFromProto(values []*clusteragentv1alpha1.BindingObservation) ([]kubernetesbinding.Observation, error) {
+	if len(values) > kubernetesbinding.MaxTargets {
+		return nil, errors.New("too many binding observations")
+	}
+	result := make([]kubernetesbinding.Observation, 0, len(values))
+	for _, value := range values {
+		item := kubernetesbinding.Observation{ID: value.GetId(), Kind: kubernetesbinding.Kind(value.GetKind()), Version: value.GetVersion(), Health: kubernetesbinding.Health(value.GetHealth()), ReasonCode: value.GetReasonCode(), SampledAt: time.Unix(value.GetSampledAtUnix(), 0).UTC()}
+		if storage := value.GetStorage(); storage != nil {
+			item.Storage = &kubernetesbinding.StorageObservation{StorageClassName: storage.GetStorageClassName(), Provisioner: storage.GetProvisioner(), AccessModes: append([]string{}, storage.GetAccessModes()...), AllowExpansion: storage.GetAllowExpansion(), VolumeBindingMode: storage.GetVolumeBindingMode()}
+		}
+		if publication := value.GetPublication(); publication != nil {
+			item.Publication = &kubernetesbinding.PublicationObservation{GatewayNamespace: publication.GetGatewayNamespace(), GatewayName: publication.GetGatewayName(), SectionName: publication.GetSectionName(), GatewayClassName: publication.GetGatewayClassName(), GatewayClassAccepted: publication.GetGatewayClassAccepted(), GatewayProgrammed: publication.GetGatewayProgrammed(), ListenerReady: publication.GetListenerReady(), SupportedRouteKinds: append([]string{}, publication.GetSupportedRouteKinds()...)}
+		}
+		result = append(result, item)
+	}
+	return result, nil
 }
 
 func (s *GRPCService) RenewCertificate(ctx context.Context, request *clusteragentv1alpha1.RenewCertificateRequest) (*clusteragentv1alpha1.RenewCertificateResponse, error) {

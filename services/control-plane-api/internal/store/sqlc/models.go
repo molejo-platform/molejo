@@ -187,6 +187,8 @@ type AppVolume struct {
 	RuntimeDesiredVersion           int64              `json:"runtime_desired_version"`
 	RuntimeSpecHash                 pgtype.Text        `json:"runtime_spec_hash"`
 	RuntimeReconciliationGeneration int64              `json:"runtime_reconciliation_generation"`
+	RuntimeStorageClassName         string             `json:"runtime_storage_class_name"`
+	StorageBindingVersion           int64              `json:"storage_binding_version"`
 }
 
 type AuditEvent struct {
@@ -302,6 +304,50 @@ type ClusterHistoricalMetricBinding struct {
 	UpdatedBy       int64              `json:"updated_by"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ClusterPublicationBinding struct {
+	ClusterID               int64              `json:"cluster_id"`
+	GatewayNamespace        string             `json:"gateway_namespace"`
+	GatewayName             string             `json:"gateway_name"`
+	SectionName             string             `json:"section_name"`
+	GatewayClassName        string             `json:"gateway_class_name"`
+	GatewayClassAccepted    bool               `json:"gateway_class_accepted"`
+	GatewayProgrammed       bool               `json:"gateway_programmed"`
+	ListenerReady           bool               `json:"listener_ready"`
+	SupportedRouteKindsJson []byte             `json:"supported_route_kinds_json"`
+	Health                  string             `json:"health"`
+	ReasonCode              string             `json:"reason_code"`
+	ObservedAt              pgtype.Timestamptz `json:"observed_at"`
+	ExpiresAt               pgtype.Timestamptz `json:"expires_at"`
+	ObservedSessionID       string             `json:"observed_session_id"`
+	ObservedSequence        int64              `json:"observed_sequence"`
+	Version                 int64              `json:"version"`
+	CreatedBy               int64              `json:"created_by"`
+	UpdatedBy               int64              `json:"updated_by"`
+	CreatedAt               pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ClusterStorageBinding struct {
+	ClusterID         int64              `json:"cluster_id"`
+	StorageProfileID  string             `json:"storage_profile_id"`
+	StorageClassName  string             `json:"storage_class_name"`
+	Provisioner       string             `json:"provisioner"`
+	AccessModesJson   []byte             `json:"access_modes_json"`
+	AllowExpansion    bool               `json:"allow_expansion"`
+	VolumeBindingMode string             `json:"volume_binding_mode"`
+	Health            string             `json:"health"`
+	ReasonCode        string             `json:"reason_code"`
+	ObservedAt        pgtype.Timestamptz `json:"observed_at"`
+	ExpiresAt         pgtype.Timestamptz `json:"expires_at"`
+	ObservedSessionID string             `json:"observed_session_id"`
+	ObservedSequence  int64              `json:"observed_sequence"`
+	Version           int64              `json:"version"`
+	CreatedBy         int64              `json:"created_by"`
+	UpdatedBy         int64              `json:"updated_by"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
 }
 
 type DeliveryTarget struct {

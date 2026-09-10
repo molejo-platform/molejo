@@ -25,7 +25,12 @@ function session(id: string, csrfToken: string): Session {
     },
     assuranceLevel: "AAL1",
     csrfToken,
-    installationCapabilities: { manageUsers: false, createWorkspace: false, publicTCP: { enabled: false } },
+    installationCapabilities: {
+      manageUsers: false,
+      manageBindings: false,
+      createWorkspace: false,
+      publicTCP: { enabled: false },
+    },
     workspaceMemberships: [],
   };
 }

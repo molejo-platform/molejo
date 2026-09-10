@@ -83,7 +83,7 @@ func resolveRuntime(feature Feature, facts Facts) Feature {
 }
 
 func resolveProvider(now time.Time, feature Feature, facts Facts) Feature {
-	if feature.ID == capabilitycontract.TelemetryMetricsHistorical {
+	if feature.ID == capabilitycontract.TelemetryMetricsHistorical || feature.ID == capabilitycontract.StorageRWO || feature.ID == capabilitycontract.StorageExpand || feature.ID == capabilitycontract.PublicationHTTP {
 		return resolveExplicitBinding(feature, facts)
 	}
 	if observation, ok := latestObservationRegardlessFreshness(feature.ID, facts.Observations); ok {
@@ -179,6 +179,8 @@ func latestObservation(now time.Time, id capabilitycontract.ID, observations []c
 
 func missingProviderReason(id capabilitycontract.ID) string {
 	switch id {
+	case capabilitycontract.StorageRWO, capabilitycontract.StorageExpand, capabilitycontract.PublicationHTTP:
+		return ReasonBindingMissing
 	case capabilitycontract.ParametersSecretStatic:
 		return ReasonSecretBackendMissing
 	case capabilitycontract.TelemetryLogsHistorical, capabilitycontract.TelemetryMetricsHistorical, capabilitycontract.TelemetryEventsHistorical:

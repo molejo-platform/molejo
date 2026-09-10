@@ -13,6 +13,7 @@ import (
 
 	clusteragentv1alpha1 "github.com/molejo-platform/molejo/contracts/molejo/clusteragent/v1alpha1"
 	"github.com/molejo-platform/molejo/packages/capabilitycontract"
+	"github.com/molejo-platform/molejo/packages/kubernetesbinding"
 	"github.com/molejo-platform/molejo/services/cluster-agent/internal/agent"
 	agentidentity "github.com/molejo-platform/molejo/services/cluster-agent/internal/identity"
 )
@@ -25,6 +26,7 @@ type GRPCConnector struct {
 	executor        RuntimeExecutor
 	observer        RuntimeObserver
 	capabilities    CapabilitySnapshotProvider
+	bindings        BindingObserver
 	runtimeQueries  RuntimeQueryHandler
 	responseTimeout time.Duration
 }
@@ -48,6 +50,10 @@ type CapabilitySnapshotProvider interface {
 	Snapshot() ([]capabilitycontract.Observation, bool)
 }
 
+type BindingObserver interface {
+	ObserveBindings(context.Context, []kubernetesbinding.Target) ([]kubernetesbinding.Observation, bool)
+}
+
 const controlChannelResponseTimeout = 10 * time.Second
 
 func NewGRPCConnector(address, serverName, version string, metadata AgentMetadata, executor RuntimeExecutor) (*GRPCConnector, error) {
@@ -63,6 +69,10 @@ func (c *GRPCConnector) ConfigureObservations(observer RuntimeObserver) {
 
 func (c *GRPCConnector) ConfigureCapabilityObservations(provider CapabilitySnapshotProvider) {
 	c.capabilities = provider
+}
+
+func (c *GRPCConnector) ConfigureBindingObservations(observer BindingObserver) {
+	c.bindings = observer
 }
 
 func (c *GRPCConnector) ConfigureRuntimeQueries(handler RuntimeQueryHandler) {
@@ -83,12 +93,12 @@ func (c *GRPCConnector) Connect(ctx context.Context, identity agentidentity.Stor
 		return fmt.Errorf("open Agent gRPC stream: %w", err)
 	}
 	if c.runtimeQueries == nil {
-		return runControlChannel(streamContext, stream, identity.InstallationID, identity.TrustBundleID, c.version, c.metadata, c.executor, c.observer, c.capabilities, paired, nil, c.responseTimeout)
+		return runControlChannel(streamContext, stream, identity.InstallationID, identity.TrustBundleID, c.version, c.metadata, c.executor, c.observer, c.capabilities, c.bindings, paired, nil, c.responseTimeout)
 	}
 	sessionReady := make(chan string, 1)
 	controlErrors := make(chan error, 1)
 	go func() {
-		controlErrors <- runControlChannel(streamContext, stream, identity.InstallationID, identity.TrustBundleID, c.version, c.metadata, c.executor, c.observer, c.capabilities, paired, func(sessionID string) { sessionReady <- sessionID }, c.responseTimeout)
+		controlErrors <- runControlChannel(streamContext, stream, identity.InstallationID, identity.TrustBundleID, c.version, c.metadata, c.executor, c.observer, c.capabilities, c.bindings, paired, func(sessionID string) { sessionReady <- sessionID }, c.responseTimeout)
 	}()
 	var sessionID string
 	select {
@@ -166,7 +176,7 @@ type agentControlStream interface {
 	Recv() (*clusteragentv1alpha1.ConnectResponse, error)
 }
 
-func runControlChannel(ctx context.Context, stream agentControlStream, installationID, trustBundleID string, version string, metadata AgentMetadata, executor RuntimeExecutor, observer RuntimeObserver, capabilities CapabilitySnapshotProvider, paired func(), sessionReady func(string), responseTimeout time.Duration) error {
+func runControlChannel(ctx context.Context, stream agentControlStream, installationID, trustBundleID string, version string, metadata AgentMetadata, executor RuntimeExecutor, observer RuntimeObserver, capabilities CapabilitySnapshotProvider, bindings BindingObserver, paired func(), sessionReady func(string), responseTimeout time.Duration) error {
 	hello := &clusteragentv1alpha1.AgentHello{InstallationId: installationID, AgentVersion: version, ClusterUid: metadata.ClusterUID, KubernetesVersion: metadata.KubernetesVersion, Capabilities: metadata.Capabilities, SupportedProtocolVersions: []string{"v1alpha1"}, TrustBundleId: trustBundleID, WorkspaceProvisioningMode: metadata.WorkspaceProvisioningMode}
 	if err := stream.Send(&clusteragentv1alpha1.ConnectRequest{Payload: &clusteragentv1alpha1.ConnectRequest_Hello{Hello: hello}}); err != nil {
 		return fmt.Errorf("send Agent hello: %w", err)
@@ -192,6 +202,8 @@ func runControlChannel(ctx context.Context, stream agentControlStream, installat
 	ticker := time.NewTicker(time.Duration(controlPlaneHello.GetHeartbeatIntervalSeconds()) * time.Second)
 	defer ticker.Stop()
 	var sequence uint64
+	var bindingTargets []kubernetesbinding.Target
+	bindingTargetsInitialized := false
 	for {
 		select {
 		case <-ctx.Done():
@@ -221,6 +233,13 @@ func runControlChannel(ctx context.Context, stream agentControlStream, installat
 				}
 				heartbeat.CapabilitySnapshotComplete = complete
 			}
+			if bindings != nil && bindingTargetsInitialized && hasCapability(metadata.Capabilities, "binding-observation.v1alpha1") && hasCapability(controlPlaneHello.GetCapabilities(), "binding-observation.v1alpha1") {
+				observationContext, observationCancel := context.WithTimeout(ctx, responseTimeout)
+				observations, complete := bindings.ObserveBindings(observationContext, bindingTargets)
+				observationCancel()
+				heartbeat.BindingObservations = bindingObservationsToProto(observations)
+				heartbeat.BindingSnapshotComplete = complete
+			}
 			if err = stream.Send(&clusteragentv1alpha1.ConnectRequest{Payload: &clusteragentv1alpha1.ConnectRequest_Heartbeat{Heartbeat: heartbeat}}); err != nil {
 				return fmt.Errorf("send Agent heartbeat: %w", err)
 			}
@@ -248,8 +267,56 @@ func runControlChannel(ctx context.Context, stream agentControlStream, installat
 			if ack.GetHeartbeatAck() == nil || ack.GetHeartbeatAck().GetSequence() != sequence {
 				return errors.New("control plane heartbeat acknowledgement is invalid")
 			}
+			if bindings != nil && hasCapability(metadata.Capabilities, "binding-observation.v1alpha1") && hasCapability(controlPlaneHello.GetCapabilities(), "binding-observation.v1alpha1") {
+				bindingTargets, err = bindingTargetsFromProto(ack.GetHeartbeatAck().GetBindingTargets())
+				if err != nil {
+					return errors.New("control plane binding targets are invalid")
+				}
+				bindingTargetsInitialized = true
+			}
 		}
 	}
+}
+
+func bindingTargetsFromProto(values []*clusteragentv1alpha1.BindingTarget) ([]kubernetesbinding.Target, error) {
+	if len(values) > kubernetesbinding.MaxTargets {
+		return nil, errors.New("too many binding targets")
+	}
+	result := make([]kubernetesbinding.Target, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		item := kubernetesbinding.Target{ID: value.GetId(), Kind: kubernetesbinding.Kind(value.GetKind()), Version: value.GetVersion()}
+		if storage := value.GetStorage(); storage != nil {
+			item.Storage = &kubernetesbinding.StorageTarget{StorageClassName: storage.GetStorageClassName()}
+		}
+		if publication := value.GetPublication(); publication != nil {
+			item.Publication = &kubernetesbinding.PublicationTarget{GatewayNamespace: publication.GetGatewayNamespace(), GatewayName: publication.GetGatewayName(), SectionName: publication.GetSectionName()}
+		}
+		if _, duplicate := seen[item.ID]; duplicate {
+			return nil, errors.New("duplicate binding target")
+		}
+		if err := kubernetesbinding.ValidateTarget(item); err != nil {
+			return nil, err
+		}
+		seen[item.ID] = struct{}{}
+		result = append(result, item)
+	}
+	return result, nil
+}
+
+func bindingObservationsToProto(values []kubernetesbinding.Observation) []*clusteragentv1alpha1.BindingObservation {
+	result := make([]*clusteragentv1alpha1.BindingObservation, 0, len(values))
+	for _, value := range values {
+		item := &clusteragentv1alpha1.BindingObservation{Id: value.ID, Kind: string(value.Kind), Version: value.Version, Health: string(value.Health), ReasonCode: value.ReasonCode, SampledAtUnix: value.SampledAt.Unix()}
+		if value.Storage != nil {
+			item.Observation = &clusteragentv1alpha1.BindingObservation_Storage{Storage: &clusteragentv1alpha1.StorageBindingObservation{StorageClassName: value.Storage.StorageClassName, Provisioner: value.Storage.Provisioner, AccessModes: append([]string{}, value.Storage.AccessModes...), AllowExpansion: value.Storage.AllowExpansion, VolumeBindingMode: value.Storage.VolumeBindingMode}}
+		}
+		if value.Publication != nil {
+			item.Observation = &clusteragentv1alpha1.BindingObservation_Publication{Publication: &clusteragentv1alpha1.PublicationBindingObservation{GatewayNamespace: value.Publication.GatewayNamespace, GatewayName: value.Publication.GatewayName, SectionName: value.Publication.SectionName, GatewayClassName: value.Publication.GatewayClassName, GatewayClassAccepted: value.Publication.GatewayClassAccepted, GatewayProgrammed: value.Publication.GatewayProgrammed, ListenerReady: value.Publication.ListenerReady, SupportedRouteKinds: append([]string{}, value.Publication.SupportedRouteKinds...)}}
+		}
+		result = append(result, item)
+	}
+	return result
 }
 
 func localCommandDeadline(serverDeadline, serverHelloTime, localHelloTime int64) int64 {

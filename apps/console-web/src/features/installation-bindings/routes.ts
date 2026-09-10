@@ -1,0 +1,1 @@
+export { ClusterBindingsPage } from "./ClusterBindingsPage";

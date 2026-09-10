@@ -14,4 +14,10 @@ export const accountRoutes = [
     beforeLoad: ({ context }) => requireInstallationCapability(context, "manageUsers"),
     component: lazyRouteComponent(() => import("../../features/installation-users/routes"), "AdministrationPage"),
   }),
+  createRoute({
+    getParentRoute: () => protectedRoute,
+    path: "/admin/clusters",
+    beforeLoad: ({ context }) => requireInstallationCapability(context, "manageBindings"),
+    component: lazyRouteComponent(() => import("../../features/installation-bindings/routes"), "ClusterBindingsPage"),
+  }),
 ];

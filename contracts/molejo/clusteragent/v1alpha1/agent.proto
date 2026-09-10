@@ -54,6 +54,8 @@ message Heartbeat {
   string session_id = 5;
   repeated CapabilityObservation capability_observations = 6;
   bool capability_snapshot_complete = 7;
+  repeated BindingObservation binding_observations = 8;
+  bool binding_snapshot_complete = 9;
 }
 
 message CapabilityObservation {
@@ -85,6 +87,59 @@ message RuntimeObservation {
 message HeartbeatAck {
   uint64 sequence = 1;
   int64 received_at_unix = 2;
+  repeated BindingTarget binding_targets = 3;
+}
+
+message BindingTarget {
+  string id = 1;
+  string kind = 2;
+  int64 version = 3;
+  oneof target {
+    StorageBindingTarget storage = 4;
+    PublicationBindingTarget publication = 5;
+  }
+}
+
+message StorageBindingTarget {
+  string storage_class_name = 1;
+}
+
+message PublicationBindingTarget {
+  string gateway_namespace = 1;
+  string gateway_name = 2;
+  string section_name = 3;
+}
+
+message BindingObservation {
+  string id = 1;
+  string kind = 2;
+  int64 version = 3;
+  string health = 4;
+  string reason_code = 5;
+  int64 sampled_at_unix = 6;
+  oneof observation {
+    StorageBindingObservation storage = 7;
+    PublicationBindingObservation publication = 8;
+  }
+}
+
+message StorageBindingObservation {
+  string storage_class_name = 1;
+  string provisioner = 2;
+  repeated string access_modes = 3;
+  bool allow_expansion = 4;
+  string volume_binding_mode = 5;
+}
+
+message PublicationBindingObservation {
+  string gateway_namespace = 1;
+  string gateway_name = 2;
+  string section_name = 3;
+  string gateway_class_name = 4;
+  bool gateway_class_accepted = 5;
+  bool gateway_programmed = 6;
+  bool listener_ready = 7;
+  repeated string supported_route_kinds = 8;
 }
 
 message RuntimeCommand {

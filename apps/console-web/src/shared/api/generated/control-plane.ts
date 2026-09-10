@@ -388,6 +388,61 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/clusters/{clusterId}/bindings/storage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                clusterId: components["parameters"]["ClusterId"];
+            };
+            cookie?: never;
+        };
+        get: operations["listClusterStorageBindings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/clusters/{clusterId}/bindings/storage/{storageProfileId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                clusterId: components["parameters"]["ClusterId"];
+                storageProfileId: string;
+            };
+            cookie?: never;
+        };
+        get: operations["getClusterStorageBinding"];
+        put: operations["putClusterStorageBinding"];
+        post?: never;
+        delete: operations["deleteClusterStorageBinding"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/clusters/{clusterId}/bindings/publication/http": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                clusterId: components["parameters"]["ClusterId"];
+            };
+            cookie?: never;
+        };
+        get: operations["getClusterPublicationBinding"];
+        put: operations["putClusterPublicationBinding"];
+        post?: never;
+        delete: operations["deleteClusterPublicationBinding"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/agent-installations": {
         parameters: {
             query?: never;
@@ -1531,6 +1586,7 @@ export interface components {
             readonly csrfToken: string;
             installationCapabilities: {
                 manageUsers: boolean;
+                manageBindings: boolean;
                 createWorkspace: boolean;
                 publicTCP: {
                     enabled: boolean;
@@ -1679,6 +1735,54 @@ export interface components {
             conformant: boolean;
             reasonCode: string;
             limitations: string[];
+            /** Format: date-time */
+            observedAt?: string;
+            version: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        ClusterStorageBindingInput: {
+            storageClassName: string;
+        };
+        ClusterStorageBinding: {
+            clusterId: string;
+            storageProfileId: string;
+            storageClassName: string;
+            provisioner: string;
+            accessModes: string[];
+            allowExpansion: boolean;
+            volumeBindingMode: string;
+            /** @enum {string} */
+            health: "Unknown" | "Healthy" | "Degraded" | "Unavailable";
+            reasonCode: string;
+            /** Format: date-time */
+            observedAt?: string;
+            version: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        ClusterPublicationBindingInput: {
+            gatewayNamespace: string;
+            gatewayName: string;
+            sectionName: string;
+        };
+        ClusterPublicationBinding: {
+            clusterId: string;
+            gatewayNamespace: string;
+            gatewayName: string;
+            sectionName: string;
+            gatewayClassName: string;
+            gatewayClassAccepted: boolean;
+            gatewayProgrammed: boolean;
+            listenerReady: boolean;
+            supportedRouteKinds: string[];
+            /** @enum {string} */
+            health: "Unknown" | "Healthy" | "Degraded" | "Unavailable";
+            reasonCode: string;
             /** Format: date-time */
             observedAt?: string;
             version: number;
@@ -3439,6 +3543,215 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Historical metric provider binding removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listClusterStorageBindings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                clusterId: components["parameters"]["ClusterId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Storage profile bindings selected for the cluster */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["ClusterStorageBinding"][];
+                    };
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getClusterStorageBinding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                clusterId: components["parameters"]["ClusterId"];
+                storageProfileId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Storage profile binding */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClusterStorageBinding"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    putClusterStorageBinding: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-Match"?: components["parameters"]["OptionalIfMatch"];
+            };
+            path: {
+                clusterId: components["parameters"]["ClusterId"];
+                storageProfileId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClusterStorageBindingInput"];
+            };
+        };
+        responses: {
+            /** @description Storage profile binding updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClusterStorageBinding"];
+                };
+            };
+            /** @description Storage profile binding created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClusterStorageBinding"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    deleteClusterStorageBinding: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                clusterId: components["parameters"]["ClusterId"];
+                storageProfileId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Storage profile binding removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getClusterPublicationBinding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                clusterId: components["parameters"]["ClusterId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description HTTP publication binding */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClusterPublicationBinding"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    putClusterPublicationBinding: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-Match"?: components["parameters"]["OptionalIfMatch"];
+            };
+            path: {
+                clusterId: components["parameters"]["ClusterId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClusterPublicationBindingInput"];
+            };
+        };
+        responses: {
+            /** @description HTTP publication binding updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClusterPublicationBinding"];
+                };
+            };
+            /** @description HTTP publication binding created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClusterPublicationBinding"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    deleteClusterPublicationBinding: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                clusterId: components["parameters"]["ClusterId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description HTTP publication binding removed */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -5598,7 +5911,9 @@ export interface operations {
     };
     listStorageProfiles: {
         parameters: {
-            query?: never;
+            query: {
+                clusterId: string;
+            };
             header?: never;
             path: {
                 workspaceId: components["parameters"]["WorkspaceId"];

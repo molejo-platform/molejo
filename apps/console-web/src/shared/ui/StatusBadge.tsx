@@ -1,4 +1,4 @@
-const success = new Set(["Ready", "Succeeded", "Completed"]);
+const success = new Set(["Ready", "Succeeded", "Completed", "Healthy", "Available"]);
 const danger = new Set(["Failed", "Degraded"]);
 const progress = new Set(["Pending", "Running", "Progressing"]);
 

@@ -6,10 +6,12 @@ import (
 	"time"
 
 	"github.com/molejo-platform/molejo/packages/capabilitycontract"
+	"github.com/molejo-platform/molejo/packages/kubernetesbinding"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/api/generated"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/authorization"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/featureavailability"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/historicalmetrics"
+	"github.com/molejo-platform/molejo/services/control-plane-api/internal/providerbinding"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/store"
 )
 
@@ -38,6 +40,22 @@ func (h *generatedHandler) GetFeatureAvailability(w http.ResponseWriter, r *http
 		case bindingErr == nil:
 			providers = providers.With(historicalmetrics.ProviderFact(binding))
 		case !errors.Is(bindingErr, historicalmetrics.ErrNotFound):
+			writeError(w, http.StatusInternalServerError, "storage_failed", "feature availability could not be loaded", r)
+			return
+		}
+	}
+	if facts.Attached {
+		storageBindings, bindingErr := h.server.store.ClusterStorageBindings(r.Context(), facts.ClusterID)
+		if bindingErr != nil {
+			writeError(w, http.StatusInternalServerError, "storage_failed", "feature availability could not be loaded", r)
+			return
+		}
+		providers = providers.With(storageBindingFacts(storageBindings, now)...)
+		publicationBinding, bindingErr := h.server.store.ClusterPublicationBinding(r.Context(), facts.ClusterID)
+		switch {
+		case bindingErr == nil:
+			providers = providers.With(publicationBindingFact(publicationBinding, now))
+		case !errors.Is(bindingErr, store.ErrBindingNotFound):
 			writeError(w, http.StatusInternalServerError, "storage_failed", "feature availability could not be loaded", r)
 			return
 		}
@@ -71,4 +89,50 @@ func (h *generatedHandler) GetFeatureAvailability(w http.ResponseWriter, r *http
 		features = append(features, feature)
 	}
 	writeJSON(w, http.StatusOK, generated.FeatureAvailabilityResponse{ScopeType: generated.FeatureAvailabilityResponseScopeType(scopeType), ScopeId: params.ScopeId, Features: features})
+}
+
+func storageBindingFacts(bindings []store.ClusterStorageBinding, now time.Time) []providerbinding.Binding {
+	rwo := providerbinding.Binding{Capability: capabilitycontract.StorageRWO}
+	expand := providerbinding.Binding{Capability: capabilitycontract.StorageExpand}
+	for _, binding := range bindings {
+		rwo.Configured, expand.Configured = true, true
+		health, reason := providerBindingHealth(binding.Health, binding.ReasonCode, binding.ExpiresAt, now)
+		if providerHealthRank(health) > providerHealthRank(rwo.Health) {
+			rwo.Health, rwo.ReasonCode, rwo.ObservedAt = health, reason, binding.ObservedAt
+		}
+		if binding.AllowExpansion && providerHealthRank(health) > providerHealthRank(expand.Health) {
+			expand.Health, expand.ReasonCode, expand.ObservedAt = health, reason, binding.ObservedAt
+		}
+	}
+	if expand.Configured && expand.Health == "" {
+		expand.Health, expand.ReasonCode = providerbinding.HealthUnavailable, "storage_expansion_unsupported"
+	}
+	return []providerbinding.Binding{rwo, expand}
+}
+
+func publicationBindingFact(binding store.ClusterPublicationBinding, now time.Time) providerbinding.Binding {
+	health, reason := providerBindingHealth(binding.Health, binding.ReasonCode, binding.ExpiresAt, now)
+	return providerbinding.Binding{Capability: capabilitycontract.PublicationHTTP, Configured: true, Health: health, ReasonCode: reason, ObservedAt: binding.ObservedAt}
+}
+
+func providerBindingHealth(health kubernetesbinding.Health, reason string, expiresAt *time.Time, now time.Time) (providerbinding.Health, string) {
+	if expiresAt == nil || !expiresAt.After(now) {
+		return providerbinding.HealthUnknown, "binding_observation_stale"
+	}
+	return providerbinding.Health(health), reason
+}
+
+func providerHealthRank(health providerbinding.Health) int {
+	switch health {
+	case providerbinding.HealthHealthy:
+		return 4
+	case providerbinding.HealthDegraded:
+		return 3
+	case providerbinding.HealthUnavailable:
+		return 2
+	case providerbinding.HealthUnknown:
+		return 1
+	default:
+		return 0
+	}
 }
