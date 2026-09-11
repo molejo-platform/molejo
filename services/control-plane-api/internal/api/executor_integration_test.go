@@ -277,7 +277,7 @@ func newExecutorIntegrationFixture(t *testing.T) (*store.Store, int64, int64, st
 	}
 	var clusterID int64
 	if err = s.Pool.QueryRow(ctx, `INSERT INTO agent_installations(public_id,name,status,cluster_uid,agent_version,kubernetes_version,capabilities_json,workspace_provisioning_mode,created_by)
-		VALUES($1,'test-agent','Active','cluster-test-uid','test','v1.36.3','["runtime.v1alpha3","workspace-provisioning.v1alpha1"]','Namespaced',$2) RETURNING id`, testAgentInstallationID, actorID).Scan(&clusterID); err != nil {
+		VALUES($1,'test-agent','Active','cluster-test-uid','test','v1.36.3','["runtime.v1alpha4","workspace-provisioning.v1alpha1"]','Namespaced',$2) RETURNING id`, testAgentInstallationID, actorID).Scan(&clusterID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = s.Pool.Exec(ctx, `INSERT INTO workspace_clusters(workspace_id,installation_id,namespace_name,state,observed_generation)

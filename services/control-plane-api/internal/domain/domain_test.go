@@ -13,21 +13,6 @@ func validIntent() Intent {
 	return Intent{Image: "ghcr.io/example/demo@sha256:" + strings.Repeat("a", 64), Replicas: 1, Ports: []RuntimePort{{Name: "http", ContainerPort: 8080, Protocol: PortProtocolTCP}}, Resources: Resources{Requests: ResourceValues{CPUMillis: 50, MemoryMiB: 64}, Limits: ResourceValues{CPUMillis: 100, MemoryMiB: 128}}, Probes: Probes{Startup: Probe{Type: ProbeHTTP, PortName: "http", Path: "/readyz"}, Liveness: Probe{Type: ProbeHTTP, PortName: "http", Path: "/healthz"}, Readiness: Probe{Type: ProbeHTTP, PortName: "http", Path: "/readyz"}}, PublicEndpoints: []PublicEndpoint{}, Variables: []Variable{}}
 }
 
-func TestNormalizeIntentMigratesLegacyPortAndHTTPProbes(t *testing.T) {
-	intent := NormalizeIntent(Intent{
-		Port:   8080,
-		Probes: Probes{Readiness: Probe{Path: "/readyz"}, Liveness: Probe{Path: "/healthz"}},
-	})
-	if len(intent.Ports) != 1 || intent.Ports[0].Name != "http" {
-		t.Fatalf("ports=%+v", intent.Ports)
-	}
-	for name, probe := range map[string]Probe{"startup": intent.Probes.Startup, "readiness": intent.Probes.Readiness, "liveness": intent.Probes.Liveness} {
-		if probe.Type != ProbeHTTP || probe.PortName != "http" || probe.Path == "" {
-			t.Fatalf("%s probe=%+v", name, probe)
-		}
-	}
-}
-
 func TestValidateIntent(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -35,7 +20,7 @@ func TestValidateIntent(t *testing.T) {
 		wantErr bool
 	}{{"valid", func(i *Intent) {}, false}, {"mutable tag", func(i *Intent) { i.Image = "ghcr.io/example/demo:latest" }, true}, {"request above limit", func(i *Intent) { i.Resources.Requests.CPUMillis = 101 }, true}, {"unknown probe port", func(i *Intent) { i.Probes.Readiness.PortName = "admin" }, true}, {"public HTTP endpoint", func(i *Intent) {
 		i.PublicEndpoints = []PublicEndpoint{{Name: "web", Type: EndpointHTTP, PortName: "http", Addresses: []HTTPAssociation{{DomainID: "default", BindingID: "pbd-test", Label: "demo"}}}}
-	}, false}, {"invalid probe", func(i *Intent) { i.Probes.Readiness.Path = "ready" }, true}}
+	}, false}, {"invalid probe", func(i *Intent) { i.Probes.Readiness.Path = "ready" }, true}, {"missing probe type", func(i *Intent) { i.Probes.Startup.Type = "" }, true}, {"missing probe port", func(i *Intent) { i.Probes.Liveness.PortName = "" }, true}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			intent := validIntent()

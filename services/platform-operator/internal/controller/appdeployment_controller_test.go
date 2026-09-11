@@ -54,14 +54,15 @@ func TestAppDeploymentSchema(t *testing.T) {
 			"spec": map[string]any{
 				"workload": map[string]any{"kind": "Stateless", "stateless": map[string]any{}},
 				"image":    testImage,
-				"port":     int64(8080),
+				"ports":    []any{map[string]any{"name": "http", "containerPort": int64(8080), "protocol": "TCP"}},
 				"resources": map[string]any{
 					"requests": map[string]any{"cpuMillis": int64(50), "memoryMiB": int64(64)},
 					"limits":   map[string]any{"cpuMillis": int64(500), "memoryMiB": int64(256)},
 				},
 				"probes": map[string]any{
-					"liveness":  map[string]any{"path": "/healthz"},
-					"readiness": map[string]any{"path": "/readyz"},
+					"startup":   map[string]any{"type": "HTTP", "portName": "http", "path": "/readyz"},
+					"liveness":  map[string]any{"type": "HTTP", "portName": "http", "path": "/healthz"},
+					"readiness": map[string]any{"type": "HTTP", "portName": "http", "path": "/readyz"},
 				},
 			},
 		}}
@@ -78,7 +79,7 @@ func TestAppDeploymentSchema(t *testing.T) {
 			t.Fatalf("create AppDeployment with private runtime contract: %v", err)
 		}
 		for _, fieldPath := range [][]string{
-			{"spec", "port"},
+			{"spec", "ports"},
 			{"spec", "resources"},
 			{"spec", "probes"},
 		} {
@@ -128,15 +129,15 @@ func TestAppDeploymentSchema(t *testing.T) {
 		mutate func(*platformv1alpha1.AppDeployment)
 	}{
 		{
-			name: "rejects a missing port",
+			name: "rejects missing ports",
 			mutate: func(appDeployment *platformv1alpha1.AppDeployment) {
-				appDeployment.Spec.Port = 0
+				appDeployment.Spec.Ports = nil
 			},
 		},
 		{
 			name: "rejects a port above 65535",
 			mutate: func(appDeployment *platformv1alpha1.AppDeployment) {
-				appDeployment.Spec.Port = 65536
+				appDeployment.Spec.Ports[0].ContainerPort = 65536
 			},
 		},
 		{
@@ -184,7 +185,7 @@ func TestAppDeploymentSchema(t *testing.T) {
 		})
 	}
 
-	t.Run("rejects an unknown field in strict mode", func(t *testing.T) {
+	t.Run("rejects the removed port field in strict mode", func(t *testing.T) {
 		dynamicClient, err := dynamic.NewForConfig(testConfig)
 		if err != nil {
 			t.Fatalf("create dynamic client: %v", err)
@@ -199,16 +200,17 @@ func TestAppDeploymentSchema(t *testing.T) {
 			"spec": map[string]any{
 				"workload": map[string]any{"kind": "Stateless", "stateless": map[string]any{}},
 				"image":    testImage,
-				"port":     int64(8080),
+				"ports":    []any{map[string]any{"name": "http", "containerPort": int64(8080), "protocol": "TCP"}},
 				"resources": map[string]any{
 					"requests": map[string]any{"cpuMillis": int64(50), "memoryMiB": int64(64)},
 					"limits":   map[string]any{"cpuMillis": int64(500), "memoryMiB": int64(256)},
 				},
 				"probes": map[string]any{
-					"liveness":  map[string]any{"path": "/healthz"},
-					"readiness": map[string]any{"path": "/readyz"},
+					"startup":   map[string]any{"type": "HTTP", "portName": "http", "path": "/readyz"},
+					"liveness":  map[string]any{"type": "HTTP", "portName": "http", "path": "/healthz"},
+					"readiness": map[string]any{"type": "HTTP", "portName": "http", "path": "/readyz"},
 				},
-				"unexpected": true,
+				"port": int64(8080),
 			},
 		}}
 		gvr := schema.GroupVersionResource{
@@ -218,7 +220,7 @@ func TestAppDeploymentSchema(t *testing.T) {
 			FieldValidation: metav1.FieldValidationStrict,
 		})
 		if err == nil {
-			t.Fatal("expected strict field validation to reject the unknown field")
+			t.Fatal("expected strict field validation to reject the removed port field")
 		}
 	})
 
@@ -237,14 +239,15 @@ func TestAppDeploymentSchema(t *testing.T) {
 			"spec": map[string]any{
 				"workload": map[string]any{"kind": "Stateless", "stateless": map[string]any{}},
 				"image":    testImage,
-				"port":     int64(8080),
+				"ports":    []any{map[string]any{"name": "http", "containerPort": int64(8080), "protocol": "TCP"}},
 				"resources": map[string]any{
 					"requests": map[string]any{"cpuMillis": int64(50), "memoryMiB": int64(64)},
 					"limits":   map[string]any{"cpuMillis": int64(500), "memoryMiB": int64(256)},
 				},
 				"probes": map[string]any{
-					"liveness":  map[string]any{"path": "/healthz"},
-					"readiness": map[string]any{"path": "/readyz"},
+					"startup":   map[string]any{"type": "HTTP", "portName": "http", "path": "/readyz"},
+					"liveness":  map[string]any{"type": "HTTP", "portName": "http", "path": "/healthz"},
+					"readiness": map[string]any{"type": "HTTP", "portName": "http", "path": "/readyz"},
 				},
 				"unexpected": true,
 			},
@@ -365,7 +368,7 @@ func newAppDeployment(namespace string, name string, image string) *platformv1al
 				Stateless: &platformv1alpha1.StatelessWorkload{},
 			},
 			Image:        image,
-			Port:         8080,
+			Ports:        []platformv1alpha1.AppDeploymentPort{{Name: "http", ContainerPort: 8080, Protocol: corev1.ProtocolTCP}},
 			ConfigMapRef: name + "-c1",
 			SecretRef:    name + "-c1-secret",
 			Variables: []platformv1alpha1.AppDeploymentVariable{
@@ -376,8 +379,9 @@ func newAppDeployment(namespace string, name string, image string) *platformv1al
 				Limits:   platformv1alpha1.AppDeploymentResourceValues{CPUMillis: 500, MemoryMiB: 256},
 			},
 			Probes: platformv1alpha1.AppDeploymentProbes{
-				Liveness:  platformv1alpha1.AppDeploymentHTTPProbe{Path: "/healthz"},
-				Readiness: platformv1alpha1.AppDeploymentHTTPProbe{Path: "/readyz"},
+				Startup:   platformv1alpha1.AppDeploymentProbe{Type: "HTTP", PortName: "http", Path: "/readyz"},
+				Liveness:  platformv1alpha1.AppDeploymentProbe{Type: "HTTP", PortName: "http", Path: "/healthz"},
+				Readiness: platformv1alpha1.AppDeploymentProbe{Type: "HTTP", PortName: "http", Path: "/readyz"},
 			},
 		},
 	}
@@ -418,7 +422,7 @@ func assertDeploymentRuntime(
 		t.Fatalf("unexpected environment references: %#v", container.EnvFrom)
 	}
 	if len(container.Ports) != 1 || container.Ports[0].Name != httpPortName ||
-		container.Ports[0].ContainerPort != spec.Port || container.Ports[0].Protocol != corev1.ProtocolTCP {
+		container.Ports[0].ContainerPort != spec.Ports[0].ContainerPort || container.Ports[0].Protocol != corev1.ProtocolTCP {
 		t.Fatalf("unexpected HTTP container port: %#v", container.Ports)
 	}
 	if got := container.Resources.Requests.Cpu().MilliValue(); got != spec.Resources.Requests.CPUMillis {
@@ -433,7 +437,7 @@ func assertDeploymentRuntime(
 	if got := container.Resources.Limits.Memory().Value(); got != spec.Resources.Limits.MemoryMiB*1024*1024 {
 		t.Fatalf("expected memory limit %dMi, got %d bytes", spec.Resources.Limits.MemoryMiB, got)
 	}
-	assertHTTPProbe(t, "startup", container.StartupProbe, spec.Probes.Readiness.Path, 2, 30)
+	assertHTTPProbe(t, "startup", container.StartupProbe, spec.Probes.Startup.Path, 2, 30)
 	assertHTTPProbe(t, "readiness", container.ReadinessProbe, spec.Probes.Readiness.Path, 5, 3)
 	assertHTTPProbe(t, "liveness", container.LivenessProbe, spec.Probes.Liveness.Path, 10, 3)
 
@@ -496,7 +500,7 @@ func assertPrivateService(
 	}
 	if len(service.Spec.Ports) != 1 || service.Spec.Ports[0].Name != httpPortName ||
 		service.Spec.Ports[0].Protocol != corev1.ProtocolTCP ||
-		service.Spec.Ports[0].Port != appDeployment.Spec.Port ||
+		service.Spec.Ports[0].Port != appDeployment.Spec.Ports[0].ContainerPort ||
 		service.Spec.Ports[0].TargetPort.StrVal != httpPortName || service.Spec.Ports[0].NodePort != 0 {
 		t.Fatalf("unexpected private Service port: %#v", service.Spec.Ports)
 	}

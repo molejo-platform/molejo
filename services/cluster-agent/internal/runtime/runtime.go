@@ -137,7 +137,6 @@ func (k *KubernetesClient) EnsureWorkspacePlacement(ctx context.Context, intent 
 }
 
 func (k *KubernetesClient) ApplyDeployment(ctx context.Context, namespace, name string, desiredVersion int64, intent runtimecontract.DeploymentIntent) error {
-	intent = normalizeIntent(intent)
 	if err := runtimecontract.ValidatePublication(intent); err != nil {
 		return err
 	}
@@ -155,10 +154,6 @@ func (k *KubernetesClient) ApplyDeployment(ctx context.Context, namespace, name 
 		ports = append(ports, platformv1alpha1.AppDeploymentPort{Name: port.Name, ContainerPort: port.ContainerPort, Protocol: corev1.ProtocolTCP})
 	}
 	publicEndpoints := make([]platformv1alpha1.AppDeploymentPublicEndpoint, 0, len(intent.PublicEndpoints))
-	legacyPort := int32(0)
-	if len(intent.Ports) > 0 {
-		legacyPort = intent.Ports[0].ContainerPort
-	}
 	for _, endpoint := range intent.PublicEndpoints {
 		var externalPort *int32
 		if endpoint.ExternalPort != 0 {
@@ -185,7 +180,7 @@ func (k *KubernetesClient) ApplyDeployment(ctx context.Context, namespace, name 
 		return platformv1alpha1.AppDeploymentProbe{Type: value.Type, PortName: value.PortName, Path: value.Path}
 	}
 	startupProbe := probe(intent.Probes.Startup)
-	obj := &platformv1alpha1.AppDeployment{TypeMeta: metav1.TypeMeta{APIVersion: "platform.molejo.dev/v1alpha1", Kind: "AppDeployment"}, ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, Annotations: map[string]string{controlPlaneOwnerAnnotation: name, desiredVersionAnnotation: strconv.FormatInt(desiredVersion, 10)}}, Spec: platformv1alpha1.AppDeploymentSpec{Workload: workload, Image: intent.Image, Replicas: &replicas, Ports: ports, Port: legacyPort, Resources: resourceSpec, Probes: platformv1alpha1.AppDeploymentProbes{Startup: &startupProbe, Liveness: probe(intent.Probes.Liveness), Readiness: probe(intent.Probes.Readiness)}, PublicEndpoints: publicEndpoints, Variables: variables, ConfigMapRef: configMapRef, SecretRef: secretRef}}
+	obj := &platformv1alpha1.AppDeployment{TypeMeta: metav1.TypeMeta{APIVersion: "platform.molejo.dev/v1alpha1", Kind: "AppDeployment"}, ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, Annotations: map[string]string{controlPlaneOwnerAnnotation: name, desiredVersionAnnotation: strconv.FormatInt(desiredVersion, 10)}}, Spec: platformv1alpha1.AppDeploymentSpec{Workload: workload, Image: intent.Image, Replicas: &replicas, Ports: ports, Resources: resourceSpec, Probes: platformv1alpha1.AppDeploymentProbes{Startup: startupProbe, Liveness: probe(intent.Probes.Liveness), Readiness: probe(intent.Probes.Readiness)}, PublicEndpoints: publicEndpoints, Variables: variables, ConfigMapRef: configMapRef, SecretRef: secretRef}}
 	// Dry-run the full projection with strict field validation before creating
 	// configuration objects. An older CRD must reject, rather than prune, addresses.
 	preflight := obj.DeepCopy()
@@ -518,9 +513,14 @@ func (k *KubernetesClient) DeleteDeployment(ctx context.Context, namespace, name
 			Annotations: map[string]string{controlPlaneOwnerAnnotation: name},
 		}, Spec: platformv1alpha1.AppDeploymentSpec{
 			Withdrawn: true, Workload: platformv1alpha1.AppDeploymentWorkload{Kind: platformv1alpha1.WorkloadStateless, Stateless: &platformv1alpha1.StatelessWorkload{}},
-			Image: "molejo/withdrawn@sha256:" + strings.Repeat("0", 64), Port: 1,
+			Image:     "molejo/withdrawn@sha256:" + strings.Repeat("0", 64),
+			Ports:     []platformv1alpha1.AppDeploymentPort{{Name: "withdrawn", ContainerPort: 1, Protocol: corev1.ProtocolTCP}},
 			Resources: platformv1alpha1.AppDeploymentResources{Requests: platformv1alpha1.AppDeploymentResourceValues{CPUMillis: 1, MemoryMiB: 1}, Limits: platformv1alpha1.AppDeploymentResourceValues{CPUMillis: 1, MemoryMiB: 1}},
-			Probes:    platformv1alpha1.AppDeploymentProbes{Readiness: platformv1alpha1.AppDeploymentProbe{Type: "TCP"}, Liveness: platformv1alpha1.AppDeploymentProbe{Type: "TCP"}},
+			Probes: platformv1alpha1.AppDeploymentProbes{
+				Startup:   platformv1alpha1.AppDeploymentProbe{Type: "TCP", PortName: "withdrawn"},
+				Readiness: platformv1alpha1.AppDeploymentProbe{Type: "TCP", PortName: "withdrawn"},
+				Liveness:  platformv1alpha1.AppDeploymentProbe{Type: "TCP", PortName: "withdrawn"},
+			},
 		}}
 		return k.client.Create(delCtx, obj, &client.CreateOptions{FieldValidation: "Strict"})
 	}
@@ -601,14 +601,6 @@ func objectSpecHash(spec any) string {
 	}
 	digest := sha256.Sum256(encoded)
 	return fmt.Sprintf("%x", digest)
-}
-
-func normalizeIntent(intent runtimecontract.DeploymentIntent) runtimecontract.DeploymentIntent {
-	if len(intent.Ports) == 0 && intent.Port != 0 {
-		intent.Ports = []runtimecontract.RuntimePort{{Name: "http", ContainerPort: intent.Port, Protocol: "TCP"}}
-	}
-	intent.Port = 0
-	return intent
 }
 
 func publicationAddressObservations(app *platformv1alpha1.AppDeployment) []*clusteragentv1alpha1.PublicationAddressObservation {

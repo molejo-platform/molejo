@@ -77,7 +77,6 @@ type StatefulWorkload struct {
 }
 
 // AppDeploymentSpec declares the minimum workload intent understood by the platform operator.
-// +kubebuilder:validation:XValidation:rule="has(self.port) || has(self.ports)",message="at least one legacy or named port is required"
 // +kubebuilder:validation:XValidation:rule="self.workload.kind != 'Stateful' || !has(self.replicas) || self.replicas == 1",message="Stateful workloads require exactly one replica"
 type AppDeploymentSpec struct {
 	// Withdrawn is a terminal write barrier. Keep this object after removing its
@@ -103,13 +102,7 @@ type AppDeploymentSpec struct {
 	// +listMapKey=name
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=8
-	Ports []AppDeploymentPort `json:"ports,omitempty"`
-
-	// Deprecated compatibility projection for pre-multiport v1alpha1 objects.
-	// +optional
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:Maximum=65535
-	Port int32 `json:"port,omitempty"`
+	Ports []AppDeploymentPort `json:"ports"`
 
 	// Resources declares the required compute requests and limits.
 	Resources AppDeploymentResources `json:"resources"`
@@ -229,10 +222,8 @@ type AppDeploymentResourceValues struct {
 
 // AppDeploymentProbes declares startup, readiness, and liveness checks.
 type AppDeploymentProbes struct {
-	// Startup is optional for compatibility with existing v1alpha1 objects. The
-	// operator falls back to readiness until the control plane rewrites them.
-	// +optional
-	Startup *AppDeploymentProbe `json:"startup,omitempty"`
+	// Startup identifies the endpoint used while the process initializes.
+	Startup AppDeploymentProbe `json:"startup"`
 
 	// Liveness identifies the endpoint used to detect an unhealthy process.
 	Liveness AppDeploymentProbe `json:"liveness"`
@@ -242,20 +233,16 @@ type AppDeploymentProbes struct {
 }
 
 // AppDeploymentProbe identifies one HTTP or TCP check on a named port.
-// +kubebuilder:validation:XValidation:rule="has(self.type) && self.type == 'TCP' || has(self.path)",message="HTTP and legacy probes require a path"
-// +kubebuilder:validation:XValidation:rule="!has(self.type) || self.type != 'TCP' || !has(self.path)",message="TCP probes do not accept a path"
+// +kubebuilder:validation:XValidation:rule="self.type == 'TCP' || has(self.path)",message="HTTP probes require a path"
+// +kubebuilder:validation:XValidation:rule="self.type != 'TCP' || !has(self.path)",message="TCP probes do not accept a path"
 type AppDeploymentProbe struct {
-	// Type defaults to HTTP only for existing v1alpha1 objects.
-	// +optional
 	// +kubebuilder:validation:Enum=HTTP;TCP
-	Type string `json:"type,omitempty"`
+	Type string `json:"type"`
 
-	// PortName defaults to the legacy http port only for existing v1alpha1 objects.
-	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=15
 	// +kubebuilder:validation:Pattern="^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$"
-	PortName string `json:"portName,omitempty"`
+	PortName string `json:"portName"`
 
 	// Path is an absolute HTTP path served by the workload.
 	// +kubebuilder:validation:MinLength=1
@@ -263,9 +250,6 @@ type AppDeploymentProbe struct {
 	// +kubebuilder:validation:Pattern="^/.*$"
 	Path string `json:"path,omitempty"`
 }
-
-// AppDeploymentHTTPProbe is a source-compatible alias for the previous v1alpha1 name.
-type AppDeploymentHTTPProbe = AppDeploymentProbe
 
 // AppDeploymentEndpointStatus reports one independently reconciled publication.
 type AppDeploymentEndpointStatus struct {

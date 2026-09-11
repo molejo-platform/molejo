@@ -65,7 +65,7 @@ func TestExecutorRejectsExpiredAndIncompatibleCommandsBeforeExecution(t *testing
 	}
 
 	incompatible := command()
-	incompatible.PayloadSchemaVersion = "runtime.v2"
+	incompatible.PayloadSchemaVersion = "runtime.v1alpha3"
 	if result := executor.Execute(t.Context(), incompatible); result.GetErrorCode() != "command_incompatible" || result.GetRetryable() {
 		t.Fatalf("incompatible command result=%+v", result)
 	}
@@ -75,6 +75,7 @@ func TestExecutorRejectsLegacyAndUnknownPayloadBeforeEffects(t *testing.T) {
 	executor := NewExecutor(unusedRuntimeClient{}, time.Second)
 	for _, body := range []string{
 		`{"namespace":"workspace","deployment":{"exposure":"Public","slug":"legacy"}}`,
+		`{"namespace":"workspace","deployment":{"port":8080}}`,
 		`{"namespace":"workspace","unexpected":true}`,
 		`{"namespace":"workspace"} {}`,
 		`{"deployment":{"ports":[{"name":"http","containerPort":8080}],"publicEndpoints":[{"name":"web","type":"HTTP","portName":"http","hostname":"example.test"}]}}`,

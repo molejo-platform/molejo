@@ -61,7 +61,6 @@ type DeploymentIntent struct {
 	ConfigurationVersion int64            `json:"configurationVersion"`
 	WorkloadKind         string           `json:"workloadKind"`
 	Volume               *AppVolume       `json:"volume,omitempty"`
-	Port                 int32            `json:"port,omitempty"`
 }
 
 // AppVolume binds a deployment intent to one independently managed volume.

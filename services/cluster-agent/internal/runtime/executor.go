@@ -51,7 +51,7 @@ func (e *Executor) Execute(parent context.Context, command *clusteragentv1alpha1
 		return failResult(result, "command_invalid", "runtime command contains trailing data", false)
 	}
 	if payload.Deployment != nil {
-		if err := runtimecontract.ValidatePublication(normalizeIntent(*payload.Deployment)); err != nil {
+		if err := runtimecontract.ValidatePublication(*payload.Deployment); err != nil {
 			return failResult(result, "command_invalid", "runtime publication is invalid", false)
 		}
 	}

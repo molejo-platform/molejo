@@ -324,7 +324,7 @@ func (w *Worker) commandPayload(ctx context.Context, op domain.Operation, appEnv
 func deploymentIntent(intent domain.Intent) runtimecontract.DeploymentIntent {
 	converted := runtimecontract.DeploymentIntent{
 		Image: intent.Image, Replicas: intent.Replicas, ConfigurationVersion: intent.ConfigurationVersion,
-		WorkloadKind: string(intent.WorkloadKind), Port: intent.Port,
+		WorkloadKind: string(intent.WorkloadKind),
 		Resources: runtimecontract.Resources{
 			Requests: runtimecontract.ResourceValues{CPUMillis: intent.Resources.Requests.CPUMillis, MemoryMiB: intent.Resources.Requests.MemoryMiB},
 			Limits:   runtimecontract.ResourceValues{CPUMillis: intent.Resources.Limits.CPUMillis, MemoryMiB: intent.Resources.Limits.MemoryMiB},

@@ -52,9 +52,9 @@ the exact hostname resolved by the control plane from `domainId` and
 `hostnameLabel`. The initial catalog offers `molejo.dev` to both workload kinds
 and `stateful.molejo.dev` only to Stateful workloads. TCP attaches to the preallocated
 `tcp-{externalPort}` listener. Both routes forward to a named port on the
-same-named Service. Empty publication keeps the workload private. During the
-current alpha, the Agent still emits legacy `spec.exposure`, `spec.slug`, and
-`spec.port` compatibility projections alongside the current contract.
+same-named Service. Empty publication keeps the workload private. The Agent emits
+the current named-port contract, and the API rejects missing ports or incomplete
+probes.
 
 The operator considers publication converged only when the expected route parent
 has current-generation `Accepted=True` and `ResolvedRefs=True` conditions, the

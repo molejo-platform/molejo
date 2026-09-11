@@ -46,7 +46,7 @@ func configureService(
 	service.Labels[managedByLabel] = managedByValue
 	service.Spec.Type = corev1.ServiceTypeClusterIP
 	service.Spec.Selector = desiredSelectorLabels(appDeployment)
-	ports := effectivePorts(appDeployment)
+	ports := appDeployment.Spec.Ports
 	service.Spec.Ports = make([]corev1.ServicePort, 0, len(ports))
 	for _, port := range ports {
 		service.Spec.Ports = append(service.Spec.Ports, corev1.ServicePort{Name: port.Name, Protocol: corev1.ProtocolTCP, Port: port.ContainerPort, TargetPort: intstr.FromString(port.Name)})

@@ -213,7 +213,6 @@ type RuntimeConfig struct {
 	PublicEndpoints []PublicEndpoint   `json:"publicEndpoints"`
 	Variables       []Variable         `json:"variables"`
 	Parameters      []ParameterBinding `json:"parameters"`
-	Port            int32              `json:"-"`
 }
 
 type Intent struct {
@@ -230,7 +229,6 @@ type Intent struct {
 	ConfigurationVersion int64            `json:"-"`
 	WorkloadKind         WorkloadKind     `json:"workloadKind"`
 	Volume               *AppVolume       `json:"volume,omitempty"`
-	Port                 int32            `json:"-"`
 }
 
 type Workspace struct {
@@ -433,9 +431,7 @@ func NormalizeRuntimeConfig(config RuntimeConfig) RuntimeConfig {
 	if config.Replicas == 0 {
 		config.Replicas = 1
 	}
-	if len(config.Ports) == 0 && config.Port != 0 {
-		config.Ports = []RuntimePort{{Name: "http", ContainerPort: config.Port, Protocol: PortProtocolTCP}}
-	} else if config.Ports == nil {
+	if config.Ports == nil {
 		config.Ports = []RuntimePort{}
 	}
 	for index := range config.Ports {
@@ -451,27 +447,6 @@ func NormalizeRuntimeConfig(config RuntimeConfig) RuntimeConfig {
 			config.PublicEndpoints[index].DomainID = "default"
 		}
 	}
-	config.Port = 0
-	defaultPortName := ""
-	if len(config.Ports) > 0 {
-		defaultPortName = config.Ports[0].Name
-	}
-	normalizeProbe := func(probe Probe) Probe {
-		if probe.Type == "" {
-			probe.Type = ProbeHTTP
-		}
-		if probe.PortName == "" {
-			probe.PortName = defaultPortName
-		}
-		return probe
-	}
-	config.Probes.Readiness = normalizeProbe(config.Probes.Readiness)
-	config.Probes.Liveness = normalizeProbe(config.Probes.Liveness)
-	if config.Probes.Startup.Type == "" && config.Probes.Startup.Path == "" {
-		config.Probes.Startup = config.Probes.Readiness
-	} else {
-		config.Probes.Startup = normalizeProbe(config.Probes.Startup)
-	}
 	if config.Variables == nil {
 		config.Variables = []Variable{}
 	}
@@ -482,9 +457,6 @@ func NormalizeRuntimeConfig(config RuntimeConfig) RuntimeConfig {
 }
 
 func NormalizeIntent(intent Intent) Intent {
-	if len(intent.Ports) == 0 && intent.Port != 0 {
-		intent.Ports = []RuntimePort{{Name: "http", ContainerPort: intent.Port, Protocol: PortProtocolTCP}}
-	}
 	configuration := NormalizeRuntimeConfig(ConfigurationFromIntent(intent))
 	intent.Replicas = configuration.Replicas
 	intent.Ports = configuration.Ports
@@ -492,7 +464,6 @@ func NormalizeIntent(intent Intent) Intent {
 	intent.Probes = configuration.Probes
 	intent.PublicEndpoints = configuration.PublicEndpoints
 	intent.Variables = configuration.Variables
-	intent.Port = 0
 	return intent
 }
 
@@ -502,7 +473,7 @@ func IntentFromConfiguration(image string, configuration RuntimeConfig) Intent {
 }
 
 func ConfigurationFromIntent(intent Intent) RuntimeConfig {
-	return RuntimeConfig{Replicas: intent.Replicas, Ports: intent.Ports, Resources: intent.Resources, Probes: intent.Probes, PublicEndpoints: intent.PublicEndpoints, Variables: intent.Variables, Parameters: []ParameterBinding{}, Port: intent.Port}
+	return RuntimeConfig{Replicas: intent.Replicas, Ports: intent.Ports, Resources: intent.Resources, Probes: intent.Probes, PublicEndpoints: intent.PublicEndpoints, Variables: intent.Variables, Parameters: []ParameterBinding{}}
 }
 
 func ValidateRuntimeConfig(config RuntimeConfig, maxReplicas int32, maxCPU, maxMemory int64) error {

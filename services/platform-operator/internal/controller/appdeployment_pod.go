@@ -51,7 +51,7 @@ func desiredAppContainer(appDeployment *platformv1alpha1.AppDeployment) corev1.C
 		EnvFrom:         desiredEnvironmentFrom(appDeployment),
 		Ports:           desiredContainerPorts(appDeployment),
 		Resources:       desiredResourceRequirements(appDeployment),
-		StartupProbe:    desiredProbe(effectiveStartupProbe(appDeployment), 2, 30),
+		StartupProbe:    desiredProbe(appDeployment.Spec.Probes.Startup, 2, 30),
 		ReadinessProbe:  desiredProbe(appDeployment.Spec.Probes.Readiness, 5, 3),
 		LivenessProbe:   desiredProbe(appDeployment.Spec.Probes.Liveness, 10, 3),
 		SecurityContext: &corev1.SecurityContext{
@@ -129,13 +129,9 @@ func desiredResourceRequirements(
 }
 
 func desiredProbe(probe platformv1alpha1.AppDeploymentProbe, periodSeconds int32, failureThreshold int32) *corev1.Probe {
-	portName := probe.PortName
-	if portName == "" {
-		portName = httpPortName
-	}
-	handler := corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Path: probe.Path, Port: intstr.FromString(portName), Scheme: corev1.URISchemeHTTP}}
+	handler := corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Path: probe.Path, Port: intstr.FromString(probe.PortName), Scheme: corev1.URISchemeHTTP}}
 	if probe.Type == "TCP" {
-		handler = corev1.ProbeHandler{TCPSocket: &corev1.TCPSocketAction{Port: intstr.FromString(portName)}}
+		handler = corev1.ProbeHandler{TCPSocket: &corev1.TCPSocketAction{Port: intstr.FromString(probe.PortName)}}
 	}
 	return &corev1.Probe{
 		ProbeHandler:     handler,
@@ -150,15 +146,8 @@ func desiredHTTPProbe(path string, periodSeconds int32, failureThreshold int32) 
 	return desiredProbe(platformv1alpha1.AppDeploymentProbe{Type: "HTTP", PortName: httpPortName, Path: path}, periodSeconds, failureThreshold)
 }
 
-func effectivePorts(appDeployment *platformv1alpha1.AppDeployment) []platformv1alpha1.AppDeploymentPort {
-	if len(appDeployment.Spec.Ports) > 0 {
-		return appDeployment.Spec.Ports
-	}
-	return []platformv1alpha1.AppDeploymentPort{{Name: httpPortName, ContainerPort: appDeployment.Spec.Port, Protocol: corev1.ProtocolTCP}}
-}
-
 func desiredContainerPorts(appDeployment *platformv1alpha1.AppDeployment) []corev1.ContainerPort {
-	ports := effectivePorts(appDeployment)
+	ports := appDeployment.Spec.Ports
 	result := make([]corev1.ContainerPort, 0, len(ports))
 	for _, port := range ports {
 		result = append(result, corev1.ContainerPort{Name: port.Name, ContainerPort: port.ContainerPort, Protocol: corev1.ProtocolTCP})
@@ -166,15 +155,8 @@ func desiredContainerPorts(appDeployment *platformv1alpha1.AppDeployment) []core
 	return result
 }
 
-func effectiveStartupProbe(appDeployment *platformv1alpha1.AppDeployment) platformv1alpha1.AppDeploymentProbe {
-	if appDeployment.Spec.Probes.Startup != nil {
-		return *appDeployment.Spec.Probes.Startup
-	}
-	return appDeployment.Spec.Probes.Readiness
-}
-
 func portByName(appDeployment *platformv1alpha1.AppDeployment, name string) (int32, bool) {
-	for _, port := range effectivePorts(appDeployment) {
+	for _, port := range appDeployment.Spec.Ports {
 		if port.Name == name {
 			return port.ContainerPort, true
 		}

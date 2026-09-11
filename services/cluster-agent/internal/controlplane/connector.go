@@ -186,7 +186,7 @@ func runControlChannel(ctx context.Context, stream agentControlStream, installat
 		return fmt.Errorf("receive control plane hello: %w", err)
 	}
 	controlPlaneHello := response.GetHello()
-	if controlPlaneHello == nil || controlPlaneHello.GetProtocolVersion() != "v1alpha1" || controlPlaneHello.GetSessionId() == "" || controlPlaneHello.GetHeartbeatIntervalSeconds() < 1 || controlPlaneHello.GetHeartbeatIntervalSeconds() > 300 || !hasCapability(controlPlaneHello.GetCapabilities(), "runtime.v1alpha3") {
+	if controlPlaneHello == nil || controlPlaneHello.GetProtocolVersion() != "v1alpha1" || controlPlaneHello.GetSessionId() == "" || controlPlaneHello.GetHeartbeatIntervalSeconds() < 1 || controlPlaneHello.GetHeartbeatIntervalSeconds() > 300 || !hasCapability(controlPlaneHello.GetCapabilities(), "runtime.v1alpha4") {
 		return errors.New("control plane hello is incompatible")
 	}
 	if controlPlaneHello.GetTrustBundleId() == "" || controlPlaneHello.GetTrustBundleId() != trustBundleID {

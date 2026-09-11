@@ -212,7 +212,7 @@ func TestReconcileCreatesUpdatesAndRecoversDeployment(t *testing.T) {
 
 	stored.Spec.Image = otherImage
 	stored.Spec.Replicas = pointerTo(int32(2))
-	stored.Spec.Port = 9090
+	stored.Spec.Ports[0].ContainerPort = 9090
 	stored.Spec.Resources.Requests = platformv1alpha1.AppDeploymentResourceValues{
 		CPUMillis: 75,
 		MemoryMiB: 96,

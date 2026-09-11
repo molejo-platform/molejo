@@ -131,7 +131,7 @@ fail while protected references exist; deleting a grant precedes deleting its
 domain or binding.
 ## Runtime and evidence
 
-`runtime.v1alpha3` is required on both sides of the Agent channel. The executor
+`runtime.v1alpha4` is required on both sides of the Agent channel. The executor
 rejects older/missing schema identifiers, unknown fields, trailing JSON and an
 invalid allocation before executing. The Kubernetes adapter dry-runs the CRD
 projection with strict field validation before creating configuration objects.

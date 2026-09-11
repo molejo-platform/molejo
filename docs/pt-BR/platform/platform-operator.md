@@ -54,9 +54,8 @@ o hostname exato resolvido pelo control plane a partir de `domainId` e
 `hostnameLabel`. O catálogo inicial oferece `molejo.dev` aos dois tipos de
 workload e `stateful.molejo.dev` somente a workloads Stateful. TCP conecta ao listener pré-alocado
 `tcp-{externalPort}`. As duas rotas encaminham para uma porta nomeada do Service
-de mesmo nome. Uma lista vazia mantém o workload privado. Durante o alpha atual,
-o Agent ainda emite as projeções de compatibilidade legadas `spec.exposure`,
-`spec.slug` e `spec.port` junto ao contrato atual.
+de mesmo nome. Uma lista vazia mantém o workload privado. O Agent emite o contrato
+atual de portas nomeadas, e a API rejeita portas ausentes ou probes incompletas.
 
 O operator considera a publicação convergida somente quando o parent esperado da
 rota possui Conditions `Accepted=True` e `ResolvedRefs=True` da geração atual, o

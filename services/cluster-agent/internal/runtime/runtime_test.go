@@ -130,7 +130,7 @@ func TestApplyDeploymentKeepsTheRuntimeNameStableAcrossIntentUpdates(t *testing.
 	second := runtimeTestIntent("demo")
 	second.Image = "ghcr.io/molejo-platform/testkit@sha256:" + strings.Repeat("b", 64)
 	second.Replicas = 3
-	second.Port = 9090
+	second.Ports[0].ContainerPort = 9090
 	second.Resources.Requests.CPUMillis = 125
 	second.Resources.Requests.MemoryMiB = 192
 	second.Resources.Limits.CPUMillis = 500
@@ -157,7 +157,7 @@ func TestApplyDeploymentKeepsTheRuntimeNameStableAcrossIntentUpdates(t *testing.
 	if current.Annotations[desiredVersionAnnotation] != "2" {
 		t.Fatalf("desired version annotation=%q, want 2", current.Annotations[desiredVersionAnnotation])
 	}
-	if current.Spec.Replicas == nil || *current.Spec.Replicas != second.Replicas || current.Spec.Port != second.Port {
+	if current.Spec.Replicas == nil || *current.Spec.Replicas != second.Replicas || len(current.Spec.Ports) != 1 || current.Spec.Ports[0].ContainerPort != second.Ports[0].ContainerPort {
 		t.Fatalf("runtime scale/port projection does not match intent: %+v", current.Spec)
 	}
 	if current.Spec.Resources.Requests.CPUMillis != second.Resources.Requests.CPUMillis || current.Spec.Resources.Requests.MemoryMiB != second.Resources.Requests.MemoryMiB || current.Spec.Resources.Limits.CPUMillis != second.Resources.Limits.CPUMillis || current.Spec.Resources.Limits.MemoryMiB != second.Resources.Limits.MemoryMiB {
@@ -447,15 +447,15 @@ func runtimeTestIntent(name string) runtimecontract.DeploymentIntent {
 	return runtimecontract.DeploymentIntent{
 		Image:    "ghcr.io/molejo-platform/testkit@sha256:" + strings.Repeat("a", 64),
 		Replicas: 1,
-		Port:     8080,
+		Ports:    []runtimecontract.RuntimePort{{Name: "http", ContainerPort: 8080, Protocol: "TCP"}},
 		Resources: runtimecontract.Resources{
 			Requests: runtimecontract.ResourceValues{CPUMillis: 50, MemoryMiB: 64},
 			Limits:   runtimecontract.ResourceValues{CPUMillis: 250, MemoryMiB: 128},
 		},
 		Probes: runtimecontract.Probes{
-			Startup:   runtimecontract.Probe{Path: "/readyz"},
-			Liveness:  runtimecontract.Probe{Path: "/healthz"},
-			Readiness: runtimecontract.Probe{Path: "/readyz"},
+			Startup:   runtimecontract.Probe{Type: "HTTP", PortName: "http", Path: "/readyz"},
+			Liveness:  runtimecontract.Probe{Type: "HTTP", PortName: "http", Path: "/healthz"},
+			Readiness: runtimecontract.Probe{Type: "HTTP", PortName: "http", Path: "/readyz"},
 		},
 	}
 }

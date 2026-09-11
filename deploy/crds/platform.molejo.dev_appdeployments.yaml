@@ -57,13 +57,6 @@ spec:
                 description: Image is an immutable OCI image reference.
                 pattern: ^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$
                 type: string
-              port:
-                description: Deprecated compatibility projection for pre-multiport
-                  v1alpha1 objects.
-                format: int32
-                maximum: 65535
-                minimum: 1
-                type: integer
               ports:
                 description: Ports are stable, named TCP ports exposed by the workload
                   Service.
@@ -113,25 +106,24 @@ spec:
                         pattern: ^/.*$
                         type: string
                       portName:
-                        description: PortName defaults to the legacy http port only
-                          for existing v1alpha1 objects.
                         maxLength: 15
                         minLength: 1
                         pattern: ^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$
                         type: string
                       type:
-                        description: Type defaults to HTTP only for existing v1alpha1
-                          objects.
                         enum:
                         - HTTP
                         - TCP
                         type: string
+                    required:
+                    - portName
+                    - type
                     type: object
                     x-kubernetes-validations:
-                    - message: HTTP and legacy probes require a path
-                      rule: has(self.type) && self.type == 'TCP' || has(self.path)
+                    - message: HTTP probes require a path
+                      rule: self.type == 'TCP' || has(self.path)
                     - message: TCP probes do not accept a path
-                      rule: '!has(self.type) || self.type != ''TCP'' || !has(self.path)'
+                      rule: self.type != 'TCP' || !has(self.path)
                   readiness:
                     description: Readiness identifies the endpoint used to admit the
                       process to the Service.
@@ -143,29 +135,27 @@ spec:
                         pattern: ^/.*$
                         type: string
                       portName:
-                        description: PortName defaults to the legacy http port only
-                          for existing v1alpha1 objects.
                         maxLength: 15
                         minLength: 1
                         pattern: ^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$
                         type: string
                       type:
-                        description: Type defaults to HTTP only for existing v1alpha1
-                          objects.
                         enum:
                         - HTTP
                         - TCP
                         type: string
+                    required:
+                    - portName
+                    - type
                     type: object
                     x-kubernetes-validations:
-                    - message: HTTP and legacy probes require a path
-                      rule: has(self.type) && self.type == 'TCP' || has(self.path)
+                    - message: HTTP probes require a path
+                      rule: self.type == 'TCP' || has(self.path)
                     - message: TCP probes do not accept a path
-                      rule: '!has(self.type) || self.type != ''TCP'' || !has(self.path)'
+                      rule: self.type != 'TCP' || !has(self.path)
                   startup:
-                    description: |-
-                      Startup is optional for compatibility with existing v1alpha1 objects. The
-                      operator falls back to readiness until the control plane rewrites them.
+                    description: Startup identifies the endpoint used while the process
+                      initializes.
                     properties:
                       path:
                         description: Path is an absolute HTTP path served by the workload.
@@ -174,28 +164,28 @@ spec:
                         pattern: ^/.*$
                         type: string
                       portName:
-                        description: PortName defaults to the legacy http port only
-                          for existing v1alpha1 objects.
                         maxLength: 15
                         minLength: 1
                         pattern: ^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$
                         type: string
                       type:
-                        description: Type defaults to HTTP only for existing v1alpha1
-                          objects.
                         enum:
                         - HTTP
                         - TCP
                         type: string
+                    required:
+                    - portName
+                    - type
                     type: object
                     x-kubernetes-validations:
-                    - message: HTTP and legacy probes require a path
-                      rule: has(self.type) && self.type == 'TCP' || has(self.path)
+                    - message: HTTP probes require a path
+                      rule: self.type == 'TCP' || has(self.path)
                     - message: TCP probes do not accept a path
-                      rule: '!has(self.type) || self.type != ''TCP'' || !has(self.path)'
+                      rule: self.type != 'TCP' || !has(self.path)
                 required:
                 - liveness
                 - readiness
+                - startup
                 type: object
               publicEndpoints:
                 description: PublicEndpoints are allocation results produced by the
@@ -457,14 +447,13 @@ spec:
                   rule: self.kind != 'Stateful' || (has(self.stateful) && !has(self.stateless))
             required:
             - image
+            - ports
             - probes
             - resources
             - withdrawn
             - workload
             type: object
             x-kubernetes-validations:
-            - message: at least one legacy or named port is required
-              rule: has(self.port) || has(self.ports)
             - message: Stateful workloads require exactly one replica
               rule: self.workload.kind != 'Stateful' || !has(self.replicas) || self.replicas
                 == 1
