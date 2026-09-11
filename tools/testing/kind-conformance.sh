@@ -16,7 +16,8 @@ bundle_directory="${work_directory}/bundle"
 molejoctl_bin="${work_directory}/molejoctl"
 owner_password_file="${work_directory}/owner-password"
 api_ca_file="${work_directory}/api-ca.crt"
-result_file="${work_directory}/result.json"
+result_directory="${work_directory}/results"
+result_file="${result_directory}/report.json"
 port_forward_log="${work_directory}/port-forward.log"
 port_forward_pid=""
 registry_port=""
@@ -59,9 +60,10 @@ cleanup() {
 
   if [[ $status -ne 0 ]]; then
     collect_diagnostics
-    rm -f -- "$owner_password_file" "$api_ca_file"
     echo "Conformance failed; diagnostics retained at ${work_directory}" >&2
   fi
+
+  rm -f -- "$owner_password_file" "$api_ca_file" "$kubeconfig_file"
 
   if [[ "${MOLEJO_KIND_KEEP:-0}" != "1" ]]; then
     kind delete cluster --name "$cluster_name" >/dev/null 2>&1 || true
@@ -69,15 +71,11 @@ cleanup() {
     if [[ ${#built_images[@]} -gt 0 ]]; then
       docker image rm "${built_images[@]}" >/dev/null 2>&1 || true
     fi
-    if [[ $status -eq 0 ]]; then
-      case "$work_directory" in
-        "${TMPDIR:-/tmp}"/molejo-kind-conformance.*) rm -rf -- "$work_directory" ;;
-      esac
-    fi
   else
     echo "MOLEJO_KIND_KEEP=1; cluster ${cluster_name} and registry ${registry_name} were preserved" >&2
-    echo "Kubeconfig: ${kubeconfig_file}" >&2
   fi
+
+  echo "Conformance evidence: ${work_directory}" >&2
 
   exit "$status"
 }
@@ -250,6 +248,16 @@ kubectl --kubeconfig "$kubeconfig_file" --context "$context_name" --namespace mo
 kubectl --kubeconfig "$kubeconfig_file" --context "$context_name" --namespace molejo-control-plane get secret molejo-control-plane-server-ca \
   -o jsonpath='{.data.ca\.crt}' | base64 --decode >"$api_ca_file"
 chmod 600 "$owner_password_file" "$api_ca_file"
+cluster_id="$(kubectl --kubeconfig "$kubeconfig_file" --context "$context_name" --namespace molejo-control-plane get secret molejo-control-plane-bootstrap -o jsonpath='{.data.agent-installation-id}' | base64 --decode)"
+cluster_uid="$(kubectl --kubeconfig "$kubeconfig_file" --context "$context_name" get namespace kube-system -o jsonpath='{.metadata.uid}')"
+[[ "$cluster_id" =~ ^(cls|agi)-[a-z2-7]{20}$ ]] || {
+  echo "bootstrap returned an invalid Molejo cluster ID" >&2
+  exit 1
+}
+[[ -n "$cluster_uid" ]] || {
+  echo "Kubernetes cluster UID is empty" >&2
+  exit 1
+}
 
 kubectl --kubeconfig "$kubeconfig_file" --context "$context_name" --namespace molejo-control-plane port-forward service/control-plane-api :8444 >"$port_forward_log" 2>&1 &
 port_forward_pid=$!
@@ -268,14 +276,19 @@ done
 }
 
 progress "Running the application lifecycle and observability journey"
-GOCACHE="${GOCACHE:-/tmp/molejo-go-cache}" go -C "${repository_root}/tools" run ./cmd/kubernetes-conformance \
+GOCACHE="${GOCACHE:-/tmp/molejo-go-cache}" go -C "${repository_root}/tools" run ./cmd/molejo-conformance run \
+  --profile alpha-core \
   --endpoint "https://127.0.0.1:${api_port}" \
   --ca-file "$api_ca_file" \
   --password-file "$owner_password_file" \
   --image "$fixture_image" \
-  --result-file "$result_file"
+  --output "$result_directory" \
+  --cluster-id "$cluster_id" \
+  --cluster-uid "$cluster_uid" \
+  --kube-context "$context_name" \
+  --disposable-target
 
-workspace_namespace="$(jq -r '.namespace' "$result_file")"
+workspace_namespace="$(jq -r '.outputs.namespace' "$result_file")"
 [[ "$workspace_namespace" =~ ^ws-[a-z0-9]+$ ]] || {
   echo "journey returned an invalid workspace namespace: ${workspace_namespace}" >&2
   exit 1
@@ -293,10 +306,18 @@ assert_can_i no molejo-system/workspace-boundary-controller create deployments.a
 assert_can_i no molejo-system/workspace-boundary-controller create secrets "$workspace_namespace"
 
 progress "Checking idempotent application cleanup"
-if kubectl --kubeconfig "$kubeconfig_file" --context "$context_name" --namespace "$workspace_namespace" get appdeployments --no-headers 2>/dev/null | grep -q .; then
-  echo "AppDeployment resources remained after deletion" >&2
+appdeployment_count="$(kubectl --kubeconfig "$kubeconfig_file" --context "$context_name" --namespace "$workspace_namespace" get appdeployments --no-headers 2>/dev/null | wc -l | tr -d ' ')"
+[[ "$appdeployment_count" == "1" ]] || {
+  echo "expected one terminal AppDeployment tombstone, found ${appdeployment_count}" >&2
   exit 1
-fi
+}
+withdrawn="$(kubectl --kubeconfig "$kubeconfig_file" --context "$context_name" --namespace "$workspace_namespace" get appdeployments -o jsonpath='{.items[0].spec.withdrawn}')"
+withdrawn_condition="$(kubectl --kubeconfig "$kubeconfig_file" --context "$context_name" --namespace "$workspace_namespace" get appdeployments -o jsonpath='{.items[0].status.conditions[?(@.type=="Withdrawn")].status}')"
+withdrawn_reason="$(kubectl --kubeconfig "$kubeconfig_file" --context "$context_name" --namespace "$workspace_namespace" get appdeployments -o jsonpath='{.items[0].status.conditions[?(@.type=="Withdrawn")].reason}')"
+[[ "$withdrawn" == "true" && "$withdrawn_condition" == "True" && "$withdrawn_reason" == "ChildrenRemoved" ]] || {
+  echo "terminal AppDeployment does not carry the confirmed withdrawal fence" >&2
+  exit 1
+}
 if kubectl --kubeconfig "$kubeconfig_file" --context "$context_name" --namespace "$workspace_namespace" get deployments,services \
   --selector app.kubernetes.io/managed-by=molejo-platform-operator --no-headers 2>/dev/null | grep -q .; then
   echo "managed workloads remained after deletion" >&2
@@ -321,4 +342,4 @@ if docker ps --all --filter "name=^/${registry_name}$" --format '{{.Names}}' | g
 fi
 
 echo
-echo "Result: Kind conformance healthy"
+echo "Result: Molejo alpha-core conformance passed"

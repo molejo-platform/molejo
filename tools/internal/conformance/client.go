@@ -51,11 +51,21 @@ func NewClient(endpoint, serverName, host, origin, caFile string) (*Client, erro
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, ServerName: serverName}
+	httpClient := &http.Client{Transport: transport, Jar: jar, Timeout: 30 * time.Second}
+	httpClient.CheckRedirect = func(request *http.Request, via []*http.Request) error {
+		if request.URL.Scheme != baseURL.Scheme || request.URL.Host != baseURL.Host {
+			return fmt.Errorf("refuse redirect outside Control Plane origin")
+		}
+		if len(via) >= 3 {
+			return fmt.Errorf("refuse redirect chain longer than three requests")
+		}
+		return nil
+	}
 	return &Client{
 		baseURL: baseURL,
 		host:    host,
 		origin:  origin,
-		http:    &http.Client{Transport: transport, Jar: jar, Timeout: 30 * time.Second},
+		http:    httpClient,
 	}, nil
 }
 
@@ -71,6 +81,10 @@ func (c *Client) Login(ctx context.Context, password string) error {
 	}
 	c.csrf = session.CSRFToken
 	return nil
+}
+
+func (c *Client) Logout(ctx context.Context) error {
+	return c.do(ctx, http.MethodDelete, "/api/v1/session", nil, nil, []int{http.StatusNoContent}, nil)
 }
 
 func (c *Client) Get(ctx context.Context, path string, output any) error {
@@ -103,7 +117,7 @@ func (c *Client) Stream(ctx context.Context, path, marker string) error {
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
 		contents, _ := io.ReadAll(io.LimitReader(response.Body, 4096))
-		return &StatusError{Code: response.StatusCode, Body: strings.TrimSpace(string(contents))}
+		return &StatusError{Code: response.StatusCode, Body: safeErrorBody(contents)}
 	}
 	return readLogStream(response.Body, marker)
 }
@@ -157,7 +171,7 @@ func (c *Client) do(ctx context.Context, method, path string, body any, headers 
 	}
 	if !accepted {
 		contents, _ := io.ReadAll(io.LimitReader(response.Body, 4096))
-		return &StatusError{Code: response.StatusCode, Body: strings.TrimSpace(string(contents))}
+		return &StatusError{Code: response.StatusCode, Body: safeErrorBody(contents)}
 	}
 	if output == nil || response.StatusCode == http.StatusNoContent {
 		return nil
@@ -170,7 +184,7 @@ func (c *Client) do(ctx context.Context, method, path string, body any, headers 
 
 func (c *Client) request(ctx context.Context, method, path string, body any, headers map[string]string) (*http.Request, error) {
 	reference, err := url.Parse(path)
-	if err != nil || !strings.HasPrefix(path, "/") {
+	if err != nil || !strings.HasPrefix(path, "/") || strings.HasPrefix(path, "//") || reference.IsAbs() || reference.Host != "" {
 		return nil, fmt.Errorf("invalid API path %q", path)
 	}
 	var contents io.Reader
@@ -200,4 +214,15 @@ func (c *Client) request(ctx context.Context, method, path string, body any, hea
 		request.Header.Set(name, value)
 	}
 	return request, nil
+}
+
+func safeErrorBody(contents []byte) string {
+	var body struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	}
+	if json.Unmarshal(contents, &body) == nil && (body.Code != "" || body.Message != "") {
+		return strings.TrimSpace(body.Code + ": " + body.Message)
+	}
+	return "response body omitted"
 }

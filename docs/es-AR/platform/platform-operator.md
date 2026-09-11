@@ -110,7 +110,7 @@ repetidas ya convergidas no emiten Events de transición duplicados.
 
 ## Verificaciones reproducibles
 
-`just kubernetes-conformance kind` crea instancias locales y descartables de Kind
+`just molejo-conformance kind` crea instancias locales y descartables de Kind
 y del registry, empaqueta los mismos charts consumidos por `molejoctl` y valida
 la instalación idempotente del runtime y del Control Plane. La jornada crea un
 Workspace con límites de RBAC, registra una imagen OCI inmutable, reconcilia y

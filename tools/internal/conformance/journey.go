@@ -9,18 +9,6 @@ import (
 	"time"
 )
 
-type Config struct {
-	Image    string
-	Password string
-	Progress func(string)
-}
-
-type Result struct {
-	WorkspaceID      string `json:"workspaceId"`
-	Namespace        string `json:"namespace"`
-	AppEnvironmentID string `json:"appEnvironmentId"`
-}
-
 type resource struct {
 	ID      string `json:"id"`
 	Version int    `json:"version"`
@@ -41,48 +29,56 @@ type appEnvironment struct {
 	CurrentDeploymentID  *string `json:"currentDeploymentId"`
 }
 
-func Run(ctx context.Context, client *Client, config Config) (Result, error) {
-	progress := config.Progress
-	if progress == nil {
-		progress = func(string) {}
+func runApplicationLifecycle(run *ScenarioContext) error {
+	ctx := run.Context
+	client := run.Config.Client
+	clusterID := run.Config.Target.ClusterID
+	if err := run.Assert("target-confirmed", "target cluster identity and active Agent confirmed"); err != nil {
+		return err
 	}
-	if err := client.Login(ctx, config.Password); err != nil {
-		return Result{}, err
-	}
-	progress("owner authenticated")
 
-	clusterID, err := activeCluster(ctx, client)
+	workspace, namespace, err := prepareWorkspace(run)
 	if err != nil {
-		return Result{}, err
+		return err
 	}
-	progress("paired cluster observed")
+	if err = run.Assert("workspace-ready", "workspace placement ready in "+namespace); err != nil {
+		return err
+	}
 
-	workspace, workspaceOperation, err := createWorkspace(ctx, client, clusterID)
+	nameSuffix := run.Config.RunID
+	if len(nameSuffix) > 12 {
+		nameSuffix = nameSuffix[:12]
+	}
+	projectPath := "/api/v1/workspaces/" + workspace.ID + "/projects"
+	project, err := createResource(ctx, client, projectPath, "Conformance "+nameSuffix)
 	if err != nil {
-		return Result{}, err
+		return err
 	}
-	if err = waitOperation(ctx, client, workspaceOperation.ID); err != nil {
-		return Result{}, err
+	projectItemPath := projectPath + "/" + project.ID
+	if err = registerCleanup(run, "Project", project, projectItemPath); err != nil {
+		return err
 	}
-	namespace, err := waitWorkspacePlacement(ctx, client, workspace.ID)
+	environmentPath := fmt.Sprintf("/api/v1/workspaces/%s/projects/%s/environments", workspace.ID, project.ID)
+	environment, err := createResource(ctx, client, environmentPath, "Conformance")
 	if err != nil {
-		return Result{}, err
+		return err
 	}
-	progress("workspace placement ready")
-
-	project, err := createResource(ctx, client, "/api/v1/workspaces/"+workspace.ID+"/projects", "Kind conformance")
+	environmentItemPath := environmentPath + "/" + environment.ID
+	if err = registerCleanup(run, "Environment", environment, environmentItemPath); err != nil {
+		return err
+	}
+	appPath := fmt.Sprintf("/api/v1/workspaces/%s/projects/%s/apps", workspace.ID, project.ID)
+	app, err := createResource(ctx, client, appPath, "Conformance HTTP")
 	if err != nil {
-		return Result{}, err
+		return err
 	}
-	environment, err := createResource(ctx, client, fmt.Sprintf("/api/v1/workspaces/%s/projects/%s/environments", workspace.ID, project.ID), "Development")
-	if err != nil {
-		return Result{}, err
+	appItemPath := appPath + "/" + app.ID
+	if err = registerCleanup(run, "App", app, appItemPath); err != nil {
+		return err
 	}
-	app, err := createResource(ctx, client, fmt.Sprintf("/api/v1/workspaces/%s/projects/%s/apps", workspace.ID, project.ID), "Conformance HTTP")
-	if err != nil {
-		return Result{}, err
+	if err = run.Assert("hierarchy-created", "application hierarchy created"); err != nil {
+		return err
 	}
-	progress("application hierarchy created")
 
 	appEnvironmentPath := fmt.Sprintf("/api/v1/workspaces/%s/projects/%s/apps/%s/environments", workspace.ID, project.ID, app.ID)
 	var target appEnvironment
@@ -95,18 +91,29 @@ func Run(ctx context.Context, client *Client, config Config) (Result, error) {
 		"configuration": configuration,
 	}, &target, nil, http.StatusCreated)
 	if err != nil {
-		return Result{}, fmt.Errorf("create AppEnvironment: %w", err)
+		return fmt.Errorf("create AppEnvironment: %w", err)
+	}
+	targetPath := appEnvironmentPath + "/" + target.ID
+	if err = run.Reporter.AddResource(ResourceRecord{
+		Kind: "AppEnvironment", ID: target.ID, RunID: run.Config.RunID, CleanupPath: targetPath,
+		Headers:  map[string]string{"Idempotency-Key": idempotencyKey(run.Config.RunID, "withdraw"), "If-Match": fmt.Sprint(target.Version)},
+		Required: true, State: "created",
+	}); err != nil {
+		return err
+	}
+	if err = run.Reporter.SetOutputs(RunOutputs{WorkspaceID: workspace.ID, Namespace: namespace, AppEnvironmentID: target.ID}); err != nil {
+		return err
 	}
 
 	releasePath := fmt.Sprintf("/api/v1/workspaces/%s/projects/%s/apps/%s/releases", workspace.ID, project.ID, app.ID)
 	var release resource
 	err = client.Post(ctx, releasePath, map[string]any{
-		"artifact":   map[string]any{"kind": "OCIImage", "reference": config.Image},
+		"artifact":   map[string]any{"kind": "OCIImage", "reference": run.Config.Image},
 		"source":     map[string]any{"provider": "LocalConformance", "repository": "molejo-platform/conformance-http", "revision": "kind"},
 		"provenance": map[string]any{"producer": "molejo-kind-conformance"},
-	}, &release, map[string]string{"Idempotency-Key": "kind-release"}, http.StatusCreated, http.StatusOK)
+	}, &release, map[string]string{"Idempotency-Key": idempotencyKey(run.Config.RunID, "release")}, http.StatusCreated, http.StatusOK)
 	if err != nil {
-		return Result{}, fmt.Errorf("register Release: %w", err)
+		return fmt.Errorf("register Release: %w", err)
 	}
 
 	deploymentPath := appEnvironmentPath + "/" + target.ID + "/deployments"
@@ -114,98 +121,122 @@ func Run(ctx context.Context, client *Client, config Config) (Result, error) {
 		Deployment resource  `json:"deployment"`
 		Operation  operation `json:"operation"`
 	}
-	deploymentHeaders := map[string]string{"Idempotency-Key": "kind-deployment", "If-Match": fmt.Sprint(target.Version)}
+	deploymentHeaders := map[string]string{"Idempotency-Key": idempotencyKey(run.Config.RunID, "deployment"), "If-Match": fmt.Sprint(target.Version)}
 	err = client.Post(ctx, deploymentPath, map[string]any{
 		"releaseId":            release.ID,
 		"configurationVersion": target.ConfigurationVersion,
 		"currentDeploymentId":  nil,
 	}, &accepted, deploymentHeaders, http.StatusAccepted)
 	if err != nil {
-		return Result{}, fmt.Errorf("create Deployment: %w", err)
+		return fmt.Errorf("create Deployment: %w", err)
 	}
 	if err = waitOperation(ctx, client, accepted.Operation.ID); err != nil {
-		return Result{}, err
+		return err
 	}
-	targetPath := appEnvironmentPath + "/" + target.ID
 	target, err = waitAppReady(ctx, client, targetPath)
 	if err != nil {
-		return Result{}, err
+		return err
 	}
-	progress("private stateless deployment ready")
+	if err = run.Reporter.UpdateResourceHeaders("AppEnvironment", target.ID, map[string]string{
+		"Idempotency-Key": idempotencyKey(run.Config.RunID, "withdraw"), "If-Match": fmt.Sprint(target.Version),
+	}); err != nil {
+		return err
+	}
+	if err = run.Assert("deployment-ready", "private stateless deployment ready"); err != nil {
+		return err
+	}
 
 	observabilityPath := targetPath + "/observability"
 	if err = assertUnavailable(ctx, client, observabilityPath+"/logs?limit=100", "historical logs"); err != nil {
-		return Result{}, err
+		return err
 	}
 	if err = waitForEvents(ctx, client, observabilityPath+"/events"); err != nil {
-		return Result{}, err
+		return err
 	}
 	if err = assertHistoricalMetricsNotConfigured(ctx, client, workspace.ID, target.ID); err != nil {
-		return Result{}, err
+		return err
 	}
-	progress("Kubernetes Events and historical fallback verified")
+	if err = run.Assert("observability-fallback", "Kubernetes Events and historical fallback verified"); err != nil {
+		return err
+	}
 
 	streamContext, cancelStream := context.WithTimeout(ctx, 30*time.Second)
 	streamErr := client.Stream(streamContext, observabilityPath+"/logs/live", "molejo-conformance")
 	cancelStream()
 	if streamErr != nil {
-		return Result{}, fmt.Errorf("read and cancel live logs: %w", streamErr)
+		return fmt.Errorf("read and cancel live logs: %w", streamErr)
 	}
-	if _, err = activeCluster(ctx, client); err != nil {
-		return Result{}, fmt.Errorf("query after stream cancellation: %w", err)
+	if _, err = verifyTarget(ctx, client, run.Config.Target); err != nil {
+		return fmt.Errorf("query after stream cancellation: %w", err)
 	}
-	progress("current logs and stream cancellation verified")
+	if err = run.Assert("live-logs", "current logs and stream cancellation verified"); err != nil {
+		return err
+	}
 
-	deleteHeaders := map[string]string{"Idempotency-Key": "kind-delete", "If-Match": fmt.Sprint(target.Version)}
+	deleteHeaders := map[string]string{"Idempotency-Key": idempotencyKey(run.Config.RunID, "withdraw"), "If-Match": fmt.Sprint(target.Version)}
 	var deletion operation
 	if err = client.Delete(ctx, targetPath, &deletion, deleteHeaders, http.StatusAccepted); err != nil {
-		return Result{}, fmt.Errorf("delete AppEnvironment: %w", err)
+		return fmt.Errorf("delete AppEnvironment: %w", err)
 	}
 	if err = waitOperation(ctx, client, deletion.ID); err != nil {
-		return Result{}, err
+		return err
 	}
 	var replay operation
 	if err = client.Delete(ctx, targetPath, &replay, deleteHeaders, http.StatusAccepted); err != nil {
-		return Result{}, fmt.Errorf("replay AppEnvironment deletion: %w", err)
+		return fmt.Errorf("replay AppEnvironment deletion: %w", err)
 	}
 	if replay.ID != deletion.ID {
-		return Result{}, fmt.Errorf("delete replay returned operation %q, want %q", replay.ID, deletion.ID)
+		return fmt.Errorf("delete replay returned operation %q, want %q", replay.ID, deletion.ID)
 	}
-	progress("idempotent cleanup accepted")
-
-	return Result{WorkspaceID: workspace.ID, Namespace: namespace, AppEnvironmentID: target.ID}, nil
+	if err = run.Reporter.UpdateResource("AppEnvironment", target.ID, "deleted"); err != nil {
+		return err
+	}
+	if err = run.Assert("withdrawal-idempotent", "idempotent application withdrawal confirmed"); err != nil {
+		return err
+	}
+	return nil
 }
 
-func activeCluster(ctx context.Context, client *Client) (string, error) {
-	var clusterID string
-	err := await(ctx, time.Second, "active cluster Agent", func(ctx context.Context) (bool, error) {
-		var response struct {
-			Items []struct {
-				ID     string `json:"id"`
-				Status string `json:"status"`
-			} `json:"items"`
-		}
-		if err := client.Get(ctx, "/api/v1/admin/clusters", &response); err != nil {
-			return false, retryUnavailable(err)
-		}
-		for _, cluster := range response.Items {
-			if cluster.Status == "Active" {
-				clusterID = cluster.ID
-				return true, nil
-			}
-		}
-		return false, nil
-	})
-	return clusterID, err
-}
-
-func createWorkspace(ctx context.Context, client *Client, clusterID string) (resource, operation, error) {
+func createWorkspace(ctx context.Context, client *Client, clusterID, runID string) (resource, operation, error) {
 	var response struct {
 		Workspace resource  `json:"workspace"`
 		Operation operation `json:"operation"`
 	}
-	err := client.Post(ctx, "/api/v1/workspaces", map[string]string{"name": "Kind conformance", "clusterId": clusterID}, &response, map[string]string{"Idempotency-Key": "kind-workspace"}, http.StatusAccepted)
+	err := client.Post(ctx, "/api/v1/workspaces", map[string]string{"name": "Conformance " + runID, "clusterId": clusterID}, &response, map[string]string{"Idempotency-Key": idempotencyKey(runID, "workspace")}, http.StatusAccepted)
 	return response.Workspace, response.Operation, err
+}
+
+func prepareWorkspace(run *ScenarioContext) (resource, string, error) {
+	ctx := run.Context
+	client := run.Config.Client
+	if run.Config.Target.WorkspaceID != "" {
+		var workspace resource
+		if err := client.Get(ctx, "/api/v1/workspaces/"+run.Config.Target.WorkspaceID, &workspace); err != nil {
+			return resource{}, "", fmt.Errorf("read conformance workspace: %w", err)
+		}
+		namespace, err := waitWorkspacePlacement(ctx, client, workspace.ID)
+		return workspace, namespace, err
+	}
+	workspace, operation, err := createWorkspace(ctx, client, run.Config.Target.ClusterID, run.Config.RunID)
+	if err != nil {
+		return resource{}, "", err
+	}
+	if err = waitOperation(ctx, client, operation.ID); err != nil {
+		return resource{}, "", err
+	}
+	namespace, err := waitWorkspacePlacement(ctx, client, workspace.ID)
+	return workspace, namespace, err
+}
+
+func registerCleanup(run *ScenarioContext, kind string, item resource, path string) error {
+	return run.Reporter.AddResource(ResourceRecord{
+		Kind: kind, ID: item.ID, RunID: run.Config.RunID, CleanupPath: path,
+		Headers: map[string]string{"If-Match": fmt.Sprint(item.Version)}, Required: true, State: "created",
+	})
+}
+
+func idempotencyKey(runID, action string) string {
+	return "conformance-" + runID + "-" + action
 }
 
 func createResource(ctx context.Context, client *Client, path, name string) (resource, error) {

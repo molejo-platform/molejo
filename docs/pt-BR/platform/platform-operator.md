@@ -108,7 +108,7 @@ Reconciliações repetidas já convergidas não emitem Events de transição dup
 
 ## Verificações reproduzíveis
 
-`just kubernetes-conformance kind` cria um cluster Kind e um registry locais e
+`just molejo-conformance kind` cria um cluster Kind e um registry locais e
 descartáveis, empacota os mesmos charts consumidos pelo `molejoctl` e valida a
 instalação idempotente do runtime e do Control Plane. A jornada cria um Workspace
 com limites de RBAC, registra uma imagem OCI imutável, reconcilia e observa uma

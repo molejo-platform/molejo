@@ -106,7 +106,7 @@ reconciliations do not emit duplicate transition Events.
 
 ## Reproducible checks
 
-`just kubernetes-conformance kind` creates disposable local Kind and registry
+`just molejo-conformance kind` creates disposable local Kind and registry
 instances, packages the same charts consumed by `molejoctl`, and validates the
 idempotent runtime and Control Plane installation. The journey creates a
 Workspace with RBAC boundaries, registers an immutable OCI image, reconciles and
