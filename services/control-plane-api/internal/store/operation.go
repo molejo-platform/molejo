@@ -117,6 +117,9 @@ func (s *Store) claimNext(ctx context.Context, worker, installationID string, le
 		return domain.Operation{}, domain.AppEnvironment{}, domain.Deployment{}, false, err
 	}
 	defer tx.Rollback(ctx)
+	if err = lockPublication(ctx, tx); err != nil {
+		return domain.Operation{}, domain.AppEnvironment{}, domain.Deployment{}, false, err
+	}
 	if installationID != "" {
 		if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, "agent-dispatch:"+installationID); err != nil {
 			return domain.Operation{}, domain.AppEnvironment{}, domain.Deployment{}, false, err
@@ -207,6 +210,9 @@ func (s *Store) completeDeployment(ctx context.Context, operation domain.Operati
 		return err
 	}
 	defer tx.Rollback(ctx)
+	if err = lockPublication(ctx, tx); err != nil {
+		return err
+	}
 	if err = completeOperationLease(ctx, tx, operation); err != nil {
 		return err
 	}
@@ -231,6 +237,13 @@ func (s *Store) completeDeployment(ctx context.Context, operation domain.Operati
 			return ErrLeaseLost
 		}
 	}
+	// A newer observed runtime version fences older publication snapshots.
+	if _, err = tx.Exec(ctx, `DELETE FROM publication_execution_claims ec USING deployments d WHERE ec.deployment_id=d.id AND d.app_environment_id=$1 AND d.id<>$2`, operation.AppEnvironmentID, operation.DeploymentID); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, `UPDATE operation_attempts a SET state='Fenced',completed_at=now() FROM operations o WHERE a.operation_id=o.id AND o.app_environment_id=$1 AND o.desired_version<$2 AND a.state IN ('Issued','Uncertain')`, operation.AppEnvironmentID, operation.DesiredVersion); err != nil {
+		return err
+	}
 	if err = activatePublicationClaims(ctx, tx, operation.AppEnvironmentID, deployed.ConfigurationVersion, deployed.WorkloadKind, deployed.Configuration, s.publication); err != nil {
 		return err
 	}
@@ -243,12 +256,28 @@ func (s *Store) CompleteAppEnvironmentDeletion(ctx context.Context, operation do
 		return err
 	}
 	defer tx.Rollback(ctx)
+	if err = lockPublication(ctx, tx); err != nil {
+		return err
+	}
 	if err = completeOperationLease(ctx, tx, operation); err != nil {
 		return err
 	}
-	tag, err := tx.Exec(ctx, `UPDATE app_environments SET archived_at=now(),last_message=$1,updated_at=now() WHERE id=$2 AND deletion_requested_at IS NOT NULL AND archived_at IS NULL`, message, operation.AppEnvironmentID)
+	var confirmed bool
+	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM operation_attempts WHERE operation_id=$1 AND fencing_token=$2 AND state='Completed' AND withdrawal_confirmed AND runtime_uid<>'')`, operation.ID, operation.FencingToken).Scan(&confirmed); err != nil {
+		return err
+	}
+	if !confirmed {
+		return ErrLeaseLost
+	}
+	tag, err := tx.Exec(ctx, `UPDATE app_environments SET archived_at=now(),withdrawal_state='Confirmed',publication_observation='{}',last_message=$1,updated_at=now() WHERE id=$2 AND deletion_requested_at IS NOT NULL AND archived_at IS NULL AND withdrawal_state='Removing'`, message, operation.AppEnvironmentID)
 	if err != nil || tag.RowsAffected() != 1 {
 		return ErrLeaseLost
+	}
+	if _, err = tx.Exec(ctx, `DELETE FROM publication_execution_claims ec USING deployments d WHERE ec.deployment_id=d.id AND d.app_environment_id=$1`, operation.AppEnvironmentID); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, `UPDATE operation_attempts a SET state='Fenced',completed_at=now() FROM operations o WHERE a.operation_id=o.id AND o.app_environment_id=$1 AND a.state IN ('Issued','Uncertain')`, operation.AppEnvironmentID); err != nil {
+		return err
 	}
 	if _, err = tx.Exec(ctx, `DELETE FROM publication_claims WHERE app_environment_id=$1`, operation.AppEnvironmentID); err != nil {
 		return err
@@ -262,6 +291,9 @@ func (s *Store) CompleteWorkspace(ctx context.Context, operation domain.Operatio
 		return err
 	}
 	defer tx.Rollback(ctx)
+	if err = lockPublication(ctx, tx); err != nil {
+		return err
+	}
 	if err = completeOperationLease(ctx, tx, operation); err != nil {
 		return err
 	}

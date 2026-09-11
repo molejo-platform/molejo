@@ -116,6 +116,8 @@ type AppEnvironment struct {
 	ReconciliationGeneration  int64              `json:"reconciliation_generation"`
 	RuntimeDesiredVersion     int64              `json:"runtime_desired_version"`
 	RuntimeSpecHash           pgtype.Text        `json:"runtime_spec_hash"`
+	WithdrawalState           string             `json:"withdrawal_state"`
+	PublicationObservation    []byte             `json:"publication_observation"`
 }
 
 type AppEnvironmentConfigurationRevision struct {
@@ -307,26 +309,20 @@ type ClusterHistoricalMetricBinding struct {
 }
 
 type ClusterPublicationBinding struct {
-	ClusterID               int64              `json:"cluster_id"`
-	GatewayNamespace        string             `json:"gateway_namespace"`
-	GatewayName             string             `json:"gateway_name"`
-	SectionName             string             `json:"section_name"`
-	GatewayClassName        string             `json:"gateway_class_name"`
-	GatewayClassAccepted    bool               `json:"gateway_class_accepted"`
-	GatewayProgrammed       bool               `json:"gateway_programmed"`
-	ListenerReady           bool               `json:"listener_ready"`
-	SupportedRouteKindsJson []byte             `json:"supported_route_kinds_json"`
-	Health                  string             `json:"health"`
-	ReasonCode              string             `json:"reason_code"`
-	ObservedAt              pgtype.Timestamptz `json:"observed_at"`
-	ExpiresAt               pgtype.Timestamptz `json:"expires_at"`
-	ObservedSessionID       string             `json:"observed_session_id"`
-	ObservedSequence        int64              `json:"observed_sequence"`
-	Version                 int64              `json:"version"`
-	CreatedBy               int64              `json:"created_by"`
-	UpdatedBy               int64              `json:"updated_by"`
-	CreatedAt               pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
+	ID                string             `json:"id"`
+	ClusterID         int64              `json:"cluster_id"`
+	Kind              string             `json:"kind"`
+	Configuration     []byte             `json:"configuration"`
+	Version           int64              `json:"version"`
+	Observation       []byte             `json:"observation"`
+	ObservedAt        pgtype.Timestamptz `json:"observed_at"`
+	ExpiresAt         pgtype.Timestamptz `json:"expires_at"`
+	ObservedSessionID string             `json:"observed_session_id"`
+	ObservedSequence  int64              `json:"observed_sequence"`
+	CreatedBy         int64              `json:"created_by"`
+	UpdatedBy         int64              `json:"updated_by"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
 }
 
 type ClusterStorageBinding struct {
@@ -393,6 +389,7 @@ type Deployment struct {
 	WorkloadKind           string             `json:"workload_kind"`
 	AppVolumeID            pgtype.Int8        `json:"app_volume_id"`
 	RequestedByPrincipalID int64              `json:"requested_by_principal_id"`
+	PublicationSnapshot    []byte             `json:"publication_snapshot"`
 }
 
 type Environment struct {
@@ -495,6 +492,18 @@ type Operation struct {
 	RequestedByPrincipalID int64              `json:"requested_by_principal_id"`
 }
 
+type OperationAttempt struct {
+	OperationID         int64              `json:"operation_id"`
+	FencingToken        int64              `json:"fencing_token"`
+	SessionID           string             `json:"session_id"`
+	Deadline            pgtype.Timestamptz `json:"deadline"`
+	State               string             `json:"state"`
+	RuntimeUid          string             `json:"runtime_uid"`
+	WithdrawalConfirmed bool               `json:"withdrawal_confirmed"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	CompletedAt         pgtype.Timestamptz `json:"completed_at"`
+}
+
 type Parameter struct {
 	ID             int64              `json:"id"`
 	PublicID       string             `json:"public_id"`
@@ -591,6 +600,36 @@ type PublicationClaim struct {
 	CurrentConfigurationVersion pgtype.Int8        `json:"current_configuration_version"`
 	CreatedAt                   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt                   pgtype.Timestamptz `json:"updated_at"`
+	DomainID                    pgtype.Text        `json:"domain_id"`
+	BindingID                   pgtype.Text        `json:"binding_id"`
+}
+
+type PublicationDomain struct {
+	ID            string             `json:"id"`
+	Name          string             `json:"name"`
+	Kind          string             `json:"kind"`
+	ReservedNames []byte             `json:"reserved_names"`
+	Version       int64              `json:"version"`
+	CreatedBy     int64              `json:"created_by"`
+	UpdatedBy     int64              `json:"updated_by"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
+type PublicationExecutionClaim struct {
+	DeploymentID int64  `json:"deployment_id"`
+	Hostname     string `json:"hostname"`
+	DomainID     string `json:"domain_id"`
+	BindingID    string `json:"binding_id"`
+	EndpointName string `json:"endpoint_name"`
+}
+
+type PublicationGrant struct {
+	DomainID    string             `json:"domain_id"`
+	WorkspaceID int64              `json:"workspace_id"`
+	BindingID   string             `json:"binding_id"`
+	CreatedBy   int64              `json:"created_by"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
 type RecoveryCode struct {

@@ -2,16 +2,19 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
 	"regexp"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/molejo-platform/molejo/packages/runtimecontract"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/audit"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/domain"
 )
@@ -23,6 +26,9 @@ var runtimeObjectNamePattern = regexp.MustCompile(`^[a-z0-9](?:[-a-z0-9]*[a-z0-9
 // RuntimeObservation contains only non-sensitive state reported by a cluster
 // Agent. Desired state remains authoritative in the control plane.
 type RuntimeObservation struct {
+	SampledAt          time.Time
+	UID                string
+	Addresses          []runtimecontract.PublicationAddressObservation
 	Kind               string
 	Namespace          string
 	Name               string
@@ -95,6 +101,51 @@ func (s *Store) ReconcileAgentObservations(ctx context.Context, clusterPublicID,
 	for _, observation := range normalized {
 		switch observation.Kind {
 		case "AppDeployment":
+			if len(observation.Addresses) > 0 && (observation.UID == "" || observation.SampledAt.IsZero()) {
+				return errors.New("publication_observation_correlation_missing")
+			}
+			if observation.UID != "" && !observation.SampledAt.IsZero() {
+				evidence := runtimecontract.PublicationObservation{UID: observation.UID, DesiredVersion: observation.DesiredVersion, Generation: observation.Generation, ObservedAt: observation.SampledAt, Addresses: observation.Addresses}
+				if err = evidence.Validate(); err != nil {
+					return err
+				}
+				if observation.SampledAt.After(time.Now().Add(30 * time.Second)) {
+					return errors.New("publication_observation_time_invalid")
+				}
+				raw, e := json.Marshal(evidence)
+				if e != nil {
+					return e
+				}
+				// Evidence is accepted only for a known immutable execution target.
+				var id int64
+				var snapshotJSON []byte
+				e = tx.QueryRow(ctx, `SELECT ae.id,d.publication_snapshot FROM app_environments ae JOIN workspaces w ON w.id=ae.workspace_id JOIN deployments d ON d.id=ae.desired_deployment_id WHERE ae.cluster_id=$1 AND w.namespace_name=$2 AND ae.runtime_name=$3 AND ae.archived_at IS NULL AND ae.deletion_requested_at IS NULL AND EXISTS(SELECT 1 FROM operations o WHERE o.deployment_id=d.id AND o.desired_version=$4)`, clusterID, observation.Namespace, observation.Name, observation.DesiredVersion).Scan(&id, &snapshotJSON)
+				if e != nil && !errors.Is(e, pgx.ErrNoRows) {
+					return e
+				}
+				if e == nil {
+					var snap PublicationSnapshot
+					if e = json.Unmarshal(snapshotJSON, &snap); e != nil {
+						return e
+					}
+					matched := len(snap.Addresses) == len(observation.Addresses)
+					for _, a := range observation.Addresses {
+						found := false
+						for _, target := range snap.Addresses {
+							if target.EndpointName == a.EndpointName && target.Hostname == a.Hostname && target.Destination == a.Destination {
+								found = true
+							}
+						}
+						matched = matched && found
+					}
+					if matched {
+						_, e = tx.Exec(ctx, `UPDATE app_environments SET publication_observation=$2 WHERE id=$1 AND (publication_observation->>'desiredVersion' IS NULL OR (publication_observation->>'desiredVersion')::bigint<$3 OR ((publication_observation->>'desiredVersion')::bigint=$3 AND (publication_observation->>'observedAt')::timestamptz<$6 AND (publication_observation->>'uid'<>$4 OR (publication_observation->>'generation')::bigint<=$5)))`, id, raw, observation.DesiredVersion, observation.UID, observation.Generation, observation.SampledAt)
+						if e != nil {
+							return e
+						}
+					}
+				}
+			}
 			seenDeployments[runtimeObservationKey(observation.Namespace, observation.Name)] = observation
 			_, err = tx.Exec(ctx, `UPDATE app_environments ae
 				SET runtime_observed_generation=$1,runtime_observed_at=now(),

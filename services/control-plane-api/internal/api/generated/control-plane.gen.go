@@ -197,6 +197,30 @@ func (e AppEnvironmentState) Valid() bool {
 	}
 }
 
+// Defines values for AppEnvironmentWithdrawalState.
+const (
+	Confirmed AppEnvironmentWithdrawalState = "Confirmed"
+	None      AppEnvironmentWithdrawalState = "None"
+	Removing  AppEnvironmentWithdrawalState = "Removing"
+	Requested AppEnvironmentWithdrawalState = "Requested"
+)
+
+// Valid indicates whether the value is a known member of the AppEnvironmentWithdrawalState enum.
+func (e AppEnvironmentWithdrawalState) Valid() bool {
+	switch e {
+	case Confirmed:
+		return true
+	case None:
+		return true
+	case Removing:
+		return true
+	case Requested:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AppEnvironmentWorkloadKind.
 const (
 	AppEnvironmentWorkloadKindStateful  AppEnvironmentWorkloadKind = "Stateful"
@@ -485,6 +509,36 @@ func (e ClusterPublicationBindingHealth) Valid() bool {
 	}
 }
 
+// Defines values for ClusterPublicationBindingSchemaVersion.
+const (
+	ClusterPublicationBindingSchemaVersionKubernetesHttpV1alpha1 ClusterPublicationBindingSchemaVersion = "kubernetes-http.v1alpha1"
+)
+
+// Valid indicates whether the value is a known member of the ClusterPublicationBindingSchemaVersion enum.
+func (e ClusterPublicationBindingSchemaVersion) Valid() bool {
+	switch e {
+	case ClusterPublicationBindingSchemaVersionKubernetesHttpV1alpha1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ClusterPublicationBindingInputSchemaVersion.
+const (
+	ClusterPublicationBindingInputSchemaVersionKubernetesHttpV1alpha1 ClusterPublicationBindingInputSchemaVersion = "kubernetes-http.v1alpha1"
+)
+
+// Valid indicates whether the value is a known member of the ClusterPublicationBindingInputSchemaVersion enum.
+func (e ClusterPublicationBindingInputSchemaVersion) Valid() bool {
+	switch e {
+	case ClusterPublicationBindingInputSchemaVersionKubernetesHttpV1alpha1:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ClusterStorageBindingHealth.
 const (
 	ClusterStorageBindingHealthDegraded    ClusterStorageBindingHealth = "Degraded"
@@ -677,6 +731,21 @@ func (e GitHubInstallationRepositorySelection) Valid() bool {
 	}
 }
 
+// Defines values for HTTPDestinationSchemaVersion.
+const (
+	HTTPDestinationSchemaVersionKubernetesHttpV1alpha1 HTTPDestinationSchemaVersion = "kubernetes-http.v1alpha1"
+)
+
+// Valid indicates whether the value is a known member of the HTTPDestinationSchemaVersion enum.
+func (e HTTPDestinationSchemaVersion) Valid() bool {
+	switch e {
+	case HTTPDestinationSchemaVersionKubernetesHttpV1alpha1:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for HistoricalMetricBindingHealth.
 const (
 	HistoricalMetricBindingHealthDegraded    HistoricalMetricBindingHealth = "Degraded"
@@ -772,13 +841,13 @@ func (e MFAChallengeMethod) Valid() bool {
 
 // Defines values for MFAChallengeMfaRequired.
 const (
-	True MFAChallengeMfaRequired = true
+	MFAChallengeMfaRequiredTrue MFAChallengeMfaRequired = true
 )
 
 // Valid indicates whether the value is a known member of the MFAChallengeMfaRequired enum.
 func (e MFAChallengeMfaRequired) Valid() bool {
 	switch e {
-	case True:
+	case MFAChallengeMfaRequiredTrue:
 		return true
 	default:
 		return false
@@ -905,6 +974,156 @@ func (e PublicEndpointType) Valid() bool {
 	case PublicEndpointTypeHTTP:
 		return true
 	case PublicEndpointTypeTCP:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PublicationAddressObservationConditionsStatus.
+const (
+	PublicationAddressObservationConditionsStatusFalse   PublicationAddressObservationConditionsStatus = "False"
+	PublicationAddressObservationConditionsStatusTrue    PublicationAddressObservationConditionsStatus = "True"
+	PublicationAddressObservationConditionsStatusUnknown PublicationAddressObservationConditionsStatus = "Unknown"
+)
+
+// Valid indicates whether the value is a known member of the PublicationAddressObservationConditionsStatus enum.
+func (e PublicationAddressObservationConditionsStatus) Valid() bool {
+	switch e {
+	case PublicationAddressObservationConditionsStatusFalse:
+		return true
+	case PublicationAddressObservationConditionsStatusTrue:
+		return true
+	case PublicationAddressObservationConditionsStatusUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PublicationAddressObservationConditionsType.
+const (
+	ConnectivityVerified PublicationAddressObservationConditionsType = "ConnectivityVerified"
+	GatewayReady         PublicationAddressObservationConditionsType = "GatewayReady"
+	RouteReady           PublicationAddressObservationConditionsType = "RouteReady"
+	ServedTLSVerified    PublicationAddressObservationConditionsType = "ServedTLSVerified"
+)
+
+// Valid indicates whether the value is a known member of the PublicationAddressObservationConditionsType enum.
+func (e PublicationAddressObservationConditionsType) Valid() bool {
+	switch e {
+	case ConnectivityVerified:
+		return true
+	case GatewayReady:
+		return true
+	case RouteReady:
+		return true
+	case ServedTLSVerified:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PublicationDependentKind.
+const (
+	PublicationDependentKindApplied    PublicationDependentKind = "Applied"
+	PublicationDependentKindDesired    PublicationDependentKind = "Desired"
+	PublicationDependentKindExecutable PublicationDependentKind = "Executable"
+)
+
+// Valid indicates whether the value is a known member of the PublicationDependentKind enum.
+func (e PublicationDependentKind) Valid() bool {
+	switch e {
+	case PublicationDependentKindApplied:
+		return true
+	case PublicationDependentKindDesired:
+		return true
+	case PublicationDependentKindExecutable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PublicationDomainKind.
+const (
+	PublicationDomainKindExact         PublicationDomainKind = "Exact"
+	PublicationDomainKindSubdomainPool PublicationDomainKind = "SubdomainPool"
+)
+
+// Valid indicates whether the value is a known member of the PublicationDomainKind enum.
+func (e PublicationDomainKind) Valid() bool {
+	switch e {
+	case PublicationDomainKindExact:
+		return true
+	case PublicationDomainKindSubdomainPool:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PublicationDomainInputKind.
+const (
+	PublicationDomainInputKindExact         PublicationDomainInputKind = "Exact"
+	PublicationDomainInputKindSubdomainPool PublicationDomainInputKind = "SubdomainPool"
+)
+
+// Valid indicates whether the value is a known member of the PublicationDomainInputKind enum.
+func (e PublicationDomainInputKind) Valid() bool {
+	switch e {
+	case PublicationDomainInputKindExact:
+		return true
+	case PublicationDomainInputKindSubdomainPool:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PublicationObservationState.
+const (
+	PublicationObservationStateDegraded    PublicationObservationState = "Degraded"
+	PublicationObservationStateProgressing PublicationObservationState = "Progressing"
+	PublicationObservationStateReady       PublicationObservationState = "Ready"
+	PublicationObservationStateUnknown     PublicationObservationState = "Unknown"
+)
+
+// Valid indicates whether the value is a known member of the PublicationObservationState enum.
+func (e PublicationObservationState) Valid() bool {
+	switch e {
+	case PublicationObservationStateDegraded:
+		return true
+	case PublicationObservationStateProgressing:
+		return true
+	case PublicationObservationStateReady:
+		return true
+	case PublicationObservationStateUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PublicationOptionHealth.
+const (
+	PublicationOptionHealthDegraded    PublicationOptionHealth = "Degraded"
+	PublicationOptionHealthHealthy     PublicationOptionHealth = "Healthy"
+	PublicationOptionHealthUnavailable PublicationOptionHealth = "Unavailable"
+	PublicationOptionHealthUnknown     PublicationOptionHealth = "Unknown"
+)
+
+// Valid indicates whether the value is a known member of the PublicationOptionHealth enum.
+func (e PublicationOptionHealth) Valid() bool {
+	switch e {
+	case PublicationOptionHealthDegraded:
+		return true
+	case PublicationOptionHealthHealthy:
+		return true
+	case PublicationOptionHealthUnavailable:
+		return true
+	case PublicationOptionHealthUnknown:
 		return true
 	default:
 		return false
@@ -1753,33 +1972,38 @@ type App struct {
 
 // AppEnvironment defines model for AppEnvironment.
 type AppEnvironment struct {
-	AppId                       string                     `json:"appId"`
-	AppName                     string                     `json:"appName"`
-	Branch                      string                     `json:"branch"`
-	ClusterId                   string                     `json:"clusterId"`
-	Configuration               RuntimeConfiguration       `json:"configuration"`
-	ConfigurationVersion        int                        `json:"configurationVersion"`
-	CreatedAt                   time.Time                  `json:"createdAt"`
-	CurrentConfigurationVersion *int                       `json:"currentConfigurationVersion,omitempty"`
-	CurrentDeploymentId         *string                    `json:"currentDeploymentId,omitempty"`
-	CurrentReleaseId            *string                    `json:"currentReleaseId,omitempty"`
-	DesiredConfigurationVersion *int                       `json:"desiredConfigurationVersion,omitempty"`
-	DesiredDeploymentId         *string                    `json:"desiredDeploymentId,omitempty"`
-	EnvironmentId               string                     `json:"environmentId"`
-	EnvironmentName             string                     `json:"environmentName"`
-	Id                          string                     `json:"id"`
-	Message                     *string                    `json:"message,omitempty"`
-	ProjectId                   string                     `json:"projectId"`
-	RuntimeObservedAt           *time.Time                 `json:"runtimeObservedAt,omitempty"`
-	RuntimeObservedGeneration   *int                       `json:"runtimeObservedGeneration,omitempty"`
-	State                       AppEnvironmentState        `json:"state"`
-	UpdatedAt                   time.Time                  `json:"updatedAt"`
-	Version                     int                        `json:"version"`
-	WorkloadKind                AppEnvironmentWorkloadKind `json:"workloadKind"`
+	AppId                       string                         `json:"appId"`
+	AppName                     string                         `json:"appName"`
+	Branch                      string                         `json:"branch"`
+	ClusterId                   string                         `json:"clusterId"`
+	Configuration               RuntimeConfiguration           `json:"configuration"`
+	ConfigurationVersion        int                            `json:"configurationVersion"`
+	CreatedAt                   time.Time                      `json:"createdAt"`
+	CurrentConfigurationVersion *int                           `json:"currentConfigurationVersion,omitempty"`
+	CurrentDeploymentId         *string                        `json:"currentDeploymentId,omitempty"`
+	CurrentReleaseId            *string                        `json:"currentReleaseId,omitempty"`
+	DesiredConfigurationVersion *int                           `json:"desiredConfigurationVersion,omitempty"`
+	DesiredDeploymentId         *string                        `json:"desiredDeploymentId,omitempty"`
+	EnvironmentId               string                         `json:"environmentId"`
+	EnvironmentName             string                         `json:"environmentName"`
+	Id                          string                         `json:"id"`
+	Message                     *string                        `json:"message,omitempty"`
+	ProjectId                   string                         `json:"projectId"`
+	PublicationObservation      *PublicationObservation        `json:"publicationObservation,omitempty"`
+	RuntimeObservedAt           *time.Time                     `json:"runtimeObservedAt,omitempty"`
+	RuntimeObservedGeneration   *int                           `json:"runtimeObservedGeneration,omitempty"`
+	State                       AppEnvironmentState            `json:"state"`
+	UpdatedAt                   time.Time                      `json:"updatedAt"`
+	Version                     int                            `json:"version"`
+	WithdrawalState             *AppEnvironmentWithdrawalState `json:"withdrawalState,omitempty"`
+	WorkloadKind                AppEnvironmentWorkloadKind     `json:"workloadKind"`
 }
 
 // AppEnvironmentState defines model for AppEnvironment.State.
 type AppEnvironmentState string
+
+// AppEnvironmentWithdrawalState defines model for AppEnvironment.WithdrawalState.
+type AppEnvironmentWithdrawalState string
 
 // AppEnvironmentWorkloadKind defines model for AppEnvironment.WorkloadKind.
 type AppEnvironmentWorkloadKind string
@@ -1981,32 +2205,37 @@ type ClusterCreateInput struct {
 
 // ClusterPublicationBinding defines model for ClusterPublicationBinding.
 type ClusterPublicationBinding struct {
-	ClusterId            string                          `json:"clusterId"`
-	CreatedAt            time.Time                       `json:"createdAt"`
-	GatewayClassAccepted bool                            `json:"gatewayClassAccepted"`
-	GatewayClassName     string                          `json:"gatewayClassName"`
-	GatewayName          string                          `json:"gatewayName"`
-	GatewayNamespace     string                          `json:"gatewayNamespace"`
-	GatewayProgrammed    bool                            `json:"gatewayProgrammed"`
-	Health               ClusterPublicationBindingHealth `json:"health"`
-	ListenerReady        bool                            `json:"listenerReady"`
-	ObservedAt           *time.Time                      `json:"observedAt,omitempty"`
-	ReasonCode           string                          `json:"reasonCode"`
-	SectionName          string                          `json:"sectionName"`
-	SupportedRouteKinds  []string                        `json:"supportedRouteKinds"`
-	UpdatedAt            time.Time                       `json:"updatedAt"`
-	Version              int                             `json:"version"`
+	ClusterId        string                                 `json:"clusterId"`
+	ClusterUid       string                                 `json:"clusterUid"`
+	CreatedAt        time.Time                              `json:"createdAt"`
+	GatewayName      string                                 `json:"gatewayName"`
+	GatewayNamespace string                                 `json:"gatewayNamespace"`
+	Health           ClusterPublicationBindingHealth        `json:"health"`
+	Id               string                                 `json:"id"`
+	Listeners        []PublicationListener                  `json:"listeners"`
+	ObservedAt       *time.Time                             `json:"observedAt,omitempty"`
+	ReasonCode       string                                 `json:"reasonCode"`
+	Revision         int                                    `json:"revision"`
+	SchemaVersion    ClusterPublicationBindingSchemaVersion `json:"schemaVersion"`
+	UpdatedAt        time.Time                              `json:"updatedAt"`
 }
 
 // ClusterPublicationBindingHealth defines model for ClusterPublicationBinding.Health.
 type ClusterPublicationBindingHealth string
 
+// ClusterPublicationBindingSchemaVersion defines model for ClusterPublicationBinding.SchemaVersion.
+type ClusterPublicationBindingSchemaVersion string
+
 // ClusterPublicationBindingInput defines model for ClusterPublicationBindingInput.
 type ClusterPublicationBindingInput struct {
-	GatewayName      string `json:"gatewayName"`
-	GatewayNamespace string `json:"gatewayNamespace"`
-	SectionName      string `json:"sectionName"`
+	GatewayName      string                                      `json:"gatewayName"`
+	GatewayNamespace string                                      `json:"gatewayNamespace"`
+	Listeners        []PublicationListener                       `json:"listeners"`
+	SchemaVersion    ClusterPublicationBindingInputSchemaVersion `json:"schemaVersion"`
 }
+
+// ClusterPublicationBindingInputSchemaVersion defines model for ClusterPublicationBindingInput.SchemaVersion.
+type ClusterPublicationBindingInputSchemaVersion string
 
 // ClusterRevocationInput defines model for ClusterRevocationInput.
 type ClusterRevocationInput struct {
@@ -2208,6 +2437,28 @@ type GitHubSourceInput struct {
 	InstallationId string `json:"installationId"`
 	RepositoryId   string `json:"repositoryId"`
 }
+
+// HTTPAssociation defines model for HTTPAssociation.
+type HTTPAssociation struct {
+	BindingId    string  `json:"bindingId"`
+	DomainId     string  `json:"domainId"`
+	Hostname     *string `json:"hostname,omitempty"`
+	Label        *string `json:"label,omitempty"`
+	ListenerName *string `json:"listenerName,omitempty"`
+}
+
+// HTTPDestination defines model for HTTPDestination.
+type HTTPDestination struct {
+	BindingId        string                       `json:"bindingId"`
+	BindingRevision  int                          `json:"bindingRevision"`
+	GatewayName      string                       `json:"gatewayName"`
+	GatewayNamespace string                       `json:"gatewayNamespace"`
+	SchemaVersion    HTTPDestinationSchemaVersion `json:"schemaVersion"`
+	SectionName      string                       `json:"sectionName"`
+}
+
+// HTTPDestinationSchemaVersion defines model for HTTPDestination.SchemaVersion.
+type HTTPDestinationSchemaVersion string
 
 // HierarchyInput defines model for HierarchyInput.
 type HierarchyInput struct {
@@ -2420,16 +2671,126 @@ type Project struct {
 
 // PublicEndpoint defines model for PublicEndpoint.
 type PublicEndpoint struct {
-	DomainId      string             `json:"domainId"`
+	Addresses     *[]HTTPAssociation `json:"addresses,omitempty"`
+	DomainId      *string            `json:"domainId,omitempty"`
 	ExternalPort  *int               `json:"externalPort,omitempty"`
-	HostnameLabel string             `json:"hostnameLabel"`
+	HostnameLabel *string            `json:"hostnameLabel,omitempty"`
 	Name          string             `json:"name"`
 	PortName      string             `json:"portName"`
 	Type          PublicEndpointType `json:"type"`
+	union         json.RawMessage
 }
 
 // PublicEndpointType defines model for PublicEndpoint.Type.
 type PublicEndpointType string
+
+// PublicEndpoint0 defines model for PublicEndpoint.0.
+type PublicEndpoint0 struct {
+	Type interface{} `json:"type,omitempty"`
+}
+
+// PublicEndpoint1 defines model for PublicEndpoint.1.
+type PublicEndpoint1 struct {
+	Type interface{} `json:"type,omitempty"`
+}
+
+// PublicationAddressObservation defines model for PublicationAddressObservation.
+type PublicationAddressObservation struct {
+	Conditions []struct {
+		LastTransitionAt   time.Time                                     `json:"lastTransitionAt"`
+		ObservedGeneration int                                           `json:"observedGeneration"`
+		Reason             string                                        `json:"reason"`
+		Status             PublicationAddressObservationConditionsStatus `json:"status"`
+		Type               PublicationAddressObservationConditionsType   `json:"type"`
+	} `json:"conditions"`
+	Destination     HTTPDestination `json:"destination"`
+	EndpointName    string          `json:"endpointName"`
+	GatewayUid      string          `json:"gatewayUid"`
+	Hostname        string          `json:"hostname"`
+	RouteGeneration int             `json:"routeGeneration"`
+	RouteName       string          `json:"routeName"`
+	RouteUid        string          `json:"routeUid"`
+}
+
+// PublicationAddressObservationConditionsStatus defines model for PublicationAddressObservation.Conditions.Status.
+type PublicationAddressObservationConditionsStatus string
+
+// PublicationAddressObservationConditionsType defines model for PublicationAddressObservation.Conditions.Type.
+type PublicationAddressObservationConditionsType string
+
+// PublicationDependent defines model for PublicationDependent.
+type PublicationDependent struct {
+	AppEnvironmentId string                   `json:"appEnvironmentId"`
+	Hostname         string                   `json:"hostname"`
+	Kind             PublicationDependentKind `json:"kind"`
+}
+
+// PublicationDependentKind defines model for PublicationDependent.Kind.
+type PublicationDependentKind string
+
+// PublicationDomain defines model for PublicationDomain.
+type PublicationDomain struct {
+	CreatedAt     time.Time             `json:"createdAt"`
+	Id            string                `json:"id"`
+	Kind          PublicationDomainKind `json:"kind"`
+	Name          string                `json:"name"`
+	ReservedNames []string              `json:"reservedNames"`
+	UpdatedAt     time.Time             `json:"updatedAt"`
+	Version       int                   `json:"version"`
+}
+
+// PublicationDomainKind defines model for PublicationDomain.Kind.
+type PublicationDomainKind string
+
+// PublicationDomainInput defines model for PublicationDomainInput.
+type PublicationDomainInput struct {
+	Kind          PublicationDomainInputKind `json:"kind"`
+	Name          string                     `json:"name"`
+	ReservedNames []string                   `json:"reservedNames"`
+}
+
+// PublicationDomainInputKind defines model for PublicationDomainInput.Kind.
+type PublicationDomainInputKind string
+
+// PublicationGrant defines model for PublicationGrant.
+type PublicationGrant struct {
+	BindingId   string    `json:"bindingId"`
+	CreatedAt   time.Time `json:"createdAt"`
+	DomainId    string    `json:"domainId"`
+	WorkspaceId string    `json:"workspaceId"`
+}
+
+// PublicationListener defines model for PublicationListener.
+type PublicationListener struct {
+	Hostname string `json:"hostname"`
+	Name     string `json:"name"`
+}
+
+// PublicationObservation defines model for PublicationObservation.
+type PublicationObservation struct {
+	Addresses      *[]PublicationAddressObservation `json:"addresses,omitempty"`
+	DesiredVersion *int                             `json:"desiredVersion,omitempty"`
+	Generation     *int                             `json:"generation,omitempty"`
+	ObservedAt     *time.Time                       `json:"observedAt,omitempty"`
+	ReasonCode     *string                          `json:"reasonCode,omitempty"`
+	State          *PublicationObservationState     `json:"state,omitempty"`
+	Uid            *string                          `json:"uid,omitempty"`
+}
+
+// PublicationObservationState defines model for PublicationObservation.State.
+type PublicationObservationState string
+
+// PublicationOption defines model for PublicationOption.
+type PublicationOption struct {
+	BindingId  string                  `json:"bindingId"`
+	Domain     PublicationDomain       `json:"domain"`
+	Health     PublicationOptionHealth `json:"health"`
+	Listeners  []PublicationListener   `json:"listeners"`
+	ReasonCode string                  `json:"reasonCode"`
+}
+
+// PublicationOptionHealth defines model for PublicationOption.Health.
+type PublicationOptionHealth string
 
 // Release defines model for Release.
 type Release struct {
@@ -3095,6 +3456,33 @@ type PutClusterStorageBindingParams struct {
 	IfMatch *OptionalIfMatch `json:"If-Match,omitempty"`
 }
 
+// GetPublicationDependentsParams defines parameters for GetPublicationDependents.
+type GetPublicationDependentsParams struct {
+	Offset    *int    `form:"offset,omitempty" json:"offset,omitempty"`
+	DomainId  *string `form:"domainId,omitempty" json:"domainId,omitempty"`
+	BindingId *string `form:"bindingId,omitempty" json:"bindingId,omitempty"`
+}
+
+// ListPublicationDomainsParams defines parameters for ListPublicationDomains.
+type ListPublicationDomainsParams struct {
+	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
+// DeletePublicationDomainParams defines parameters for DeletePublicationDomain.
+type DeletePublicationDomainParams struct {
+	IfMatch int `json:"If-Match"`
+}
+
+// PutPublicationDomainParams defines parameters for PutPublicationDomain.
+type PutPublicationDomainParams struct {
+	IfMatch *int `json:"If-Match,omitempty"`
+}
+
+// ListPublicationGrantsParams defines parameters for ListPublicationGrants.
+type ListPublicationGrantsParams struct {
+	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
 // ListUsersParams defines parameters for ListUsers.
 type ListUsersParams struct {
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
@@ -3425,6 +3813,12 @@ type ListEnvironmentAppsParams struct {
 	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
+// GetPublicationOptionsParams defines parameters for GetPublicationOptions.
+type GetPublicationOptionsParams struct {
+	Offset    *int   `form:"offset,omitempty" json:"offset,omitempty"`
+	ClusterId string `form:"clusterId" json:"clusterId"`
+}
+
 // ListStorageProfilesParams defines parameters for ListStorageProfiles.
 type ListStorageProfilesParams struct {
 	ClusterId string `form:"clusterId" json:"clusterId"`
@@ -3452,6 +3846,9 @@ type PutClusterPublicationBindingJSONRequestBody = ClusterPublicationBindingInpu
 
 // PutClusterStorageBindingJSONRequestBody defines body for PutClusterStorageBinding for application/json ContentType.
 type PutClusterStorageBindingJSONRequestBody = ClusterStorageBindingInput
+
+// PutPublicationDomainJSONRequestBody defines body for PutPublicationDomain for application/json ContentType.
+type PutPublicationDomainJSONRequestBody = PublicationDomainInput
 
 // CreateUserJSONRequestBody defines body for CreateUser for application/json ContentType.
 type CreateUserJSONRequestBody = UserCreateInput
@@ -3576,6 +3973,181 @@ type CreateEnvironmentJSONRequestBody = HierarchyInput
 // UpdateEnvironmentJSONRequestBody defines body for UpdateEnvironment for application/json ContentType.
 type UpdateEnvironmentJSONRequestBody = HierarchyInput
 
+// AsPublicEndpoint0 returns the union data inside the PublicEndpoint as a PublicEndpoint0
+func (t PublicEndpoint) AsPublicEndpoint0() (PublicEndpoint0, error) {
+	var body PublicEndpoint0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromPublicEndpoint0 overwrites any union data inside the PublicEndpoint as the provided PublicEndpoint0
+func (t *PublicEndpoint) FromPublicEndpoint0(v PublicEndpoint0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergePublicEndpoint0 performs a merge with any union data inside the PublicEndpoint, using the provided PublicEndpoint0
+func (t *PublicEndpoint) MergePublicEndpoint0(v PublicEndpoint0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsPublicEndpoint1 returns the union data inside the PublicEndpoint as a PublicEndpoint1
+func (t PublicEndpoint) AsPublicEndpoint1() (PublicEndpoint1, error) {
+	var body PublicEndpoint1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromPublicEndpoint1 overwrites any union data inside the PublicEndpoint as the provided PublicEndpoint1
+func (t *PublicEndpoint) FromPublicEndpoint1(v PublicEndpoint1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergePublicEndpoint1 performs a merge with any union data inside the PublicEndpoint, using the provided PublicEndpoint1
+func (t *PublicEndpoint) MergePublicEndpoint1(v PublicEndpoint1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t PublicEndpoint) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+	object := make(map[string]json.RawMessage)
+	if t.union != nil {
+		err = json.Unmarshal(b, &object)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if t.Addresses != nil {
+		object["addresses"], err = json.Marshal(t.Addresses)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'addresses': %w", err)
+		}
+	}
+
+	if t.DomainId != nil {
+		object["domainId"], err = json.Marshal(t.DomainId)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'domainId': %w", err)
+		}
+	}
+
+	if t.ExternalPort != nil {
+		object["externalPort"], err = json.Marshal(t.ExternalPort)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'externalPort': %w", err)
+		}
+	}
+
+	if t.HostnameLabel != nil {
+		object["hostnameLabel"], err = json.Marshal(t.HostnameLabel)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'hostnameLabel': %w", err)
+		}
+	}
+
+	object["name"], err = json.Marshal(t.Name)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'name': %w", err)
+	}
+
+	object["portName"], err = json.Marshal(t.PortName)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'portName': %w", err)
+	}
+
+	object["type"], err = json.Marshal(t.Type)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'type': %w", err)
+	}
+
+	b, err = json.Marshal(object)
+	return b, err
+}
+
+func (t *PublicEndpoint) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	if err != nil {
+		return err
+	}
+	object := make(map[string]json.RawMessage)
+	err = json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["addresses"]; found {
+		err = json.Unmarshal(raw, &t.Addresses)
+		if err != nil {
+			return fmt.Errorf("error reading 'addresses': %w", err)
+		}
+	}
+
+	if raw, found := object["domainId"]; found {
+		err = json.Unmarshal(raw, &t.DomainId)
+		if err != nil {
+			return fmt.Errorf("error reading 'domainId': %w", err)
+		}
+	}
+
+	if raw, found := object["externalPort"]; found {
+		err = json.Unmarshal(raw, &t.ExternalPort)
+		if err != nil {
+			return fmt.Errorf("error reading 'externalPort': %w", err)
+		}
+	}
+
+	if raw, found := object["hostnameLabel"]; found {
+		err = json.Unmarshal(raw, &t.HostnameLabel)
+		if err != nil {
+			return fmt.Errorf("error reading 'hostnameLabel': %w", err)
+		}
+	}
+
+	if raw, found := object["name"]; found {
+		err = json.Unmarshal(raw, &t.Name)
+		if err != nil {
+			return fmt.Errorf("error reading 'name': %w", err)
+		}
+	}
+
+	if raw, found := object["portName"]; found {
+		err = json.Unmarshal(raw, &t.PortName)
+		if err != nil {
+			return fmt.Errorf("error reading 'portName': %w", err)
+		}
+	}
+
+	if raw, found := object["type"]; found {
+		err = json.Unmarshal(raw, &t.Type)
+		if err != nil {
+			return fmt.Errorf("error reading 'type': %w", err)
+		}
+	}
+
+	return err
+}
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 
@@ -3634,6 +4206,30 @@ type ServerInterface interface {
 
 	// (POST /api/v1/admin/clusters/{clusterId}/enrollment-invitations)
 	CreateClusterEnrollmentInvitation(w http.ResponseWriter, r *http.Request, clusterId ClusterId)
+
+	// (GET /api/v1/admin/publication/dependents)
+	GetPublicationDependents(w http.ResponseWriter, r *http.Request, params GetPublicationDependentsParams)
+
+	// (GET /api/v1/admin/publication/domains)
+	ListPublicationDomains(w http.ResponseWriter, r *http.Request, params ListPublicationDomainsParams)
+
+	// (DELETE /api/v1/admin/publication/domains/{domainId})
+	DeletePublicationDomain(w http.ResponseWriter, r *http.Request, domainId string, params DeletePublicationDomainParams)
+
+	// (GET /api/v1/admin/publication/domains/{domainId})
+	GetPublicationDomain(w http.ResponseWriter, r *http.Request, domainId string)
+
+	// (PUT /api/v1/admin/publication/domains/{domainId})
+	PutPublicationDomain(w http.ResponseWriter, r *http.Request, domainId string, params PutPublicationDomainParams)
+
+	// (GET /api/v1/admin/publication/domains/{domainId}/grants)
+	ListPublicationGrants(w http.ResponseWriter, r *http.Request, domainId string, params ListPublicationGrantsParams)
+
+	// (DELETE /api/v1/admin/publication/domains/{domainId}/grants/{workspaceId}/{bindingId})
+	DeletePublicationGrant(w http.ResponseWriter, r *http.Request, domainId string, workspaceId string, bindingId string)
+
+	// (PUT /api/v1/admin/publication/domains/{domainId}/grants/{workspaceId}/{bindingId})
+	PutPublicationGrant(w http.ResponseWriter, r *http.Request, domainId string, workspaceId string, bindingId string)
 
 	// (GET /api/v1/admin/users)
 	ListUsers(w http.ResponseWriter, r *http.Request, params ListUsersParams)
@@ -3971,6 +4567,9 @@ type ServerInterface interface {
 	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/environments/{environmentId}/apps)
 	ListEnvironmentApps(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, environmentId EnvironmentId, params ListEnvironmentAppsParams)
 
+	// (GET /api/v1/workspaces/{workspaceId}/publication-options)
+	GetPublicationOptions(w http.ResponseWriter, r *http.Request, workspaceId string, params GetPublicationOptionsParams)
+
 	// (GET /api/v1/workspaces/{workspaceId}/storage-profiles)
 	ListStorageProfiles(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, params ListStorageProfilesParams)
 
@@ -4071,6 +4670,46 @@ func (_ Unimplemented) PutClusterStorageBinding(w http.ResponseWriter, r *http.R
 
 // (POST /api/v1/admin/clusters/{clusterId}/enrollment-invitations)
 func (_ Unimplemented) CreateClusterEnrollmentInvitation(w http.ResponseWriter, r *http.Request, clusterId ClusterId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /api/v1/admin/publication/dependents)
+func (_ Unimplemented) GetPublicationDependents(w http.ResponseWriter, r *http.Request, params GetPublicationDependentsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /api/v1/admin/publication/domains)
+func (_ Unimplemented) ListPublicationDomains(w http.ResponseWriter, r *http.Request, params ListPublicationDomainsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (DELETE /api/v1/admin/publication/domains/{domainId})
+func (_ Unimplemented) DeletePublicationDomain(w http.ResponseWriter, r *http.Request, domainId string, params DeletePublicationDomainParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /api/v1/admin/publication/domains/{domainId})
+func (_ Unimplemented) GetPublicationDomain(w http.ResponseWriter, r *http.Request, domainId string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (PUT /api/v1/admin/publication/domains/{domainId})
+func (_ Unimplemented) PutPublicationDomain(w http.ResponseWriter, r *http.Request, domainId string, params PutPublicationDomainParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /api/v1/admin/publication/domains/{domainId}/grants)
+func (_ Unimplemented) ListPublicationGrants(w http.ResponseWriter, r *http.Request, domainId string, params ListPublicationGrantsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (DELETE /api/v1/admin/publication/domains/{domainId}/grants/{workspaceId}/{bindingId})
+func (_ Unimplemented) DeletePublicationGrant(w http.ResponseWriter, r *http.Request, domainId string, workspaceId string, bindingId string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (PUT /api/v1/admin/publication/domains/{domainId}/grants/{workspaceId}/{bindingId})
+func (_ Unimplemented) PutPublicationGrant(w http.ResponseWriter, r *http.Request, domainId string, workspaceId string, bindingId string) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -4631,6 +5270,11 @@ func (_ Unimplemented) UpdateEnvironment(w http.ResponseWriter, r *http.Request,
 
 // (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/environments/{environmentId}/apps)
 func (_ Unimplemented) ListEnvironmentApps(w http.ResponseWriter, r *http.Request, workspaceId WorkspaceId, projectId ProjectId, environmentId EnvironmentId, params ListEnvironmentAppsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /api/v1/workspaces/{workspaceId}/publication-options)
+func (_ Unimplemented) GetPublicationOptions(w http.ResponseWriter, r *http.Request, workspaceId string, params GetPublicationOptionsParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -5267,6 +5911,358 @@ func (siw *ServerInterfaceWrapper) CreateClusterEnrollmentInvitation(w http.Resp
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CreateClusterEnrollmentInvitation(w, r, clusterId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetPublicationDependents operation middleware
+func (siw *ServerInterfaceWrapper) GetPublicationDependents(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetPublicationDependentsParams
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "domainId" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "domainId", r.URL.Query(), &params.DomainId, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "domainId"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "domainId", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "bindingId" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "bindingId", r.URL.Query(), &params.BindingId, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "bindingId"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "bindingId", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPublicationDependents(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListPublicationDomains operation middleware
+func (siw *ServerInterfaceWrapper) ListPublicationDomains(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListPublicationDomainsParams
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListPublicationDomains(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeletePublicationDomain operation middleware
+func (siw *ServerInterfaceWrapper) DeletePublicationDomain(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "domainId" -------------
+	var domainId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "domainId", chi.URLParam(r, "domainId"), &domainId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "domainId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeletePublicationDomainParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch int
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "integer", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeletePublicationDomain(w, r, domainId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetPublicationDomain operation middleware
+func (siw *ServerInterfaceWrapper) GetPublicationDomain(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "domainId" -------------
+	var domainId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "domainId", chi.URLParam(r, "domainId"), &domainId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "domainId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPublicationDomain(w, r, domainId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PutPublicationDomain operation middleware
+func (siw *ServerInterfaceWrapper) PutPublicationDomain(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "domainId" -------------
+	var domainId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "domainId", chi.URLParam(r, "domainId"), &domainId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "domainId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PutPublicationDomainParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch int
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "integer", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = &IfMatch
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PutPublicationDomain(w, r, domainId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListPublicationGrants operation middleware
+func (siw *ServerInterfaceWrapper) ListPublicationGrants(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "domainId" -------------
+	var domainId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "domainId", chi.URLParam(r, "domainId"), &domainId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "domainId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListPublicationGrantsParams
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListPublicationGrants(w, r, domainId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeletePublicationGrant operation middleware
+func (siw *ServerInterfaceWrapper) DeletePublicationGrant(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "domainId" -------------
+	var domainId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "domainId", chi.URLParam(r, "domainId"), &domainId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "domainId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "bindingId" -------------
+	var bindingId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "bindingId", chi.URLParam(r, "bindingId"), &bindingId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "bindingId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeletePublicationGrant(w, r, domainId, workspaceId, bindingId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PutPublicationGrant operation middleware
+func (siw *ServerInterfaceWrapper) PutPublicationGrant(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "domainId" -------------
+	var domainId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "domainId", chi.URLParam(r, "domainId"), &domainId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "domainId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "bindingId" -------------
+	var bindingId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "bindingId", chi.URLParam(r, "bindingId"), &bindingId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "bindingId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PutPublicationGrant(w, r, domainId, workspaceId, bindingId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -10931,6 +11927,61 @@ func (siw *ServerInterfaceWrapper) ListEnvironmentApps(w http.ResponseWriter, r 
 	handler.ServeHTTP(w, r)
 }
 
+// GetPublicationOptions operation middleware
+func (siw *ServerInterfaceWrapper) GetPublicationOptions(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetPublicationOptionsParams
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		}
+		return
+	}
+
+	// ------------- Required query parameter "clusterId" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "clusterId", r.URL.Query(), &params.ClusterId, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "clusterId"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "clusterId", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPublicationOptions(w, r, workspaceId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListStorageProfiles operation middleware
 func (siw *ServerInterfaceWrapper) ListStorageProfiles(w http.ResponseWriter, r *http.Request) {
 
@@ -11507,6 +12558,33 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/operations/{operationId}", wrapper.GetOperation)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/admin/publication/domains", wrapper.ListPublicationDomains)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/api/v1/admin/publication/domains/{domainId}", wrapper.DeletePublicationDomain)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/admin/publication/domains/{domainId}", wrapper.GetPublicationDomain)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/api/v1/admin/publication/domains/{domainId}", wrapper.PutPublicationDomain)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/admin/publication/domains/{domainId}/grants", wrapper.ListPublicationGrants)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/api/v1/admin/publication/domains/{domainId}/grants/{workspaceId}/{bindingId}", wrapper.DeletePublicationGrant)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/api/v1/admin/publication/domains/{domainId}/grants/{workspaceId}/{bindingId}", wrapper.PutPublicationGrant)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/admin/publication/dependents", wrapper.GetPublicationDependents)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/workspaces/{workspaceId}/publication-options", wrapper.GetPublicationOptions)
 	})
 
 	return r
@@ -12620,6 +13698,297 @@ func (response CreateClusterEnrollmentInvitation409JSONResponse) VisitCreateClus
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPublicationDependentsRequestObject struct {
+	Params GetPublicationDependentsParams
+}
+
+type GetPublicationDependentsResponseObject interface {
+	VisitGetPublicationDependentsResponse(w http.ResponseWriter) error
+}
+
+type GetPublicationDependents200JSONResponse struct {
+	HasMore bool                   `json:"hasMore"`
+	Items   []PublicationDependent `json:"items"`
+}
+
+func (response GetPublicationDependents200JSONResponse) VisitGetPublicationDependentsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPublicationDependentsdefaultJSONResponse struct {
+	Body       Error
+	StatusCode int
+}
+
+func (response GetPublicationDependentsdefaultJSONResponse) VisitGetPublicationDependentsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListPublicationDomainsRequestObject struct {
+	Params ListPublicationDomainsParams
+}
+
+type ListPublicationDomainsResponseObject interface {
+	VisitListPublicationDomainsResponse(w http.ResponseWriter) error
+}
+
+type ListPublicationDomains200JSONResponse struct {
+	HasMore bool                `json:"hasMore"`
+	Items   []PublicationDomain `json:"items"`
+}
+
+func (response ListPublicationDomains200JSONResponse) VisitListPublicationDomainsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListPublicationDomainsdefaultJSONResponse struct {
+	Body       Error
+	StatusCode int
+}
+
+func (response ListPublicationDomainsdefaultJSONResponse) VisitListPublicationDomainsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeletePublicationDomainRequestObject struct {
+	DomainId string `json:"domainId"`
+	Params   DeletePublicationDomainParams
+}
+
+type DeletePublicationDomainResponseObject interface {
+	VisitDeletePublicationDomainResponse(w http.ResponseWriter) error
+}
+
+type DeletePublicationDomain204Response struct {
+}
+
+func (response DeletePublicationDomain204Response) VisitDeletePublicationDomainResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeletePublicationDomaindefaultJSONResponse struct {
+	Body       Error
+	StatusCode int
+}
+
+func (response DeletePublicationDomaindefaultJSONResponse) VisitDeletePublicationDomainResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPublicationDomainRequestObject struct {
+	DomainId string `json:"domainId"`
+}
+
+type GetPublicationDomainResponseObject interface {
+	VisitGetPublicationDomainResponse(w http.ResponseWriter) error
+}
+
+type GetPublicationDomain200JSONResponse PublicationDomain
+
+func (response GetPublicationDomain200JSONResponse) VisitGetPublicationDomainResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutPublicationDomainRequestObject struct {
+	DomainId string `json:"domainId"`
+	Params   PutPublicationDomainParams
+	Body     *PutPublicationDomainJSONRequestBody
+}
+
+type PutPublicationDomainResponseObject interface {
+	VisitPutPublicationDomainResponse(w http.ResponseWriter) error
+}
+
+type PutPublicationDomain200JSONResponse PublicationDomain
+
+func (response PutPublicationDomain200JSONResponse) VisitPutPublicationDomainResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutPublicationDomain201JSONResponse PublicationDomain
+
+func (response PutPublicationDomain201JSONResponse) VisitPutPublicationDomainResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutPublicationDomaindefaultJSONResponse struct {
+	Body       Error
+	StatusCode int
+}
+
+func (response PutPublicationDomaindefaultJSONResponse) VisitPutPublicationDomainResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListPublicationGrantsRequestObject struct {
+	DomainId string `json:"domainId"`
+	Params   ListPublicationGrantsParams
+}
+
+type ListPublicationGrantsResponseObject interface {
+	VisitListPublicationGrantsResponse(w http.ResponseWriter) error
+}
+
+type ListPublicationGrants200JSONResponse struct {
+	HasMore bool               `json:"hasMore"`
+	Items   []PublicationGrant `json:"items"`
+}
+
+func (response ListPublicationGrants200JSONResponse) VisitListPublicationGrantsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeletePublicationGrantRequestObject struct {
+	DomainId    string `json:"domainId"`
+	WorkspaceId string `json:"workspaceId"`
+	BindingId   string `json:"bindingId"`
+}
+
+type DeletePublicationGrantResponseObject interface {
+	VisitDeletePublicationGrantResponse(w http.ResponseWriter) error
+}
+
+type DeletePublicationGrant204Response struct {
+}
+
+func (response DeletePublicationGrant204Response) VisitDeletePublicationGrantResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeletePublicationGrantdefaultJSONResponse struct {
+	Body       Error
+	StatusCode int
+}
+
+func (response DeletePublicationGrantdefaultJSONResponse) VisitDeletePublicationGrantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutPublicationGrantRequestObject struct {
+	DomainId    string `json:"domainId"`
+	WorkspaceId string `json:"workspaceId"`
+	BindingId   string `json:"bindingId"`
+}
+
+type PutPublicationGrantResponseObject interface {
+	VisitPutPublicationGrantResponse(w http.ResponseWriter) error
+}
+
+type PutPublicationGrant204Response struct {
+}
+
+func (response PutPublicationGrant204Response) VisitPutPublicationGrantResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type PutPublicationGrantdefaultJSONResponse struct {
+	Body       Error
+	StatusCode int
+}
+
+func (response PutPublicationGrantdefaultJSONResponse) VisitPutPublicationGrantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -19044,6 +20413,49 @@ func (response ListEnvironmentApps404JSONResponse) VisitListEnvironmentAppsRespo
 	return err
 }
 
+type GetPublicationOptionsRequestObject struct {
+	WorkspaceId string `json:"workspaceId"`
+	Params      GetPublicationOptionsParams
+}
+
+type GetPublicationOptionsResponseObject interface {
+	VisitGetPublicationOptionsResponse(w http.ResponseWriter) error
+}
+
+type GetPublicationOptions200JSONResponse struct {
+	HasMore bool                `json:"hasMore"`
+	Items   []PublicationOption `json:"items"`
+}
+
+func (response GetPublicationOptions200JSONResponse) VisitGetPublicationOptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPublicationOptionsdefaultJSONResponse struct {
+	Body       Error
+	StatusCode int
+}
+
+func (response GetPublicationOptionsdefaultJSONResponse) VisitGetPublicationOptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListStorageProfilesRequestObject struct {
 	WorkspaceId WorkspaceId `json:"workspaceId"`
 	Params      ListStorageProfilesParams
@@ -19205,6 +20617,30 @@ type StrictServerInterface interface {
 
 	// (POST /api/v1/admin/clusters/{clusterId}/enrollment-invitations)
 	CreateClusterEnrollmentInvitation(ctx context.Context, request CreateClusterEnrollmentInvitationRequestObject) (CreateClusterEnrollmentInvitationResponseObject, error)
+
+	// (GET /api/v1/admin/publication/dependents)
+	GetPublicationDependents(ctx context.Context, request GetPublicationDependentsRequestObject) (GetPublicationDependentsResponseObject, error)
+
+	// (GET /api/v1/admin/publication/domains)
+	ListPublicationDomains(ctx context.Context, request ListPublicationDomainsRequestObject) (ListPublicationDomainsResponseObject, error)
+
+	// (DELETE /api/v1/admin/publication/domains/{domainId})
+	DeletePublicationDomain(ctx context.Context, request DeletePublicationDomainRequestObject) (DeletePublicationDomainResponseObject, error)
+
+	// (GET /api/v1/admin/publication/domains/{domainId})
+	GetPublicationDomain(ctx context.Context, request GetPublicationDomainRequestObject) (GetPublicationDomainResponseObject, error)
+
+	// (PUT /api/v1/admin/publication/domains/{domainId})
+	PutPublicationDomain(ctx context.Context, request PutPublicationDomainRequestObject) (PutPublicationDomainResponseObject, error)
+
+	// (GET /api/v1/admin/publication/domains/{domainId}/grants)
+	ListPublicationGrants(ctx context.Context, request ListPublicationGrantsRequestObject) (ListPublicationGrantsResponseObject, error)
+
+	// (DELETE /api/v1/admin/publication/domains/{domainId}/grants/{workspaceId}/{bindingId})
+	DeletePublicationGrant(ctx context.Context, request DeletePublicationGrantRequestObject) (DeletePublicationGrantResponseObject, error)
+
+	// (PUT /api/v1/admin/publication/domains/{domainId}/grants/{workspaceId}/{bindingId})
+	PutPublicationGrant(ctx context.Context, request PutPublicationGrantRequestObject) (PutPublicationGrantResponseObject, error)
 
 	// (GET /api/v1/admin/users)
 	ListUsers(ctx context.Context, request ListUsersRequestObject) (ListUsersResponseObject, error)
@@ -19541,6 +20977,9 @@ type StrictServerInterface interface {
 
 	// (GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/environments/{environmentId}/apps)
 	ListEnvironmentApps(ctx context.Context, request ListEnvironmentAppsRequestObject) (ListEnvironmentAppsResponseObject, error)
+
+	// (GET /api/v1/workspaces/{workspaceId}/publication-options)
+	GetPublicationOptions(ctx context.Context, request GetPublicationOptionsRequestObject) (GetPublicationOptionsResponseObject, error)
 
 	// (GET /api/v1/workspaces/{workspaceId}/storage-profiles)
 	ListStorageProfiles(ctx context.Context, request ListStorageProfilesRequestObject) (ListStorageProfilesResponseObject, error)
@@ -20099,6 +21538,228 @@ func (sh *strictHandler) CreateClusterEnrollmentInvitation(w http.ResponseWriter
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(CreateClusterEnrollmentInvitationResponseObject); ok {
 		if err := validResponse.VisitCreateClusterEnrollmentInvitationResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetPublicationDependents operation middleware
+func (sh *strictHandler) GetPublicationDependents(w http.ResponseWriter, r *http.Request, params GetPublicationDependentsParams) {
+	var request GetPublicationDependentsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetPublicationDependents(ctx, request.(GetPublicationDependentsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetPublicationDependents")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetPublicationDependentsResponseObject); ok {
+		if err := validResponse.VisitGetPublicationDependentsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListPublicationDomains operation middleware
+func (sh *strictHandler) ListPublicationDomains(w http.ResponseWriter, r *http.Request, params ListPublicationDomainsParams) {
+	var request ListPublicationDomainsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListPublicationDomains(ctx, request.(ListPublicationDomainsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListPublicationDomains")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListPublicationDomainsResponseObject); ok {
+		if err := validResponse.VisitListPublicationDomainsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeletePublicationDomain operation middleware
+func (sh *strictHandler) DeletePublicationDomain(w http.ResponseWriter, r *http.Request, domainId string, params DeletePublicationDomainParams) {
+	var request DeletePublicationDomainRequestObject
+
+	request.DomainId = domainId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeletePublicationDomain(ctx, request.(DeletePublicationDomainRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeletePublicationDomain")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeletePublicationDomainResponseObject); ok {
+		if err := validResponse.VisitDeletePublicationDomainResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetPublicationDomain operation middleware
+func (sh *strictHandler) GetPublicationDomain(w http.ResponseWriter, r *http.Request, domainId string) {
+	var request GetPublicationDomainRequestObject
+
+	request.DomainId = domainId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetPublicationDomain(ctx, request.(GetPublicationDomainRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetPublicationDomain")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetPublicationDomainResponseObject); ok {
+		if err := validResponse.VisitGetPublicationDomainResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PutPublicationDomain operation middleware
+func (sh *strictHandler) PutPublicationDomain(w http.ResponseWriter, r *http.Request, domainId string, params PutPublicationDomainParams) {
+	var request PutPublicationDomainRequestObject
+
+	request.DomainId = domainId
+	request.Params = params
+
+	var body PutPublicationDomainJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PutPublicationDomain(ctx, request.(PutPublicationDomainRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PutPublicationDomain")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PutPublicationDomainResponseObject); ok {
+		if err := validResponse.VisitPutPublicationDomainResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListPublicationGrants operation middleware
+func (sh *strictHandler) ListPublicationGrants(w http.ResponseWriter, r *http.Request, domainId string, params ListPublicationGrantsParams) {
+	var request ListPublicationGrantsRequestObject
+
+	request.DomainId = domainId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListPublicationGrants(ctx, request.(ListPublicationGrantsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListPublicationGrants")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListPublicationGrantsResponseObject); ok {
+		if err := validResponse.VisitListPublicationGrantsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeletePublicationGrant operation middleware
+func (sh *strictHandler) DeletePublicationGrant(w http.ResponseWriter, r *http.Request, domainId string, workspaceId string, bindingId string) {
+	var request DeletePublicationGrantRequestObject
+
+	request.DomainId = domainId
+	request.WorkspaceId = workspaceId
+	request.BindingId = bindingId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeletePublicationGrant(ctx, request.(DeletePublicationGrantRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeletePublicationGrant")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeletePublicationGrantResponseObject); ok {
+		if err := validResponse.VisitDeletePublicationGrantResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PutPublicationGrant operation middleware
+func (sh *strictHandler) PutPublicationGrant(w http.ResponseWriter, r *http.Request, domainId string, workspaceId string, bindingId string) {
+	var request PutPublicationGrantRequestObject
+
+	request.DomainId = domainId
+	request.WorkspaceId = workspaceId
+	request.BindingId = bindingId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PutPublicationGrant(ctx, request.(PutPublicationGrantRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PutPublicationGrant")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PutPublicationGrantResponseObject); ok {
+		if err := validResponse.VisitPutPublicationGrantResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -23448,6 +25109,33 @@ func (sh *strictHandler) ListEnvironmentApps(w http.ResponseWriter, r *http.Requ
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ListEnvironmentAppsResponseObject); ok {
 		if err := validResponse.VisitListEnvironmentAppsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetPublicationOptions operation middleware
+func (sh *strictHandler) GetPublicationOptions(w http.ResponseWriter, r *http.Request, workspaceId string, params GetPublicationOptionsParams) {
+	var request GetPublicationOptionsRequestObject
+
+	request.WorkspaceId = workspaceId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetPublicationOptions(ctx, request.(GetPublicationOptionsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetPublicationOptions")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetPublicationOptionsResponseObject); ok {
+		if err := validResponse.VisitGetPublicationOptionsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

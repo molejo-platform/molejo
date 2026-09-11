@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -68,19 +69,34 @@ func (s *Store) createDeployment(ctx context.Context, actorUserID *int64, actor 
 	} else if err != nil {
 		return domain.Deployment{}, domain.Operation{}, false, err
 	}
+	var otherActive bool
+	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM operations WHERE app_environment_id=$1 AND status IN ('Pending','Running') AND kind<>'ApplyDeployment')`, appEnvironment.ID).Scan(&otherActive); err != nil {
+		return domain.Deployment{}, domain.Operation{}, false, err
+	}
+	if otherActive {
+		return domain.Deployment{}, domain.Operation{}, false, ErrConflict
+	}
 	var active bool
 	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM operations WHERE app_environment_id=$1 AND status IN ('Pending','Running'))`, appEnvironment.ID).Scan(&active); err != nil {
 		return domain.Deployment{}, domain.Operation{}, false, err
 	}
-	if active || appEnvironment.DeletionRequestedAt != nil {
+	if appEnvironment.DeletionRequestedAt != nil {
 		return domain.Deployment{}, domain.Operation{}, false, ErrConflict
+	}
+	if active {
+		if _, err = tx.Exec(ctx, `UPDATE deployments d SET status='Degraded',message=$2,completed_at=now(),updated_at=now() WHERE EXISTS(SELECT 1 FROM operations o WHERE o.deployment_id=d.id AND o.app_environment_id=$1 AND o.kind='ApplyDeployment' AND o.status IN ('Pending','Running'))`, appEnvironment.ID, "new deployment requested"); err != nil {
+			return domain.Deployment{}, domain.Operation{}, false, err
+		}
+		if _, err = tx.Exec(ctx, `UPDATE operations SET status='Failed',error_code='superseded',error_message='new deployment requested',completed_at=now(),lease_until=NULL,worker_id=NULL WHERE app_environment_id=$1 AND kind='ApplyDeployment' AND status IN ('Pending','Running')`, appEnvironment.ID); err != nil {
+			return domain.Deployment{}, domain.Operation{}, false, err
+		}
 	}
 	revision, err := configurationRevision(ctx, tx, request.WorkspaceID, appEnvironment.ID, request.ConfigurationVersion)
 	if err != nil {
 		return domain.Deployment{}, domain.Operation{}, false, err
 	}
 	revision.Configuration = inheritAllocatedPorts(revision.Configuration, appEnvironment.Configuration)
-	revision.Configuration, err = s.reservePublicationClaims(ctx, tx, appEnvironment.ID, revision.Version, appEnvironment.WorkloadKind, revision.Configuration)
+	revision.Configuration, err = s.reservePublicationClaims(ctx, tx, appEnvironment.ID, revision.Version, appEnvironment.WorkloadKind, revision.Configuration, false)
 	if err != nil {
 		return domain.Deployment{}, domain.Operation{}, false, err
 	}
@@ -124,6 +140,22 @@ func (s *Store) createDeployment(ctx context.Context, actorUserID *int64, actor 
 	operation, err := insertOperationForPrincipal(ctx, tx, request.WorkspaceID, appEnvironment.ID, deployment.ID, actorUserID, actor.ID, domain.OperationApplyDeployment, request.IdempotencyHash, request.PayloadHash, desiredVersion)
 	if err != nil {
 		return domain.Deployment{}, domain.Operation{}, false, translateDBError(err)
+	}
+	_, snapshot, err := s.resolveHTTPConfiguration(ctx, tx, appEnvironment.ID, revision.Configuration)
+	if err != nil {
+		return domain.Deployment{}, domain.Operation{}, false, err
+	}
+	snapshotJSON, err := json.Marshal(snapshot)
+	if err != nil {
+		return domain.Deployment{}, domain.Operation{}, false, err
+	}
+	if _, err = tx.Exec(ctx, `UPDATE deployments SET publication_snapshot=$2 WHERE id=$1`, deployment.ID, snapshotJSON); err != nil {
+		return domain.Deployment{}, domain.Operation{}, false, err
+	}
+	for _, a := range snapshot.Addresses {
+		if _, err = tx.Exec(ctx, `INSERT INTO publication_execution_claims(deployment_id,hostname,domain_id,binding_id,endpoint_name) VALUES($1,$2,$3,$4,$5)`, deployment.ID, a.Hostname, a.DomainID, a.Destination.BindingID, a.EndpointName); err != nil {
+			return domain.Deployment{}, domain.Operation{}, false, err
+		}
 	}
 	operation.AppEnvironmentPublicID = appEnvironment.PublicID
 	operation.DeploymentPublicID = deployment.PublicID

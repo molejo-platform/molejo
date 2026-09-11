@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -71,10 +72,13 @@ func (s *Store) ReconcileBindingObservations(ctx context.Context, clusterPublicI
 	for _, observation := range observations {
 		target, exists := targetByID[observation.ID]
 		if !exists {
-			return errors.New("binding observation target is not active")
+			continue
 		}
 		if _, duplicate := seen[observation.ID]; duplicate {
 			return errors.New("binding observation is duplicated")
+		}
+		if observation.Version != target.Version {
+			continue
 		}
 		if err = kubernetesbinding.ValidateObservation(target, observation, receivedAt); err != nil {
 			return err
@@ -85,12 +89,13 @@ func (s *Store) ReconcileBindingObservations(ctx context.Context, clusterPublicI
 		if _, err = tx.Exec(ctx, `UPDATE cluster_storage_bindings SET health='Unknown',reason_code='binding_observation_missing',observed_at=NULL,expires_at=NULL,observed_session_id=$2,observed_sequence=$3 WHERE cluster_id=$1`, clusterID, sessionID, int64(sequence)); err != nil {
 			return err
 		}
-		if _, err = tx.Exec(ctx, `UPDATE cluster_publication_bindings SET health='Unknown',reason_code='binding_observation_missing',observed_at=NULL,expires_at=NULL,observed_session_id=$2,observed_sequence=$3 WHERE cluster_id=$1`, clusterID, sessionID, int64(sequence)); err != nil {
-			return err
-		}
 	}
 	for _, observation := range observations {
-		expiresAt := receivedAt.Add(kubernetesbinding.ObservationTTL)
+		target, ok := targetByID[observation.ID]
+		if !ok || target.Version != observation.Version {
+			continue
+		}
+		expiresAt := observation.SampledAt.Add(kubernetesbinding.ObservationTTL)
 		switch observation.Kind {
 		case kubernetesbinding.KindStorage:
 			modes, marshalErr := json.Marshal(kubernetesbinding.NormalizeStrings(observation.Storage.AccessModes))
@@ -109,22 +114,19 @@ func (s *Store) ReconcileBindingObservations(ctx context.Context, clusterPublicI
 				return ErrVersionConflict
 			}
 		case kubernetesbinding.KindPublicationHTTP:
-			kinds, marshalErr := json.Marshal(kubernetesbinding.NormalizeStrings(observation.Publication.SupportedRouteKinds))
+			parts := strings.SplitN(observation.ID, ":", 2)
+			if len(parts) != 2 {
+				return errors.New("publication observation identity invalid")
+			}
+			value, marshalErr := json.Marshal(map[string]any{"health": observation.Health, "reasonCode": observation.ReasonCode, "sampledAt": observation.SampledAt, "facts": observation.Publication})
 			if marshalErr != nil {
 				return marshalErr
 			}
-			result, execErr := tx.Exec(ctx, `UPDATE cluster_publication_bindings SET gateway_class_name=$3,gateway_class_accepted=$4,gateway_programmed=$5,
-				listener_ready=$6,supported_route_kinds_json=$7::text::jsonb,health=$8,reason_code=$9,observed_at=$10,expires_at=$11,
-				observed_session_id=$12,observed_sequence=$13 WHERE cluster_id=$1 AND version=$2`, clusterID, observation.Version,
-				observation.Publication.GatewayClassName, observation.Publication.GatewayClassAccepted, observation.Publication.GatewayProgrammed,
-				observation.Publication.ListenerReady, string(kinds), observation.Health, observation.ReasonCode, observation.SampledAt,
-				expiresAt, sessionID, int64(sequence))
-			if execErr != nil {
-				return execErr
+			_, err = tx.Exec(ctx, `UPDATE cluster_publication_bindings SET observation=jsonb_set(observation,ARRAY[$3],$4::jsonb),observed_at=GREATEST(observed_at,$5),expires_at=GREATEST(expires_at,$6),observed_session_id=$7,observed_sequence=$8 WHERE cluster_id=$1 AND id=$2 AND version=$9 AND (observation->$3->>'sampledAt' IS NULL OR (observation->$3->>'sampledAt')::timestamptz<$5)`, clusterID, parts[0], parts[1], value, observation.SampledAt, expiresAt, sessionID, int64(sequence), observation.Version)
+			if err != nil {
+				return err
 			}
-			if result.RowsAffected() != 1 {
-				return ErrVersionConflict
-			}
+
 		}
 	}
 	return tx.Commit(ctx)
@@ -153,19 +155,20 @@ func storageBindingTargets(ctx context.Context, query bindingTargetQuerier, clus
 }
 
 func publicationBindingTargets(ctx context.Context, query bindingTargetQuerier, clusterPublicID string) ([]kubernetesbinding.Target, error) {
-	rows, err := query.Query(ctx, `SELECT b.gateway_namespace,b.gateway_name,b.section_name,b.version FROM cluster_publication_bindings b JOIN agent_installations i ON i.id=b.cluster_id WHERE i.public_id=$1`, clusterPublicID)
+	rows, err := query.Query(ctx, publicationBindingSelect+` WHERE i.public_id=$1`, clusterPublicID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	targets := make([]kubernetesbinding.Target, 0, 1)
+	result := []kubernetesbinding.Target{}
 	for rows.Next() {
-		var namespace, name, section string
-		var version int64
-		if err = rows.Scan(&namespace, &name, &section, &version); err != nil {
+		b, err := scanPublicationBinding(rows)
+		if err != nil {
 			return nil, err
 		}
-		targets = append(targets, kubernetesbinding.Target{ID: publicationBindingTargetID, Kind: kubernetesbinding.KindPublicationHTTP, Version: version, Publication: &kubernetesbinding.PublicationTarget{GatewayNamespace: namespace, GatewayName: name, SectionName: section}})
+		for _, l := range b.Listeners {
+			result = append(result, kubernetesbinding.Target{ID: b.ID + ":" + l.Name, Kind: kubernetesbinding.KindPublicationHTTP, Version: b.Revision, Publication: &kubernetesbinding.PublicationTarget{GatewayNamespace: b.GatewayNamespace, GatewayName: b.GatewayName, SectionName: l.Name}})
+		}
 	}
-	return targets, rows.Err()
+	return result, rows.Err()
 }

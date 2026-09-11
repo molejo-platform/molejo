@@ -31,25 +31,15 @@ type ClusterStorageBinding struct {
 }
 
 type ClusterPublicationBinding struct {
-	ClusterID            string
-	ClusterUID           string
-	GatewayNamespace     string
-	GatewayName          string
-	SectionName          string
-	GatewayClassName     string
-	GatewayClassAccepted bool
-	GatewayProgrammed    bool
-	ListenerReady        bool
-	SupportedRouteKinds  []string
-	Health               kubernetesbinding.Health
-	ReasonCode           string
-	ObservedAt           *time.Time
-	ExpiresAt            *time.Time
-	Version              int64
-	CreatedAt            time.Time
-	UpdatedAt            time.Time
+	kubernetesbinding.HTTPBinding
+	ClusterID  string                   `json:"clusterId"`
+	ClusterUID string                   `json:"clusterUid"`
+	Health     kubernetesbinding.Health `json:"health"`
+	ReasonCode string                   `json:"reasonCode"`
+	ObservedAt *time.Time               `json:"observedAt,omitempty"`
+	ExpiresAt  *time.Time               `json:"-"`
+	CreatedAt  time.Time                `json:"createdAt"`
+	UpdatedAt  time.Time                `json:"updatedAt"`
 }
 
 func storageBindingTargetID(profileID string) string { return "storage:" + profileID }
-
-const publicationBindingTargetID = "publication:http"

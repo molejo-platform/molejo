@@ -33,6 +33,9 @@ func ValidateTiming(operationLease, commandTimeout time.Duration) error {
 }
 
 type Store interface {
+	RegisterAttempt(context.Context, domain.Operation, time.Time) error
+	FinishAttempt(context.Context, string, string, int64, store.AttemptResult) error
+	PublicationSnapshotForDeployment(context.Context, int64) (store.PublicationSnapshot, error)
 	ClaimNextForAgent(context.Context, string, string, time.Duration) (domain.Operation, domain.AppEnvironment, domain.Deployment, bool, error)
 	Workspace(context.Context, int64) (domain.Workspace, error)
 	CompleteWorkspace(context.Context, domain.Operation) error
@@ -96,6 +99,9 @@ func (w *Worker) NextCommand(ctx context.Context, installationID string) (*clust
 		_ = w.Store.Fail(ctx, op, "command_unavailable", "operation lease does not leave enough time to execute the runtime command", true)
 		return nil, false, err
 	}
+	if err := w.Store.RegisterAttempt(ctx, op, deadline); err != nil {
+		return nil, false, err
+	}
 	commandID := op.PublicID + ":" + strconv.FormatInt(op.FencingToken, 10)
 	command := &clusteragentv1alpha1.RuntimeCommand{
 		CommandId: commandID, OperationId: op.PublicID, DesiredVersion: op.DesiredVersion,
@@ -130,6 +136,11 @@ func (w *Worker) HandleResult(ctx context.Context, installationID string, result
 	if !ok {
 		return store.ErrLeaseLost
 	}
+	// Record a late result as evidence about its attempt, never as authority to
+	// complete an operation whose lease has been replaced.
+	if err := w.Store.FinishAttempt(ctx, installationID, operationID, result.GetFencingToken(), store.AttemptResult{Uncertain: result.GetErrorCode() != "", RuntimeUID: result.GetRuntimeUid(), WithdrawalConfirmed: result.GetWithdrawalConfirmed()}); err != nil {
+		return err
+	}
 	op, err := w.Store.ClaimedOperationForAgent(ctx, installationID, operationID, result.GetFencingToken())
 	if err != nil {
 		return err
@@ -149,9 +160,12 @@ func (w *Worker) HandleResult(ctx context.Context, installationID string, result
 	case domain.OperationEnsureVolume, domain.OperationExpandVolume, domain.OperationDeleteVolume:
 		return w.Store.CompleteVolume(ctx, op, result.GetVolumeState(), result.GetVolumeMessage(), result.GetObservedSizeGib(), result.GetSpecHash())
 	case domain.OperationDeleteAppEnv:
+		if !result.GetWithdrawalConfirmed() || result.GetRuntimeUid() == "" {
+			return w.Store.Fail(ctx, op, "withdrawal_unconfirmed", "terminal withdrawal was not confirmed", true)
+		}
 		return w.Store.CompleteAppEnvironmentDeletion(ctx, op, result.GetMessage())
 	case domain.OperationApplyDeployment:
-		if result.GetObservedRelease() == "" {
+		if result.GetObservedRelease() == "" || result.GetRuntimeUid() == "" {
 			return w.Store.Fail(ctx, op, "runtime_observation_failed", "runtime release was not observed", true)
 		}
 		if result.GetVolumeState() != "" {
@@ -201,6 +215,9 @@ func (w *Worker) Abandon(ctx context.Context, installationID, commandID string) 
 	if err != nil {
 		return nil
 	}
+	if err := w.Store.FinishAttempt(ctx, installationID, commandID[:separator], fencingToken, store.AttemptResult{Uncertain: true}); err != nil {
+		return err
+	}
 	operation, err := w.Store.ClaimedOperationForAgent(ctx, installationID, commandID[:separator], fencingToken)
 	if err != nil {
 		return nil
@@ -249,6 +266,9 @@ func (w *Worker) commandPayload(ctx context.Context, op domain.Operation, appEnv
 	intent := domain.IntentFromConfiguration(deployment.Image, deployment.Configuration)
 	intent.WorkloadKind = deployment.WorkloadKind
 	for index := range intent.PublicEndpoints {
+		if intent.PublicEndpoints[index].Type == domain.EndpointHTTP {
+			continue
+		}
 		intent.PublicEndpoints[index].Hostname, err = w.Publication.Resolve(deployment.WorkloadKind, intent.PublicEndpoints[index])
 		if err != nil {
 			return runtimecontract.Payload{}, err
@@ -281,6 +301,22 @@ func (w *Worker) commandPayload(ctx context.Context, op domain.Operation, appEnv
 		}
 	}
 	converted := deploymentIntent(intent)
+	snapshot, err := w.Store.PublicationSnapshotForDeployment(ctx, deployment.ID)
+	if err != nil {
+		return runtimecontract.Payload{}, err
+	}
+	for i := range converted.PublicEndpoints {
+		e := &converted.PublicEndpoints[i]
+		if e.Type != domain.EndpointHTTP {
+			continue
+		}
+		e.Hostname, e.HostnameLabel = "", ""
+		for _, a := range snapshot.Addresses {
+			if a.EndpointName == e.Name {
+				e.Addresses = append(e.Addresses, runtimecontract.HTTPAddress{Hostname: a.Hostname, Destination: a.Destination})
+			}
+		}
+	}
 	payload.Deployment = &converted
 	return payload, nil
 }

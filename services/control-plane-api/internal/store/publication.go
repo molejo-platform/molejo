@@ -27,9 +27,9 @@ func NewPublicationPolicy(defaultDomain, statefulDomain string, tcpEnabled bool,
 			reserved = append(reserved, child)
 		}
 	}
-	policy.Domains = append(policy.Domains, PublicationDomain{ID: "default", Suffix: defaultDomain, WorkloadKinds: []domain.WorkloadKind{domain.WorkloadStateless, domain.WorkloadStateful}, EndpointTypes: []string{domain.EndpointHTTP, domain.EndpointTCP}, ReservedLabels: reserved})
+	policy.Domains = append(policy.Domains, PublicationDomain{ID: "default", Suffix: defaultDomain, WorkloadKinds: []domain.WorkloadKind{domain.WorkloadStateless, domain.WorkloadStateful}, EndpointTypes: []string{domain.EndpointTCP}, ReservedLabels: reserved})
 	if statefulDomain != "" {
-		policy.Domains = append(policy.Domains, PublicationDomain{ID: "stateful", Suffix: statefulDomain, WorkloadKinds: []domain.WorkloadKind{domain.WorkloadStateful}, EndpointTypes: []string{domain.EndpointHTTP, domain.EndpointTCP}})
+		policy.Domains = append(policy.Domains, PublicationDomain{ID: "stateful", Suffix: statefulDomain, WorkloadKinds: []domain.WorkloadKind{domain.WorkloadStateful}, EndpointTypes: []string{domain.EndpointTCP}})
 	}
 	return policy
 }
@@ -77,9 +77,24 @@ func inheritAllocatedPorts(configuration, current domain.RuntimeConfig) domain.R
 	return configuration
 }
 
-func (s *Store) reservePublicationClaims(ctx context.Context, tx pgx.Tx, appEnvironmentID, configurationVersion int64, workloadKind domain.WorkloadKind, configuration domain.RuntimeConfig) (domain.RuntimeConfig, error) {
+func (s *Store) reservePublicationClaims(ctx context.Context, tx pgx.Tx, appEnvironmentID, configurationVersion int64, workloadKind domain.WorkloadKind, configuration domain.RuntimeConfig, desired bool) (domain.RuntimeConfig, error) {
+	if err := lockPublication(ctx, tx); err != nil {
+		return configuration, err
+	}
+	configuration, snapshot, err := s.resolveHTTPConfiguration(ctx, tx, appEnvironmentID, configuration)
+	if err != nil {
+		return configuration, err
+	}
+	for _, a := range snapshot.Addresses {
+		if err = reserveHTTPClaim(ctx, tx, appEnvironmentID, configurationVersion, a, desired); err != nil {
+			return configuration, err
+		}
+	}
 	for index := range configuration.PublicEndpoints {
 		endpoint := &configuration.PublicEndpoints[index]
+		if endpoint.Type == domain.EndpointHTTP {
+			continue
+		}
 		hostname, err := s.publication.Resolve(workloadKind, *endpoint)
 		if err != nil {
 			return domain.RuntimeConfig{}, err
@@ -119,17 +134,30 @@ func (s *Store) reservePublicationClaims(ctx context.Context, tx pgx.Tx, appEnvi
 			return domain.RuntimeConfig{}, err
 		}
 	}
-	if _, err := tx.Exec(ctx, `DELETE FROM publication_claims WHERE app_environment_id=$1 AND current_configuration_version IS NULL AND desired_configuration_version IS DISTINCT FROM $2`, appEnvironmentID, configurationVersion); err != nil {
-		return domain.RuntimeConfig{}, err
+	if desired {
+		if _, err := tx.Exec(ctx, `UPDATE publication_claims SET desired_configuration_version=NULL WHERE app_environment_id=$1 AND desired_configuration_version IS DISTINCT FROM $2`, appEnvironmentID, configurationVersion); err != nil {
+			return configuration, err
+		}
 	}
-	if _, err := tx.Exec(ctx, `UPDATE publication_claims SET desired_configuration_version=NULL,updated_at=now() WHERE app_environment_id=$1 AND current_configuration_version IS NOT NULL AND desired_configuration_version IS DISTINCT FROM $2`, appEnvironmentID, configurationVersion); err != nil {
-		return domain.RuntimeConfig{}, err
+	if desired {
+		if err := cleanupPublicationClaims(ctx, tx, appEnvironmentID); err != nil {
+			return configuration, err
+		}
 	}
+
 	return configuration, nil
 }
 
 func activatePublicationClaims(ctx context.Context, tx pgx.Tx, appEnvironmentID, configurationVersion int64, workloadKind domain.WorkloadKind, configuration domain.RuntimeConfig, policy PublicationPolicy) error {
 	for _, endpoint := range configuration.PublicEndpoints {
+		if endpoint.Type == domain.EndpointHTTP {
+			for _, a := range endpoint.Addresses {
+				if _, err := tx.Exec(ctx, `UPDATE publication_claims SET current_configuration_version=$3 WHERE app_environment_id=$1 AND hostname=$2`, appEnvironmentID, a.Hostname, configurationVersion); err != nil {
+					return err
+				}
+			}
+			continue
+		}
 		hostname, err := policy.Resolve(workloadKind, endpoint)
 		if err != nil {
 			return err
@@ -142,6 +170,9 @@ func activatePublicationClaims(ctx context.Context, tx pgx.Tx, appEnvironmentID,
 			return fmt.Errorf("activate publication claim: %w", ErrPublicationConflict)
 		}
 	}
-	_, err := tx.Exec(ctx, `DELETE FROM publication_claims WHERE app_environment_id=$1 AND current_configuration_version IS DISTINCT FROM $2 AND desired_configuration_version IS NULL`, appEnvironmentID, configurationVersion)
-	return err
+	_, err := tx.Exec(ctx, `UPDATE publication_claims SET current_configuration_version=NULL WHERE app_environment_id=$1 AND current_configuration_version IS DISTINCT FROM $2`, appEnvironmentID, configurationVersion)
+	if err != nil {
+		return err
+	}
+	return cleanupPublicationClaims(ctx, tx, appEnvironmentID)
 }

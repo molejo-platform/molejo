@@ -76,7 +76,11 @@ func TestRuntimeObservationsIncludeOnlyControlPlaneOwnedObjects(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "vol-owned", Namespace: "workspace-one", Annotations: map[string]string{controlPlaneOwnerAnnotation: "vol-owned"}},
 		Status:     platformv1alpha1.AppVolumeStatus{State: platformv1alpha1.VolumeStateReady, ObservedGeneration: 1, ObservedSizeGiB: 2},
 	}
-	kubernetesClient := &KubernetesClient{client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(owned, unowned, volume).Build(), applyTimeout: time.Second}
+	terminal := owned.DeepCopy()
+	terminal.Name = "ap-withdrawn"
+	terminal.Annotations[controlPlaneOwnerAnnotation] = terminal.Name
+	terminal.Spec.Withdrawn = true
+	kubernetesClient := &KubernetesClient{client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(owned, unowned, terminal, volume).Build(), applyTimeout: time.Second}
 
 	observations, err := kubernetesClient.RuntimeObservations(t.Context())
 	if err != nil || len(observations) != 2 {

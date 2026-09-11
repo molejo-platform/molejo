@@ -10,6 +10,14 @@ const (
 	MaxHTTPListeners         = 10
 )
 
+var (
+	ErrHTTPBindingInvalid         = errors.New("http_binding_invalid")
+	ErrHTTPListenerInvalid        = errors.New("http_listener_invalid")
+	ErrHTTPBindingUnsupported     = errors.New("http_binding_unsupported")
+	ErrHTTPDestinationUnavailable = errors.New("http_destination_unavailable")
+	ErrHTTPSelectionRequired      = errors.New("http_destination_selection_required")
+)
+
 // HTTPBinding is the supported implementation, not a universal provider envelope.
 // ID is new on creation; Revision changes on administrative edits only.
 type HTTPBinding struct {
@@ -38,13 +46,16 @@ type HTTPDestination struct {
 }
 
 func (b HTTPBinding) Validate() error {
+	if b.SchemaVersion != HTTPBindingSchemaVersion {
+		return ErrHTTPBindingUnsupported
+	}
 	if b.ID == "" || len(b.ID) > 128 || b.Revision < 1 || b.SchemaVersion != HTTPBindingSchemaVersion || !validLabel(b.GatewayNamespace) || !validSubdomain(b.GatewayName) || len(b.Listeners) < 1 || len(b.Listeners) > MaxHTTPListeners {
-		return errors.New("http_binding_invalid")
+		return ErrHTTPBindingInvalid
 	}
 	seen := map[string]bool{}
 	for _, l := range b.Listeners {
 		if !validLabel(l.Name) || seen[l.Name] || !validHostnamePattern(l.Hostname) {
-			return errors.New("http_listener_invalid")
+			return ErrHTTPListenerInvalid
 		}
 		seen[l.Name] = true
 	}
@@ -110,10 +121,10 @@ func (b HTTPBinding) Resolve(hostname, selectedListener string) (HTTPDestination
 		}
 	}
 	if len(candidates) == 0 {
-		return HTTPDestination{}, errors.New("http_destination_unavailable")
+		return HTTPDestination{}, ErrHTTPDestinationUnavailable
 	}
 	if len(candidates) > 1 {
-		return HTTPDestination{}, errors.New("http_destination_selection_required")
+		return HTTPDestination{}, ErrHTTPSelectionRequired
 	}
 	return HTTPDestination{BindingID: b.ID, BindingRevision: b.Revision, SchemaVersion: b.SchemaVersion, GatewayNamespace: b.GatewayNamespace, GatewayName: b.GatewayName, SectionName: candidates[0].Name}, nil
 }

@@ -17,6 +17,7 @@ import (
 	clusteragentv1alpha1 "github.com/molejo-platform/molejo/contracts/molejo/clusteragent/v1alpha1"
 	"github.com/molejo-platform/molejo/packages/capabilitycontract"
 	"github.com/molejo-platform/molejo/packages/kubernetesbinding"
+	"github.com/molejo-platform/molejo/packages/runtimecontract"
 	"github.com/molejo-platform/molejo/packages/workspacecontract"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/audit"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/domain"
@@ -118,7 +119,7 @@ func (s *GRPCService) Connect(stream grpc.BidiStreamingServer[clusteragentv1alph
 	}
 	capabilityObservationsEnabled := hasCapability(hello.GetCapabilities(), "capability-observation.v1alpha1")
 	bindingObservationsEnabled := s.bindings != nil && hasCapability(hello.GetCapabilities(), "binding-observation.v1alpha1")
-	if err = stream.Send(&clusteragentv1alpha1.ConnectResponse{Payload: &clusteragentv1alpha1.ConnectResponse_Hello{Hello: &clusteragentv1alpha1.ControlPlaneHello{ProtocolVersion: "v1alpha1", HeartbeatIntervalSeconds: int32(s.heartbeatInterval / time.Second), ServerTimeUnix: now.Unix(), Capabilities: []string{"runtime.v1alpha2", "runtime-observation.v1alpha1", "runtime-query.v1alpha1", "certificate-renewal.v1alpha1", "capability-observation.v1alpha1", "binding-observation.v1alpha1"}, SessionId: sessionID, TrustBundleId: s.trustBundleID}}}); err != nil {
+	if err = stream.Send(&clusteragentv1alpha1.ConnectResponse{Payload: &clusteragentv1alpha1.ConnectResponse_Hello{Hello: &clusteragentv1alpha1.ControlPlaneHello{ProtocolVersion: "v1alpha1", HeartbeatIntervalSeconds: int32(s.heartbeatInterval / time.Second), ServerTimeUnix: now.Unix(), Capabilities: []string{"runtime.v1alpha3", "runtime-observation.v1alpha1", "runtime-query.v1alpha1", "certificate-renewal.v1alpha1", "capability-observation.v1alpha1", "binding-observation.v1alpha1"}, SessionId: sessionID, TrustBundleId: s.trustBundleID}}}); err != nil {
 		return err
 	}
 	for {
@@ -144,6 +145,7 @@ func (s *GRPCService) Connect(stream grpc.BidiStreamingServer[clusteragentv1alph
 			observations := make([]store.RuntimeObservation, 0, len(heartbeat.GetObservations()))
 			for _, observation := range heartbeat.GetObservations() {
 				observations = append(observations, store.RuntimeObservation{
+					UID: observation.GetUid(), SampledAt: time.Unix(0, observation.GetSampledAtUnixNano()).UTC(), Addresses: runtimePublicationObservations(observation),
 					Kind: observation.GetKind(), Namespace: observation.GetNamespace(), Name: observation.GetName(),
 					State: observation.GetState(), Message: observation.GetMessage(), Generation: observation.GetGeneration(),
 					ObservedGeneration: observation.GetObservedGeneration(), ObservedRelease: observation.GetObservedRelease(),
@@ -302,7 +304,7 @@ func (s *GRPCService) RenewCertificate(ctx context.Context, request *clusteragen
 
 func hasRuntimeCapability(capabilities []string) bool {
 	for _, capability := range capabilities {
-		if capability == "runtime.v1alpha2" {
+		if capability == "runtime.v1alpha3" {
 			return true
 		}
 	}
@@ -353,4 +355,16 @@ func peerIdentity(ctx context.Context) (string, []byte, error) {
 	}
 	fingerprint := sha256.Sum256(certificate.Raw)
 	return installationID, fingerprint[:], nil
+}
+
+func runtimePublicationObservations(o *clusteragentv1alpha1.RuntimeObservation) []runtimecontract.PublicationAddressObservation {
+	result := []runtimecontract.PublicationAddressObservation{}
+	for _, a := range o.GetAddresses() {
+		value := runtimecontract.PublicationAddressObservation{EndpointName: a.GetEndpointName(), Hostname: a.GetHostname(), Destination: kubernetesbinding.HTTPDestination{BindingID: a.GetBindingId(), BindingRevision: a.GetBindingRevision(), SchemaVersion: a.GetDestinationSchemaVersion(), GatewayNamespace: a.GetGatewayNamespace(), GatewayName: a.GetGatewayName(), SectionName: a.GetSectionName()}, RouteName: a.GetRouteName(), RouteUID: a.GetRouteUid(), RouteGeneration: a.GetRouteGeneration(), GatewayUID: a.GetGatewayUid()}
+		for _, c := range a.GetConditions() {
+			value.Conditions = append(value.Conditions, runtimecontract.PublicationCondition{Type: c.GetType(), Status: c.GetStatus(), Reason: c.GetReason(), ObservedGeneration: c.GetObservedGeneration(), LastTransitionAt: time.Unix(c.GetLastTransitionUnix(), 0)})
+		}
+		result = append(result, value)
+	}
+	return result
 }

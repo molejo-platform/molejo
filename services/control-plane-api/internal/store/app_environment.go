@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"math"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/molejo-platform/molejo/packages/runtimecontract"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/domain"
 )
 
@@ -23,7 +25,7 @@ const appEnvironmentColumns = `
 	COALESCE(dd.public_id,''),COALESCE(cd.public_id,''),COALESCE(cr.public_id,''),
 	COALESCE(dd.configuration_version,0),COALESCE(cd.configuration_version,0),
 	ae.runtime_observed_generation,ae.runtime_observed_at,
-	ae.last_state,ae.last_message,ae.deletion_requested_at,ae.archived_at,ae.created_at,ae.updated_at`
+	ae.last_state,ae.last_message,ae.deletion_requested_at,ae.archived_at,ae.created_at,ae.updated_at,ae.withdrawal_state,ae.publication_observation`
 
 const appEnvironmentJoins = `
 	JOIN projects p ON p.id=ae.project_id
@@ -44,7 +46,7 @@ func scanAppEnvironment(row pgx.Row) (domain.AppEnvironment, error) {
 		&item.ConfigurationVersion, &item.Version, &item.DesiredDeploymentPublicID,
 		&item.CurrentDeploymentPublicID, &item.CurrentReleasePublicID, &item.DesiredConfigurationVersion,
 		&item.CurrentConfigurationVersion, &item.RuntimeObservedGeneration, &item.RuntimeObservedAt, &item.State, &item.Message,
-		&item.DeletionRequestedAt, &item.ArchivedAt, &item.CreatedAt, &item.UpdatedAt,
+		&item.DeletionRequestedAt, &item.ArchivedAt, &item.CreatedAt, &item.UpdatedAt, &item.WithdrawalState, &item.PublicationObservation,
 	)
 	if err != nil {
 		return domain.AppEnvironment{}, err
@@ -53,6 +55,17 @@ func scanAppEnvironment(row pgx.Row) (domain.AppEnvironment, error) {
 		return domain.AppEnvironment{}, err
 	}
 	item.Configuration = domain.NormalizeRuntimeConfig(item.Configuration)
+	var observation runtimecontract.PublicationObservation
+	if len(item.PublicationObservation) > 2 {
+		if err = json.Unmarshal(item.PublicationObservation, &observation); err != nil {
+			return item, err
+		}
+		observation.SetAggregate(time.Now())
+		item.PublicationObservation, err = json.Marshal(observation)
+		if err != nil {
+			return item, err
+		}
+	}
 	return item, nil
 }
 
@@ -130,7 +143,7 @@ func (s *Store) createAppEnvironmentOnCluster(ctx context.Context, tx pgx.Tx, wo
 	if err != nil {
 		return domain.AppEnvironment{}, nil, translateDBError(err)
 	}
-	configuration, err = s.reservePublicationClaims(ctx, tx, item.ID, item.ConfigurationVersion, item.WorkloadKind, configuration)
+	configuration, err = s.reservePublicationClaims(ctx, tx, item.ID, item.ConfigurationVersion, item.WorkloadKind, configuration, true)
 	if err != nil {
 		return domain.AppEnvironment{}, nil, err
 	}
@@ -168,6 +181,9 @@ func (s *Store) UpdateAppEnvironment(ctx context.Context, workspaceID, actorID i
 		return domain.AppEnvironment{}, err
 	}
 	defer tx.Rollback(ctx)
+	if err := lockPublication(ctx, tx); err != nil {
+		return domain.AppEnvironment{}, err
+	}
 	current, err := appEnvironmentForUpdate(ctx, tx, workspaceID, publicID)
 	if err != nil {
 		return domain.AppEnvironment{}, err
@@ -176,6 +192,10 @@ func (s *Store) UpdateAppEnvironment(ctx context.Context, workspaceID, actorID i
 		return domain.AppEnvironment{}, ErrVersionConflict
 	}
 	configuration = inheritAllocatedPorts(configuration, current.Configuration)
+	configuration, _, err = s.resolveHTTPConfiguration(ctx, tx, current.ID, configuration)
+	if err != nil {
+		return domain.AppEnvironment{}, err
+	}
 	configurationJSON, err := domain.CanonicalJSON(configuration)
 	if err != nil {
 		return domain.AppEnvironment{}, err
@@ -215,7 +235,7 @@ func (s *Store) UpdateAppEnvironment(ctx context.Context, workspaceID, actorID i
 		return domain.AppEnvironment{}, translateDBError(err)
 	}
 	if configurationChanged {
-		configuration, err = s.reservePublicationClaims(ctx, tx, item.ID, item.ConfigurationVersion, item.WorkloadKind, configuration)
+		configuration, err = s.reservePublicationClaims(ctx, tx, item.ID, item.ConfigurationVersion, item.WorkloadKind, configuration, true)
 		if err != nil {
 			return domain.AppEnvironment{}, err
 		}
@@ -435,15 +455,28 @@ func (s *Store) DeleteAppEnvironment(ctx context.Context, workspaceID, actorID i
 	if appEnvironment.Version != version || appEnvironment.DeletionRequestedAt != nil {
 		return domain.Operation{}, ErrVersionConflict
 	}
+	var otherActive bool
+	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM operations WHERE app_environment_id=$1 AND status IN ('Pending','Running') AND kind<>'ApplyDeployment')`, appEnvironment.ID).Scan(&otherActive); err != nil {
+		return domain.Operation{}, err
+	}
+	if otherActive {
+		return domain.Operation{}, ErrConflict
+	}
 	var active bool
 	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM operations WHERE app_environment_id=$1 AND status IN ('Pending','Running'))`, appEnvironment.ID).Scan(&active); err != nil {
 		return domain.Operation{}, err
 	}
 	if active {
-		return domain.Operation{}, ErrConflict
+		// Superseding intent is durable; issued attempts retain their claims.
+		if _, err = tx.Exec(ctx, `UPDATE deployments d SET status='Degraded',message=$2,completed_at=now(),updated_at=now() WHERE EXISTS(SELECT 1 FROM operations o WHERE o.deployment_id=d.id AND o.app_environment_id=$1 AND o.kind='ApplyDeployment' AND o.status IN ('Pending','Running'))`, appEnvironment.ID, "withdrawal requested"); err != nil {
+			return domain.Operation{}, err
+		}
+		if _, err = tx.Exec(ctx, `UPDATE operations SET status='Failed',error_code='superseded',error_message='withdrawal requested',completed_at=now(),lease_until=NULL,worker_id=NULL WHERE app_environment_id=$1 AND kind='ApplyDeployment' AND status IN ('Pending','Running')`, appEnvironment.ID); err != nil {
+			return domain.Operation{}, err
+		}
 	}
 	var desiredVersion int64
-	if err = tx.QueryRow(ctx, `UPDATE app_environments SET deletion_requested_at=now(),version=version+1,updated_at=now() WHERE id=$1 RETURNING version`, appEnvironment.ID).Scan(&desiredVersion); err != nil {
+	if err = tx.QueryRow(ctx, `UPDATE app_environments SET deletion_requested_at=now(),withdrawal_state='Requested',version=version+1,updated_at=now() WHERE id=$1 RETURNING version`, appEnvironment.ID).Scan(&desiredVersion); err != nil {
 		return domain.Operation{}, err
 	}
 	operation, err := insertOperation(ctx, tx, workspaceID, appEnvironment.ID, 0, actorID, domain.OperationDeleteAppEnv, idempotencyHash, payloadHash, desiredVersion)
@@ -455,6 +488,10 @@ func (s *Store) DeleteAppEnvironment(ctx context.Context, workspaceID, actorID i
 }
 
 func appEnvironmentForUpdate(ctx context.Context, tx pgx.Tx, workspaceID int64, publicID string) (domain.AppEnvironment, error) {
+	if err := lockPublication(ctx, tx); err != nil {
+		return domain.AppEnvironment{}, err
+	}
+
 	query := `SELECT ` + appEnvironmentColumns + ` FROM app_environments ae ` + appEnvironmentJoins + `
 		WHERE ae.workspace_id=$1 AND ae.public_id=$2 AND ae.archived_at IS NULL FOR UPDATE OF ae`
 	item, err := scanAppEnvironment(tx.QueryRow(ctx, query, workspaceID, publicID))

@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	PayloadSchemaVersion = "runtime.v1alpha2"
+	PayloadSchemaVersion = "runtime.v1alpha3"
 	MaxHTTPAddresses     = 10
 )
 

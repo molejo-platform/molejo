@@ -34,7 +34,7 @@ type AppDeploymentReconciler struct {
 // +kubebuilder:rbac:groups=platform.molejo.dev,resources=appdeployments/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=apps,resources=deployments;statefulsets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;delete
-// +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch
+// +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=tcproutes,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways,verbs=get;list;watch
@@ -84,6 +84,10 @@ func (r *AppDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	)
 	if !appDeployment.DeletionTimestamp.IsZero() {
 		return ctrl.Result{}, nil
+	}
+
+	if appDeployment.Spec.Withdrawn {
+		return r.reconcileWithdrawal(ctx, appDeployment)
 	}
 
 	workload, err := r.reconcileWorkload(ctx, appDeployment)

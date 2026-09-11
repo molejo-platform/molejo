@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -35,6 +36,8 @@ const (
 var ErrOwnershipConflict = errors.New("runtime object is not owned by the control plane")
 
 type Observation struct {
+	UID                string
+	Withdrawn          bool
 	Exists             bool
 	State              string
 	Message            string
@@ -194,7 +197,7 @@ func (k *KubernetesClient) ApplyDeployment(ctx context.Context, namespace, name 
 		if current.Annotations[controlPlaneOwnerAnnotation] != name {
 			return ErrOwnershipConflict
 		}
-		if objectDesiredVersion(current) > desiredVersion {
+		if current.Spec.Withdrawn || objectDesiredVersion(current) > desiredVersion {
 			return errors.New("stale deployment version")
 		}
 		obj.UID, obj.ResourceVersion = current.UID, current.ResourceVersion
@@ -364,10 +367,10 @@ func (k *KubernetesClient) GarbageCollectConfiguration(ctx context.Context, name
 		if root.Annotations[controlPlaneOwnerAnnotation] != owner {
 			return fmt.Errorf("%w: AppDeployment %s/%s", ErrOwnershipConflict, namespace, owner)
 		}
-		if root.Spec.ConfigMapRef != "" {
+		if !root.Spec.Withdrawn && root.Spec.ConfigMapRef != "" {
 			keep[root.Spec.ConfigMapRef] = struct{}{}
 		}
-		if root.Spec.SecretRef != "" {
+		if !root.Spec.Withdrawn && root.Spec.SecretRef != "" {
 			keep[root.Spec.SecretRef] = struct{}{}
 		}
 	} else if !apierrors.IsNotFound(err) {
@@ -446,6 +449,7 @@ func (k *KubernetesClient) RuntimeObservations(ctx context.Context) ([]*clustera
 	observeCtx, cancel := context.WithTimeout(ctx, k.applyTimeout)
 	defer cancel()
 
+	sampledAt := time.Now().UTC().UnixNano()
 	var deployments platformv1alpha1.AppDeploymentList
 	if err := k.client.List(observeCtx, &deployments); err != nil {
 		return nil, fmt.Errorf("list AppDeployment observations: %w", err)
@@ -457,12 +461,13 @@ func (k *KubernetesClient) RuntimeObservations(ctx context.Context) ([]*clustera
 	items := make([]*clusteragentv1alpha1.RuntimeObservation, 0, len(deployments.Items)+len(volumes.Items))
 	for index := range deployments.Items {
 		item := &deployments.Items[index]
-		if item.Annotations[controlPlaneOwnerAnnotation] != item.Name {
+		// Withdrawal is observed by its command; terminal identities are not live inventory.
+		if item.Spec.Withdrawn || item.Annotations[controlPlaneOwnerAnnotation] != item.Name {
 			continue
 		}
 		observed := observation(item, item.Spec.Image)
 		items = append(items, &clusteragentv1alpha1.RuntimeObservation{
-			Kind: "AppDeployment", Namespace: item.Namespace, Name: item.Name,
+			Kind: "AppDeployment", Namespace: item.Namespace, Name: item.Name, SampledAtUnixNano: sampledAt,
 			State: observed.State, Message: observed.Message, Generation: observed.Generation,
 			ObservedGeneration: observed.ObservedGeneration, ObservedRelease: observed.ObservedRelease,
 			DesiredVersion: observed.DesiredVersion, SpecHash: observed.SpecHash, Addresses: publicationAddressObservations(item), Uid: string(item.UID),
@@ -499,24 +504,37 @@ func (k *KubernetesClient) RuntimeObservations(ctx context.Context) ([]*clustera
 	return items, nil
 }
 
+// DeleteDeployment installs a terminal barrier instead of deleting the runtime
+// identity. ResourceVersion serializes it against already-issued updates; a
+// retained identity rejects late creates even when their result was lost.
 func (k *KubernetesClient) DeleteDeployment(ctx context.Context, namespace, name string) error {
 	delCtx, cancel := context.WithTimeout(ctx, k.applyTimeout)
 	defer cancel()
 	obj := &platformv1alpha1.AppDeployment{}
-	if err := k.client.Get(delCtx, types.NamespacedName{Namespace: namespace, Name: name}, obj); err != nil {
-		if apierrors.IsNotFound(err) {
-			return nil
-		}
+	err := k.client.Get(delCtx, types.NamespacedName{Namespace: namespace, Name: name}, obj)
+	if apierrors.IsNotFound(err) {
+		obj = &platformv1alpha1.AppDeployment{ObjectMeta: metav1.ObjectMeta{
+			Name: name, Namespace: namespace,
+			Annotations: map[string]string{controlPlaneOwnerAnnotation: name},
+		}, Spec: platformv1alpha1.AppDeploymentSpec{
+			Withdrawn: true, Workload: platformv1alpha1.AppDeploymentWorkload{Kind: platformv1alpha1.WorkloadStateless, Stateless: &platformv1alpha1.StatelessWorkload{}},
+			Image: "molejo/withdrawn@sha256:" + strings.Repeat("0", 64), Port: 1,
+			Resources: platformv1alpha1.AppDeploymentResources{Requests: platformv1alpha1.AppDeploymentResourceValues{CPUMillis: 1, MemoryMiB: 1}, Limits: platformv1alpha1.AppDeploymentResourceValues{CPUMillis: 1, MemoryMiB: 1}},
+			Probes:    platformv1alpha1.AppDeploymentProbes{Readiness: platformv1alpha1.AppDeploymentProbe{Type: "TCP"}, Liveness: platformv1alpha1.AppDeploymentProbe{Type: "TCP"}},
+		}}
+		return k.client.Create(delCtx, obj, &client.CreateOptions{FieldValidation: "Strict"})
+	}
+	if err != nil {
 		return err
 	}
 	if obj.Annotations[controlPlaneOwnerAnnotation] != name {
-		return fmt.Errorf("%w: AppDeployment %s/%s", ErrOwnershipConflict, namespace, name)
+		return ErrOwnershipConflict
 	}
-	if err := k.client.Delete(delCtx, obj, client.Preconditions{UID: &obj.UID, ResourceVersion: &obj.ResourceVersion}, client.PropagationPolicy(metav1.DeletePropagationForeground)); apierrors.IsNotFound(err) {
+	if obj.Spec.Withdrawn {
 		return nil
-	} else {
-		return err
 	}
+	obj.Spec.Withdrawn = true
+	return k.client.Update(delCtx, obj)
 }
 
 func (k *KubernetesClient) ownedObjectExists(ctx context.Context, namespace, name string) (bool, error) {
@@ -534,7 +552,17 @@ func (k *KubernetesClient) ownedObjectExists(ctx context.Context, namespace, nam
 }
 
 func observation(obj *platformv1alpha1.AppDeployment, expectedRelease string) Observation {
-	o := Observation{Exists: true, State: runtimecontract.StateProgressing, Message: "reconciliation pending", Generation: obj.Generation, ObservedGeneration: obj.Status.ObservedGeneration, ObservedRelease: obj.Status.ObservedRelease, DesiredVersion: objectDesiredVersion(obj), SpecHash: objectSpecHash(obj.Spec)}
+	o := Observation{UID: string(obj.UID), Withdrawn: obj.Spec.Withdrawn, Exists: true, State: runtimecontract.StateProgressing, Message: "reconciliation pending", Generation: obj.Generation, ObservedGeneration: obj.Status.ObservedGeneration, ObservedRelease: obj.Status.ObservedRelease, DesiredVersion: objectDesiredVersion(obj), SpecHash: objectSpecHash(obj.Spec)}
+	if obj.Spec.Withdrawn {
+		for _, c := range obj.Status.Conditions {
+			if c.Type == "Withdrawn" && c.Status == metav1.ConditionTrue && c.ObservedGeneration == obj.Generation {
+				o.Exists = false
+				o.State = runtimecontract.StateReady
+				o.Message = "runtime withdrawal confirmed; terminal identity retained"
+			}
+		}
+		return o
+	}
 	ready := false
 	degraded := false
 	for _, condition := range obj.Status.Conditions {

@@ -116,7 +116,7 @@ func bindingFailure(err error) (kubernetesbinding.Health, string) {
 	case apierrors.IsNotFound(err):
 		return kubernetesbinding.HealthUnavailable, "binding_resource_not_found"
 	case apierrors.IsForbidden(err), apierrors.IsUnauthorized(err):
-		return kubernetesbinding.HealthUnavailable, "binding_access_denied"
+		return kubernetesbinding.HealthUnknown, "binding_access_denied"
 	default:
 		return kubernetesbinding.HealthUnknown, "binding_probe_failed"
 	}

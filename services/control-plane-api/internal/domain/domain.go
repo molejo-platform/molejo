@@ -16,8 +16,6 @@ import (
 )
 
 const (
-	ExposurePrivate                      = "Private"
-	ExposurePublic                       = "Public"
 	PortProtocolTCP                      = "TCP"
 	ProbeHTTP                            = "HTTP"
 	ProbeTCP                             = "TCP"
@@ -134,13 +132,14 @@ type RuntimePort struct {
 }
 
 type PublicEndpoint struct {
-	Name          string `json:"name"`
-	Type          string `json:"type"`
-	PortName      string `json:"portName"`
-	DomainID      string `json:"domainId"`
-	HostnameLabel string `json:"hostnameLabel"`
-	ExternalPort  int32  `json:"externalPort,omitempty"`
-	Hostname      string `json:"-"`
+	Addresses     []HTTPAssociation `json:"addresses,omitempty"`
+	Name          string            `json:"name"`
+	Type          string            `json:"type"`
+	PortName      string            `json:"portName"`
+	DomainID      string            `json:"domainId,omitempty"`
+	HostnameLabel string            `json:"hostnameLabel,omitempty"`
+	ExternalPort  int32             `json:"externalPort,omitempty"`
+	Hostname      string            `json:"-"`
 }
 
 type Variable struct {
@@ -215,8 +214,6 @@ type RuntimeConfig struct {
 	Variables       []Variable         `json:"variables"`
 	Parameters      []ParameterBinding `json:"parameters"`
 	Port            int32              `json:"-"`
-	Exposure        string             `json:"-"`
-	Slug            string             `json:"-"`
 }
 
 type Intent struct {
@@ -234,8 +231,6 @@ type Intent struct {
 	WorkloadKind         WorkloadKind     `json:"workloadKind"`
 	Volume               *AppVolume       `json:"volume,omitempty"`
 	Port                 int32            `json:"-"`
-	Exposure             string           `json:"-"`
-	Slug                 string           `json:"-"`
 }
 
 type Workspace struct {
@@ -309,39 +304,41 @@ type GitHubSource struct {
 }
 
 type AppEnvironment struct {
-	ID                          int64         `json:"-"`
-	PublicID                    string        `json:"id"`
-	WorkspaceID                 int64         `json:"-"`
-	ClusterID                   int64         `json:"-"`
-	ClusterPublicID             string        `json:"clusterId"`
-	ClusterUID                  string        `json:"-"`
-	ProjectID                   int64         `json:"-"`
-	AppID                       int64         `json:"-"`
-	EnvironmentID               int64         `json:"-"`
-	ProjectPublicID             string        `json:"projectId"`
-	AppPublicID                 string        `json:"appId"`
-	AppName                     string        `json:"appName"`
-	EnvironmentPublicID         string        `json:"environmentId"`
-	EnvironmentName             string        `json:"environmentName"`
-	SourceBranch                string        `json:"branch"`
-	WorkloadKind                WorkloadKind  `json:"workloadKind"`
-	RuntimeName                 string        `json:"-"`
-	Configuration               RuntimeConfig `json:"configuration"`
-	ConfigurationVersion        int64         `json:"configurationVersion"`
-	Version                     int64         `json:"version"`
-	DesiredDeploymentPublicID   string        `json:"desiredDeploymentId,omitempty"`
-	CurrentDeploymentPublicID   string        `json:"currentDeploymentId,omitempty"`
-	CurrentReleasePublicID      string        `json:"currentReleaseId,omitempty"`
-	DesiredConfigurationVersion int64         `json:"desiredConfigurationVersion,omitempty"`
-	CurrentConfigurationVersion int64         `json:"currentConfigurationVersion,omitempty"`
-	RuntimeObservedGeneration   int64         `json:"runtimeObservedGeneration,omitempty"`
-	RuntimeObservedAt           *time.Time    `json:"runtimeObservedAt,omitempty"`
-	State                       string        `json:"state"`
-	Message                     string        `json:"message,omitempty"`
-	CreatedAt                   time.Time     `json:"createdAt"`
-	UpdatedAt                   time.Time     `json:"updatedAt"`
-	DeletionRequestedAt         *time.Time    `json:"-"`
-	ArchivedAt                  *time.Time    `json:"-"`
+	WithdrawalState             WithdrawalState `json:"withdrawalState"`
+	PublicationObservation      json.RawMessage `json:"publicationObservation"`
+	ID                          int64           `json:"-"`
+	PublicID                    string          `json:"id"`
+	WorkspaceID                 int64           `json:"-"`
+	ClusterID                   int64           `json:"-"`
+	ClusterPublicID             string          `json:"clusterId"`
+	ClusterUID                  string          `json:"-"`
+	ProjectID                   int64           `json:"-"`
+	AppID                       int64           `json:"-"`
+	EnvironmentID               int64           `json:"-"`
+	ProjectPublicID             string          `json:"projectId"`
+	AppPublicID                 string          `json:"appId"`
+	AppName                     string          `json:"appName"`
+	EnvironmentPublicID         string          `json:"environmentId"`
+	EnvironmentName             string          `json:"environmentName"`
+	SourceBranch                string          `json:"branch"`
+	WorkloadKind                WorkloadKind    `json:"workloadKind"`
+	RuntimeName                 string          `json:"-"`
+	Configuration               RuntimeConfig   `json:"configuration"`
+	ConfigurationVersion        int64           `json:"configurationVersion"`
+	Version                     int64           `json:"version"`
+	DesiredDeploymentPublicID   string          `json:"desiredDeploymentId,omitempty"`
+	CurrentDeploymentPublicID   string          `json:"currentDeploymentId,omitempty"`
+	CurrentReleasePublicID      string          `json:"currentReleaseId,omitempty"`
+	DesiredConfigurationVersion int64           `json:"desiredConfigurationVersion,omitempty"`
+	CurrentConfigurationVersion int64           `json:"currentConfigurationVersion,omitempty"`
+	RuntimeObservedGeneration   int64           `json:"runtimeObservedGeneration,omitempty"`
+	RuntimeObservedAt           *time.Time      `json:"runtimeObservedAt,omitempty"`
+	State                       string          `json:"state"`
+	Message                     string          `json:"message,omitempty"`
+	CreatedAt                   time.Time       `json:"createdAt"`
+	UpdatedAt                   time.Time       `json:"updatedAt"`
+	DeletionRequestedAt         *time.Time      `json:"-"`
+	ArchivedAt                  *time.Time      `json:"-"`
 }
 
 func NewPublicID(prefix string) (string, error) {
@@ -446,17 +443,15 @@ func NormalizeRuntimeConfig(config RuntimeConfig) RuntimeConfig {
 			config.Ports[index].Protocol = PortProtocolTCP
 		}
 	}
-	if len(config.PublicEndpoints) == 0 && config.Exposure == ExposurePublic && config.Slug != "" {
-		config.PublicEndpoints = []PublicEndpoint{{Name: "web", Type: EndpointHTTP, PortName: config.Ports[0].Name, DomainID: "default", HostnameLabel: config.Slug}}
-	} else if config.PublicEndpoints == nil {
+	if config.PublicEndpoints == nil {
 		config.PublicEndpoints = []PublicEndpoint{}
 	}
 	for index := range config.PublicEndpoints {
-		if config.PublicEndpoints[index].DomainID == "" {
+		if config.PublicEndpoints[index].Type == EndpointTCP && config.PublicEndpoints[index].DomainID == "" {
 			config.PublicEndpoints[index].DomainID = "default"
 		}
 	}
-	config.Port, config.Exposure, config.Slug = 0, "", ""
+	config.Port = 0
 	defaultPortName := ""
 	if len(config.Ports) > 0 {
 		defaultPortName = config.Ports[0].Name
@@ -490,9 +485,6 @@ func NormalizeIntent(intent Intent) Intent {
 	if len(intent.Ports) == 0 && intent.Port != 0 {
 		intent.Ports = []RuntimePort{{Name: "http", ContainerPort: intent.Port, Protocol: PortProtocolTCP}}
 	}
-	if len(intent.PublicEndpoints) == 0 && intent.Exposure == ExposurePublic && intent.Slug != "" {
-		intent.PublicEndpoints = []PublicEndpoint{{Name: "web", Type: EndpointHTTP, PortName: "http", HostnameLabel: intent.Slug}}
-	}
 	configuration := NormalizeRuntimeConfig(ConfigurationFromIntent(intent))
 	intent.Replicas = configuration.Replicas
 	intent.Ports = configuration.Ports
@@ -500,7 +492,7 @@ func NormalizeIntent(intent Intent) Intent {
 	intent.Probes = configuration.Probes
 	intent.PublicEndpoints = configuration.PublicEndpoints
 	intent.Variables = configuration.Variables
-	intent.Port, intent.Exposure, intent.Slug = 0, "", ""
+	intent.Port = 0
 	return intent
 }
 
@@ -510,7 +502,7 @@ func IntentFromConfiguration(image string, configuration RuntimeConfig) Intent {
 }
 
 func ConfigurationFromIntent(intent Intent) RuntimeConfig {
-	return RuntimeConfig{Replicas: intent.Replicas, Ports: intent.Ports, Resources: intent.Resources, Probes: intent.Probes, PublicEndpoints: intent.PublicEndpoints, Variables: intent.Variables, Parameters: []ParameterBinding{}, Port: intent.Port, Exposure: intent.Exposure, Slug: intent.Slug}
+	return RuntimeConfig{Replicas: intent.Replicas, Ports: intent.Ports, Resources: intent.Resources, Probes: intent.Probes, PublicEndpoints: intent.PublicEndpoints, Variables: intent.Variables, Parameters: []ParameterBinding{}, Port: intent.Port}
 }
 
 func ValidateRuntimeConfig(config RuntimeConfig, maxReplicas int32, maxCPU, maxMemory int64) error {
@@ -571,17 +563,25 @@ func ValidateRuntimeConfig(config RuntimeConfig, maxReplicas int32, maxCPU, maxM
 		if _, exists := portNames[endpoint.PortName]; !exists {
 			return errors.New("public endpoints must reference an existing port name")
 		}
-		if len(endpoint.HostnameLabel) == 0 || len(endpoint.HostnameLabel) > 63 || !slugPattern.MatchString(endpoint.HostnameLabel) {
-			return errors.New("public endpoint hostnameLabel must be a lowercase DNS label")
-		}
-		if len(endpoint.DomainID) == 0 || len(endpoint.DomainID) > 63 || !slugPattern.MatchString(endpoint.DomainID) {
-			return errors.New("public endpoint domainId must be a lowercase DNS label")
-		}
-		if endpoint.Type == EndpointHTTP && endpoint.ExternalPort != 0 {
-			return errors.New("HTTP public endpoints cannot declare an external port")
-		}
-		if endpoint.Type == EndpointTCP && endpoint.ExternalPort != 0 && (endpoint.ExternalPort < 1 || endpoint.ExternalPort > 65535) {
-			return errors.New("TCP public endpoint external port is invalid")
+		if endpoint.Type == EndpointHTTP {
+			if endpoint.DomainID != "" || endpoint.HostnameLabel != "" || endpoint.ExternalPort != 0 || len(endpoint.Addresses) < 1 || len(endpoint.Addresses) > 10 {
+				return errors.New("http_publication_invalid")
+			}
+			for _, address := range endpoint.Addresses {
+				if address.DomainID == "" || len(address.DomainID) > 128 || address.BindingID == "" || len(address.BindingID) > 128 || (address.ListenerName != "" && (len(address.ListenerName) > 63 || !slugPattern.MatchString(address.ListenerName))) {
+					return errors.New("publication_reference_required")
+				}
+				if address.Label != "" && (!slugPattern.MatchString(address.Label) || len(address.Label) > 63) {
+					return errors.New("publication_label_invalid")
+				}
+			}
+		} else {
+			if len(endpoint.Addresses) != 0 || len(endpoint.HostnameLabel) == 0 || len(endpoint.HostnameLabel) > 63 || !slugPattern.MatchString(endpoint.HostnameLabel) || endpoint.DomainID == "" {
+				return errors.New("tcp_publication_invalid")
+			}
+			if endpoint.ExternalPort != 0 && (endpoint.ExternalPort < 1 || endpoint.ExternalPort > 65535) {
+				return errors.New("tcp_port_invalid")
+			}
 		}
 		endpointNames[endpoint.Name] = struct{}{}
 		endpointTypes[endpoint.Type] = struct{}{}

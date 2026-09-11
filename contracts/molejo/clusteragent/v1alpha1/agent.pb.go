@@ -635,6 +635,7 @@ type RuntimeObservation struct {
 	SpecHash           string                           `protobuf:"bytes,11,opt,name=spec_hash,json=specHash,proto3" json:"spec_hash,omitempty"`
 	Addresses          []*PublicationAddressObservation `protobuf:"bytes,12,rep,name=addresses,proto3" json:"addresses,omitempty"`
 	Uid                string                           `protobuf:"bytes,13,opt,name=uid,proto3" json:"uid,omitempty"`
+	SampledAtUnixNano  int64                            `protobuf:"varint,14,opt,name=sampled_at_unix_nano,json=sampledAtUnixNano,proto3" json:"sampled_at_unix_nano,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
@@ -758,6 +759,13 @@ func (x *RuntimeObservation) GetUid() string {
 		return x.Uid
 	}
 	return ""
+}
+
+func (x *RuntimeObservation) GetSampledAtUnixNano() int64 {
+	if x != nil {
+		return x.SampledAtUnixNano
+	}
+	return 0
 }
 
 // Facts correlate one address with the exact operation destination and runtime object.
@@ -1659,8 +1667,10 @@ func (x *RuntimeCommand) GetPayloadSchemaVersion() string {
 }
 
 type RuntimeResult struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	CommandId string                 `protobuf:"bytes,1,opt,name=command_id,json=commandId,proto3" json:"command_id,omitempty"`
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	RuntimeUid          string                 `protobuf:"bytes,13,opt,name=runtime_uid,json=runtimeUid,proto3" json:"runtime_uid,omitempty"`
+	WithdrawalConfirmed bool                   `protobuf:"varint,14,opt,name=withdrawal_confirmed,json=withdrawalConfirmed,proto3" json:"withdrawal_confirmed,omitempty"`
+	CommandId           string                 `protobuf:"bytes,1,opt,name=command_id,json=commandId,proto3" json:"command_id,omitempty"`
 	// fencing_token must echo the command token that remains authoritative in PostgreSQL.
 	FencingToken    int64  `protobuf:"varint,2,opt,name=fencing_token,json=fencingToken,proto3" json:"fencing_token,omitempty"`
 	State           string `protobuf:"bytes,3,opt,name=state,proto3" json:"state,omitempty"`
@@ -1705,6 +1715,20 @@ func (x *RuntimeResult) ProtoReflect() protoreflect.Message {
 // Deprecated: Use RuntimeResult.ProtoReflect.Descriptor instead.
 func (*RuntimeResult) Descriptor() ([]byte, []int) {
 	return file_molejo_clusteragent_v1alpha1_agent_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *RuntimeResult) GetRuntimeUid() string {
+	if x != nil {
+		return x.RuntimeUid
+	}
+	return ""
+}
+
+func (x *RuntimeResult) GetWithdrawalConfirmed() bool {
+	if x != nil {
+		return x.WithdrawalConfirmed
+	}
+	return false
 }
 
 func (x *RuntimeResult) GetCommandId() string {
@@ -3204,7 +3228,7 @@ const file_molejo_clusteragent_v1alpha1_agent_proto_rawDesc = "" +
 	"reasonCode\x12+\n" +
 	"\x11sanitized_message\x18\a \x01(\tR\x10sanitizedMessage\x12 \n" +
 	"\vlimitations\x18\b \x03(\tR\vlimitations\x12&\n" +
-	"\x0fsampled_at_unix\x18\t \x01(\x03R\rsampledAtUnix\"\xe5\x03\n" +
+	"\x0fsampled_at_unix\x18\t \x01(\x03R\rsampledAtUnix\"\x96\x04\n" +
 	"\x12RuntimeObservation\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x1c\n" +
 	"\tnamespace\x18\x02 \x01(\tR\tnamespace\x12\x12\n" +
@@ -3221,7 +3245,8 @@ const file_molejo_clusteragent_v1alpha1_agent_proto_rawDesc = "" +
 	" \x01(\x03R\x0edesiredVersion\x12\x1b\n" +
 	"\tspec_hash\x18\v \x01(\tR\bspecHash\x12Y\n" +
 	"\taddresses\x18\f \x03(\v2;.molejo.clusteragent.v1alpha1.PublicationAddressObservationR\taddresses\x12\x10\n" +
-	"\x03uid\x18\r \x01(\tR\x03uid\"\xb7\x04\n" +
+	"\x03uid\x18\r \x01(\tR\x03uid\x12/\n" +
+	"\x14sampled_at_unix_nano\x18\x0e \x01(\x03R\x11sampledAtUnixNano\"\xb7\x04\n" +
 	"\x1dPublicationAddressObservation\x12#\n" +
 	"\rendpoint_name\x18\x01 \x01(\tR\fendpointName\x12\x1a\n" +
 	"\bhostname\x18\x02 \x01(\tR\bhostname\x12\x1d\n" +
@@ -3300,8 +3325,11 @@ const file_molejo_clusteragent_v1alpha1_agent_proto_rawDesc = "" +
 	"\rdeadline_unix\x18\x05 \x01(\x03R\fdeadlineUnix\x12\x12\n" +
 	"\x04kind\x18\x06 \x01(\tR\x04kind\x12!\n" +
 	"\fpayload_json\x18\a \x01(\fR\vpayloadJson\x124\n" +
-	"\x16payload_schema_version\x18\b \x01(\tR\x14payloadSchemaVersion\"\xa7\x03\n" +
-	"\rRuntimeResult\x12\x1d\n" +
+	"\x16payload_schema_version\x18\b \x01(\tR\x14payloadSchemaVersion\"\xfb\x03\n" +
+	"\rRuntimeResult\x12\x1f\n" +
+	"\vruntime_uid\x18\r \x01(\tR\n" +
+	"runtimeUid\x121\n" +
+	"\x14withdrawal_confirmed\x18\x0e \x01(\bR\x13withdrawalConfirmed\x12\x1d\n" +
 	"\n" +
 	"command_id\x18\x01 \x01(\tR\tcommandId\x12#\n" +
 	"\rfencing_token\x18\x02 \x01(\x03R\ffencingToken\x12\x14\n" +

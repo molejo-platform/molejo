@@ -404,6 +404,15 @@ spec:
                 x-kubernetes-list-map-keys:
                 - name
                 x-kubernetes-list-type: map
+              withdrawn:
+                default: false
+                description: |-
+                  Withdrawn is a terminal write barrier. Keep this object after removing its
+                  children: deleting the barrier would let an uncertain old Create succeed.
+                type: boolean
+                x-kubernetes-validations:
+                - message: withdrawal is terminal
+                  rule: '!oldSelf || self'
               workload:
                 description: Workload selects exactly one workload renderer.
                 properties:
@@ -450,6 +459,7 @@ spec:
             - image
             - probes
             - resources
+            - withdrawn
             - workload
             type: object
             x-kubernetes-validations:

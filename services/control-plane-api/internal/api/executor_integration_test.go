@@ -59,6 +59,7 @@ func TestAgentCommandCompletesADeploymentWithoutControlPlaneKubernetesAccess(t *
 		t.Fatalf("payload=%+v", payload)
 	}
 	result := &clusteragentv1alpha1.RuntimeResult{
+		RuntimeUid:      "runtime-test",
 		CommandId:       command.GetCommandId(),
 		FencingToken:    command.GetFencingToken(),
 		State:           runtimecontract.StateReady,
@@ -217,8 +218,6 @@ func createExecutorTargetAndRelease(t *testing.T, s *store.Store, workspaceID, a
 	}
 	configuration := apiRuntimeConfiguration("executor-api")
 	configuration.PublicEndpoints = nil
-	configuration.Exposure = domain.ExposurePrivate
-	configuration.Slug = ""
 	target, err := s.CreateAppEnvironment(ctx, workspaceID, actorID, mustAPIID(t, "aev"), project.PublicID, app.PublicID, environment.PublicID, "main", configuration)
 	if err != nil {
 		t.Fatal(err)
@@ -278,7 +277,7 @@ func newExecutorIntegrationFixture(t *testing.T) (*store.Store, int64, int64, st
 	}
 	var clusterID int64
 	if err = s.Pool.QueryRow(ctx, `INSERT INTO agent_installations(public_id,name,status,cluster_uid,agent_version,kubernetes_version,capabilities_json,workspace_provisioning_mode,created_by)
-		VALUES($1,'test-agent','Active','cluster-test-uid','test','v1.36.3','["runtime.v1alpha2","workspace-provisioning.v1alpha1"]','Namespaced',$2) RETURNING id`, testAgentInstallationID, actorID).Scan(&clusterID); err != nil {
+		VALUES($1,'test-agent','Active','cluster-test-uid','test','v1.36.3','["runtime.v1alpha3","workspace-provisioning.v1alpha1"]','Namespaced',$2) RETURNING id`, testAgentInstallationID, actorID).Scan(&clusterID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = s.Pool.Exec(ctx, `INSERT INTO workspace_clusters(workspace_id,installation_id,namespace_name,state,observed_generation)
@@ -291,5 +290,19 @@ func newExecutorIntegrationFixture(t *testing.T) (*store.Store, int64, int64, st
 	if _, err = s.Pool.Exec(ctx, `UPDATE operations SET status='Succeeded',started_at=COALESCE(started_at,now()),completed_at=now(),updated_at=now() WHERE workspace_id=$1 AND kind='EnsureWorkspace'`, workspaceID); err != nil {
 		t.Fatal(err)
 	}
+
+	if _, err = s.Pool.Exec(ctx, `UPDATE agent_installations SET control_session_id='test-session' WHERE id=$1`, clusterID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.Pool.Exec(ctx, `INSERT INTO cluster_publication_bindings(id,cluster_id,configuration,created_by,updated_by) VALUES('pbd-test',$1,'{"schemaVersion":"kubernetes-http.v1alpha1","gatewayNamespace":"molejo-system","gatewayName":"molejo","listeners":[{"name":"https-molejo","hostname":"*.molejo.dev"},{"name":"apex","hostname":"molejo.dev"}]}',$2,$2)`, clusterID, actorID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.Pool.Exec(ctx, `INSERT INTO publication_domains(id,name,kind,created_by,updated_by) VALUES('default','molejo.dev','SubdomainPool',$1,$1),('stateful','stateful.molejo.dev','SubdomainPool',$1,$1)`, actorID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.Pool.Exec(ctx, `INSERT INTO publication_grants(domain_id,workspace_id,binding_id,created_by) SELECT id,$1,'pbd-test',$2 FROM publication_domains`, workspaceID, actorID); err != nil {
+		t.Fatal(err)
+	}
+
 	return s, workspaceID, actorID, workspace.Namespace
 }

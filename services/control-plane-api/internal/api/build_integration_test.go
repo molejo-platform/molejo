@@ -97,7 +97,7 @@ func TestBuildAPIUsesTheAppEnvironmentBranchAndDeploysAReleaseSnapshot(t *testin
 		Deployment domain.Deployment `json:"deployment"`
 	}
 	decodeResponse(t, response, &accepted)
-	if accepted.Deployment.ReleasePublicID != release.PublicID || accepted.Deployment.AppEnvironmentPublicID != target.PublicID || len(accepted.Deployment.Configuration.PublicEndpoints) != 1 || accepted.Deployment.Configuration.PublicEndpoints[0].HostnameLabel != "api-production" {
+	if accepted.Deployment.ReleasePublicID != release.PublicID || accepted.Deployment.AppEnvironmentPublicID != target.PublicID || len(accepted.Deployment.Configuration.PublicEndpoints) != 1 || accepted.Deployment.Configuration.PublicEndpoints[0].Addresses[0].Label != "api-production" {
 		t.Fatalf("deployment=%+v", accepted.Deployment)
 	}
 }
@@ -115,7 +115,7 @@ func apiRuntimeConfiguration(slug string) domain.RuntimeConfig {
 			Liveness:  domain.Probe{Type: domain.ProbeHTTP, PortName: "http", Path: "/healthz"},
 			Readiness: domain.Probe{Type: domain.ProbeHTTP, PortName: "http", Path: "/readyz"},
 		},
-		PublicEndpoints: []domain.PublicEndpoint{{Name: "web", Type: domain.EndpointHTTP, PortName: "http", HostnameLabel: slug}},
+		PublicEndpoints: []domain.PublicEndpoint{{Name: "web", Type: domain.EndpointHTTP, PortName: "http", Addresses: []domain.HTTPAssociation{{DomainID: "default", BindingID: "pbd-test", Label: slug}}}},
 		Variables:       []domain.Variable{{Name: "APP_MODE", Value: "production"}},
 	}
 }

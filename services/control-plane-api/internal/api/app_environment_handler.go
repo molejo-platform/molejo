@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/molejo-platform/molejo/packages/kubernetesbinding"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/api/generated"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/audit"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/auth"
@@ -374,6 +375,8 @@ func (h *generatedHandler) appEnvironment(w http.ResponseWriter, r *http.Request
 
 func writeAppEnvironmentError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
+	case errors.Is(err, kubernetesbinding.ErrHTTPSelectionRequired), errors.Is(err, kubernetesbinding.ErrHTTPDestinationUnavailable), errors.Is(err, domain.ErrPublicationUnsupported), errors.Is(err, domain.ErrPublicationNotGranted), errors.Is(err, domain.ErrPublicationName), errors.Is(err, domain.ErrPublicationReserved), errors.Is(err, domain.ErrPublicationLimit), errors.Is(err, store.ErrPublicationDependency):
+		writePublicationError(w, r, err)
 	case errors.Is(err, store.ErrNotFound):
 		writeError(w, http.StatusNotFound, "app_environment_not_found", "App Environment was not found", r)
 	case errors.Is(err, store.ErrVersionConflict):

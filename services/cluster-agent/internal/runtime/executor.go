@@ -134,6 +134,8 @@ func (e *Executor) execute(ctx context.Context, kind string, desiredVersion int6
 		if err = e.client.GarbageCollectConfiguration(ctx, payload.Namespace, payload.Name); err != nil {
 			return err
 		}
+		result.RuntimeUid = observed.UID
+		result.WithdrawalConfirmed = observed.Withdrawn && !observed.Exists
 		result.State = runtimecontract.StateReady
 		result.Message = observed.Message
 		return nil
@@ -149,6 +151,7 @@ func (e *Executor) execute(ctx context.Context, kind string, desiredVersion int6
 		if err != nil {
 			return err
 		}
+		result.RuntimeUid = observed.UID
 		result.State, result.Message, result.ObservedRelease = observed.State, observed.Message, observed.ObservedRelease
 		result.DesiredVersion, result.SpecHash = observed.DesiredVersion, observed.SpecHash
 		if !observed.Exists || observed.State != runtimecontract.StateReady || observed.ObservedRelease != payload.Deployment.Image {

@@ -87,7 +87,7 @@ func (h *generatedHandler) GetClusterPublicationBinding(w http.ResponseWriter, r
 	}
 	binding, err := h.server.store.ClusterPublicationBinding(r.Context(), string(clusterID))
 	if err != nil {
-		writeKubernetesBindingError(w, r, err)
+		writePublicationError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, publicationBindingResponse(binding, time.Now().UTC()))
@@ -109,9 +109,9 @@ func (h *generatedHandler) PutClusterPublicationBinding(w http.ResponseWriter, r
 		expectedVersion = &value
 	}
 	event := h.server.auditEvent(r, "installation.binding.publication.put", "ClusterPublicationBinding", string(clusterID), audit.Succeeded)
-	binding, err := h.server.store.PutClusterPublicationBinding(r.Context(), string(clusterID), input.GatewayNamespace, input.GatewayName, input.SectionName, administrator.ID, expectedVersion, event)
+	binding, err := h.server.store.PutClusterPublicationBinding(r.Context(), string(clusterID), httpBindingInput(input), administrator.ID, expectedVersion, event)
 	if err != nil {
-		writeKubernetesBindingError(w, r, err)
+		writePublicationError(w, r, err)
 		return
 	}
 	status := http.StatusCreated
@@ -128,7 +128,7 @@ func (h *generatedHandler) DeleteClusterPublicationBinding(w http.ResponseWriter
 	}
 	event := h.server.auditEvent(r, "installation.binding.publication.delete", "ClusterPublicationBinding", string(clusterID), audit.Succeeded)
 	if err := h.server.store.DeleteClusterPublicationBinding(r.Context(), string(clusterID), administrator.ID, int64(params.IfMatch), event); err != nil {
-		writeKubernetesBindingError(w, r, err)
+		writePublicationError(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -149,19 +149,17 @@ func storageBindingResponse(binding store.ClusterStorageBinding, now time.Time) 
 	return result
 }
 
-func publicationBindingResponse(binding store.ClusterPublicationBinding, now time.Time) generated.ClusterPublicationBinding {
-	health, reason := currentBindingHealth(binding.Health, binding.ReasonCode, binding.ExpiresAt, now)
-	result := generated.ClusterPublicationBinding{
-		ClusterId: binding.ClusterID, GatewayNamespace: binding.GatewayNamespace, GatewayName: binding.GatewayName,
-		SectionName: binding.SectionName, GatewayClassName: binding.GatewayClassName, GatewayClassAccepted: binding.GatewayClassAccepted,
-		GatewayProgrammed: binding.GatewayProgrammed, ListenerReady: binding.ListenerReady, SupportedRouteKinds: append([]string{}, binding.SupportedRouteKinds...),
-		Health: generated.ClusterPublicationBindingHealth(health), ReasonCode: reason, Version: int(binding.Version), CreatedAt: binding.CreatedAt, UpdatedAt: binding.UpdatedAt,
+func httpBindingInput(input generated.ClusterPublicationBindingInput) kubernetesbinding.HTTPBinding {
+	b := kubernetesbinding.HTTPBinding{SchemaVersion: string(input.SchemaVersion), GatewayNamespace: input.GatewayNamespace, GatewayName: input.GatewayName}
+	for _, l := range input.Listeners {
+		b.Listeners = append(b.Listeners, kubernetesbinding.HTTPListener{Name: l.Name, Hostname: l.Hostname})
 	}
-	if binding.ObservedAt != nil {
-		observed := binding.ObservedAt.UTC()
-		result.ObservedAt = &observed
-	}
-	return result
+	return b
+}
+
+func publicationBindingResponse(binding store.ClusterPublicationBinding, now time.Time) store.ClusterPublicationBinding {
+	binding.Health, binding.ReasonCode = currentBindingHealth(binding.Health, binding.ReasonCode, binding.ExpiresAt, now)
+	return binding
 }
 
 func currentBindingHealth(health kubernetesbinding.Health, reason string, expiresAt *time.Time, now time.Time) (kubernetesbinding.Health, string) {
@@ -173,6 +171,8 @@ func currentBindingHealth(health kubernetesbinding.Health, reason string, expire
 
 func writeKubernetesBindingError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
+	case errors.Is(err, kubernetesbinding.ErrHTTPBindingInvalid), errors.Is(err, kubernetesbinding.ErrHTTPListenerInvalid), errors.Is(err, kubernetesbinding.ErrHTTPBindingUnsupported), errors.Is(err, store.ErrConflict), errors.Is(err, store.ErrPublicationDependency):
+		writePublicationError(w, r, err)
 	case errors.Is(err, store.ErrBindingNotFound), errors.Is(err, store.ErrClusterNotFound):
 		writeError(w, http.StatusNotFound, "binding_not_found", "binding or cluster was not found", r)
 	case errors.Is(err, store.ErrVersionConflict):

@@ -74,7 +74,7 @@ func resolveRuntime(feature Feature, facts Facts) Feature {
 		feature.State, feature.ReasonCode = Unknown, ReasonClusterAgentOffline
 		return feature
 	}
-	if !contains(facts.ProtocolCapabilities, "runtime.v1alpha2") {
+	if !contains(facts.ProtocolCapabilities, "runtime.v1alpha3") {
 		feature.State, feature.ReasonCode = Unsupported, ReasonClusterCapabilityIncompatible
 		return feature
 	}

@@ -133,4 +133,27 @@ func TestEnvtestEnsuresExactWorkspaceAndAppDeploymentIdempotently(t *testing.T) 
 	if err := runtimeClient.Get(ctx, client.ObjectKey{Namespace: placementIntent.NamespaceName, Name: "ap-aaaaaaaaaaaaaaaaaaaa-c4"}, &corev1.ConfigMap{}); !apierrors.IsNotFound(err) {
 		t.Fatalf("invalid allocation had side effects: %v", err)
 	}
+	// Capture an issued write, withdraw, then deliver that write late.
+	stale := deployment.DeepCopy()
+	if err := adapter.DeleteDeployment(ctx, placementIntent.NamespaceName, deployment.Name); err != nil {
+		t.Fatal(err)
+	}
+	if err := runtimeClient.Update(ctx, stale); !apierrors.IsConflict(err) {
+		t.Fatalf("late update: %v", err)
+	}
+	stale.ResourceVersion, stale.UID = "", ""
+	if err := runtimeClient.Create(ctx, stale); !apierrors.IsAlreadyExists(err) {
+		t.Fatalf("late create: %v", err)
+	}
+	var terminal platformv1alpha1.AppDeployment
+	if err := runtimeClient.Get(ctx, client.ObjectKeyFromObject(&deployment), &terminal); err != nil {
+		t.Fatal(err)
+	}
+	terminal.Spec.Withdrawn = false
+	if err := runtimeClient.Update(ctx, &terminal); !apierrors.IsInvalid(err) {
+		t.Fatalf("terminal transition accepted: %v", err)
+	}
+	if err := adapter.DeleteDeployment(ctx, placementIntent.NamespaceName, "ap-never-created"); err != nil {
+		t.Fatalf("absent identity barrier: %v", err)
+	}
 }

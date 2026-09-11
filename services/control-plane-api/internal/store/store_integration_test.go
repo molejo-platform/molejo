@@ -161,7 +161,7 @@ func TestAppEnvironmentOwnsBranchConfigurationAndUniquePair(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if item.SourceBranch != "develop" || len(item.Configuration.PublicEndpoints) != 1 || item.Configuration.PublicEndpoints[0].HostnameLabel != "testkit-dev" || item.ConfigurationVersion != 1 {
+	if item.SourceBranch != "develop" || len(item.Configuration.PublicEndpoints) != 1 || item.Configuration.PublicEndpoints[0].Addresses[0].Label != "testkit-dev" || item.ConfigurationVersion != 1 {
 		t.Fatalf("App Environment did not preserve its configuration: %+v", item)
 	}
 	_, err = storage.CreateAppEnvironment(context.Background(), workspaceID, actorID, newID(t, "aev"), project.PublicID, app.PublicID, environment.PublicID, "main", integrationConfiguration("other"))
@@ -592,7 +592,7 @@ func integrationConfiguration(slug string) domain.RuntimeConfig {
 			Liveness:  domain.Probe{Type: domain.ProbeHTTP, PortName: "http", Path: "/healthz"},
 			Readiness: domain.Probe{Type: domain.ProbeHTTP, PortName: "http", Path: "/readyz"},
 		},
-		PublicEndpoints: []domain.PublicEndpoint{{Name: "web", Type: domain.EndpointHTTP, PortName: "http", HostnameLabel: slug}},
+		PublicEndpoints: []domain.PublicEndpoint{{Name: "web", Type: domain.EndpointHTTP, PortName: "http", Addresses: []domain.HTTPAssociation{{DomainID: "default", BindingID: "pbd-test", Label: slug}}}},
 		Variables:       []domain.Variable{{Name: "APP_MODE", Value: "test"}},
 	}
 }
@@ -630,7 +630,8 @@ func TestActivatePublicationClaimsReplacesObsoleteHostnameWithoutInvalidReferenc
 		t.Fatal(err)
 	}
 	configuration := integrationConfiguration("database")
-	configuration.PublicEndpoints[0].DomainID = "stateful"
+	configuration.PublicEndpoints[0].Addresses[0].DomainID = "stateful"
+	configuration.PublicEndpoints[0].Addresses[0].Hostname = "database.stateful.molejo.dev"
 	tx, err := storage.Pool.Begin(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -671,7 +672,7 @@ func TestPublicationClaimsAllocateTCPPoolTransactionally(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	configuration.PublicEndpoints[0].HostnameLabel = "second-http"
+	configuration.PublicEndpoints[0].Addresses[0].Label = "second-http"
 	configuration.PublicEndpoints[1].HostnameLabel = "second-db"
 	configuration.PublicEndpoints[1].ExternalPort = 0
 	_, err = storage.CreateAppEnvironment(ctx, workspaceID, actorID, newID(t, "aev"), project.PublicID, secondApp.PublicID, environment.PublicID, "main", configuration)
@@ -756,7 +757,7 @@ func newIntegrationFixture(t *testing.T) (*Store, int64, int64) {
 	clusterPublicID := newID(t, "cls")
 	var clusterID int64
 	if err = storage.Pool.QueryRow(ctx, `INSERT INTO agent_installations(public_id,name,status,cluster_uid,agent_version,kubernetes_version,capabilities_json,created_by,last_seen_at)
-		VALUES($1,'Integration cluster','Active','integration-cluster','test','v1.36.3','["runtime.v1alpha2"]'::jsonb,$2,now()) RETURNING id`, clusterPublicID, actorID).Scan(&clusterID); err != nil {
+		VALUES($1,'Integration cluster','Active','integration-cluster','test','v1.36.3','["runtime.v1alpha3"]'::jsonb,$2,now()) RETURNING id`, clusterPublicID, actorID).Scan(&clusterID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = storage.Pool.Exec(ctx, `UPDATE operations SET agent_installation_id=$1 WHERE workspace_id=$2 AND agent_installation_id IS NULL`, clusterID, workspaceID); err != nil {
@@ -772,6 +773,20 @@ func newIntegrationFixture(t *testing.T) (*Store, int64, int64) {
 	if _, err = storage.Pool.Exec(ctx, `UPDATE operations SET status='Succeeded',started_at=now(),completed_at=now()`); err != nil {
 		t.Fatal(err)
 	}
+
+	if _, err = storage.Pool.Exec(ctx, `UPDATE agent_installations SET control_session_id='test-session' WHERE id=$1`, clusterID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = storage.Pool.Exec(ctx, `INSERT INTO cluster_publication_bindings(id,cluster_id,configuration,created_by,updated_by) VALUES('pbd-test',$1,'{"schemaVersion":"kubernetes-http.v1alpha1","gatewayNamespace":"molejo-system","gatewayName":"molejo","listeners":[{"name":"https-molejo","hostname":"*.molejo.dev"},{"name":"apex","hostname":"molejo.dev"}]}',$2,$2)`, clusterID, actorID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = storage.Pool.Exec(ctx, `INSERT INTO publication_domains(id,name,kind,created_by,updated_by) VALUES('default','molejo.dev','SubdomainPool',$1,$1),('stateful','stateful.molejo.dev','SubdomainPool',$1,$1)`, actorID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = storage.Pool.Exec(ctx, `INSERT INTO publication_grants(domain_id,workspace_id,binding_id,created_by) SELECT id,$1,'pbd-test',$2 FROM publication_domains`, workspaceID, actorID); err != nil {
+		t.Fatal(err)
+	}
+
 	return storage, workspaceID, actorID
 }
 

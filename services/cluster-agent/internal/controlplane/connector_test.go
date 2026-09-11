@@ -21,7 +21,7 @@ func (s *blockingAgentStream) Send(*clusteragentv1alpha1.ConnectRequest) error {
 func (s *blockingAgentStream) Recv() (*clusteragentv1alpha1.ConnectResponse, error) {
 	if !s.helloSent {
 		s.helloSent = true
-		return &clusteragentv1alpha1.ConnectResponse{Payload: &clusteragentv1alpha1.ConnectResponse_Hello{Hello: &clusteragentv1alpha1.ControlPlaneHello{ProtocolVersion: "v1alpha1", Capabilities: []string{"runtime.v1alpha2"}, HeartbeatIntervalSeconds: 1, SessionId: "ags-test", TrustBundleId: "trust-v1"}}}, nil
+		return &clusteragentv1alpha1.ConnectResponse{Payload: &clusteragentv1alpha1.ConnectResponse_Hello{Hello: &clusteragentv1alpha1.ControlPlaneHello{ProtocolVersion: "v1alpha1", Capabilities: []string{"runtime.v1alpha3"}, HeartbeatIntervalSeconds: 1, SessionId: "ags-test", TrustBundleId: "trust-v1"}}}, nil
 	}
 	<-s.ctx.Done()
 	return nil, s.ctx.Err()

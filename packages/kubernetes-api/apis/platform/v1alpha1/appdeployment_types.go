@@ -80,6 +80,12 @@ type StatefulWorkload struct {
 // +kubebuilder:validation:XValidation:rule="has(self.port) || has(self.ports)",message="at least one legacy or named port is required"
 // +kubebuilder:validation:XValidation:rule="self.workload.kind != 'Stateful' || !has(self.replicas) || self.replicas == 1",message="Stateful workloads require exactly one replica"
 type AppDeploymentSpec struct {
+	// Withdrawn is a terminal write barrier. Keep this object after removing its
+	// children: deleting the barrier would let an uncertain old Create succeed.
+	// +kubebuilder:default=false
+	// +kubebuilder:validation:XValidation:rule="!oldSelf || self",message="withdrawal is terminal"
+	Withdrawn bool `json:"withdrawn"`
+
 	// Workload selects exactly one workload renderer.
 	Workload AppDeploymentWorkload `json:"workload"`
 

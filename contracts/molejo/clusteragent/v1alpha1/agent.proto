@@ -90,6 +90,7 @@ message RuntimeObservation {
   string spec_hash = 11;
   repeated PublicationAddressObservation addresses = 12;
   string uid = 13;
+  int64 sampled_at_unix_nano = 14;
 }
 
 // Facts correlate one address with the exact operation destination and runtime object.
@@ -192,6 +193,8 @@ message RuntimeCommand {
 }
 
 message RuntimeResult {
+  string runtime_uid = 13;
+  bool withdrawal_confirmed = 14;
   string command_id = 1;
   // fencing_token must echo the command token that remains authoritative in PostgreSQL.
   int64 fencing_token = 2;

@@ -43,8 +43,8 @@ func TestKubernetesBindingsRequireAdministratorAndDriveAvailability(t *testing.T
 	if storageBinding.Health != generated.ClusterStorageBindingHealthUnknown || storageBinding.Version != 1 {
 		t.Fatalf("unobserved storage binding=%+v", storageBinding)
 	}
-	response = hierarchyRequest(t, server, owner, http.MethodPut, publicationPath, `{"gatewayNamespace":"molejo-system","gatewayName":"molejo","sectionName":"https-molejo"}`, nil)
-	if response.Code != http.StatusCreated {
+	response = hierarchyRequest(t, server, owner, http.MethodPut, publicationPath, `{"gatewayNamespace":"molejo-system","gatewayName":"molejo","schemaVersion":"kubernetes-http.v1alpha1","listeners":[{"name":"https-molejo","hostname":"*.molejo.dev"}]}`, map[string]string{"If-Match": "1"})
+	if response.Code != http.StatusOK {
 		t.Fatalf("create publication status=%d body=%s", response.Code, response.Body.String())
 	}
 
@@ -56,7 +56,7 @@ func TestKubernetesBindingsRequireAdministratorAndDriveAvailability(t *testing.T
 			Storage: &kubernetesbinding.StorageObservation{StorageClassName: "local-path", Provisioner: "rancher.io/local-path", AccessModes: []string{"ReadWriteOnce"}, AllowExpansion: true, VolumeBindingMode: "WaitForFirstConsumer"},
 		},
 		{
-			ID: "publication:http", Kind: kubernetesbinding.KindPublicationHTTP, Version: 1,
+			ID: "pbd-test:https-molejo", Kind: kubernetesbinding.KindPublicationHTTP, Version: 2,
 			Health: kubernetesbinding.HealthHealthy, SampledAt: observedAt,
 			Publication: &kubernetesbinding.PublicationObservation{GatewayNamespace: "molejo-system", GatewayName: "molejo", SectionName: "https-molejo", GatewayClassName: "traefik", GatewayClassAccepted: true, GatewayProgrammed: true, ListenerReady: true, SupportedRouteKinds: []string{"HTTPRoute"}},
 		},

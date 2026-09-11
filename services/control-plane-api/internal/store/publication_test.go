@@ -41,10 +41,10 @@ func TestPublicationPolicyResolvesAllowedDomainsAndRejectsReservedLabels(t *test
 		want         string
 		wantErr      error
 	}{
-		{name: "default stateless", workloadKind: domain.WorkloadStateless, endpoint: domain.PublicEndpoint{Type: domain.EndpointHTTP, DomainID: "default", HostnameLabel: "api"}, want: "api.molejo.dev"},
+		{name: "default stateless", workloadKind: domain.WorkloadStateless, endpoint: domain.PublicEndpoint{Type: domain.EndpointTCP, DomainID: "default", HostnameLabel: "api"}, want: "api.molejo.dev"},
 		{name: "stateful domain", workloadKind: domain.WorkloadStateful, endpoint: domain.PublicEndpoint{Type: domain.EndpointTCP, DomainID: "stateful", HostnameLabel: "pg"}, want: "pg.stateful.molejo.dev"},
 		{name: "stateful domain rejects stateless", workloadKind: domain.WorkloadStateless, endpoint: domain.PublicEndpoint{Type: domain.EndpointHTTP, DomainID: "stateful", HostnameLabel: "api"}, wantErr: ErrPublicationDomainNotAllowed},
-		{name: "cloud is reserved", workloadKind: domain.WorkloadStateless, endpoint: domain.PublicEndpoint{Type: domain.EndpointHTTP, DomainID: "default", HostnameLabel: "cloud"}, wantErr: ErrPublicationHostnameReserved},
+		{name: "cloud is reserved", workloadKind: domain.WorkloadStateless, endpoint: domain.PublicEndpoint{Type: domain.EndpointTCP, DomainID: "default", HostnameLabel: "cloud"}, wantErr: ErrPublicationHostnameReserved},
 		{name: "stateful child is reserved", workloadKind: domain.WorkloadStateful, endpoint: domain.PublicEndpoint{Type: domain.EndpointTCP, DomainID: "default", HostnameLabel: "stateful"}, wantErr: ErrPublicationHostnameReserved},
 	}
 	for _, test := range tests {

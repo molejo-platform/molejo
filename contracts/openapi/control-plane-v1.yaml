@@ -1900,6 +1900,164 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Operation' }
+  /api/v1/admin/publication/domains:
+    get:
+      operationId: listPublicationDomains
+      parameters:
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, maximum: 1000000, default: 0 } }
+      responses:
+        default:
+          description: Sanitized API error
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '200':
+          description: Administrative domains
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, hasMore]
+                additionalProperties: false
+                properties:
+                  hasMore: { type: boolean }
+                  items:
+                    type: array
+                    maxItems: 100
+                    items: { $ref: '#/components/schemas/PublicationDomain' }
+  /api/v1/admin/publication/domains/{domainId}:
+    parameters:
+      - { name: domainId, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+    get:
+      operationId: getPublicationDomain
+      responses:
+        '200':
+          description: Current administrative revision
+          content: { application/json: { schema: { $ref: '#/components/schemas/PublicationDomain' } } }
+    put:
+      operationId: putPublicationDomain
+      parameters:
+        - { name: If-Match, in: header, schema: { type: integer, minimum: 1 } }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/PublicationDomainInput' } } }
+      responses:
+        default:
+          description: Sanitized API error
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '200':
+          description: Updated domain
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicationDomain'
+        '201':
+          description: Created domain
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicationDomain'
+    delete:
+      operationId: deletePublicationDomain
+      parameters:
+        - { name: If-Match, in: header, required: true, schema: { type: integer, minimum: 1 } }
+      responses:
+        default:
+          description: Sanitized API error
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '204':
+          description: Domain removed
+  /api/v1/admin/publication/domains/{domainId}/grants:
+    get:
+      operationId: listPublicationGrants
+      parameters:
+        - { name: domainId, in: path, required: true, schema: { type: string, maxLength: 128 } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, maximum: 1000000, default: 0 } }
+      responses:
+        '200':
+          description: Administrative grants
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [items, hasMore]
+                properties:
+                  hasMore: { type: boolean }
+                  items:
+                    type: array
+                    maxItems: 100
+                    items: { $ref: '#/components/schemas/PublicationGrant' }
+  /api/v1/admin/publication/domains/{domainId}/grants/{workspaceId}/{bindingId}:
+    parameters:
+      - { name: domainId, in: path, required: true, schema: { type: string, maxLength: 128 } }
+      - { name: workspaceId, in: path, required: true, schema: { type: string, maxLength: 128 } }
+      - { name: bindingId, in: path, required: true, schema: { type: string, maxLength: 128 } }
+    put:
+      operationId: putPublicationGrant
+      responses:
+        default:
+          description: Sanitized API error
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '204':
+          description: Grant mutation completed
+    delete:
+      operationId: deletePublicationGrant
+      responses:
+        default:
+          description: Sanitized API error
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '204':
+          description: Grant mutation completed
+  /api/v1/admin/publication/dependents:
+    get:
+      operationId: getPublicationDependents
+      parameters:
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, maximum: 1000000, default: 0 } }
+        - { name: domainId, in: query, schema: { type: string, maxLength: 128 } }
+        - { name: bindingId, in: query, schema: { type: string, maxLength: 128 } }
+      responses:
+        default:
+          description: Sanitized API error
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '200':
+          description: Publication dependencies
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, hasMore]
+                additionalProperties: false
+                properties:
+                  hasMore: { type: boolean }
+                  items:
+                    type: array
+                    maxItems: 100
+                    items: { $ref: '#/components/schemas/PublicationDependent' }
+  /api/v1/workspaces/{workspaceId}/publication-options:
+    get:
+      operationId: getPublicationOptions
+      parameters:
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, maximum: 1000000, default: 0 } }
+        - { name: workspaceId, in: path, required: true, schema: { type: string } }
+        - { name: clusterId, in: query, required: true, schema: { type: string } }
+      responses:
+        default:
+          description: Sanitized API error
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '200':
+          description: Granted publication choices
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, hasMore]
+                additionalProperties: false
+                properties:
+                  hasMore: { type: boolean }
+                  items:
+                    type: array
+                    maxItems: 100
+                    items: { $ref: '#/components/schemas/PublicationOption' }
+
 components:
   securitySchemes:
     sessionCookie:
@@ -2368,34 +2526,144 @@ components:
         version: { type: integer, minimum: 1 }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
+    PublicationListener:
+      type: object
+      additionalProperties: false
+      required: [name, hostname]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 63 }
+        hostname: { type: string, minLength: 1, maxLength: 253 }
     ClusterPublicationBindingInput:
       type: object
-      required: [gatewayNamespace, gatewayName, sectionName]
       additionalProperties: false
+      required: [schemaVersion, gatewayNamespace, gatewayName, listeners]
       properties:
+        schemaVersion: { type: string, enum: [kubernetes-http.v1alpha1] }
         gatewayNamespace: { type: string, minLength: 1, maxLength: 63 }
         gatewayName: { type: string, minLength: 1, maxLength: 253 }
-        sectionName: { type: string, minLength: 1, maxLength: 63 }
+        listeners: { type: array, minItems: 1, maxItems: 10, items: { $ref: '#/components/schemas/PublicationListener' } }
     ClusterPublicationBinding:
       type: object
-      required: [clusterId, gatewayNamespace, gatewayName, sectionName, gatewayClassName, gatewayClassAccepted, gatewayProgrammed, listenerReady, supportedRouteKinds, health, reasonCode, version, createdAt, updatedAt]
       additionalProperties: false
+      required: [schemaVersion, gatewayNamespace, gatewayName, listeners, id, clusterId, clusterUid, revision, health, reasonCode, createdAt, updatedAt]
       properties:
-        clusterId: { type: string, pattern: '^(cls|agi)-[a-z2-7]{20}$' }
+        schemaVersion: { type: string, enum: [kubernetes-http.v1alpha1] }
         gatewayNamespace: { type: string, minLength: 1, maxLength: 63 }
         gatewayName: { type: string, minLength: 1, maxLength: 253 }
-        sectionName: { type: string, minLength: 1, maxLength: 63 }
-        gatewayClassName: { type: string, maxLength: 253 }
-        gatewayClassAccepted: { type: boolean }
-        gatewayProgrammed: { type: boolean }
-        listenerReady: { type: boolean }
-        supportedRouteKinds: { type: array, maxItems: 8, items: { type: string, maxLength: 64 } }
+        listeners: { type: array, minItems: 1, maxItems: 10, items: { $ref: '#/components/schemas/PublicationListener' } }
+        id: { type: string }
+        clusterId: { type: string }
+        clusterUid: { type: string }
+        revision: { type: integer, minimum: 1 }
         health: { type: string, enum: [Unknown, Healthy, Degraded, Unavailable] }
-        reasonCode: { type: string, maxLength: 128 }
+        reasonCode: { type: string }
         observedAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    PublicationDomainInput:
+      type: object
+      additionalProperties: false
+      required: [name, kind, reservedNames]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 254 }
+        kind: { type: string, enum: [Exact, SubdomainPool] }
+        reservedNames: { type: array, maxItems: 100, items: { type: string, maxLength: 253 } }
+    PublicationDomain:
+      type: object
+      additionalProperties: false
+      required: [name, kind, reservedNames, id, version, createdAt, updatedAt]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 254 }
+        kind: { type: string, enum: [Exact, SubdomainPool] }
+        reservedNames: { type: array, maxItems: 100, items: { type: string, maxLength: 253 } }
+        id: { type: string }
         version: { type: integer, minimum: 1 }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
+    PublicationObservation:
+      type: object
+      additionalProperties: false
+      properties:
+        uid: { type: string, maxLength: 128 }
+        desiredVersion: { type: integer, minimum: 0 }
+        generation: { type: integer, minimum: 0 }
+        observedAt: { type: string, format: date-time }
+        state: { type: string, enum: [Unknown, Ready, Progressing, Degraded] }
+        reasonCode: { type: string }
+        addresses: { type: array, maxItems: 10, items: { $ref: '#/components/schemas/PublicationAddressObservation' } }
+    PublicationAddressObservation:
+      type: object
+      additionalProperties: false
+      required: [endpointName, hostname, destination, routeName, routeUid, routeGeneration, gatewayUid, conditions]
+      properties:
+        endpointName: { type: string, maxLength: 15 }
+        hostname: { type: string, maxLength: 253 }
+        destination: { $ref: '#/components/schemas/HTTPDestination' }
+        routeName: { type: string, maxLength: 253 }
+        routeUid: { type: string, maxLength: 128 }
+        routeGeneration: { type: integer, minimum: 0 }
+        gatewayUid: { type: string, maxLength: 128 }
+        conditions:
+          type: array
+          maxItems: 4
+          items:
+            type: object
+            additionalProperties: false
+            required: [type, status, reason, observedGeneration, lastTransitionAt]
+            properties:
+              type: { type: string, enum: [RouteReady, GatewayReady, ConnectivityVerified, ServedTLSVerified] }
+              status: { type: string, enum: ['True', 'False', Unknown] }
+              reason: { type: string, maxLength: 128 }
+              observedGeneration: { type: integer, minimum: 0 }
+              lastTransitionAt: { type: string, format: date-time }
+    HTTPDestination:
+      type: object
+      additionalProperties: false
+      required: [bindingId, bindingRevision, schemaVersion, gatewayNamespace, gatewayName, sectionName]
+      properties:
+        bindingId: { type: string, maxLength: 128 }
+        bindingRevision: { type: integer, minimum: 1 }
+        schemaVersion: { type: string, enum: [kubernetes-http.v1alpha1] }
+        gatewayNamespace: { type: string, maxLength: 63 }
+        gatewayName: { type: string, maxLength: 253 }
+        sectionName: { type: string, maxLength: 63 }
+    PublicationGrant:
+      type: object
+      additionalProperties: false
+      required: [domainId, workspaceId, bindingId, createdAt]
+      properties:
+        domainId: { type: string }
+        workspaceId: { type: string }
+        bindingId: { type: string }
+        createdAt: { type: string, format: date-time }
+    PublicationOption:
+      type: object
+      additionalProperties: false
+      required: [domain, bindingId, listeners, health, reasonCode]
+      properties:
+        domain: { $ref: '#/components/schemas/PublicationDomain' }
+        bindingId: { type: string }
+        listeners: { type: array, maxItems: 10, items: { $ref: '#/components/schemas/PublicationListener' } }
+        health: { type: string, enum: [Unknown, Healthy, Degraded, Unavailable] }
+        reasonCode: { type: string }
+    PublicationDependent:
+      type: object
+      additionalProperties: false
+      required: [appEnvironmentId, hostname, kind]
+      properties:
+        appEnvironmentId: { type: string }
+        hostname: { type: string }
+        kind: { type: string, enum: [Desired, Applied, Executable] }
+    HTTPAssociation:
+      type: object
+      additionalProperties: false
+      required: [domainId, bindingId]
+      properties:
+        domainId: { type: string, minLength: 1, maxLength: 128 }
+        bindingId: { type: string, minLength: 1, maxLength: 128 }
+        label: { type: string, minLength: 1, maxLength: 63 }
+        listenerName: { type: string, minLength: 1, maxLength: 63 }
+        hostname: { type: string, readOnly: true }
     Cluster:
       type: object
       required: [id, name, status, capabilities, createdAt, updatedAt]
@@ -3032,6 +3300,8 @@ components:
       required: [id, clusterId, projectId, appId, appName, environmentId, environmentName, branch, workloadKind, configuration, configurationVersion, version, state, createdAt, updatedAt]
       additionalProperties: false
       properties:
+        withdrawalState: { type: string, enum: [None, Requested, Removing, Confirmed] }
+        publicationObservation: { $ref: '#/components/schemas/PublicationObservation' }
         id: { type: string, pattern: '^aev-[a-z2-7]{20}$' }
         clusterId: { type: string, pattern: '^(cls|agi)-[a-z2-7]{20}$' }
         projectId: { type: string, pattern: '^prj-[a-z2-7]{20}$' }
@@ -3181,15 +3451,24 @@ components:
         protocol: { type: string, enum: [TCP] }
     PublicEndpoint:
       type: object
-      required: [name, type, portName, domainId, hostnameLabel]
       additionalProperties: false
+      required: [name, type, portName]
       properties:
         name: { type: string, minLength: 1, maxLength: 15, pattern: '^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$' }
         type: { type: string, enum: [HTTP, TCP] }
-        portName: { type: string, minLength: 1, maxLength: 15, pattern: '^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$' }
-        domainId: { type: string, minLength: 1, maxLength: 63, pattern: '^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$' }
+        portName: { type: string, minLength: 1, maxLength: 15 }
+        addresses: { type: array, minItems: 1, maxItems: 10, items: { $ref: '#/components/schemas/HTTPAssociation' } }
+        domainId: { type: string, minLength: 1, maxLength: 63 }
         hostnameLabel: { type: string, minLength: 1, maxLength: 63, pattern: '^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$' }
         externalPort: { type: integer, minimum: 1, maximum: 65535, readOnly: true }
+      oneOf:
+        - required: [addresses]
+          properties: { type: { enum: [HTTP] } }
+          not:
+            anyOf: [{ required: [domainId] }, { required: [hostnameLabel] }, { required: [externalPort] }]
+        - required: [domainId, hostnameLabel]
+          properties: { type: { enum: [TCP] } }
+          not: { required: [addresses] }
     Deployment:
       type: object
       required: [id, appEnvironmentId, releaseId, workloadKind, configurationVersion, configuration, requestedBy, state, createdAt, updatedAt]
