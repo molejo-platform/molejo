@@ -303,7 +303,7 @@ func testAgentHello(installationID string) *clusteragentv1alpha1.AgentHello {
 		AgentVersion:              "test",
 		ClusterUid:                "cluster-test-uid",
 		KubernetesVersion:         "v1.36.3",
-		Capabilities:              []string{"runtime.v1alpha1"},
+		Capabilities:              []string{"runtime.v1alpha2"},
 		WorkspaceProvisioningMode: string(workspacecontract.ProvisioningNamespaced),
 	}
 }

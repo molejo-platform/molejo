@@ -84,7 +84,7 @@ func run() error {
 		metadata := controlplane.AgentMetadata{
 			ClusterUID:                string(systemNamespace.UID),
 			KubernetesVersion:         serverVersion.GitVersion,
-			Capabilities:              []string{"runtime.v1alpha1", "runtime-observation.v1alpha1", "runtime-query.v1alpha1", "certificate-renewal.v1alpha1", "capability-observation.v1alpha1", "binding-observation.v1alpha1", "workspace-provisioning.v1alpha1"},
+			Capabilities:              []string{"runtime.v1alpha2", "runtime-observation.v1alpha1", "runtime-query.v1alpha1", "certificate-renewal.v1alpha1", "capability-observation.v1alpha1", "binding-observation.v1alpha1", "workspace-provisioning.v1alpha1"},
 			WorkspaceProvisioningMode: string(configuration.WorkspaceProvisioningMode),
 		}
 		grpcConnector, connectorErr := controlplane.NewGRPCConnector(configuration.GRPCAddress, configuration.GRPCServerName, version, metadata, executor)

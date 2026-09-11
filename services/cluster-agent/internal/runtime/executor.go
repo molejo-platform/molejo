@@ -1,10 +1,12 @@
 package runtime
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"time"
 
 	clusteragentv1alpha1 "github.com/molejo-platform/molejo/contracts/molejo/clusteragent/v1alpha1"
@@ -32,7 +34,7 @@ func (e *Executor) Execute(parent context.Context, command *clusteragentv1alpha1
 	if command.GetCommandId() == "" || command.GetOperationId() == "" || command.GetFencingToken() < 1 || command.GetDesiredVersion() < 1 {
 		return failResult(result, "command_invalid", "runtime command metadata is invalid", false)
 	}
-	if schema := command.GetPayloadSchemaVersion(); schema != "" && schema != "runtime.v1alpha1" {
+	if schema := command.GetPayloadSchemaVersion(); schema != runtimecontract.PayloadSchemaVersion {
 		return failResult(result, "command_incompatible", "runtime command schema is not supported", false)
 	}
 	deadline := time.Unix(command.GetDeadlineUnix(), 0)
@@ -40,8 +42,18 @@ func (e *Executor) Execute(parent context.Context, command *clusteragentv1alpha1
 		return failResult(result, "command_expired", "runtime command deadline has elapsed", true)
 	}
 	var payload runtimecontract.Payload
-	if err := json.Unmarshal(command.GetPayloadJson(), &payload); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(command.GetPayloadJson()))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&payload); err != nil {
 		return failResult(result, "command_invalid", "runtime command payload is invalid", false)
+	}
+	if decoder.Decode(new(any)) != io.EOF {
+		return failResult(result, "command_invalid", "runtime command contains trailing data", false)
+	}
+	if payload.Deployment != nil {
+		if err := runtimecontract.ValidatePublication(normalizeIntent(*payload.Deployment)); err != nil {
+			return failResult(result, "command_invalid", "runtime publication is invalid", false)
+		}
 	}
 	timeoutDeadline := time.Now().Add(e.timeout)
 	if deadline.Before(timeoutDeadline) {

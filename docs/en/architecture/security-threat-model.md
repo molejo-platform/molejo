@@ -149,6 +149,24 @@ optional capability state and do not make the core application loop unhealthy.
 - A cluster administrator can always override Molejo controls; this actor is
   outside Molejo tenant isolation.
 
+## HTTP publication foundation (TM-04, TM-05, TM-07, TM-16)
+
+The [publication contract](http-publication.md) rejects legacy or partial runtime
+payloads before effects, fixes a per-address Gateway/listener target, and preserves
+foreign resource ownership. Only namespaces explicitly labeled
+`platform.molejo.dev/http-publication=enabled` attach to the managed Gateway recipe;
+Molejo owns this label on Workspace and control-plane namespaces. The label is an
+infrastructure attachment boundary, not a product domain grant. Workloads must
+not be allowed to mutate namespaces, AppDeployments or HTTPRoutes directly.
+External Gateway inspection requires neither Helm ownership nor Secret reads.
+
+CP result fencing and a missing Kubernetes object alone do not prove that a late
+Apply cannot recreate a deleted route. Phase-two operation/claim transactions must
+establish quiescence before final correlated withdrawal and claim release; until
+then the old HTTP configuration is rejected before command dispatch. Foreground
+deletion, update preconditions and live desired-version checks are complementary
+runtime controls, not a durable post-deletion fence.
+
 ## Accepted residual risks and non-goals
 
 - Alpha releases may require a clean reinstall and do not promise in-place

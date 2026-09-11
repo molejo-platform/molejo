@@ -226,7 +226,7 @@ func TestWorkspaceProvisioningRequiresCapabilityAndExplicitClusterConsent(t *tes
 	response := hierarchyRequest(t, server, owner, http.MethodPost, "/api/v1/workspaces", requestBody, map[string]string{"Idempotency-Key": "disabled-consent"})
 	assertHierarchyConflict(t, response, "cluster_consent_disabled", "workspace provisioning request was not admitted")
 
-	if _, err := storage.Pool.Exec(ctx, `UPDATE agent_installations SET workspace_provisioning_mode='Namespaced',capabilities_json='["runtime.v1alpha1"]'::jsonb WHERE public_id=$1`, testAgentInstallationID); err != nil {
+	if _, err := storage.Pool.Exec(ctx, `UPDATE agent_installations SET workspace_provisioning_mode='Namespaced',capabilities_json='["runtime.v1alpha2"]'::jsonb WHERE public_id=$1`, testAgentInstallationID); err != nil {
 		t.Fatal(err)
 	}
 	response = hierarchyRequest(t, server, owner, http.MethodPost, "/api/v1/workspaces", requestBody, map[string]string{"Idempotency-Key": "missing-capability"})

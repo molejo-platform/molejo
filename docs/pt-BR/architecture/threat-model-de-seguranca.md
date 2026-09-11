@@ -138,6 +138,24 @@ e não tornam o application loop core indisponível.
   Control Plane.
 - Administrador Kubernetes sempre pode sobrepor controles e fica fora do isolamento tenant.
 
+## Fundação de publicação HTTP (TM-04, TM-05, TM-07, TM-16)
+
+O [contrato de publicação](../../en/architecture/http-publication.md) rejeita
+payloads legados ou parciais antes de efeitos, fixa Gateway/listener por endereço
+e preserva ownership alheio. Somente namespaces com a label explícita
+`platform.molejo.dev/http-publication=enabled` podem se conectar à receita
+Gateway gerenciada. A Molejo atribui essa label aos namespaces de Workspace e
+Control Plane. Ela limita attachment de infraestrutura; não concede domínio no
+produto. Workloads não podem alterar namespaces, AppDeployments ou HTTPRoutes.
+Inspeção de Gateway externo dispensa ownership Helm e leitura de Secret.
+
+Fencing de resultado e ausência do objeto Kubernetes não provam que um Apply
+atrasado não pode recriar a rota. As transações de operação/claim da Fase 2 devem
+comprovar ausência de execução pendente antes da retirada final correlacionada e
+da liberação do claim. Até lá, a configuração HTTP antiga é recusada antes do
+dispatch. Delete foreground, precondições de atualização e checagem de revisão
+são controles complementares, não uma barreira durável após a exclusão.
+
 ## Riscos aceitos e não objetivos
 
 - Alphas podem exigir reinstalação limpa.

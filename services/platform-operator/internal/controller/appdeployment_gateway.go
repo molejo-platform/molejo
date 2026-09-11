@@ -13,9 +13,9 @@ import (
 	platformv1alpha1 "github.com/molejo-platform/molejo/packages/kubernetes-api/apis/platform/v1alpha1"
 )
 
-func (r *AppDeploymentReconciler) getPublicationGateway(ctx context.Context) (*gatewayv1.Gateway, error) {
+func (r *AppDeploymentReconciler) getPublicationGateway(ctx context.Context, target platformv1alpha1.HTTPDestination) (*gatewayv1.Gateway, error) {
 	gateway := &gatewayv1.Gateway{}
-	err := r.Get(ctx, client.ObjectKey{Namespace: sharedGatewayNamespace, Name: sharedGatewayName}, gateway)
+	err := r.Get(ctx, client.ObjectKey{Namespace: target.GatewayNamespace, Name: target.GatewayName}, gateway)
 	if apierrors.IsNotFound(err) {
 		return nil, nil
 	}
@@ -28,6 +28,7 @@ func (r *AppDeploymentReconciler) getPublicationGateway(ctx context.Context) (*g
 func evaluatePublicationGateway(
 	gateway *gatewayv1.Gateway,
 	publication workloadDecision,
+	section string,
 ) workloadDecision {
 	if publication.state == workloadStateDegraded {
 		return publication
@@ -46,7 +47,7 @@ func evaluatePublicationGateway(
 		}
 	}
 
-	listenerConditions, found := publicationGatewayListenerConditions(gateway)
+	listenerConditions, found := publicationGatewayListenerConditions(gateway, section)
 	if !found {
 		if !conditionIsCurrent(programmed, gateway.Generation) || programmed.Status != metav1.ConditionTrue {
 			return workloadDecision{
@@ -84,12 +85,12 @@ func evaluatePublicationGateway(
 	return publication
 }
 
-func publicationGatewayListenerConditions(gateway *gatewayv1.Gateway) ([]metav1.Condition, bool) {
+func publicationGatewayListenerConditions(gateway *gatewayv1.Gateway, section string) ([]metav1.Condition, bool) {
 	var conditions []metav1.Condition
 	found := false
 	for index := range gateway.Status.Listeners {
 		listener := &gateway.Status.Listeners[index]
-		if listener.Name != sharedGatewaySection {
+		if string(listener.Name) != section {
 			continue
 		}
 		if found {

@@ -38,20 +38,13 @@ const (
 	// ReasonGatewayRejected reports that the shared Gateway or HTTPS listener is unavailable.
 	ReasonGatewayRejected = "GatewayRejected"
 	// ReasonPublicationRejected reports that a public endpoint was rejected by the shared Gateway.
-	ReasonPublicationRejected                       = "PublicationRejected"
-	ReasonHostnameConflict                          = "HostnameConflict"
-	ExposurePrivate           AppDeploymentExposure = "Private"
-	ExposurePublic            AppDeploymentExposure = "Public"
+	ReasonPublicationRejected = "PublicationRejected"
 
 	// WorkloadStateless projects an AppDeployment into a Deployment.
 	WorkloadStateless AppDeploymentWorkloadKind = "Stateless"
 	// WorkloadStateful projects an AppDeployment into a single-replica StatefulSet.
 	WorkloadStateful AppDeploymentWorkloadKind = "Stateful"
 )
-
-// AppDeploymentExposure is retained only while existing v1alpha1 objects are migrated.
-// +kubebuilder:validation:Enum=Private;Public
-type AppDeploymentExposure string
 
 // AppDeploymentWorkloadKind discriminates the workload renderer.
 // +kubebuilder:validation:Enum=Stateless;Stateful
@@ -84,8 +77,6 @@ type StatefulWorkload struct {
 }
 
 // AppDeploymentSpec declares the minimum workload intent understood by the platform operator.
-// +kubebuilder:validation:XValidation:rule="!has(self.exposure) || self.exposure != 'Public' || has(self.slug)",message="legacy public exposure requires a slug"
-// +kubebuilder:validation:XValidation:rule="!has(self.exposure) || self.exposure != 'Private' || !has(self.slug)",message="legacy private exposure omits the slug"
 // +kubebuilder:validation:XValidation:rule="has(self.port) || has(self.ports)",message="at least one legacy or named port is required"
 // +kubebuilder:validation:XValidation:rule="self.workload.kind != 'Stateful' || !has(self.replicas) || self.replicas == 1",message="Stateful workloads require exactly one replica"
 type AppDeploymentSpec struct {
@@ -124,19 +115,8 @@ type AppDeploymentSpec struct {
 	// +listType=map
 	// +listMapKey=name
 	// +kubebuilder:validation:MaxItems=2
+	// +kubebuilder:validation:XValidation:rule="self.filter(e, e.type == 'HTTP').size() <= 1 && self.filter(e, e.type == 'TCP').size() <= 1",message="at most one endpoint of each type is supported"
 	PublicEndpoints []AppDeploymentPublicEndpoint `json:"publicEndpoints,omitempty"`
-
-	// Deprecated compatibility projection for pre-multiport v1alpha1 objects.
-	// +optional
-	// +kubebuilder:default=Private
-	Exposure AppDeploymentExposure `json:"exposure,omitempty"`
-
-	// Deprecated compatibility projection for pre-multiport v1alpha1 objects.
-	// +optional
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=63
-	// +kubebuilder:validation:Pattern="^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$"
-	Slug string `json:"slug,omitempty"`
 
 	// Variables are non-secret environment variables projected into the workload.
 	// +listType=map
@@ -175,7 +155,13 @@ type AppDeploymentPublicEndpointType string
 // AppDeploymentPublicEndpoint is a bounded public route allocated by the control plane.
 // +kubebuilder:validation:XValidation:rule="self.type != 'TCP' || has(self.externalPort)",message="TCP publication requires an allocated external port"
 // +kubebuilder:validation:XValidation:rule="self.type != 'HTTP' || !has(self.externalPort)",message="HTTP publication does not use an external port"
+// +kubebuilder:validation:XValidation:rule="self.type != 'HTTP' || (has(self.addresses) && size(self.addresses) > 0 && !has(self.hostname) && !has(self.hostnameLabel))",message="HTTP requires resolved addresses only"
+// +kubebuilder:validation:XValidation:rule="self.type != 'TCP' || !has(self.addresses)",message="TCP does not use HTTP addresses"
 type AppDeploymentPublicEndpoint struct {
+	// +listType=map
+	// +listMapKey=hostname
+	// +kubebuilder:validation:MaxItems=10
+	Addresses []AppDeploymentHTTPAddress `json:"addresses,omitempty"`
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=15
 	// +kubebuilder:validation:Pattern="^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$"
@@ -190,7 +176,7 @@ type AppDeploymentPublicEndpoint struct {
 
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
-	HostnameLabel string `json:"hostnameLabel"`
+	HostnameLabel string `json:"hostnameLabel,omitempty"`
 
 	// Hostname is the exact public name resolved by the control plane.
 	// +kubebuilder:validation:MaxLength=253
@@ -277,10 +263,14 @@ type AppDeploymentHTTPProbe = AppDeploymentProbe
 
 // AppDeploymentEndpointStatus reports one independently reconciled publication.
 type AppDeploymentEndpointStatus struct {
-	Name   string                          `json:"name"`
-	Type   AppDeploymentPublicEndpointType `json:"type"`
-	Ready  bool                            `json:"ready"`
-	Reason string                          `json:"reason,omitempty"`
+	// +listType=map
+	// +listMapKey=hostname
+	// +kubebuilder:validation:MaxItems=10
+	Addresses []AppDeploymentHTTPAddressStatus `json:"addresses,omitempty"`
+	Name      string                           `json:"name"`
+	Type      AppDeploymentPublicEndpointType  `json:"type"`
+	Ready     bool                             `json:"ready"`
+	Reason    string                           `json:"reason,omitempty"`
 }
 
 // AppDeploymentStatus reports the observed workload state.
@@ -332,4 +322,49 @@ type AppDeploymentList struct {
 
 func init() {
 	SchemeBuilder.Register(&AppDeployment{}, &AppDeploymentList{})
+}
+
+// AppDeploymentHTTPAddress fixes one association to its authorized destination.
+type AppDeploymentHTTPAddress struct {
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern="^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?(?:\\.[a-z0-9](?:[-a-z0-9]*[a-z0-9])?)*$"
+	// +kubebuilder:validation:XValidation:rule="self.split('.').all(label, size(label) <= 63)",message="DNS labels cannot exceed 63 characters"
+	Hostname    string          `json:"hostname"`
+	Destination HTTPDestination `json:"destination"`
+}
+
+type HTTPDestination struct {
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=128
+	BindingID string `json:"bindingId"`
+	// +kubebuilder:validation:Minimum=1
+	BindingRevision int64 `json:"bindingRevision"`
+	// +kubebuilder:validation:Enum=kubernetes-http.v1alpha1
+	SchemaVersion string `json:"schemaVersion"`
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern="^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$"
+	GatewayNamespace string `json:"gatewayNamespace"`
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern="^[a-z0-9](?:[-a-z0-9.]*[a-z0-9])?$"
+	GatewayName string `json:"gatewayName"`
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern="^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$"
+	SectionName string `json:"sectionName"`
+}
+
+// Evidence describes runtime facts only. It does not attest DNS or served TLS.
+type AppDeploymentHTTPAddressStatus struct {
+	Hostname        string          `json:"hostname"`
+	Destination     HTTPDestination `json:"destination"`
+	RouteName       string          `json:"routeName"`
+	RouteUID        string          `json:"routeUid"`
+	RouteGeneration int64           `json:"routeGeneration"`
+	GatewayUID      string          `json:"gatewayUid,omitempty"`
+	// +listType=map
+	// +listMapKey=type
+	Conditions []metav1.Condition `json:"conditions"`
 }

@@ -89,6 +89,15 @@ amplos somente quando o comportamento não puder ser provado em uma camada
 inferior. Nunca inclua credenciais, chaves privadas, certificados ou kubeconfigs
 em snapshots.
 
+A fundação de publicação HTTP também possui uma prova local com TLS real:
+
+```bash
+tools/testing/publication-kind.sh
+```
+
+Ela cria e remove um Kind isolado com kubeconfig próprio. Requer Docker, Helm e
+kubectl e nunca usa o contexto atual do cluster.
+
 ## Testes de aceitação no K3s
 
 Estes testes para mantenedores não fazem parte do `just verify`, pois exigem um

@@ -101,7 +101,7 @@ func TestConfigurePublicationRoutesWithoutClusterDependencies(t *testing.T) {
 		Name: "web", Type: "HTTP", PortName: httpPortName, Hostname: "app.molejo.dev",
 	}
 	httpRoute := &gatewayv1.HTTPRoute{}
-	if err := configureHTTPRoute(httpRoute, appDeployment, httpEndpoint); err != nil {
+	if err := configureHTTPRoute(httpRoute, appDeployment, httpEndpoint, testHTTPAddress("app.molejo.dev")); err != nil {
 		t.Fatalf("configure HTTPRoute: %v", err)
 	}
 	if len(httpRoute.Spec.Hostnames) != 1 || httpRoute.Spec.Hostnames[0] != "app.molejo.dev" {

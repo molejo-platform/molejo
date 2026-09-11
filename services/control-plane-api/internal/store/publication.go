@@ -42,10 +42,18 @@ func (p PublicationPolicy) Resolve(workloadKind domain.WorkloadKind, endpoint do
 		if !slices.Contains(candidate.WorkloadKinds, workloadKind) || !slices.Contains(candidate.EndpointTypes, endpoint.Type) {
 			return "", ErrPublicationDomainNotAllowed
 		}
-		if slices.Contains(candidate.ReservedLabels, endpoint.HostnameLabel) {
+		allocation := domain.PublicationDomain{ID: candidate.ID, Name: candidate.Suffix, Kind: domain.PublicationPool}
+		for _, label := range candidate.ReservedLabels {
+			allocation.ReservedNames = append(allocation.ReservedNames, label+"."+candidate.Suffix)
+		}
+		hostname, err := allocation.Resolve(endpoint.HostnameLabel)
+		if errors.Is(err, domain.ErrPublicationReserved) {
 			return "", ErrPublicationHostnameReserved
 		}
-		return endpoint.HostnameLabel + "." + candidate.Suffix, nil
+		if err != nil {
+			return "", ErrPublicationDomainNotAllowed
+		}
+		return hostname, nil
 	}
 	return "", ErrPublicationDomainNotAllowed
 }

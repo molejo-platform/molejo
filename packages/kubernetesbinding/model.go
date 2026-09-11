@@ -82,7 +82,6 @@ type PublicationObservation struct {
 var (
 	idPattern     = regexp.MustCompile(`^[a-z][a-z0-9:-]{0,127}$`)
 	dnsLabel      = regexp.MustCompile(`^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$`)
-	dnsSubdomain  = regexp.MustCompile(`^[a-z0-9](?:[-a-z0-9.]*[a-z0-9])?$`)
 	reasonPattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,127}$`)
 )
 
@@ -151,7 +150,15 @@ func validLabel(value string) bool {
 }
 
 func validSubdomain(value string) bool {
-	return len(value) <= 253 && dnsSubdomain.MatchString(value)
+	if len(value) > 253 {
+		return false
+	}
+	for _, label := range strings.Split(value, ".") {
+		if !validLabel(label) {
+			return false
+		}
+	}
+	return true
 }
 
 func validUnique(values []string, maximum, maximumLength int) bool {

@@ -193,7 +193,9 @@ func writeGatewayResult(writer io.Writer, report gateway.Report, contextName str
 	service := report.Setup.Spec.Gateway.Service
 	_, _ = fmt.Fprintf(writer, "Gateway setup %s is ready in context %s\n", report.Setup.Metadata.Name, contextName)
 	_, _ = fmt.Fprintf(writer, "Gateway: %s/%s\n", instance.Namespace, instance.Name)
-	_, _ = fmt.Fprintf(writer, "HTTPS listener: %s\n", instance.HTTPSListener)
+	for _, listener := range instance.Listeners {
+		_, _ = fmt.Fprintf(writer, "HTTPS listener: %s (%s)\n", listener.Name, listener.Hostname)
+	}
 	_, _ = fmt.Fprintf(writer, "HTTPS NodePort: %d\n\nResult: ready\n", service.HTTPSNodePort)
 }
 

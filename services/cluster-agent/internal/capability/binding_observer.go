@@ -75,7 +75,7 @@ func (c *Collector) observePublicationBinding(ctx context.Context, target kubern
 		if !ok || stringField(listener, "name") != reference.SectionName {
 			continue
 		}
-		result.Publication.ListenerReady = nestedConditionsTrue(listener, "Accepted", "Programmed")
+		result.Publication.ListenerReady = nestedConditionsTrue(listener, gateway.GetGeneration(), "Accepted", "Programmed", "ResolvedRefs")
 		if supported, ok := listener["supportedKinds"].([]any); ok {
 			for _, value := range supported {
 				if kind, ok := value.(map[string]any); ok {
@@ -124,26 +124,27 @@ func bindingFailure(err error) (kubernetesbinding.Health, string) {
 
 func conditionTrue(object *unstructured.Unstructured, conditionType string) bool {
 	conditions, _, _ := unstructured.NestedSlice(object.Object, "status", "conditions")
-	return conditionSliceTrue(conditions, conditionType, "True")
+	return conditionSliceTrue(conditions, conditionType, "True", object.GetGeneration())
 }
 
-func nestedConditionsTrue(object map[string]any, required ...string) bool {
+func nestedConditionsTrue(object map[string]any, generation int64, required ...string) bool {
 	conditions, _, _ := unstructured.NestedSlice(object, "conditions")
 	for _, conditionType := range required {
-		if !conditionSliceTrue(conditions, conditionType, "True") {
+		if !conditionSliceTrue(conditions, conditionType, "True", generation) {
 			return false
 		}
 	}
 	return true
 }
 
-func conditionSliceTrue(conditions []any, conditionType, expectedStatus string) bool {
+func conditionSliceTrue(conditions []any, conditionType, expectedStatus string, generation int64) bool {
 	if expectedStatus == "" {
 		expectedStatus = "True"
 	}
 	for _, raw := range conditions {
 		condition, ok := raw.(map[string]any)
-		if ok && stringField(condition, "type") == conditionType && stringField(condition, "status") == expectedStatus {
+		observed, _, _ := unstructured.NestedInt64(condition, "observedGeneration")
+		if ok && observed == generation && stringField(condition, "type") == conditionType && stringField(condition, "status") == expectedStatus {
 			return true
 		}
 	}

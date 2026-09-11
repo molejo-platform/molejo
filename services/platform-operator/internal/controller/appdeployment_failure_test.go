@@ -17,7 +17,6 @@ func TestClassifyProjectionFailure(t *testing.T) {
 		wantReason string
 		wantReport bool
 	}{
-		{name: "hostname conflict", err: errHostnameConflict, handled: true, wantReason: platformv1alpha1.ReasonHostnameConflict},
 		{name: "ownership conflict", err: errOwnershipConflict, handled: true, wantReason: platformv1alpha1.ReasonOwnershipConflict},
 		{name: "persistent Kubernetes rejection", err: apierrors.NewBadRequest("invalid"), handled: true, wantReason: platformv1alpha1.ReasonReconcileFailed, wantReport: true},
 		{name: "transient failure", err: errors.New("temporarily unavailable")},

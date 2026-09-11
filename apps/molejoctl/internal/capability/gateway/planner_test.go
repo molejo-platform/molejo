@@ -50,7 +50,7 @@ func TestNormalizeAndValidateRejectsUnsupportedSetup(t *testing.T) {
 	setup := validSetup()
 	setup.Spec.Profile = "eks"
 	setup.Spec.Gateway.Service.HTTPSNodePort = setup.Spec.Gateway.Service.HTTPNodePort
-	setup.Spec.Gateway.Instance.CertificateSecret.Namespace = "other"
+	setup.Spec.Gateway.Instance.Listeners[0].CertificateSecret.Namespace = "other"
 	_, diagnostics := NormalizeAndValidate(setup)
 	if len(diagnostics) != 3 {
 		t.Fatalf("diagnostics=%+v", diagnostics)

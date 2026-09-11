@@ -48,6 +48,16 @@ explicit provider binding with its own retention, isolation, authentication, and
 conformance guarantees. Public product APIs expose normalized product concepts,
 not provider query languages or credentials.
 
+## HTTP publication application (2026-09-11)
+
+The [HTTP publication foundation](../architecture/http-publication.md) implements
+one concrete Kubernetes HTTP binding, immutable per-address destinations, and
+separate administrative identity, revision, schema version and observed UID.
+Explicit compatible developer choices take precedence over defaults; equivalent
+implicit candidates require selection. Read-only consumption inspection does not
+require ownership of a managed recipe or Secret access. JSONB is an optional
+implementation persistence choice, not a universal provider registry.
+
 ## Consequences
 
 - Operators can retain Kubernetes, cloud, registry, storage, publication, and

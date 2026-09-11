@@ -39,3 +39,21 @@ molejoctl platform control-plane install \
 
 El `HTTPRoute` resultante expone solamente `console-web`. La consola reenvía
 `/api/*` a la API interna del control plane.
+
+La receta `config.molejo.dev/v1alpha2` requiere `instance.listeners` con 1–10
+entradas. Cada una declara `name`, `hostname` exacto o wildcard y
+`certificateSecret`. `init` genera apex (`https-apex`) y wildcard
+(`https-molejo`). Las recetas anteriores se rechazan; regenerá en una instalación
+alpha limpia. El Secret debe cubrir todos los nombres. Los listeners administrados
+permiten HTTPRoutes solo desde namespaces con
+`platform.molejo.dev/http-publication=enabled`, asignada por el provisionamiento
+de Workspace y la instalación del Control Plane.
+
+`verify` comprueba conformidad con la receta administrada. La biblioteca separada
+`InspectConsumption` evalúa listener, attachment, soporte HTTPRoute y condiciones
+actuales del Gateway externo mediante lectura, sin Helm ni Secret. El comando
+integrado con APIs de bindings corresponde a la Fase 3. El Gateway externo
+conectado no recibe patches; el Operator sigue administrando sus HTTPRoutes.
+
+Consultá la [base de publicación HTTP](../../en/architecture/http-publication.md)
+para límites, versiones, evidencia de estado y prueba TLS local.

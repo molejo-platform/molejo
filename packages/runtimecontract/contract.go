@@ -1,4 +1,4 @@
-// Package runtimecontract defines the Kubernetes-neutral command payload shared
+// Package runtimecontract defines the bounded command payload shared
 // by the control plane and an outbound cluster Agent.
 package runtimecontract
 
@@ -11,10 +11,8 @@ const (
 	OperationExpandVolume             = "ExpandVolume"
 	OperationDeleteVolume             = "DeleteVolume"
 
-	ExposurePrivate = "Private"
-	ExposurePublic  = "Public"
-	EndpointHTTP    = "HTTP"
-	EndpointTCP     = "TCP"
+	EndpointHTTP = "HTTP"
+	EndpointTCP  = "TCP"
 
 	WorkloadStateless = "Stateless"
 	WorkloadStateful  = "Stateful"
@@ -50,7 +48,7 @@ type WorkspacePlacementIntent struct {
 	LifecycleState string `json:"lifecycleState"`
 }
 
-// DeploymentIntent is the Kubernetes-neutral desired application runtime state.
+// DeploymentIntent carries runtime intent with concrete publication destinations.
 type DeploymentIntent struct {
 	Image                string           `json:"image"`
 	Replicas             int32            `json:"replicas"`
@@ -64,8 +62,6 @@ type DeploymentIntent struct {
 	WorkloadKind         string           `json:"workloadKind"`
 	Volume               *AppVolume       `json:"volume,omitempty"`
 	Port                 int32            `json:"port,omitempty"`
-	Exposure             string           `json:"exposure,omitempty"`
-	Slug                 string           `json:"slug,omitempty"`
 }
 
 // AppVolume binds a deployment intent to one independently managed volume.
@@ -119,12 +115,13 @@ type RuntimePort struct {
 
 // PublicEndpoint is a Control Plane allocation, not user-supplied Gateway state.
 type PublicEndpoint struct {
-	Name          string `json:"name"`
-	Type          string `json:"type"`
-	PortName      string `json:"portName"`
-	HostnameLabel string `json:"hostnameLabel"`
-	Hostname      string `json:"hostname"`
-	ExternalPort  int32  `json:"externalPort,omitempty"`
+	Addresses     []HTTPAddress `json:"addresses,omitempty"`
+	Name          string        `json:"name"`
+	Type          string        `json:"type"`
+	PortName      string        `json:"portName"`
+	HostnameLabel string        `json:"hostnameLabel,omitempty"`
+	Hostname      string        `json:"hostname,omitempty"`
+	ExternalPort  int32         `json:"externalPort,omitempty"`
 }
 
 // Variable is one environment variable transported to the runtime projection.

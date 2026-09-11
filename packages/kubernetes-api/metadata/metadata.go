@@ -9,4 +9,5 @@ const (
 	ControlPlaneOwnerAnnotation = "platform.molejo.dev/control-plane-owner"
 	ControlPlaneOwner           = "molejo-control-plane"
 	ApplicationContainer        = "app"
+	PublicationNamespaceLabel   = "platform.molejo.dev/http-publication"
 )

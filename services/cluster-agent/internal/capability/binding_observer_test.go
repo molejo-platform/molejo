@@ -24,7 +24,7 @@ func TestObserveBindingsReadsOnlyTheSelectedResources(t *testing.T) {
 		"spec":     map[string]any{"gatewayClassName": "traefik"},
 		"status": map[string]any{
 			"conditions": []any{map[string]any{"type": "Programmed", "status": "True"}},
-			"listeners":  []any{map[string]any{"name": "https-molejo", "conditions": []any{map[string]any{"type": "Accepted", "status": "True"}, map[string]any{"type": "Programmed", "status": "True"}}, "supportedKinds": []any{map[string]any{"kind": "HTTPRoute"}}}},
+			"listeners":  []any{map[string]any{"name": "https-molejo", "conditions": []any{map[string]any{"type": "Accepted", "status": "True"}, map[string]any{"type": "Programmed", "status": "True"}, map[string]any{"type": "ResolvedRefs", "status": "True"}}, "supportedKinds": []any{map[string]any{"kind": "HTTPRoute"}}}},
 		},
 	}}
 	class := &unstructured.Unstructured{Object: map[string]any{

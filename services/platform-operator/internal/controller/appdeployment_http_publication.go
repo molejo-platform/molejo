@@ -2,7 +2,7 @@ package controller
 
 import (
 	"context"
-	"errors"
+	"crypto/sha256"
 	"fmt"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -14,60 +14,62 @@ import (
 	platformv1alpha1 "github.com/molejo-platform/molejo/packages/kubernetes-api/apis/platform/v1alpha1"
 )
 
-func (r *AppDeploymentReconciler) applyHTTPPublication(
-	ctx context.Context,
-	appDeployment *platformv1alpha1.AppDeployment,
-) (*gatewayv1.HTTPRoute, controllerutil.OperationResult, string, error) {
-	route := &gatewayv1.HTTPRoute{ObjectMeta: metav1.ObjectMeta{
-		Name: appDeployment.Name, Namespace: appDeployment.Namespace,
-	}}
-	endpoint, public := publicEndpoint(appDeployment, platformv1alpha1.AppDeploymentPublicEndpointType("HTTP"))
-	if !public {
-		if err := r.Get(ctx, client.ObjectKeyFromObject(route), route); err != nil {
-			if apierrors.IsNotFound(err) {
-				return nil, controllerutil.OperationResultNone, "", nil
-			}
-			return nil, controllerutil.OperationResultNone, "", err
-		}
-		if !metav1.IsControlledBy(route, appDeployment) {
-			return nil, controllerutil.OperationResultNone, route.ResourceVersion, errOwnershipConflict
-		}
-		resourceVersion := route.ResourceVersion
-		if err := r.Delete(ctx, route); err != nil && !apierrors.IsNotFound(err) {
-			return nil, controllerutil.OperationResultNone, resourceVersion, fmt.Errorf("delete HTTPRoute: %w", err)
-		}
-		return nil, controllerutil.OperationResultUpdated, resourceVersion, nil
-	}
+func httpRouteName(app *platformv1alpha1.AppDeployment, endpoint, hostname string) string {
+	sum := sha256.Sum256([]byte(app.Name + "/" + endpoint + "/" + hostname))
+	return fmt.Sprintf("http-%x", sum[:20])
+}
 
-	if len(appDeployment.Spec.PublicEndpoints) == 0 {
-		if err := r.ensureHostnameAvailable(ctx, appDeployment); err != nil {
-			if errors.Is(err, errHostnameConflict) {
-				if cleanupErr := r.deleteOwnedHTTPRoute(ctx, appDeployment, route); cleanupErr != nil {
-					return nil, controllerutil.OperationResultNone, "", cleanupErr
-				}
-			}
-			return nil, controllerutil.OperationResultNone, "", err
-		}
-	}
-
-	var resourceVersionBefore string
+func (r *AppDeploymentReconciler) applyHTTPAddress(ctx context.Context, app *platformv1alpha1.AppDeployment, endpoint platformv1alpha1.AppDeploymentPublicEndpoint, address platformv1alpha1.AppDeploymentHTTPAddress) (*gatewayv1.HTTPRoute, controllerutil.OperationResult, string, error) {
+	route := &gatewayv1.HTTPRoute{ObjectMeta: metav1.ObjectMeta{Name: httpRouteName(app, endpoint.Name, address.Hostname), Namespace: app.Namespace}}
+	before := ""
 	operation, err := controllerutil.CreateOrPatch(ctx, r.Client, route, func() error {
-		resourceVersionBefore = route.ResourceVersion
-		if !route.CreationTimestamp.IsZero() && !metav1.IsControlledBy(route, appDeployment) {
+		before = route.ResourceVersion
+		if !route.CreationTimestamp.IsZero() && !metav1.IsControlledBy(route, app) {
 			return errOwnershipConflict
 		}
-		if err := controllerutil.SetControllerReference(appDeployment, route, r.Scheme); err != nil {
-			return fmt.Errorf("set HTTPRoute owner reference: %w", err)
+		if !route.DeletionTimestamp.IsZero() {
+			return fmt.Errorf("HTTPRoute withdrawal is pending")
 		}
-		return configureHTTPRoute(route, appDeployment, endpoint)
+		if err := controllerutil.SetControllerReference(app, route, r.Scheme); err != nil {
+			return err
+		}
+		return configureHTTPRoute(route, app, endpoint, address)
 	})
-	return route, operation, resourceVersionBefore, err
+	return route, operation, before, err
+}
+
+// Only current-incarnation children are withdrawn. UID/resourceVersion
+// preconditions prevent deleting a replacement between the read and the write.
+func (r *AppDeploymentReconciler) withdrawHTTPAddresses(ctx context.Context, app *platformv1alpha1.AppDeployment, desired map[string]bool) (bool, error) {
+	routes := &gatewayv1.HTTPRouteList{}
+	if err := r.List(ctx, routes, client.InNamespace(app.Namespace)); err != nil {
+		return false, err
+	}
+	pending := false
+	for i := range routes.Items {
+		route := &routes.Items[i]
+		if desired[route.Name] || !metav1.IsControlledBy(route, app) {
+			continue
+		}
+		if err := r.Delete(ctx, route, client.Preconditions{UID: &route.UID, ResourceVersion: &route.ResourceVersion}); err != nil && !apierrors.IsNotFound(err) {
+			return false, err
+		}
+		r.recordHTTPRouteOperation(ctx, app, controllerutil.OperationResultUpdated, route.ResourceVersion, nil, workloadDecision{state: workloadStateProgressing, reason: "HTTPRouteWithdrawalPending"})
+		remaining := &gatewayv1.HTTPRoute{}
+		if err := r.Get(ctx, client.ObjectKeyFromObject(route), remaining); err == nil {
+			pending = true
+		} else if !apierrors.IsNotFound(err) {
+			return false, err
+		}
+	}
+	return pending, nil
 }
 
 func configureHTTPRoute(
 	route *gatewayv1.HTTPRoute,
 	appDeployment *platformv1alpha1.AppDeployment,
 	endpoint platformv1alpha1.AppDeploymentPublicEndpoint,
+	address platformv1alpha1.AppDeploymentHTTPAddress,
 ) error {
 	if route.Labels == nil {
 		route.Labels = map[string]string{}
@@ -77,8 +79,8 @@ func configureHTTPRoute(
 
 	gatewayGroup := gatewayv1.Group(gatewayv1.GroupName)
 	gatewayKind := gatewayv1.Kind("Gateway")
-	gatewayNamespace := gatewayv1.Namespace(sharedGatewayNamespace)
-	httpsSection := gatewayv1.SectionName(sharedGatewaySection)
+	gatewayNamespace := gatewayv1.Namespace(address.Destination.GatewayNamespace)
+	httpsSection := gatewayv1.SectionName(address.Destination.SectionName)
 	port, found := portByName(appDeployment, endpoint.PortName)
 	if !found {
 		return fmt.Errorf("public HTTP endpoint references an unknown port")
@@ -91,10 +93,10 @@ func configureHTTPRoute(
 	weight := int32(1)
 	route.Spec = gatewayv1.HTTPRouteSpec{
 		CommonRouteSpec: gatewayv1.CommonRouteSpec{ParentRefs: []gatewayv1.ParentReference{{
-			Group: &gatewayGroup, Kind: &gatewayKind, Name: sharedGatewayName,
+			Group: &gatewayGroup, Kind: &gatewayKind, Name: gatewayv1.ObjectName(address.Destination.GatewayName),
 			Namespace: &gatewayNamespace, SectionName: &httpsSection,
 		}}},
-		Hostnames: []gatewayv1.Hostname{gatewayv1.Hostname(publicEndpointHostname(endpoint))},
+		Hostnames: []gatewayv1.Hostname{gatewayv1.Hostname(address.Hostname)},
 		Rules: []gatewayv1.HTTPRouteRule{{
 			Matches: []gatewayv1.HTTPRouteMatch{{Path: &gatewayv1.HTTPPathMatch{
 				Type: &pathType, Value: &pathValue,
@@ -108,88 +110,4 @@ func configureHTTPRoute(
 		}},
 	}
 	return nil
-}
-
-func (r *AppDeploymentReconciler) deleteOwnedHTTPRoute(
-	ctx context.Context,
-	appDeployment *platformv1alpha1.AppDeployment,
-	route *gatewayv1.HTTPRoute,
-) error {
-	if err := r.Get(ctx, client.ObjectKeyFromObject(appDeployment), route); err != nil {
-		if apierrors.IsNotFound(err) {
-			return nil
-		}
-		return fmt.Errorf("get losing HTTPRoute claim: %w", err)
-	}
-	if !metav1.IsControlledBy(route, appDeployment) {
-		return nil
-	}
-	if err := r.Delete(ctx, route); err != nil && !apierrors.IsNotFound(err) {
-		return fmt.Errorf("delete losing HTTPRoute claim: %w", err)
-	}
-	return nil
-}
-
-func (r *AppDeploymentReconciler) ensureHostnameAvailable(
-	ctx context.Context,
-	appDeployment *platformv1alpha1.AppDeployment,
-) error {
-	appDeployments := &platformv1alpha1.AppDeploymentList{}
-	if err := r.List(ctx, appDeployments); err != nil {
-		return fmt.Errorf("list AppDeployments for hostname ownership: %w", err)
-	}
-	winner := appDeployment
-	winnerHasRoute, err := r.hasPublicHostnameRoute(ctx, appDeployment)
-	if err != nil {
-		return err
-	}
-	for index := range appDeployments.Items {
-		candidate := &appDeployments.Items[index]
-		if appDeploymentPublicHostname(candidate) == "" ||
-			appDeploymentPublicHostname(candidate) != appDeploymentPublicHostname(appDeployment) ||
-			candidate.UID == appDeployment.UID {
-			continue
-		}
-		candidateHasRoute, err := r.hasPublicHostnameRoute(ctx, candidate)
-		if err != nil {
-			return err
-		}
-		if (candidateHasRoute && !winnerHasRoute) ||
-			(candidateHasRoute == winnerHasRoute && hostnameClaimPrecedes(candidate, winner)) {
-			winner = candidate
-			winnerHasRoute = candidateHasRoute
-		}
-	}
-	if winner.UID != appDeployment.UID {
-		return errHostnameConflict
-	}
-	return nil
-}
-
-func (r *AppDeploymentReconciler) hasPublicHostnameRoute(
-	ctx context.Context,
-	appDeployment *platformv1alpha1.AppDeployment,
-) (bool, error) {
-	route := &gatewayv1.HTTPRoute{}
-	if err := r.Get(ctx, client.ObjectKeyFromObject(appDeployment), route); err != nil {
-		if apierrors.IsNotFound(err) {
-			return false, nil
-		}
-		return false, fmt.Errorf("get HTTPRoute for hostname ownership: %w", err)
-	}
-	return metav1.IsControlledBy(route, appDeployment) &&
-		len(route.Spec.Hostnames) == 1 &&
-		string(route.Spec.Hostnames[0]) == appDeploymentPublicHostname(appDeployment), nil
-}
-
-func hostnameClaimPrecedes(left, right *platformv1alpha1.AppDeployment) bool {
-	if !left.CreationTimestamp.Time.Equal(right.CreationTimestamp.Time) {
-		return left.CreationTimestamp.Before(&right.CreationTimestamp)
-	}
-	leftKey := left.Namespace + "/" + left.Name
-	rightKey := right.Namespace + "/" + right.Name
-	if leftKey != rightKey {
-		return leftKey < rightKey
-	}
-	return string(left.UID) < string(right.UID)
 }

@@ -2,572 +2,181 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
-	"time"
 
-	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	platformv1alpha1 "github.com/molejo-platform/molejo/packages/kubernetes-api/apis/platform/v1alpha1"
 )
 
-func TestAppDeploymentPublicationSchema(t *testing.T) {
-	ctx := context.Background()
-	namespace := createTestNamespace(t, "publication-schema")
+func testHTTPAddress(hostname string) platformv1alpha1.AppDeploymentHTTPAddress {
+	return platformv1alpha1.AppDeploymentHTTPAddress{Hostname: hostname, Destination: platformv1alpha1.HTTPDestination{BindingID: "binding-one", BindingRevision: 1, SchemaVersion: "kubernetes-http.v1alpha1", GatewayNamespace: "molejo-system", GatewayName: "molejo", SectionName: "https-molejo"}}
+}
 
-	valid := newAppDeployment(namespace, "ap-publicvalid", testImage)
-	valid.Spec.Exposure = platformv1alpha1.ExposurePublic
-	valid.Spec.Slug = "public-valid"
-	if err := testClient.Create(ctx, valid); err != nil {
-		t.Fatalf("create valid public AppDeployment: %v", err)
+func testHTTPEndpoint(names ...string) platformv1alpha1.AppDeploymentPublicEndpoint {
+	e := platformv1alpha1.AppDeploymentPublicEndpoint{Name: "web", Type: "HTTP", PortName: httpPortName}
+	for _, name := range names {
+		e.Addresses = append(e.Addresses, testHTTPAddress(name))
 	}
+	return e
+}
 
-	tests := []struct {
+func TestHTTPAssociationsReconcileIndependently(t *testing.T) {
+	ctx := t.Context()
+	namespace := createTestNamespace(t, "multi-address")
+	app := newAppDeployment(namespace, "ap-multiaddress", testImage)
+	endpoint := testHTTPEndpoint("example.test", "website.example.test")
+	endpoint.Addresses[0].Destination.SectionName = "https-apex"
+	app.Spec.PublicEndpoints = []platformv1alpha1.AppDeploymentPublicEndpoint{endpoint}
+	if err := testClient.Create(ctx, app); err != nil {
+		t.Fatal(err)
+	}
+	r := &AppDeploymentReconciler{Client: testClient, Scheme: testScheme}
+	key := client.ObjectKeyFromObject(app)
+	reconcile := func() {
+		t.Helper()
+		if _, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: key}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	reconcile()
+	first := getHTTPRoute(t, ctx, client.ObjectKey{Namespace: namespace, Name: httpRouteName(app, "web", "example.test")})
+	second := getHTTPRoute(t, ctx, client.ObjectKey{Namespace: namespace, Name: httpRouteName(app, "web", "website.example.test")})
+	if first.Spec.ParentRefs[0].SectionName == nil || *first.Spec.ParentRefs[0].SectionName != "https-apex" || *second.Spec.ParentRefs[0].SectionName != "https-molejo" {
+		t.Fatal("destination was not preserved")
+	}
+	for _, route := range []*gatewayv1.HTTPRoute{first, second} {
+		if !metav1.IsControlledBy(route, app) || route.Spec.Rules[0].BackendRefs[0].Name != gatewayv1.ObjectName(app.Name) || *route.Spec.Rules[0].BackendRefs[0].Port != 8080 {
+			t.Fatal("ownership or shared backend mismatch")
+		}
+	}
+	reconcile()
+	if got := getHTTPRoute(t, ctx, client.ObjectKeyFromObject(second)); got.ResourceVersion != second.ResourceVersion {
+		t.Fatal("idempotent reconciliation patched route")
+	}
+	stored := getAppDeployment(t, ctx, key)
+	if len(stored.Status.EndpointStatuses) != 1 || len(stored.Status.EndpointStatuses[0].Addresses) != 2 {
+		t.Fatal("address observations missing")
+	}
+	for _, a := range stored.Status.EndpointStatuses[0].Addresses {
+		if c := meta.FindStatusCondition(a.Conditions, "ServedTLSVerified"); c == nil || c.Status != metav1.ConditionUnknown {
+			t.Fatal("runtime claimed TLS verification")
+		}
+	}
+	// Gateway events target the configured Gateway, including external names.
+	events := r.mapGatewayToAppDeployments(ctx, &gatewayv1.Gateway{ObjectMeta: metav1.ObjectMeta{Name: "molejo", Namespace: "molejo-system"}})
+	matched := false
+	for _, event := range events {
+		if event.NamespacedName == key {
+			matched = true
+		}
+	}
+	if !matched {
+		t.Fatal("Gateway watch did not find its consumer")
+	}
+	if events := r.mapGatewayToAppDeployments(ctx, &gatewayv1.Gateway{ObjectMeta: metav1.ObjectMeta{Name: "unrelated", Namespace: "elsewhere"}}); len(events) != 0 {
+		t.Fatal("unrelated Gateway selected consumers")
+	}
+	// A removed index label does not conceal an owned route. A finalizer must
+	// keep withdrawal pending until the route is actually gone.
+	first.Labels = nil
+	first.Finalizers = []string{"test.molejo.dev/hold"}
+	if err := testClient.Update(ctx, first); err != nil {
+		t.Fatal(err)
+	}
+	stored.Spec.PublicEndpoints[0].Addresses = stored.Spec.PublicEndpoints[0].Addresses[1:]
+	if err := testClient.Update(ctx, stored); err != nil {
+		t.Fatal(err)
+	}
+	reconcile()
+	blocked := getHTTPRoute(t, ctx, client.ObjectKeyFromObject(first))
+	if blocked.DeletionTimestamp.IsZero() {
+		t.Fatal("owned route was not withdrawn")
+	}
+	if pending, err := r.withdrawHTTPAddresses(ctx, stored, map[string]bool{second.Name: true}); err != nil || !pending {
+		t.Fatalf("finalizer did not keep withdrawal pending: %v %v", pending, err)
+	}
+	blocked.Finalizers = nil
+	if err := testClient.Update(ctx, blocked); err != nil {
+		t.Fatal(err)
+	}
+	reconcile()
+	if err := testClient.Get(ctx, client.ObjectKeyFromObject(first), &gatewayv1.HTTPRoute{}); !apierrors.IsNotFound(err) {
+		t.Fatalf("removed route remains: %v", err)
+	}
+	if got := getHTTPRoute(t, ctx, client.ObjectKeyFromObject(second)); got.UID != second.UID || got.ResourceVersion != second.ResourceVersion {
+		t.Fatal("remaining association changed")
+	}
+	// A foreign replacement at the deterministic name is never adopted.
+	if err := testClient.Delete(ctx, second); err != nil {
+		t.Fatal(err)
+	}
+	foreign := second.DeepCopy()
+	foreign.UID = ""
+	foreign.ResourceVersion = ""
+	foreign.OwnerReferences = nil
+	if err := testClient.Create(ctx, foreign); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := r.applyHTTPAddress(ctx, stored, stored.Spec.PublicEndpoints[0], stored.Spec.PublicEndpoints[0].Addresses[0]); !errors.Is(err, errOwnershipConflict) {
+		t.Fatalf("foreign route not rejected: %v", err)
+	}
+}
+
+func TestHTTPAssociationSchemaRejectsInvalidContracts(t *testing.T) {
+	ns := createTestNamespace(t, "address-schema")
+	cases := []struct {
 		name   string
-		mutate func(*platformv1alpha1.AppDeployment)
+		change func(*platformv1alpha1.AppDeployment)
 	}{
-		{
-			name: "rejects an unknown exposure",
-			mutate: func(appDeployment *platformv1alpha1.AppDeployment) {
-				appDeployment.Spec.Exposure = "External"
-			},
-		},
-		{
-			name: "requires a slug for public exposure",
-			mutate: func(appDeployment *platformv1alpha1.AppDeployment) {
-				appDeployment.Spec.Exposure = platformv1alpha1.ExposurePublic
-			},
-		},
-		{
-			name: "forbids a slug for private exposure",
-			mutate: func(appDeployment *platformv1alpha1.AppDeployment) {
-				appDeployment.Spec.Slug = "unexpected"
-			},
-		},
-		{
-			name: "rejects a non-DNS slug",
-			mutate: func(appDeployment *platformv1alpha1.AppDeployment) {
-				appDeployment.Spec.Exposure = platformv1alpha1.ExposurePublic
-				appDeployment.Spec.Slug = "Invalid_Slug"
-			},
-		},
-		{
-			name: "rejects a slug longer than one DNS label",
-			mutate: func(appDeployment *platformv1alpha1.AppDeployment) {
-				appDeployment.Spec.Exposure = platformv1alpha1.ExposurePublic
-				appDeployment.Spec.Slug = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-			},
-		},
+		{"duplicate", func(a *platformv1alpha1.AppDeployment) {
+			a.Spec.PublicEndpoints[0].Addresses = append(a.Spec.PublicEndpoints[0].Addresses, a.Spec.PublicEndpoints[0].Addresses[0])
+		}},
+		{"wildcard", func(a *platformv1alpha1.AppDeployment) {
+			a.Spec.PublicEndpoints[0].Addresses[0].Hostname = "*.example.test"
+		}},
+		{"too-many", func(a *platformv1alpha1.AppDeployment) {
+			for i := 0; i < 10; i++ {
+				a.Spec.PublicEndpoints[0].Addresses = append(a.Spec.PublicEndpoints[0].Addresses, testHTTPAddress(fmt.Sprintf("a%d.example.test", i)))
+			}
+		}},
+		{"no-destination", func(a *platformv1alpha1.AppDeployment) {
+			a.Spec.PublicEndpoints[0].Addresses[0].Destination.BindingID = ""
+		}},
+		{"unknown-version", func(a *platformv1alpha1.AppDeployment) {
+			a.Spec.PublicEndpoints[0].Addresses[0].Destination.SchemaVersion = "future"
+		}},
+		{"legacy-hostname", func(a *platformv1alpha1.AppDeployment) { a.Spec.PublicEndpoints[0].Hostname = "example.test" }},
+		{"multiple-http", func(a *platformv1alpha1.AppDeployment) {
+			e := testHTTPEndpoint("another.test")
+			e.Name = "other"
+			a.Spec.PublicEndpoints = append(a.Spec.PublicEndpoints, e)
+		}},
 	}
-	for index, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			appDeployment := newAppDeployment(namespace, fmt.Sprintf("ap-publicinvalid%02d", index), testImage)
-			test.mutate(appDeployment)
-			if err := testClient.Create(ctx, appDeployment); err == nil {
-				t.Fatal("expected API validation to reject AppDeployment")
+	for i, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			a := newAppDeployment(ns, fmt.Sprintf("ap-invalid%d", i), testImage)
+			a.Spec.PublicEndpoints = []platformv1alpha1.AppDeploymentPublicEndpoint{testHTTPEndpoint("example.test")}
+			tc.change(a)
+			if err := testClient.Create(t.Context(), a); err == nil {
+				t.Fatal("schema accepted invalid contract")
 			}
 		})
-	}
-}
-
-func TestReconcileCreatesPublicHTTPRoute(t *testing.T) {
-	ctx := context.Background()
-	namespace := createTestNamespace(t, "public-route")
-	appDeployment := newAppDeployment(namespace, "ap-publicroute", testImage)
-	appDeployment.Spec.Exposure = platformv1alpha1.ExposurePublic
-	appDeployment.Spec.Slug = "public-route"
-	if err := testClient.Create(ctx, appDeployment); err != nil {
-		t.Fatalf("create AppDeployment: %v", err)
-	}
-
-	reconciler := &AppDeploymentReconciler{Client: testClient, Scheme: testScheme}
-	request := ctrl.Request{NamespacedName: types.NamespacedName{
-		Name: appDeployment.Name, Namespace: namespace,
-	}}
-	if _, err := reconciler.Reconcile(ctx, request); err != nil {
-		t.Fatalf("reconcile public AppDeployment: %v", err)
-	}
-
-	route := getHTTPRoute(t, ctx, request.NamespacedName)
-	if !metav1.IsControlledBy(route, appDeployment) {
-		t.Fatal("expected HTTPRoute to be controlled by AppDeployment")
-	}
-	if len(route.Spec.Hostnames) != 1 || route.Spec.Hostnames[0] != "public-route.molejo.dev" {
-		t.Fatalf("unexpected HTTPRoute hostnames: %#v", route.Spec.Hostnames)
-	}
-	if len(route.Spec.ParentRefs) != 1 || route.Spec.ParentRefs[0].Name != "molejo" ||
-		route.Spec.ParentRefs[0].Namespace == nil || *route.Spec.ParentRefs[0].Namespace != "molejo-system" ||
-		route.Spec.ParentRefs[0].SectionName == nil || *route.Spec.ParentRefs[0].SectionName != "https-molejo" {
-		t.Fatalf("unexpected HTTPRoute parent references: %#v", route.Spec.ParentRefs)
-	}
-	if len(route.Spec.Rules) != 1 || len(route.Spec.Rules[0].BackendRefs) != 1 {
-		t.Fatalf("expected exactly one HTTPRoute backend, got %#v", route.Spec.Rules)
-	}
-	backend := route.Spec.Rules[0].BackendRefs[0].BackendRef
-	if backend.Name != gatewayv1.ObjectName(appDeployment.Name) || backend.Port == nil ||
-		*backend.Port != gatewayv1.PortNumber(appDeployment.Spec.Port) {
-		t.Fatalf("unexpected HTTPRoute backend: %#v", backend)
-	}
-}
-
-func TestReconcileRemovesPublicHTTPRouteWhenExposureBecomesPrivate(t *testing.T) {
-	ctx := context.Background()
-	namespace := createTestNamespace(t, "remove-route")
-	appDeployment := newAppDeployment(namespace, "ap-removeroute", testImage)
-	appDeployment.Spec.Exposure = platformv1alpha1.ExposurePublic
-	appDeployment.Spec.Slug = "remove-route"
-	if err := testClient.Create(ctx, appDeployment); err != nil {
-		t.Fatalf("create AppDeployment: %v", err)
-	}
-
-	reconciler := &AppDeploymentReconciler{Client: testClient, Scheme: testScheme}
-	key := client.ObjectKey{Name: appDeployment.Name, Namespace: namespace}
-	request := ctrl.Request{NamespacedName: key}
-	if _, err := reconciler.Reconcile(ctx, request); err != nil {
-		t.Fatalf("reconcile public AppDeployment: %v", err)
-	}
-	_ = getHTTPRoute(t, ctx, key)
-
-	stored := getAppDeployment(t, ctx, key)
-	stored.Spec.Exposure = platformv1alpha1.ExposurePrivate
-	stored.Spec.Slug = ""
-	if err := testClient.Update(ctx, stored); err != nil {
-		t.Fatalf("make AppDeployment private: %v", err)
-	}
-	if _, err := reconciler.Reconcile(ctx, request); err != nil {
-		t.Fatalf("reconcile private AppDeployment: %v", err)
-	}
-
-	route := &gatewayv1.HTTPRoute{}
-	err := testClient.Get(ctx, key, route)
-	if !apierrors.IsNotFound(err) {
-		t.Fatalf("expected HTTPRoute to be removed, got %v", err)
-	}
-}
-
-func TestReconcilePublicHTTPRouteIsIdempotent(t *testing.T) {
-	ctx := context.Background()
-	namespace := createTestNamespace(t, "route-idempotent")
-	appDeployment := newAppDeployment(namespace, "ap-routeidempotent", testImage)
-	appDeployment.Spec.Exposure = platformv1alpha1.ExposurePublic
-	appDeployment.Spec.Slug = "route-idempotent"
-	if err := testClient.Create(ctx, appDeployment); err != nil {
-		t.Fatalf("create AppDeployment: %v", err)
-	}
-
-	reconciler := &AppDeploymentReconciler{Client: testClient, Scheme: testScheme}
-	key := client.ObjectKey{Name: appDeployment.Name, Namespace: namespace}
-	request := ctrl.Request{NamespacedName: key}
-	if _, err := reconciler.Reconcile(ctx, request); err != nil {
-		t.Fatalf("initial reconcile: %v", err)
-	}
-	resourceVersion := getHTTPRoute(t, ctx, key).ResourceVersion
-	if _, err := reconciler.Reconcile(ctx, request); err != nil {
-		t.Fatalf("idempotent reconcile: %v", err)
-	}
-	if got := getHTTPRoute(t, ctx, key).ResourceVersion; got != resourceVersion {
-		t.Fatalf("expected HTTPRoute resourceVersion %q to remain stable, got %q", resourceVersion, got)
-	}
-}
-
-func TestReconcilePublicHTTPRouteDoesNotPatchAPIServerDefaults(t *testing.T) {
-	ctx := context.Background()
-	scheme := runtime.NewScheme()
-	if err := platformv1alpha1.AddToScheme(scheme); err != nil {
-		t.Fatalf("add AppDeployment scheme: %v", err)
-	}
-	if err := gatewayv1.Install(scheme); err != nil {
-		t.Fatalf("add Gateway API scheme: %v", err)
-	}
-
-	appDeployment := newAppDeployment("ws-defaults", "ap-routedefaults", testImage)
-	appDeployment.UID = types.UID("appdeployment-route-defaults")
-	appDeployment.Spec.Exposure = platformv1alpha1.ExposurePublic
-	appDeployment.Spec.Slug = "route-defaults"
-	baseClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(appDeployment.DeepCopy()).Build()
-	defaultingClient := &gatewayDefaultingClient{Client: baseClient}
-	reconciler := &AppDeploymentReconciler{Client: defaultingClient, Scheme: scheme}
-
-	if _, _, _, err := reconciler.applyHTTPPublication(ctx, appDeployment); err != nil {
-		t.Fatalf("create HTTPRoute: %v", err)
-	}
-	defaultingClient.patchCalls = 0
-	if _, _, _, err := reconciler.applyHTTPPublication(ctx, appDeployment); err != nil {
-		t.Fatalf("reconcile defaulted HTTPRoute: %v", err)
-	}
-	if defaultingClient.patchCalls != 0 {
-		t.Fatalf("expected no HTTPRoute PATCH after API defaults, got %d", defaultingClient.patchCalls)
-	}
-}
-
-func TestGatewayCertificateFailureRevokesPublicReadinessWithoutAppChange(t *testing.T) {
-	ctx := context.Background()
-	systemNamespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "molejo-system"}}
-	if err := testClient.Create(ctx, systemNamespace); err != nil && !apierrors.IsAlreadyExists(err) {
-		t.Fatalf("create Gateway namespace: %v", err)
-	}
-
-	gateway := &gatewayv1.Gateway{
-		ObjectMeta: metav1.ObjectMeta{Name: "molejo", Namespace: systemNamespace.Name},
-		Spec: gatewayv1.GatewaySpec{
-			GatewayClassName: "test-gateway-class",
-			Listeners: []gatewayv1.Listener{{
-				Name: "https-molejo", Port: 443, Protocol: gatewayv1.HTTPSProtocolType,
-			}},
-		},
-	}
-	if err := testClient.Create(ctx, gateway); err != nil {
-		t.Fatalf("create shared Gateway: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = testClient.Delete(context.Background(), gateway)
-	})
-	setTestGatewayStatus(t, ctx, gateway, true)
-
-	namespace := createTestNamespace(t, "gateway-readiness")
-	appDeployment := newAppDeployment(namespace, "ap-gatewayreadiness", testImage)
-	appDeployment.Spec.Exposure = platformv1alpha1.ExposurePublic
-	appDeployment.Spec.Slug = "gateway-readiness"
-	if err := testClient.Create(ctx, appDeployment); err != nil {
-		t.Fatalf("create public AppDeployment: %v", err)
-	}
-	key := client.ObjectKeyFromObject(appDeployment)
-	reconciler := &AppDeploymentReconciler{Client: testClient, Scheme: testScheme}
-	request := ctrl.Request{NamespacedName: key}
-	if _, err := reconciler.Reconcile(ctx, request); err != nil {
-		t.Fatalf("create managed children: %v", err)
-	}
-	deployment := getDeployment(t, ctx, key)
-	desired := desiredReplicas(appDeployment)
-	deployment.Status.ObservedGeneration = deployment.Generation
-	deployment.Status.Replicas = desired
-	deployment.Status.UpdatedReplicas = desired
-	deployment.Status.ReadyReplicas = desired
-	deployment.Status.AvailableReplicas = desired
-	if err := testClient.Status().Update(ctx, deployment); err != nil {
-		t.Fatalf("mark Deployment ready: %v", err)
-	}
-	route := getHTTPRoute(t, ctx, key)
-	route.Status = routeWithConditions(
-		metav1.Condition{
-			Type: string(gatewayv1.RouteConditionAccepted), Status: metav1.ConditionTrue,
-			ObservedGeneration: route.Generation,
-		},
-		metav1.Condition{
-			Type: string(gatewayv1.RouteConditionResolvedRefs), Status: metav1.ConditionTrue,
-			ObservedGeneration: route.Generation,
-		},
-	).Status
-	if err := testClient.Status().Update(ctx, route); err != nil {
-		t.Fatalf("mark HTTPRoute accepted: %v", err)
-	}
-	if _, err := reconciler.Reconcile(ctx, request); err != nil {
-		t.Fatalf("establish public readiness: %v", err)
-	}
-	stored := getAppDeployment(t, ctx, key)
-	ready := meta.FindStatusCondition(stored.Status.Conditions, platformv1alpha1.ConditionReady)
-	if ready == nil || ready.Status != metav1.ConditionTrue {
-		t.Fatalf("expected healthy Gateway baseline to become Ready=True, got %#v", ready)
-	}
-
-	manager, err := ctrl.NewManager(testConfig, ctrl.Options{
-		Scheme:                 testScheme,
-		Metrics:                metricsserver.Options{BindAddress: "0"},
-		HealthProbeBindAddress: "0",
-	})
-	if err != nil {
-		t.Fatalf("create test manager: %v", err)
-	}
-	if err := (&AppDeploymentReconciler{
-		Client: manager.GetClient(), Scheme: manager.GetScheme(),
-	}).SetupWithManager(manager); err != nil {
-		t.Fatalf("register test reconciler: %v", err)
-	}
-	managerCtx, cancelManager := context.WithCancel(context.Background())
-	managerErrors := make(chan error, 1)
-	go func() {
-		managerErrors <- manager.Start(managerCtx)
-	}()
-	t.Cleanup(func() {
-		cancelManager()
-		select {
-		case <-managerErrors:
-		case <-time.After(5 * time.Second):
-			t.Error("test manager did not stop")
-		}
-	})
-	if !manager.GetCache().WaitForCacheSync(managerCtx) {
-		t.Fatal("test manager cache did not synchronize")
-	}
-
-	setTestGatewayStatus(t, ctx, gateway, false)
-	waitForCondition(t, 3*time.Second, "Gateway certificate failure to revoke public readiness", func() bool {
-		stored := &platformv1alpha1.AppDeployment{}
-		if err := testClient.Get(ctx, key, stored); err != nil {
-			return false
-		}
-		ready := meta.FindStatusCondition(stored.Status.Conditions, platformv1alpha1.ConditionReady)
-		degraded := meta.FindStatusCondition(stored.Status.Conditions, platformv1alpha1.ConditionDegraded)
-		if ready == nil || ready.Status != metav1.ConditionFalse ||
-			degraded == nil || degraded.Status != metav1.ConditionTrue {
-			return false
-		}
-		return !strings.Contains(degraded.Message, "private-certificate-detail")
-	})
-}
-
-func TestReconcileRejectsDuplicatePublicHostname(t *testing.T) {
-	ctx := context.Background()
-	firstNamespace := createTestNamespace(t, "hostname-owner")
-	secondNamespace := createTestNamespace(t, "hostname-conflict")
-	reconciler := &AppDeploymentReconciler{Client: testClient, Scheme: testScheme}
-
-	first := newAppDeployment(firstNamespace, "ap-hostowner", testImage)
-	first.Spec.Exposure = platformv1alpha1.ExposurePublic
-	first.Spec.Slug = "globally-unique"
-	if err := testClient.Create(ctx, first); err != nil {
-		t.Fatalf("create hostname owner: %v", err)
-	}
-	firstRequest := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(first)}
-	if _, err := reconciler.Reconcile(ctx, firstRequest); err != nil {
-		t.Fatalf("reconcile hostname owner: %v", err)
-	}
-
-	second := newAppDeployment(secondNamespace, "ap-hostconflict", testImage)
-	if err := testClient.Create(ctx, second); err != nil {
-		t.Fatalf("create private AppDeployment: %v", err)
-	}
-	secondRequest := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(second)}
-	if _, err := reconciler.Reconcile(ctx, secondRequest); err != nil {
-		t.Fatalf("reconcile private AppDeployment: %v", err)
-	}
-	previousObservedGeneration := getAppDeployment(t, ctx, client.ObjectKeyFromObject(second)).Status.ObservedGeneration
-
-	second = getAppDeployment(t, ctx, client.ObjectKeyFromObject(second))
-	second.Spec.Exposure = platformv1alpha1.ExposurePublic
-	second.Spec.Slug = first.Spec.Slug
-	if err := testClient.Update(ctx, second); err != nil {
-		t.Fatalf("request duplicate hostname: %v", err)
-	}
-	result, err := reconciler.Reconcile(ctx, secondRequest)
-	if err != nil {
-		t.Fatalf("reconcile duplicate hostname: %v", err)
-	}
-	if result.RequeueAfter != ownershipConflictRequeueAfter {
-		t.Fatalf("expected bounded hostname conflict requeue, got %s", result.RequeueAfter)
-	}
-	stored := getAppDeployment(t, ctx, client.ObjectKeyFromObject(second))
-	if stored.Status.ObservedGeneration != previousObservedGeneration {
-		t.Fatalf("expected observed generation %d to be preserved, got %d",
-			previousObservedGeneration, stored.Status.ObservedGeneration)
-	}
-	assertCondition(t, stored, platformv1alpha1.ConditionDegraded, metav1.ConditionTrue,
-		platformv1alpha1.ReasonHostnameConflict)
-}
-
-func TestReconcileSelectsOneWinnerWhenHostnameClaimsAlreadyExist(t *testing.T) {
-	ctx := context.Background()
-	firstNamespace := createTestNamespace(t, "hostname-race-first")
-	secondNamespace := createTestNamespace(t, "hostname-race-second")
-	reconciler := &AppDeploymentReconciler{Client: testClient, Scheme: testScheme}
-
-	first := newAppDeployment(firstNamespace, "ap-hostracefirst", testImage)
-	first.Spec.Exposure = platformv1alpha1.ExposurePublic
-	first.Spec.Slug = "simultaneous-claim"
-	second := newAppDeployment(secondNamespace, "ap-hostracesecond", testImage)
-	second.Spec.Exposure = platformv1alpha1.ExposurePublic
-	second.Spec.Slug = first.Spec.Slug
-
-	// Both claims deliberately exist before either reconciliation starts. This is
-	// the ordering that a sequential owner-then-contender test does not exercise.
-	if err := testClient.Create(ctx, first); err != nil {
-		t.Fatalf("create first hostname claim: %v", err)
-	}
-	if err := testClient.Create(ctx, second); err != nil {
-		t.Fatalf("create second hostname claim: %v", err)
-	}
-
-	requests := []ctrl.Request{
-		{NamespacedName: client.ObjectKeyFromObject(first)},
-		{NamespacedName: client.ObjectKeyFromObject(second)},
-	}
-	for _, request := range requests {
-		if _, err := reconciler.Reconcile(ctx, request); err != nil {
-			t.Fatalf("reconcile hostname claimant %s: %v", request.NamespacedName, err)
-		}
-	}
-
-	listWinners := func() []gatewayv1.HTTPRoute {
-		t.Helper()
-		routes := &gatewayv1.HTTPRouteList{}
-		if err := testClient.List(ctx, routes); err != nil {
-			t.Fatalf("list HTTPRoutes: %v", err)
-		}
-		winners := make([]gatewayv1.HTTPRoute, 0, 1)
-		for _, route := range routes.Items {
-			if len(route.Spec.Hostnames) == 1 && route.Spec.Hostnames[0] == "simultaneous-claim.molejo.dev" {
-				winners = append(winners, route)
-			}
-		}
-		return winners
-	}
-	winners := listWinners()
-	if len(winners) != 1 {
-		t.Fatalf("expected exactly one deterministic hostname winner, got %d HTTPRoutes", len(winners))
-	}
-
-	winnerOwner := metav1.GetControllerOf(&winners[0])
-	if winnerOwner == nil {
-		t.Fatal("expected the hostname winner HTTPRoute to have a controller owner")
-	}
-	winnerUID := winnerOwner.UID
-	for _, appDeployment := range []*platformv1alpha1.AppDeployment{first, second} {
-		stored := getAppDeployment(t, ctx, client.ObjectKeyFromObject(appDeployment))
-		degraded := meta.FindStatusCondition(stored.Status.Conditions, platformv1alpha1.ConditionDegraded)
-		if stored.UID == winnerUID {
-			if degraded != nil && degraded.Status == metav1.ConditionTrue &&
-				degraded.Reason == platformv1alpha1.ReasonHostnameConflict {
-				t.Fatalf("hostname winner %s must not report a hostname conflict", client.ObjectKeyFromObject(stored))
-			}
-			continue
-		}
-		if degraded == nil || degraded.Status != metav1.ConditionTrue ||
-			degraded.Reason != platformv1alpha1.ReasonHostnameConflict {
-			t.Fatalf("hostname loser %s must report HostnameConflict, got %#v",
-				client.ObjectKeyFromObject(stored), degraded)
-		}
-	}
-
-	// Reversing reconciliation order must not transfer the hostname to the other
-	// claimant or leave both claimants without a route.
-	for index := len(requests) - 1; index >= 0; index-- {
-		if _, err := reconciler.Reconcile(ctx, requests[index]); err != nil {
-			t.Fatalf("reconcile hostname claimant again %s: %v", requests[index].NamespacedName, err)
-		}
-	}
-	winners = listWinners()
-	if len(winners) != 1 {
-		t.Fatalf("expected exactly one hostname winner after repeated reconciliation, got %d", len(winners))
-	}
-	stableOwner := metav1.GetControllerOf(&winners[0])
-	if stableOwner == nil || stableOwner.UID != winnerUID {
-		t.Fatalf("hostname ownership changed after repeated reconciliation: %#v", stableOwner)
-	}
-}
-
-func TestReconcileConvergesDuplicateEstablishedHostnameRoutes(t *testing.T) {
-	ctx := context.Background()
-	firstNamespace := createTestNamespace(t, "hostname-established-first")
-	secondNamespace := createTestNamespace(t, "hostname-established-second")
-	reconciler := &AppDeploymentReconciler{Client: testClient, Scheme: testScheme}
-
-	first := newAppDeployment(firstNamespace, "ap-establishedfirst", testImage)
-	first.Spec.Exposure = platformv1alpha1.ExposurePublic
-	first.Spec.Slug = "established-duplicate"
-	second := newAppDeployment(secondNamespace, "ap-establishedsecond", testImage)
-	second.Spec.Exposure = platformv1alpha1.ExposurePublic
-	second.Spec.Slug = first.Spec.Slug
-	for _, appDeployment := range []*platformv1alpha1.AppDeployment{first, second} {
-		if err := testClient.Create(ctx, appDeployment); err != nil {
-			t.Fatalf("create AppDeployment %s: %v", client.ObjectKeyFromObject(appDeployment), err)
-		}
-		stored := getAppDeployment(t, ctx, client.ObjectKeyFromObject(appDeployment))
-		route := &gatewayv1.HTTPRoute{
-			ObjectMeta: metav1.ObjectMeta{Name: stored.Name, Namespace: stored.Namespace},
-			Spec: gatewayv1.HTTPRouteSpec{
-				Hostnames: []gatewayv1.Hostname{gatewayv1.Hostname(publicHostname(stored.Spec.Slug))},
-			},
-		}
-		if err := controllerutil.SetControllerReference(stored, route, testScheme); err != nil {
-			t.Fatalf("set HTTPRoute owner %s: %v", client.ObjectKeyFromObject(stored), err)
-		}
-		if err := testClient.Create(ctx, route); err != nil {
-			t.Fatalf("create established HTTPRoute %s: %v", client.ObjectKeyFromObject(route), err)
-		}
-	}
-
-	for _, appDeployment := range []*platformv1alpha1.AppDeployment{second, first} {
-		request := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(appDeployment)}
-		if _, err := reconciler.Reconcile(ctx, request); err != nil {
-			t.Fatalf("reconcile duplicate hostname claimant %s: %v", request.NamespacedName, err)
-		}
-	}
-
-	routes := &gatewayv1.HTTPRouteList{}
-	if err := testClient.List(ctx, routes); err != nil {
-		t.Fatalf("list HTTPRoutes: %v", err)
-	}
-	matching := 0
-	for _, route := range routes.Items {
-		if len(route.Spec.Hostnames) == 1 &&
-			string(route.Spec.Hostnames[0]) == publicHostname(first.Spec.Slug) {
-			matching++
-		}
-	}
-	if matching != 1 {
-		t.Fatalf("expected reconciliation to converge duplicate established claims to one HTTPRoute, got %d", matching)
-	}
-}
-
-func TestReconcileCorrectsAndRecreatesPublicHTTPRoute(t *testing.T) {
-	ctx := context.Background()
-	namespace := createTestNamespace(t, "route-recovery")
-	appDeployment := newAppDeployment(namespace, "ap-routerecovery", testImage)
-	appDeployment.Spec.Exposure = platformv1alpha1.ExposurePublic
-	appDeployment.Spec.Slug = "route-recovery"
-	if err := testClient.Create(ctx, appDeployment); err != nil {
-		t.Fatalf("create AppDeployment: %v", err)
-	}
-
-	reconciler := &AppDeploymentReconciler{Client: testClient, Scheme: testScheme}
-	key := client.ObjectKeyFromObject(appDeployment)
-	request := ctrl.Request{NamespacedName: key}
-	if _, err := reconciler.Reconcile(ctx, request); err != nil {
-		t.Fatalf("initial reconcile: %v", err)
-	}
-
-	route := getHTTPRoute(t, ctx, key)
-	route.Spec.Hostnames = []gatewayv1.Hostname{"drift.molejo.dev"}
-	if err := testClient.Update(ctx, route); err != nil {
-		t.Fatalf("introduce HTTPRoute drift: %v", err)
-	}
-	if _, err := reconciler.Reconcile(ctx, request); err != nil {
-		t.Fatalf("reconcile HTTPRoute drift: %v", err)
-	}
-	route = getHTTPRoute(t, ctx, key)
-	if len(route.Spec.Hostnames) != 1 || string(route.Spec.Hostnames[0]) != publicHostname(appDeployment.Spec.Slug) {
-		t.Fatalf("expected hostname drift to be corrected, got %#v", route.Spec.Hostnames)
-	}
-
-	previousUID := route.UID
-	if err := testClient.Delete(ctx, route); err != nil {
-		t.Fatalf("delete managed HTTPRoute: %v", err)
-	}
-	if _, err := reconciler.Reconcile(ctx, request); err != nil {
-		t.Fatalf("reconcile deleted HTTPRoute: %v", err)
-	}
-	if route = getHTTPRoute(t, ctx, key); route.UID == previousUID {
-		t.Fatal("expected deleted HTTPRoute to be recreated with a new UID")
 	}
 }
 
 func TestEvaluatePublication(t *testing.T) {
 	ready := workloadDecision{state: workloadStateReady, reason: platformv1alpha1.ReasonDeploymentAvailable}
 	appDeployment := newAppDeployment("ws-test", "ap-publication", testImage)
-	appDeployment.Spec.Exposure = platformv1alpha1.ExposurePublic
-	appDeployment.Spec.Slug = "publication"
+	appDeployment.Spec.PublicEndpoints = []platformv1alpha1.AppDeploymentPublicEndpoint{testHTTPEndpoint("publication.molejo.dev")}
 	staleRoute := routeWithConditions(
 		metav1.Condition{Type: string(gatewayv1.RouteConditionAccepted), Status: metav1.ConditionTrue},
 		metav1.Condition{Type: string(gatewayv1.RouteConditionResolvedRefs), Status: metav1.ConditionTrue},
@@ -646,8 +255,7 @@ func TestEvaluatePublication(t *testing.T) {
 
 func TestEvaluatePublicationDoesNotMaskDegradedWorkload(t *testing.T) {
 	appDeployment := newAppDeployment("ws-test", "ap-publication-degraded", testImage)
-	appDeployment.Spec.Exposure = platformv1alpha1.ExposurePublic
-	appDeployment.Spec.Slug = "publication-degraded"
+	appDeployment.Spec.PublicEndpoints = []platformv1alpha1.AppDeploymentPublicEndpoint{testHTTPEndpoint("publication-degraded.molejo.dev")}
 	degraded := workloadDecision{
 		state:  workloadStateDegraded,
 		reason: platformv1alpha1.ReasonReplicaFailure,
@@ -743,7 +351,7 @@ func TestEvaluatePublicationGatewayUsesFailureFirstPrecedence(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			decision := evaluatePublicationGateway(test.gateway, test.input)
+			decision := evaluatePublicationGateway(test.gateway, test.input, sharedGatewaySection)
 			if decision.state != test.wantState || decision.reason != test.wantReason {
 				t.Fatalf("decision = %s/%s, want %s/%s", decision.state, decision.reason,
 					test.wantState, test.wantReason)
@@ -757,8 +365,7 @@ func TestEvaluatePublicationGatewayUsesFailureFirstPrecedence(t *testing.T) {
 
 func TestEvaluatePublicationTreatsMultipleControllersAsAmbiguous(t *testing.T) {
 	appDeployment := newAppDeployment("ws-test", "ap-publication-ambiguous", testImage)
-	appDeployment.Spec.Exposure = platformv1alpha1.ExposurePublic
-	appDeployment.Spec.Slug = "publication-ambiguous"
+	appDeployment.Spec.PublicEndpoints = []platformv1alpha1.AppDeploymentPublicEndpoint{testHTTPEndpoint("publication-ambiguous.molejo.dev")}
 	ready := workloadDecision{
 		state:  workloadStateReady,
 		reason: platformv1alpha1.ReasonDeploymentAvailable,
@@ -801,6 +408,7 @@ func routeWithConditions(conditions ...metav1.Condition) *gatewayv1.HTTPRoute {
 	httpsSection := gatewayv1.SectionName("https-molejo")
 	return &gatewayv1.HTTPRoute{
 		ObjectMeta: metav1.ObjectMeta{Generation: routeGeneration},
+		Spec:       gatewayv1.HTTPRouteSpec{CommonRouteSpec: gatewayv1.CommonRouteSpec{ParentRefs: []gatewayv1.ParentReference{{Name: "molejo", Namespace: &gatewayNamespace, SectionName: &httpsSection}}}},
 		Status: gatewayv1.HTTPRouteStatus{RouteStatus: gatewayv1.RouteStatus{
 			Parents: []gatewayv1.RouteParentStatus{{
 				ParentRef: gatewayv1.ParentReference{
@@ -858,122 +466,23 @@ func getHTTPRoute(t *testing.T, ctx context.Context, key client.ObjectKey) *gate
 	return route
 }
 
-func setTestGatewayStatus(
-	t *testing.T,
-	ctx context.Context,
-	gateway *gatewayv1.Gateway,
-	healthy bool,
-) {
-	t.Helper()
-	if err := testClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway); err != nil {
-		t.Fatalf("get shared Gateway: %v", err)
+func TestAddressFactsRemainIndependentAndFailureWinsAggregation(t *testing.T) {
+	app := newAppDeployment("workspace", "ap-facts", testImage)
+	app.Generation = 2
+	rejected := workloadDecision{state: workloadStateDegraded, reason: "HTTPRouteRejected"}
+	ready := workloadDecision{state: workloadStateReady}
+	pending := workloadDecision{state: workloadStateProgressing, reason: "Pending"}
+	conditions := addressConditions(app, testHTTPAddress("example.test"), rejected, ready)
+	if meta.FindStatusCondition(conditions, "RouteReady").Status != metav1.ConditionFalse || meta.FindStatusCondition(conditions, "GatewayReady").Status != metav1.ConditionTrue {
+		t.Fatal("independent Gateway evidence was lost")
 	}
-	conditionStatus := metav1.ConditionTrue
-	programmedReason := string(gatewayv1.GatewayReasonProgrammed)
-	listenerReason := string(gatewayv1.ListenerReasonProgrammed)
-	message := "The shared Gateway is programmed."
-	if !healthy {
-		conditionStatus = metav1.ConditionFalse
-		programmedReason = string(gatewayv1.GatewayReasonListenersNotReady)
-		listenerReason = string(gatewayv1.ListenerReasonInvalidCertificateRef)
-		message = "certificate secret private-certificate-detail is invalid"
-	}
-	gateway.Status.Conditions = []metav1.Condition{{
-		Type:               string(gatewayv1.GatewayConditionProgrammed),
-		Status:             conditionStatus,
-		ObservedGeneration: gateway.Generation,
-		Reason:             programmedReason,
-		Message:            message,
-		LastTransitionTime: metav1.Now(),
-	}}
-	gateway.Status.Listeners = []gatewayv1.ListenerStatus{{
-		Name: "https-molejo",
-		Conditions: []metav1.Condition{
-			{
-				Type: string(gatewayv1.ListenerConditionAccepted), Status: conditionStatus,
-				ObservedGeneration: gateway.Generation, Reason: listenerReason,
-				Message: message, LastTransitionTime: metav1.Now(),
-			},
-			{
-				Type: string(gatewayv1.ListenerConditionProgrammed), Status: conditionStatus,
-				ObservedGeneration: gateway.Generation, Reason: listenerReason,
-				Message: message, LastTransitionTime: metav1.Now(),
-			},
-			{
-				Type: string(gatewayv1.ListenerConditionResolvedRefs), Status: conditionStatus,
-				ObservedGeneration: gateway.Generation, Reason: listenerReason,
-				Message: message, LastTransitionTime: metav1.Now(),
-			},
-		},
-	}}
-	if err := testClient.Status().Update(ctx, gateway); err != nil {
-		t.Fatalf("update shared Gateway status: %v", err)
-	}
-}
-
-func waitForCondition(t *testing.T, timeout time.Duration, description string, condition func() bool) {
-	t.Helper()
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		if condition() {
-			return
+	for _, values := range [][]workloadDecision{{ready, rejected, pending}, {pending, ready, rejected}, {rejected, pending, ready}} {
+		result := ready
+		for _, value := range values {
+			result = combinePublicationDecision(result, value)
 		}
-		time.Sleep(25 * time.Millisecond)
-	}
-	t.Fatalf("timed out waiting for %s", description)
-}
-
-type gatewayDefaultingClient struct {
-	client.Client
-	patchCalls int
-}
-
-func (defaulting *gatewayDefaultingClient) Create(
-	ctx context.Context,
-	object client.Object,
-	options ...client.CreateOption,
-) error {
-	applyGatewayAPIDefaults(object)
-	return defaulting.Client.Create(ctx, object, options...)
-}
-
-func (defaulting *gatewayDefaultingClient) Patch(
-	ctx context.Context,
-	object client.Object,
-	patch client.Patch,
-	options ...client.PatchOption,
-) error {
-	if _, ok := object.(*gatewayv1.HTTPRoute); ok {
-		defaulting.patchCalls++
-		applyGatewayAPIDefaults(object)
-	}
-	return defaulting.Client.Patch(ctx, object, patch, options...)
-}
-
-func applyGatewayAPIDefaults(object client.Object) {
-	route, ok := object.(*gatewayv1.HTTPRoute)
-	if !ok || len(route.Spec.ParentRefs) == 0 || len(route.Spec.Rules) == 0 ||
-		len(route.Spec.Rules[0].BackendRefs) == 0 {
-		return
-	}
-	group := gatewayv1.Group(gatewayv1.GroupName)
-	kind := gatewayv1.Kind("Gateway")
-	route.Spec.ParentRefs[0].Group = &group
-	route.Spec.ParentRefs[0].Kind = &kind
-	if len(route.Spec.Rules[0].Matches) == 0 {
-		pathType := gatewayv1.PathMatchPathPrefix
-		pathValue := "/"
-		route.Spec.Rules[0].Matches = []gatewayv1.HTTPRouteMatch{{Path: &gatewayv1.HTTPPathMatch{
-			Type: &pathType, Value: &pathValue,
-		}}}
-	}
-	weight := int32(1)
-	route.Spec.Rules[0].BackendRefs[0].Weight = &weight
-}
-
-func TestPublicEndpointHostnamePrefersControlPlaneResolution(t *testing.T) {
-	endpoint := platformv1alpha1.AppDeploymentPublicEndpoint{HostnameLabel: "pg", Hostname: "pg.stateful.molejo.dev"}
-	if got := publicEndpointHostname(endpoint); got != "pg.stateful.molejo.dev" {
-		t.Fatalf("hostname=%q", got)
+		if result.state != workloadStateDegraded || result.reason != "HTTPRouteRejected" {
+			t.Fatalf("failure masked by list order: %+v", result)
+		}
 	}
 }

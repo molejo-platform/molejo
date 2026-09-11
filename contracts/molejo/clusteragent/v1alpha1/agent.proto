@@ -88,6 +88,33 @@ message RuntimeObservation {
   int64 observed_size_gib = 9;
   int64 desired_version = 10;
   string spec_hash = 11;
+  repeated PublicationAddressObservation addresses = 12;
+  string uid = 13;
+}
+
+// Facts correlate one address with the exact operation destination and runtime object.
+message PublicationAddressObservation {
+  string endpoint_name = 1;
+  string hostname = 2;
+  string binding_id = 3;
+  int64 binding_revision = 4;
+  string destination_schema_version = 5;
+  string gateway_namespace = 6;
+  string gateway_name = 7;
+  string section_name = 8;
+  string gateway_uid = 9;
+  string route_name = 10;
+  string route_uid = 11;
+  int64 route_generation = 12;
+  repeated PublicationCondition conditions = 13;
+}
+
+message PublicationCondition {
+  string type = 1;
+  string status = 2;
+  string reason = 3;
+  int64 observed_generation = 4;
+  int64 last_transition_unix = 5;
 }
 
 message HeartbeatAck {

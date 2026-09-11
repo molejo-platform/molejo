@@ -79,6 +79,12 @@ func (w *Worker) NextCommand(ctx context.Context, installationID string) (*clust
 		_ = w.Store.Fail(ctx, op, "command_unavailable", "runtime command could not be prepared", true)
 		return nil, false, err
 	}
+	if payload.Deployment != nil {
+		if err := runtimecontract.ValidatePublication(*payload.Deployment); err != nil {
+			_ = w.Store.Fail(ctx, op, "publication_contract_incompatible", "publication requires resolved address destinations", false)
+			return nil, false, err
+		}
+	}
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		_ = w.Store.Fail(ctx, op, "command_invalid", "runtime command could not be encoded", false)
@@ -94,7 +100,7 @@ func (w *Worker) NextCommand(ctx context.Context, installationID string) (*clust
 	command := &clusteragentv1alpha1.RuntimeCommand{
 		CommandId: commandID, OperationId: op.PublicID, DesiredVersion: op.DesiredVersion,
 		FencingToken: op.FencingToken, DeadlineUnix: deadline.Unix(),
-		Kind: op.Kind, PayloadJson: raw, PayloadSchemaVersion: "runtime.v1alpha1",
+		Kind: op.Kind, PayloadJson: raw, PayloadSchemaVersion: runtimecontract.PayloadSchemaVersion,
 	}
 	if op.Kind == domain.OperationEnsureWorkspace {
 		command.Kind = runtimecontract.OperationEnsureWorkspacePlacement
@@ -282,7 +288,7 @@ func (w *Worker) commandPayload(ctx context.Context, op domain.Operation, appEnv
 func deploymentIntent(intent domain.Intent) runtimecontract.DeploymentIntent {
 	converted := runtimecontract.DeploymentIntent{
 		Image: intent.Image, Replicas: intent.Replicas, ConfigurationVersion: intent.ConfigurationVersion,
-		WorkloadKind: string(intent.WorkloadKind), Port: intent.Port, Exposure: intent.Exposure, Slug: intent.Slug,
+		WorkloadKind: string(intent.WorkloadKind), Port: intent.Port,
 		Resources: runtimecontract.Resources{
 			Requests: runtimecontract.ResourceValues{CPUMillis: intent.Resources.Requests.CPUMillis, MemoryMiB: intent.Resources.Requests.MemoryMiB},
 			Limits:   runtimecontract.ResourceValues{CPUMillis: intent.Resources.Limits.CPUMillis, MemoryMiB: intent.Resources.Limits.MemoryMiB},

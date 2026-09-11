@@ -152,9 +152,6 @@ func (r *AppDeploymentReconciler) mapGatewayToAppDeployments(
 	ctx context.Context,
 	object client.Object,
 ) []reconcile.Request {
-	if object.GetNamespace() != sharedGatewayNamespace || object.GetName() != sharedGatewayName {
-		return nil
-	}
 	appDeployments := &platformv1alpha1.AppDeploymentList{}
 	if err := r.List(ctx, appDeployments); err != nil {
 		ctrl.LoggerFrom(ctx).Error(err, "unable to list public AppDeployments after Gateway change")
@@ -163,7 +160,18 @@ func (r *AppDeploymentReconciler) mapGatewayToAppDeployments(
 	requests := make([]reconcile.Request, 0, len(appDeployments.Items))
 	for index := range appDeployments.Items {
 		appDeployment := &appDeployments.Items[index]
-		if _, public := publicEndpoint(appDeployment, platformv1alpha1.AppDeploymentPublicEndpointType("HTTP")); !public {
+		endpoint, public := publicEndpoint(appDeployment, "HTTP")
+		if !public {
+			continue
+		}
+		matched := false
+		for _, a := range endpoint.Addresses {
+			if a.Destination.GatewayNamespace == object.GetNamespace() && a.Destination.GatewayName == object.GetName() {
+				matched = true
+				break
+			}
+		}
+		if !matched {
 			continue
 		}
 		requests = append(requests, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(appDeployment)})

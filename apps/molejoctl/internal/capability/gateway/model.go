@@ -1,7 +1,7 @@
 package gateway
 
 const (
-	APIVersion = "config.molejo.dev/v1alpha1"
+	APIVersion = "config.molejo.dev/v1alpha2"
 	Kind       = "GatewaySetup"
 
 	ProfileK3s              = "k3s"
@@ -59,9 +59,13 @@ type ServiceSpec struct {
 }
 
 type InstanceSpec struct {
-	Namespace         string          `yaml:"namespace" json:"namespace"`
+	Namespace string         `yaml:"namespace" json:"namespace"`
+	Name      string         `yaml:"name" json:"name"`
+	Listeners []ListenerSpec `yaml:"listeners" json:"listeners"`
+}
+
+type ListenerSpec struct {
 	Name              string          `yaml:"name" json:"name"`
-	HTTPSListener     string          `yaml:"httpsListener" json:"httpsListener"`
 	Hostname          string          `yaml:"hostname" json:"hostname"`
 	CertificateSecret ObjectReference `yaml:"certificateSecret" json:"certificateSecret"`
 }
@@ -147,11 +151,12 @@ func InitialK3s(options InitialOptions) Setup {
 				Controller: ControllerSpec{Management: ControllerManaged, Name: ControllerTraefik, Version: TraefikVersion, Namespace: "traefik-system", ClassName: "traefik"},
 				Service:    ServiceSpec{Type: "NodePort", HTTPNodePort: 30080, HTTPSNodePort: 30443},
 				Instance: InstanceSpec{
-					Namespace:         DefaultGatewayNamespace,
-					Name:              "molejo",
-					HTTPSListener:     "https-molejo",
-					Hostname:          "*." + options.Domain,
-					CertificateSecret: ObjectReference{Namespace: options.CertificateNamespace, Name: options.CertificateName},
+					Namespace: DefaultGatewayNamespace,
+					Name:      "molejo",
+					Listeners: []ListenerSpec{
+						{Name: "https-apex", Hostname: options.Domain, CertificateSecret: ObjectReference{Namespace: options.CertificateNamespace, Name: options.CertificateName}},
+						{Name: "https-molejo", Hostname: "*." + options.Domain, CertificateSecret: ObjectReference{Namespace: options.CertificateNamespace, Name: options.CertificateName}},
+					},
 				},
 			},
 		},

@@ -18,6 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	platformv1alpha1 "github.com/molejo-platform/molejo/packages/kubernetes-api/apis/platform/v1alpha1"
+	"github.com/molejo-platform/molejo/packages/kubernetesbinding"
 	"github.com/molejo-platform/molejo/packages/runtimecontract"
 )
 
@@ -132,8 +133,7 @@ func TestApplyDeploymentKeepsTheRuntimeNameStableAcrossIntentUpdates(t *testing.
 	second.Resources.Limits.MemoryMiB = 384
 	second.Probes.Liveness.Path = "/live"
 	second.Probes.Readiness.Path = "/ready"
-	second.Exposure = runtimecontract.ExposurePublic
-	second.Slug = "demo-public"
+	second.PublicEndpoints = []runtimecontract.PublicEndpoint{{Name: "web", Type: "HTTP", PortName: "http", Addresses: []runtimecontract.HTTPAddress{{Hostname: "demo.example.test", Destination: kubernetesbinding.HTTPDestination{BindingID: "binding-one", BindingRevision: 1, SchemaVersion: kubernetesbinding.HTTPBindingSchemaVersion, GatewayNamespace: "edge", GatewayName: "shared", SectionName: "https"}}}}}
 	second.Variables = []runtimecontract.Variable{{Name: "APP_MODE", Value: "production"}}
 
 	if err := kubernetesClient.ApplyDeployment(context.Background(), "molejo-workspaces", "ap-deployment-id", 1, first); err != nil {
@@ -162,8 +162,8 @@ func TestApplyDeploymentKeepsTheRuntimeNameStableAcrossIntentUpdates(t *testing.
 	if current.Spec.Probes.Liveness.Path != second.Probes.Liveness.Path || current.Spec.Probes.Readiness.Path != second.Probes.Readiness.Path {
 		t.Fatalf("runtime probe projection does not match intent: %+v", current.Spec.Probes)
 	}
-	if current.Spec.Exposure != platformv1alpha1.ExposurePublic || current.Spec.Slug != second.Slug {
-		t.Fatalf("runtime exposure projection does not match intent: exposure=%q slug=%q", current.Spec.Exposure, current.Spec.Slug)
+	if len(current.Spec.PublicEndpoints) != 1 || current.Spec.PublicEndpoints[0].Addresses[0].Hostname != "demo.example.test" {
+		t.Fatal("address projection differs from intent")
 	}
 	if len(current.Spec.Variables) != 1 || current.Spec.Variables[0].Name != "APP_MODE" || current.Spec.Variables[0].Value != "production" {
 		t.Fatalf("runtime variables do not match intent: %+v", current.Spec.Variables)
@@ -453,6 +453,5 @@ func runtimeTestIntent(name string) runtimecontract.DeploymentIntent {
 			Liveness:  runtimecontract.Probe{Path: "/healthz"},
 			Readiness: runtimecontract.Probe{Path: "/readyz"},
 		},
-		Exposure: runtimecontract.ExposurePrivate,
 	}
 }

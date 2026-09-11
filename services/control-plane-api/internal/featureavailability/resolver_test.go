@@ -20,7 +20,7 @@ func TestResolveRuntimePrecedence(t *testing.T) {
 		{"not attached", Facts{}, NotConfigured, ReasonClusterNotAttached},
 		{"offline", Facts{ClusterAttached: true}, Unknown, ReasonClusterAgentOffline},
 		{"old protocol", Facts{ClusterAttached: true, AgentConnected: true}, Unsupported, ReasonClusterCapabilityIncompatible},
-		{"available", Facts{ClusterAttached: true, AgentConnected: true, ProtocolCapabilities: []string{"runtime.v1alpha1"}}, Available, ""},
+		{"available", Facts{ClusterAttached: true, AgentConnected: true, ProtocolCapabilities: []string{"runtime.v1alpha2"}}, Available, ""},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -101,7 +101,7 @@ func TestResolveObservationAlwaysReturnsLimitationsArray(t *testing.T) {
 
 func TestResolveWorkspaceProvisioningKeepsConsentSeparateFromProtocolSupport(t *testing.T) {
 	now := time.Now().UTC()
-	base := Facts{ClusterAttached: true, AgentConnected: true, ProtocolCapabilities: []string{"runtime.v1alpha1", "workspace-provisioning.v1alpha1"}}
+	base := Facts{ClusterAttached: true, AgentConnected: true, ProtocolCapabilities: []string{"runtime.v1alpha2", "workspace-provisioning.v1alpha1"}}
 	disabled := featureByID(Resolve(now, Target{}, base), capabilitycontract.WorkspaceProvisioning)
 	if disabled.State != NotConfigured || disabled.ReasonCode != ReasonWorkspaceProvisioningDisabled {
 		t.Fatalf("disabled provisioning=%+v", disabled)
@@ -146,7 +146,7 @@ func TestUnavailableHistoricalMetricsDoNotAffectApplicationLoop(t *testing.T) {
 	features := Resolve(now, Target{}, Facts{
 		ClusterAttached:      true,
 		AgentConnected:       true,
-		ProtocolCapabilities: []string{"runtime.v1alpha1"},
+		ProtocolCapabilities: []string{"runtime.v1alpha2"},
 		Providers: providerbinding.New(providerbinding.Binding{
 			Capability: capabilitycontract.TelemetryMetricsHistorical,
 			Configured: true,

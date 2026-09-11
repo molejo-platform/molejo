@@ -6,10 +6,7 @@ import (
 	"strings"
 )
 
-var (
-	dnsLabelPattern = regexp.MustCompile(`^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$`)
-	dnsNamePattern  = regexp.MustCompile(`^(?:[a-z0-9](?:[-a-z0-9]*[a-z0-9])?\.)+[a-z]{2,63}$`)
-)
+var dnsLabelPattern = regexp.MustCompile(`^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$`)
 
 func NormalizeAndValidate(setup Setup) (Setup, []Diagnostic) {
 	setup.APIVersion = strings.TrimSpace(setup.APIVersion)
@@ -26,10 +23,6 @@ func NormalizeAndValidate(setup Setup) (Setup, []Diagnostic) {
 	instance := &setup.Spec.Gateway.Instance
 	instance.Namespace = strings.TrimSpace(instance.Namespace)
 	instance.Name = strings.TrimSpace(instance.Name)
-	instance.HTTPSListener = strings.TrimSpace(instance.HTTPSListener)
-	instance.Hostname = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(instance.Hostname), "."))
-	instance.CertificateSecret.Namespace = strings.TrimSpace(instance.CertificateSecret.Namespace)
-	instance.CertificateSecret.Name = strings.TrimSpace(instance.CertificateSecret.Name)
 
 	diagnostics := []Diagnostic{}
 	if setup.APIVersion != APIVersion {
@@ -44,8 +37,6 @@ func NormalizeAndValidate(setup Setup) (Setup, []Diagnostic) {
 		{"spec.gateway.controller.className", controller.ClassName},
 		{"spec.gateway.instance.namespace", instance.Namespace},
 		{"spec.gateway.instance.name", instance.Name},
-		{"spec.gateway.instance.httpsListener", instance.HTTPSListener},
-		{"spec.gateway.instance.certificateSecret.name", instance.CertificateSecret.Name},
 	}
 	for _, label := range labels {
 		if len(label.value) > 63 || !dnsLabelPattern.MatchString(label.value) {
@@ -76,12 +67,39 @@ func NormalizeAndValidate(setup Setup) (Setup, []Diagnostic) {
 	if setup.Spec.Gateway.Service.HTTPNodePort == setup.Spec.Gateway.Service.HTTPSNodePort {
 		diagnostics = append(diagnostics, Diagnostic{Field: "spec.gateway.service", Message: "HTTP and HTTPS NodePorts must differ"})
 	}
-	hostname := strings.TrimPrefix(instance.Hostname, "*.")
-	if !strings.HasPrefix(instance.Hostname, "*.") || !dnsNamePattern.MatchString(hostname) {
-		diagnostics = append(diagnostics, Diagnostic{Field: "spec.gateway.instance.hostname", Message: "must be a single-label wildcard DNS name"})
+
+	if len(instance.Listeners) < 1 || len(instance.Listeners) > 10 {
+		diagnostics = append(diagnostics, Diagnostic{Field: "spec.gateway.instance.listeners", Message: "must contain between 1 and 10 listeners"})
 	}
-	if instance.CertificateSecret.Namespace != instance.Namespace {
-		diagnostics = append(diagnostics, Diagnostic{Field: "spec.gateway.instance.certificateSecret.namespace", Message: "must match the Gateway namespace"})
+	names := map[string]bool{}
+	hostnames := map[string]bool{}
+	instance.Listeners = append([]ListenerSpec(nil), instance.Listeners...)
+	for i := range instance.Listeners {
+		l := &instance.Listeners[i]
+		l.Name = strings.TrimSpace(l.Name)
+		l.CertificateSecret.Namespace = strings.TrimSpace(l.CertificateSecret.Namespace)
+		l.CertificateSecret.Name = strings.TrimSpace(l.CertificateSecret.Name)
+		l.Hostname = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(l.Hostname), "."))
+		field := fmt.Sprintf("spec.gateway.instance.listeners[%d]", i)
+		if !dnsLabelPattern.MatchString(l.Name) || len(l.Name) > 63 || names[l.Name] {
+			diagnostics = append(diagnostics, Diagnostic{Field: field + ".name", Message: "must be a unique DNS label"})
+		}
+		names[l.Name] = true
+		hostname := strings.TrimPrefix(l.Hostname, "*.")
+		valid := len(hostname) <= 253 && hostname != ""
+		for _, label := range strings.Split(hostname, ".") {
+			valid = valid && len(label) <= 63 && dnsLabelPattern.MatchString(label)
+		}
+		if !valid || hostnames[l.Hostname] {
+			diagnostics = append(diagnostics, Diagnostic{Field: field + ".hostname", Message: "must be a unique exact or wildcard DNS name"})
+		}
+		hostnames[l.Hostname] = true
+		if l.CertificateSecret.Namespace != instance.Namespace {
+			diagnostics = append(diagnostics, Diagnostic{Field: field + ".certificateSecret.namespace", Message: "must match the Gateway namespace"})
+		}
+		if !dnsLabelPattern.MatchString(l.CertificateSecret.Name) || len(l.CertificateSecret.Name) > 63 {
+			diagnostics = append(diagnostics, Diagnostic{Field: field + ".certificateSecret.name", Message: "must be a DNS label"})
+		}
 	}
 	return setup, diagnostics
 }

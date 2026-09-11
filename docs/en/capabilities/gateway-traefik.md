@@ -22,6 +22,15 @@ molejoctl capability gateway apply --kube-context molejo-k3s --file gateway-setu
 molejoctl capability gateway verify --kube-context molejo-k3s --file gateway-setup.yaml
 ```
 
+The `config.molejo.dev/v1alpha2` recipe has `instance.listeners` (1–10 entries).
+Each entry declares `name`, an exact or wildcard `hostname`, and
+`certificateSecret`. `init` emits both apex (`https-apex`) and wildcard
+(`https-molejo`) listeners. Old single-listener recipes are rejected; regenerate
+on a clean alpha installation. The Secret must cover every configured name.
+The managed listeners allow HTTPRoutes only from namespaces labeled
+`platform.molejo.dev/http-publication=enabled`, assigned by Molejo namespace
+provisioning and control-plane installation.
+
 The generated file is safe to keep in version control because it contains no
 credentials. `plan` and `verify` are read-only. `apply` owns only the generated
 Traefik Helm release and the labeled shared Gateway; it refuses to adopt a
@@ -39,3 +48,13 @@ molejoctl platform control-plane install \
 
 The resulting `HTTPRoute` exposes only `console-web`. The console proxies
 `/api/*` to the internal control-plane API.
+
+`verify` checks conformity with this managed recipe, including its prerequisites.
+The independent `InspectConsumption` library evaluates an external Gateway's
+listener, attachment, HTTPRoute support and current conditions with read-only
+credentials, without Helm or Secret access. The integrated command using that
+inspection and product binding APIs belongs to phase three. A connected external
+Gateway is never patched; the Operator still manages its own HTTPRoutes.
+
+See [HTTP publication foundation](../architecture/http-publication.md) for limits,
+versioning, status evidence and the local TLS conformance command.

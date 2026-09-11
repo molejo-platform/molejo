@@ -31,6 +31,7 @@ import (
 
 	"github.com/molejo-platform/molejo/apps/molejoctl/internal/helmclient"
 	"github.com/molejo-platform/molejo/apps/molejoctl/internal/kubecontext"
+	kubemetadata "github.com/molejo-platform/molejo/packages/kubernetes-api/metadata"
 )
 
 const (
@@ -442,8 +443,9 @@ func observeControlPlane(ctx context.Context, client kubernetes.Interface, relea
 
 func ensureControlPlaneNamespace(ctx context.Context, client kubernetes.Interface) error {
 	desiredLabels := map[string]string{
-		"app.kubernetes.io/part-of":    "molejo-platform",
-		"app.kubernetes.io/managed-by": "Helm",
+		kubemetadata.PublicationNamespaceLabel: "enabled",
+		"app.kubernetes.io/part-of":            "molejo-platform",
+		"app.kubernetes.io/managed-by":         "Helm",
 	}
 	desiredAnnotations := map[string]string{
 		"meta.helm.sh/release-name":      controlPlaneRelease,

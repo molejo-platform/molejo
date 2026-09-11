@@ -89,6 +89,15 @@ and fixed sleeps. Add broad end-to-end coverage only for behavior that cannot be
 proved at a lower layer. Never include credentials, private keys, certificates,
 or kubeconfigs in snapshots.
 
+The HTTP publication foundation also has a bounded real-TLS local proof:
+
+```bash
+tools/testing/publication-kind.sh
+```
+
+It creates and deletes an isolated Kind cluster and uses a private kubeconfig.
+It requires Docker, Helm and kubectl; it never uses the current cluster context.
+
 ## K3s acceptance checks
 
 These maintainer checks are not part of `just verify` because they require an

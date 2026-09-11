@@ -53,14 +53,6 @@ spec:
                 description: ConfigMapRef names an immutable ConfigMap prepared by
                   the control plane.
                 type: string
-              exposure:
-                default: Private
-                description: Deprecated compatibility projection for pre-multiport
-                  v1alpha1 objects.
-                enum:
-                - Private
-                - Public
-                type: string
               image:
                 description: Image is an immutable OCI image reference.
                 pattern: ^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$
@@ -212,6 +204,65 @@ spec:
                   description: AppDeploymentPublicEndpoint is a bounded public route
                     allocated by the control plane.
                   properties:
+                    addresses:
+                      items:
+                        description: AppDeploymentHTTPAddress fixes one association
+                          to its authorized destination.
+                        properties:
+                          destination:
+                            properties:
+                              bindingId:
+                                maxLength: 128
+                                minLength: 1
+                                type: string
+                              bindingRevision:
+                                format: int64
+                                minimum: 1
+                                type: integer
+                              gatewayName:
+                                maxLength: 253
+                                minLength: 1
+                                pattern: ^[a-z0-9](?:[-a-z0-9.]*[a-z0-9])?$
+                                type: string
+                              gatewayNamespace:
+                                maxLength: 63
+                                minLength: 1
+                                pattern: ^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$
+                                type: string
+                              schemaVersion:
+                                enum:
+                                - kubernetes-http.v1alpha1
+                                type: string
+                              sectionName:
+                                maxLength: 63
+                                minLength: 1
+                                pattern: ^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$
+                                type: string
+                            required:
+                            - bindingId
+                            - bindingRevision
+                            - gatewayName
+                            - gatewayNamespace
+                            - schemaVersion
+                            - sectionName
+                            type: object
+                          hostname:
+                            maxLength: 253
+                            minLength: 1
+                            pattern: ^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?(?:\.[a-z0-9](?:[-a-z0-9]*[a-z0-9])?)*$
+                            type: string
+                            x-kubernetes-validations:
+                            - message: DNS labels cannot exceed 63 characters
+                              rule: self.split('.').all(label, size(label) <= 63)
+                        required:
+                        - destination
+                        - hostname
+                        type: object
+                      maxItems: 10
+                      type: array
+                      x-kubernetes-list-map-keys:
+                      - hostname
+                      x-kubernetes-list-type: map
                     externalPort:
                       format: int32
                       maximum: 65535
@@ -244,7 +295,6 @@ spec:
                       - TCP
                       type: string
                   required:
-                  - hostnameLabel
                   - name
                   - portName
                   - type
@@ -254,11 +304,20 @@ spec:
                     rule: self.type != 'TCP' || has(self.externalPort)
                   - message: HTTP publication does not use an external port
                     rule: self.type != 'HTTP' || !has(self.externalPort)
+                  - message: HTTP requires resolved addresses only
+                    rule: self.type != 'HTTP' || (has(self.addresses) && size(self.addresses)
+                      > 0 && !has(self.hostname) && !has(self.hostnameLabel))
+                  - message: TCP does not use HTTP addresses
+                    rule: self.type != 'TCP' || !has(self.addresses)
                 maxItems: 2
                 type: array
                 x-kubernetes-list-map-keys:
                 - name
                 x-kubernetes-list-type: map
+                x-kubernetes-validations:
+                - message: at most one endpoint of each type is supported
+                  rule: self.filter(e, e.type == 'HTTP').size() <= 1 && self.filter(e,
+                    e.type == 'TCP').size() <= 1
               replicas:
                 default: 1
                 description: Replicas is the desired number of workload replicas.
@@ -317,13 +376,6 @@ spec:
               secretRef:
                 description: SecretRef names an immutable Secret prepared by the control
                   plane.
-                type: string
-              slug:
-                description: Deprecated compatibility projection for pre-multiport
-                  v1alpha1 objects.
-                maxLength: 63
-                minLength: 1
-                pattern: ^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$
                 type: string
               variables:
                 description: Variables are non-secret environment variables projected
@@ -401,10 +453,6 @@ spec:
             - workload
             type: object
             x-kubernetes-validations:
-            - message: legacy public exposure requires a slug
-              rule: '!has(self.exposure) || self.exposure != ''Public'' || has(self.slug)'
-            - message: legacy private exposure omits the slug
-              rule: '!has(self.exposure) || self.exposure != ''Private'' || !has(self.slug)'
             - message: at least one legacy or named port is required
               rule: has(self.port) || has(self.ports)
             - message: Stateful workloads require exactly one replica
@@ -480,6 +528,133 @@ spec:
                   description: AppDeploymentEndpointStatus reports one independently
                     reconciled publication.
                   properties:
+                    addresses:
+                      items:
+                        description: Evidence describes runtime facts only. It does
+                          not attest DNS or served TLS.
+                        properties:
+                          conditions:
+                            items:
+                              description: Condition contains details for one aspect
+                                of the current state of this API Resource.
+                              properties:
+                                lastTransitionTime:
+                                  description: |-
+                                    lastTransitionTime is the last time the condition transitioned from one status to another.
+                                    This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                                  format: date-time
+                                  type: string
+                                message:
+                                  description: |-
+                                    message is a human readable message indicating details about the transition.
+                                    This may be an empty string.
+                                  maxLength: 32768
+                                  type: string
+                                observedGeneration:
+                                  description: |-
+                                    observedGeneration represents the .metadata.generation that the condition was set based upon.
+                                    For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                                    with respect to the current state of the instance.
+                                  format: int64
+                                  minimum: 0
+                                  type: integer
+                                reason:
+                                  description: |-
+                                    reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                                    Producers of specific condition types may define expected values and meanings for this field,
+                                    and whether the values are considered a guaranteed API.
+                                    The value should be a CamelCase string.
+                                    This field may not be empty.
+                                  maxLength: 1024
+                                  minLength: 1
+                                  pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                                  type: string
+                                status:
+                                  description: status of the condition, one of True,
+                                    False, Unknown.
+                                  enum:
+                                  - "True"
+                                  - "False"
+                                  - Unknown
+                                  type: string
+                                type:
+                                  description: type of condition in CamelCase or in
+                                    foo.example.com/CamelCase.
+                                  maxLength: 316
+                                  pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                                  type: string
+                              required:
+                              - lastTransitionTime
+                              - message
+                              - reason
+                              - status
+                              - type
+                              type: object
+                            type: array
+                            x-kubernetes-list-map-keys:
+                            - type
+                            x-kubernetes-list-type: map
+                          destination:
+                            properties:
+                              bindingId:
+                                maxLength: 128
+                                minLength: 1
+                                type: string
+                              bindingRevision:
+                                format: int64
+                                minimum: 1
+                                type: integer
+                              gatewayName:
+                                maxLength: 253
+                                minLength: 1
+                                pattern: ^[a-z0-9](?:[-a-z0-9.]*[a-z0-9])?$
+                                type: string
+                              gatewayNamespace:
+                                maxLength: 63
+                                minLength: 1
+                                pattern: ^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$
+                                type: string
+                              schemaVersion:
+                                enum:
+                                - kubernetes-http.v1alpha1
+                                type: string
+                              sectionName:
+                                maxLength: 63
+                                minLength: 1
+                                pattern: ^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$
+                                type: string
+                            required:
+                            - bindingId
+                            - bindingRevision
+                            - gatewayName
+                            - gatewayNamespace
+                            - schemaVersion
+                            - sectionName
+                            type: object
+                          gatewayUid:
+                            type: string
+                          hostname:
+                            type: string
+                          routeGeneration:
+                            format: int64
+                            type: integer
+                          routeName:
+                            type: string
+                          routeUid:
+                            type: string
+                        required:
+                        - conditions
+                        - destination
+                        - hostname
+                        - routeGeneration
+                        - routeName
+                        - routeUid
+                        type: object
+                      maxItems: 10
+                      type: array
+                      x-kubernetes-list-map-keys:
+                      - hostname
+                      x-kubernetes-list-type: map
                     name:
                       type: string
                     ready:

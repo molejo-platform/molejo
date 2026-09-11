@@ -135,6 +135,9 @@ func (k *KubernetesClient) EnsureWorkspacePlacement(ctx context.Context, intent 
 
 func (k *KubernetesClient) ApplyDeployment(ctx context.Context, namespace, name string, desiredVersion int64, intent runtimecontract.DeploymentIntent) error {
 	intent = normalizeIntent(intent)
+	if err := runtimecontract.ValidatePublication(intent); err != nil {
+		return err
+	}
 	applyCtx, cancel := context.WithTimeout(ctx, k.applyTimeout)
 	defer cancel()
 	exists, err := k.ownedObjectExists(applyCtx, namespace, name)
@@ -153,8 +156,6 @@ func (k *KubernetesClient) ApplyDeployment(ctx context.Context, namespace, name 
 	if len(intent.Ports) > 0 {
 		legacyPort = intent.Ports[0].ContainerPort
 	}
-	legacyExposure := platformv1alpha1.ExposurePrivate
-	legacySlug := ""
 	for _, endpoint := range intent.PublicEndpoints {
 		var externalPort *int32
 		if endpoint.ExternalPort != 0 {
@@ -162,22 +163,14 @@ func (k *KubernetesClient) ApplyDeployment(ctx context.Context, namespace, name 
 			externalPort = &allocated
 		}
 		publicEndpoints = append(publicEndpoints, platformv1alpha1.AppDeploymentPublicEndpoint{Name: endpoint.Name, Type: platformv1alpha1.AppDeploymentPublicEndpointType(endpoint.Type), PortName: endpoint.PortName, HostnameLabel: endpoint.HostnameLabel, Hostname: endpoint.Hostname, ExternalPort: externalPort})
-		if endpoint.Type == runtimecontract.EndpointHTTP {
-			legacyExposure = platformv1alpha1.ExposurePublic
-			legacySlug = endpoint.HostnameLabel
+
+		for _, address := range endpoint.Addresses {
+			d := address.Destination
+			last := &publicEndpoints[len(publicEndpoints)-1]
+			last.Addresses = append(last.Addresses, platformv1alpha1.AppDeploymentHTTPAddress{Hostname: address.Hostname, Destination: platformv1alpha1.HTTPDestination{BindingID: d.BindingID, BindingRevision: d.BindingRevision, SchemaVersion: d.SchemaVersion, GatewayNamespace: d.GatewayNamespace, GatewayName: d.GatewayName, SectionName: d.SectionName}})
 		}
 	}
 	configMapRef, secretRef := "", ""
-	if intent.ConfigurationVersion > 0 {
-		configMapRef, secretRef, err = k.materializeConfiguration(applyCtx, namespace, name, intent.ConfigurationVersion, intent.Variables, intent.SecretVariables)
-		if err != nil {
-			return err
-		}
-	} else {
-		for _, variable := range intent.Variables {
-			variables = append(variables, platformv1alpha1.AppDeploymentVariable{Name: variable.Name, Value: variable.Value})
-		}
-	}
 	workload := platformv1alpha1.AppDeploymentWorkload{Kind: platformv1alpha1.WorkloadStateless, Stateless: &platformv1alpha1.StatelessWorkload{}}
 	if intent.WorkloadKind == runtimecontract.WorkloadStateful {
 		if intent.Volume == nil {
@@ -189,9 +182,45 @@ func (k *KubernetesClient) ApplyDeployment(ctx context.Context, namespace, name 
 		return platformv1alpha1.AppDeploymentProbe{Type: value.Type, PortName: value.PortName, Path: value.Path}
 	}
 	startupProbe := probe(intent.Probes.Startup)
-	obj := &platformv1alpha1.AppDeployment{TypeMeta: metav1.TypeMeta{APIVersion: "platform.molejo.dev/v1alpha1", Kind: "AppDeployment"}, ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, Annotations: map[string]string{controlPlaneOwnerAnnotation: name, desiredVersionAnnotation: strconv.FormatInt(desiredVersion, 10)}}, Spec: platformv1alpha1.AppDeploymentSpec{Workload: workload, Image: intent.Image, Replicas: &replicas, Ports: ports, Port: legacyPort, Resources: resourceSpec, Probes: platformv1alpha1.AppDeploymentProbes{Startup: &startupProbe, Liveness: probe(intent.Probes.Liveness), Readiness: probe(intent.Probes.Readiness)}, PublicEndpoints: publicEndpoints, Exposure: legacyExposure, Slug: legacySlug, Variables: variables, ConfigMapRef: configMapRef, SecretRef: secretRef}}
+	obj := &platformv1alpha1.AppDeployment{TypeMeta: metav1.TypeMeta{APIVersion: "platform.molejo.dev/v1alpha1", Kind: "AppDeployment"}, ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, Annotations: map[string]string{controlPlaneOwnerAnnotation: name, desiredVersionAnnotation: strconv.FormatInt(desiredVersion, 10)}}, Spec: platformv1alpha1.AppDeploymentSpec{Workload: workload, Image: intent.Image, Replicas: &replicas, Ports: ports, Port: legacyPort, Resources: resourceSpec, Probes: platformv1alpha1.AppDeploymentProbes{Startup: &startupProbe, Liveness: probe(intent.Probes.Liveness), Readiness: probe(intent.Probes.Readiness)}, PublicEndpoints: publicEndpoints, Variables: variables, ConfigMapRef: configMapRef, SecretRef: secretRef}}
+	// Dry-run the full projection with strict field validation before creating
+	// configuration objects. An older CRD must reject, rather than prune, addresses.
+	preflight := obj.DeepCopy()
+	if exists {
+		current := &platformv1alpha1.AppDeployment{}
+		if err := k.client.Get(applyCtx, client.ObjectKeyFromObject(obj), current); err != nil {
+			return err
+		}
+		if current.Annotations[controlPlaneOwnerAnnotation] != name {
+			return ErrOwnershipConflict
+		}
+		if objectDesiredVersion(current) > desiredVersion {
+			return errors.New("stale deployment version")
+		}
+		obj.UID, obj.ResourceVersion = current.UID, current.ResourceVersion
+		preflight.UID, preflight.ResourceVersion = current.UID, current.ResourceVersion
+		if err := k.client.Patch(applyCtx, preflight, client.Apply, client.FieldOwner(k.fieldManager), client.ForceOwnership, client.DryRunAll, &client.PatchOptions{FieldValidation: "Strict"}); err != nil {
+			return fmt.Errorf("validate runtime schema: %w", err)
+		}
+	} else if err := k.client.Create(applyCtx, preflight, client.DryRunAll, &client.CreateOptions{FieldValidation: "Strict"}); err != nil {
+		return fmt.Errorf("validate runtime schema: %w", err)
+	}
+	if intent.ConfigurationVersion > 0 {
+		configMapRef, secretRef, err = k.materializeConfiguration(applyCtx, namespace, name, intent.ConfigurationVersion, intent.Variables, intent.SecretVariables)
+		if err != nil {
+			return err
+		}
+	} else {
+		for _, variable := range intent.Variables {
+			variables = append(variables, platformv1alpha1.AppDeploymentVariable{Name: variable.Name, Value: variable.Value})
+		}
+	}
+
+	obj.Spec.Variables = variables
+	obj.Spec.ConfigMapRef, obj.Spec.SecretRef = configMapRef, secretRef
+
 	if !exists {
-		if err := k.client.Create(applyCtx, obj, client.FieldOwner(k.fieldManager)); err != nil {
+		if err := k.client.Create(applyCtx, obj, client.FieldOwner(k.fieldManager), &client.CreateOptions{FieldValidation: "Strict"}); err != nil {
 			if apierrors.IsAlreadyExists(err) {
 				return fmt.Errorf("%w: AppDeployment %s/%s appeared during create", ErrOwnershipConflict, namespace, name)
 			}
@@ -199,7 +228,7 @@ func (k *KubernetesClient) ApplyDeployment(ctx context.Context, namespace, name 
 		}
 		return nil
 	}
-	if err := k.client.Patch(applyCtx, obj, client.Apply, client.FieldOwner(k.fieldManager), client.ForceOwnership); err != nil {
+	if err := k.client.Patch(applyCtx, obj, client.Apply, client.FieldOwner(k.fieldManager), client.ForceOwnership, &client.PatchOptions{FieldValidation: "Strict"}); err != nil {
 		return fmt.Errorf("apply AppDeployment: %w", err)
 	}
 	return nil
@@ -436,7 +465,7 @@ func (k *KubernetesClient) RuntimeObservations(ctx context.Context) ([]*clustera
 			Kind: "AppDeployment", Namespace: item.Namespace, Name: item.Name,
 			State: observed.State, Message: observed.Message, Generation: observed.Generation,
 			ObservedGeneration: observed.ObservedGeneration, ObservedRelease: observed.ObservedRelease,
-			DesiredVersion: observed.DesiredVersion, SpecHash: observed.SpecHash,
+			DesiredVersion: observed.DesiredVersion, SpecHash: observed.SpecHash, Addresses: publicationAddressObservations(item), Uid: string(item.UID),
 		})
 		if len(items) > 1000 {
 			return nil, errors.New("runtime observation snapshot exceeds 1000 objects")
@@ -483,7 +512,7 @@ func (k *KubernetesClient) DeleteDeployment(ctx context.Context, namespace, name
 	if obj.Annotations[controlPlaneOwnerAnnotation] != name {
 		return fmt.Errorf("%w: AppDeployment %s/%s", ErrOwnershipConflict, namespace, name)
 	}
-	if err := k.client.Delete(delCtx, obj); apierrors.IsNotFound(err) {
+	if err := k.client.Delete(delCtx, obj, client.Preconditions{UID: &obj.UID, ResourceVersion: &obj.ResourceVersion}, client.PropagationPolicy(metav1.DeletePropagationForeground)); apierrors.IsNotFound(err) {
 		return nil
 	} else {
 		return err
@@ -509,7 +538,7 @@ func observation(obj *platformv1alpha1.AppDeployment, expectedRelease string) Ob
 	ready := false
 	degraded := false
 	for _, condition := range obj.Status.Conditions {
-		if condition.Type == platformv1alpha1.ConditionDegraded && condition.Status == metav1.ConditionTrue {
+		if condition.Type == platformv1alpha1.ConditionDegraded && condition.Status == metav1.ConditionTrue && condition.ObservedGeneration == obj.Generation {
 			degraded = true
 			o.Message = condition.Message
 		}
@@ -517,7 +546,7 @@ func observation(obj *platformv1alpha1.AppDeployment, expectedRelease string) Ob
 			ready = true
 			o.Message = condition.Message
 		}
-		if condition.Type == platformv1alpha1.ConditionProgressing && condition.Status == metav1.ConditionTrue && condition.Message != "" {
+		if condition.Type == platformv1alpha1.ConditionProgressing && condition.Status == metav1.ConditionTrue && condition.ObservedGeneration == obj.Generation && condition.Message != "" {
 			o.Message = condition.Message
 		}
 	}
@@ -550,9 +579,24 @@ func normalizeIntent(intent runtimecontract.DeploymentIntent) runtimecontract.De
 	if len(intent.Ports) == 0 && intent.Port != 0 {
 		intent.Ports = []runtimecontract.RuntimePort{{Name: "http", ContainerPort: intent.Port, Protocol: "TCP"}}
 	}
-	if len(intent.PublicEndpoints) == 0 && intent.Exposure == runtimecontract.ExposurePublic && intent.Slug != "" {
-		intent.PublicEndpoints = []runtimecontract.PublicEndpoint{{Name: "web", Type: runtimecontract.EndpointHTTP, PortName: "http", HostnameLabel: intent.Slug}}
-	}
-	intent.Port, intent.Exposure, intent.Slug = 0, "", ""
+	intent.Port = 0
 	return intent
+}
+
+func publicationAddressObservations(app *platformv1alpha1.AppDeployment) []*clusteragentv1alpha1.PublicationAddressObservation {
+	result := []*clusteragentv1alpha1.PublicationAddressObservation{}
+	for _, endpoint := range app.Status.EndpointStatuses {
+		for _, address := range endpoint.Addresses {
+			if len(result) >= runtimecontract.MaxHTTPAddresses {
+				return result
+			}
+			d := address.Destination
+			value := &clusteragentv1alpha1.PublicationAddressObservation{EndpointName: endpoint.Name, Hostname: address.Hostname, BindingId: d.BindingID, BindingRevision: d.BindingRevision, DestinationSchemaVersion: d.SchemaVersion, GatewayNamespace: d.GatewayNamespace, GatewayName: d.GatewayName, SectionName: d.SectionName, GatewayUid: address.GatewayUID, RouteName: address.RouteName, RouteUid: address.RouteUID, RouteGeneration: address.RouteGeneration}
+			for _, c := range address.Conditions {
+				value.Conditions = append(value.Conditions, &clusteragentv1alpha1.PublicationCondition{Type: c.Type, Status: string(c.Status), Reason: c.Reason, ObservedGeneration: c.ObservedGeneration, LastTransitionUnix: c.LastTransitionTime.Unix()})
+			}
+			result = append(result, value)
+		}
+	}
+	return result
 }

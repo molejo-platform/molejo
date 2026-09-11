@@ -19,10 +19,7 @@ const (
 	persistentFailureRequeueAfter = 5 * time.Minute
 )
 
-var (
-	errOwnershipConflict = errors.New("required child is not controlled by the AppDeployment")
-	errHostnameConflict  = errors.New("public hostname is already owned by another AppDeployment")
-)
+var errOwnershipConflict = errors.New("required child is not controlled by the AppDeployment")
 
 type projectionFailure struct {
 	decision workloadDecision
@@ -32,12 +29,6 @@ type projectionFailure struct {
 
 func classifyProjectionFailure(err error) (projectionFailure, bool) {
 	switch {
-	case errors.Is(err, errHostnameConflict):
-		return projectionFailure{decision: workloadDecision{
-			state:   workloadStateDegraded,
-			reason:  platformv1alpha1.ReasonHostnameConflict,
-			message: "The requested public hostname is not available.",
-		}, requeue: ownershipConflictRequeueAfter}, true
 	case errors.Is(err, errOwnershipConflict):
 		return projectionFailure{decision: workloadDecision{
 			state:   workloadStateDegraded,

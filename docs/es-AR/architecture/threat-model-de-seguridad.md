@@ -147,6 +147,26 @@ principal de aplicaciones.
 - Las observaciones del Agent y los candidatos descubiertos no pueden crear ni activar un Binding del Control Plane.
 - Un administrador del clúster siempre puede sobrepasar los controles de Molejo; este actor está fuera del aislamiento entre tenants de Molejo.
 
+## Base de publicación HTTP (TM-04, TM-05, TM-07, TM-16)
+
+El [contrato de publicación](../../en/architecture/http-publication.md) rechaza
+payloads anteriores o parciales antes de producir efectos, fija Gateway/listener
+por dirección y conserva el ownership ajeno. Solo los namespaces con la etiqueta
+explícita `platform.molejo.dev/http-publication=enabled` pueden conectarse a la
+receta Gateway administrada. Molejo asigna esa etiqueta a namespaces de Workspace
+y Control Plane. Es un límite de attachment de infraestructura, no una concesión
+de dominio del producto. Los workloads no pueden modificar namespaces,
+AppDeployments ni HTTPRoutes. Inspeccionar un Gateway externo no requiere
+ownership de Helm ni lectura de Secret.
+
+El fencing de resultados y la ausencia del objeto Kubernetes no prueban que un
+Apply atrasado no pueda recrear la ruta. Las transacciones de operación/claim de
+la Fase 2 deben confirmar que no quedan ejecuciones pendientes antes del retiro
+final correlacionado y la liberación del claim. Hasta entonces, la configuración
+HTTP anterior se rechaza antes del dispatch. Delete foreground, precondiciones
+de actualización y revisión son controles complementarios, no una barrera
+durable después de la eliminación.
+
 ## Riesgos residuales aceptados y no objetivos
 
 - Las releases alfa pueden requerir una reinstalación limpia y no prometen compatibilidad de migraciones in-place de autorización o RBAC.

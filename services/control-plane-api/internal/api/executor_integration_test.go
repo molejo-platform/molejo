@@ -215,7 +215,11 @@ func createExecutorTargetAndRelease(t *testing.T, s *store.Store, workspaceID, a
 	if err != nil {
 		t.Fatal(err)
 	}
-	target, err := s.CreateAppEnvironment(ctx, workspaceID, actorID, mustAPIID(t, "aev"), project.PublicID, app.PublicID, environment.PublicID, "main", apiRuntimeConfiguration("executor-api"))
+	configuration := apiRuntimeConfiguration("executor-api")
+	configuration.PublicEndpoints = nil
+	configuration.Exposure = domain.ExposurePrivate
+	configuration.Slug = ""
+	target, err := s.CreateAppEnvironment(ctx, workspaceID, actorID, mustAPIID(t, "aev"), project.PublicID, app.PublicID, environment.PublicID, "main", configuration)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -274,7 +278,7 @@ func newExecutorIntegrationFixture(t *testing.T) (*store.Store, int64, int64, st
 	}
 	var clusterID int64
 	if err = s.Pool.QueryRow(ctx, `INSERT INTO agent_installations(public_id,name,status,cluster_uid,agent_version,kubernetes_version,capabilities_json,workspace_provisioning_mode,created_by)
-		VALUES($1,'test-agent','Active','cluster-test-uid','test','v1.36.3','["runtime.v1alpha1","workspace-provisioning.v1alpha1"]','Namespaced',$2) RETURNING id`, testAgentInstallationID, actorID).Scan(&clusterID); err != nil {
+		VALUES($1,'test-agent','Active','cluster-test-uid','test','v1.36.3','["runtime.v1alpha2","workspace-provisioning.v1alpha1"]','Namespaced',$2) RETURNING id`, testAgentInstallationID, actorID).Scan(&clusterID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = s.Pool.Exec(ctx, `INSERT INTO workspace_clusters(workspace_id,installation_id,namespace_name,state,observed_generation)

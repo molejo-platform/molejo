@@ -118,7 +118,7 @@ func (s *GRPCService) Connect(stream grpc.BidiStreamingServer[clusteragentv1alph
 	}
 	capabilityObservationsEnabled := hasCapability(hello.GetCapabilities(), "capability-observation.v1alpha1")
 	bindingObservationsEnabled := s.bindings != nil && hasCapability(hello.GetCapabilities(), "binding-observation.v1alpha1")
-	if err = stream.Send(&clusteragentv1alpha1.ConnectResponse{Payload: &clusteragentv1alpha1.ConnectResponse_Hello{Hello: &clusteragentv1alpha1.ControlPlaneHello{ProtocolVersion: "v1alpha1", HeartbeatIntervalSeconds: int32(s.heartbeatInterval / time.Second), ServerTimeUnix: now.Unix(), Capabilities: []string{"runtime.v1alpha1", "runtime-observation.v1alpha1", "runtime-query.v1alpha1", "certificate-renewal.v1alpha1", "capability-observation.v1alpha1", "binding-observation.v1alpha1"}, SessionId: sessionID, TrustBundleId: s.trustBundleID}}}); err != nil {
+	if err = stream.Send(&clusteragentv1alpha1.ConnectResponse{Payload: &clusteragentv1alpha1.ConnectResponse_Hello{Hello: &clusteragentv1alpha1.ControlPlaneHello{ProtocolVersion: "v1alpha1", HeartbeatIntervalSeconds: int32(s.heartbeatInterval / time.Second), ServerTimeUnix: now.Unix(), Capabilities: []string{"runtime.v1alpha2", "runtime-observation.v1alpha1", "runtime-query.v1alpha1", "certificate-renewal.v1alpha1", "capability-observation.v1alpha1", "binding-observation.v1alpha1"}, SessionId: sessionID, TrustBundleId: s.trustBundleID}}}); err != nil {
 		return err
 	}
 	for {
@@ -302,7 +302,7 @@ func (s *GRPCService) RenewCertificate(ctx context.Context, request *clusteragen
 
 func hasRuntimeCapability(capabilities []string) bool {
 	for _, capability := range capabilities {
-		if capability == "runtime.v1alpha1" {
+		if capability == "runtime.v1alpha2" {
 			return true
 		}
 	}

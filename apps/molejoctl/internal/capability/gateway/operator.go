@@ -22,6 +22,7 @@ import (
 
 	"github.com/molejo-platform/molejo/apps/molejoctl/internal/helmclient"
 	"github.com/molejo-platform/molejo/apps/molejoctl/internal/kubecontext"
+	kubemetadata "github.com/molejo-platform/molejo/packages/kubernetes-api/metadata"
 )
 
 const setupTimeout = 5 * time.Minute
@@ -180,12 +181,18 @@ func (e *kubernetesEnvironment) Discover(ctx context.Context, setup Setup) (Fact
 	if err != nil {
 		return Facts{}, err
 	}
-	secretReference := setup.Spec.Gateway.Instance.CertificateSecret
-	secret, getErr := e.kubernetes.CoreV1().Secrets(secretReference.Namespace).Get(ctx, secretReference.Name, metav1.GetOptions{})
-	if getErr == nil {
-		facts.Certificate = secret.Type == "kubernetes.io/tls" && len(secret.Data["tls.crt"]) > 0 && len(secret.Data["tls.key"]) > 0
-	} else if !apierrors.IsNotFound(getErr) {
-		return Facts{}, fmt.Errorf("inspect TLS Secret: %w", getErr)
+
+	facts.Certificate = true
+	for _, listener := range setup.Spec.Gateway.Instance.Listeners {
+		ref := listener.CertificateSecret
+		secret, getErr := e.kubernetes.CoreV1().Secrets(ref.Namespace).Get(ctx, ref.Name, metav1.GetOptions{})
+		if getErr == nil {
+			facts.Certificate = facts.Certificate && secret.Type == "kubernetes.io/tls" && len(secret.Data["tls.crt"]) > 0 && len(secret.Data["tls.key"]) > 0
+		} else if apierrors.IsNotFound(getErr) {
+			facts.Certificate = false
+		} else {
+			return Facts{}, fmt.Errorf("inspect TLS Secret: %w", getErr)
+		}
 	}
 	facts.Controller, err = inspectTraefikRelease(e.contextName, setup)
 	if err != nil {
@@ -292,7 +299,7 @@ func (e *kubernetesEnvironment) discoverGateway(ctx context.Context, setup Setup
 	return ResourceFacts{
 		Exists:  true,
 		Owned:   gateway.Labels[ManagedByLabel] == ManagedByValue,
-		Ready:   gatewayReady(gateway, gatewayv1.SectionName(instance.HTTPSListener)),
+		Ready:   allListenersReady(gateway, instance.Listeners),
 		Matches: reflect.DeepEqual(gateway.Spec, desiredGateway(setup).Spec),
 	}, nil
 }
@@ -427,23 +434,26 @@ func traefikValues(setup Setup) map[string]any {
 
 func desiredGateway(setup Setup) *gatewayv1.Gateway {
 	instance := setup.Spec.Gateway.Instance
-	hostname := gatewayv1.Hostname(instance.Hostname)
+
 	mode := gatewayv1.TLSModeTerminate
-	allNamespaces := gatewayv1.NamespacesFromAll
+	from := gatewayv1.NamespacesFromSelector
 	group := gatewayv1.Group("")
 	kind := gatewayv1.Kind("Secret")
-	return &gatewayv1.Gateway{
-		TypeMeta:   metav1.TypeMeta{APIVersion: gatewayv1.GroupVersion.String(), Kind: "Gateway"},
-		ObjectMeta: metav1.ObjectMeta{Name: instance.Name, Namespace: instance.Namespace, Labels: map[string]string{ManagedByLabel: ManagedByValue, "app.kubernetes.io/part-of": "molejo-platform"}},
-		Spec: gatewayv1.GatewaySpec{
-			GatewayClassName: gatewayv1.ObjectName(setup.Spec.Gateway.Controller.ClassName),
-			Listeners: []gatewayv1.Listener{{
-				Name: gatewayv1.SectionName(instance.HTTPSListener), Hostname: &hostname, Port: 443, Protocol: gatewayv1.HTTPSProtocolType,
-				TLS:           &gatewayv1.ListenerTLSConfig{Mode: &mode, CertificateRefs: []gatewayv1.SecretObjectReference{{Group: &group, Kind: &kind, Name: gatewayv1.ObjectName(instance.CertificateSecret.Name)}}},
-				AllowedRoutes: &gatewayv1.AllowedRoutes{Namespaces: &gatewayv1.RouteNamespaces{From: &allNamespaces}},
-			}},
-		},
+	gateway := &gatewayv1.Gateway{TypeMeta: metav1.TypeMeta{APIVersion: gatewayv1.GroupVersion.String(), Kind: "Gateway"}, ObjectMeta: metav1.ObjectMeta{Name: instance.Name, Namespace: instance.Namespace, Labels: map[string]string{ManagedByLabel: ManagedByValue, "app.kubernetes.io/part-of": "molejo-platform"}}, Spec: gatewayv1.GatewaySpec{GatewayClassName: gatewayv1.ObjectName(setup.Spec.Gateway.Controller.ClassName)}}
+	for _, listener := range instance.Listeners {
+		hostname := gatewayv1.Hostname(listener.Hostname)
+		gateway.Spec.Listeners = append(gateway.Spec.Listeners, gatewayv1.Listener{Name: gatewayv1.SectionName(listener.Name), Hostname: &hostname, Port: 443, Protocol: gatewayv1.HTTPSProtocolType, TLS: &gatewayv1.ListenerTLSConfig{Mode: &mode, CertificateRefs: []gatewayv1.SecretObjectReference{{Group: &group, Kind: &kind, Name: gatewayv1.ObjectName(listener.CertificateSecret.Name)}}}, AllowedRoutes: &gatewayv1.AllowedRoutes{Kinds: []gatewayv1.RouteGroupKind{{Kind: "HTTPRoute"}}, Namespaces: &gatewayv1.RouteNamespaces{From: &from, Selector: &metav1.LabelSelector{MatchLabels: map[string]string{kubemetadata.PublicationNamespaceLabel: "enabled"}}}}})
 	}
+	return gateway
+}
+
+func allListenersReady(gateway *gatewayv1.Gateway, listeners []ListenerSpec) bool {
+	for _, l := range listeners {
+		if !gatewayReady(gateway, gatewayv1.SectionName(l.Name)) {
+			return false
+		}
+	}
+	return len(listeners) > 0
 }
 
 func conditionTrue(conditions []metav1.Condition, conditionType string, generation int64) bool {

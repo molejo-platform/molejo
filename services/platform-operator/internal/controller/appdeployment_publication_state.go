@@ -62,10 +62,17 @@ func evaluatePublication(
 }
 
 func publicationParentConditions(route *gatewayv1.HTTPRoute) []metav1.Condition {
+	if len(route.Spec.ParentRefs) != 1 {
+		return nil
+	}
+	expected := route.Spec.ParentRefs[0]
+	if expected.Namespace == nil || expected.SectionName == nil {
+		return nil
+	}
 	var conditions []metav1.Condition
 	found := false
 	for _, parent := range route.Status.Parents {
-		if parent.ParentRef.Name != sharedGatewayName {
+		if parent.ParentRef.Name != expected.Name {
 			continue
 		}
 		if parent.ParentRef.Group != nil && *parent.ParentRef.Group != gatewayv1.GroupName {
@@ -74,10 +81,10 @@ func publicationParentConditions(route *gatewayv1.HTTPRoute) []metav1.Condition 
 		if parent.ParentRef.Kind != nil && *parent.ParentRef.Kind != "Gateway" {
 			continue
 		}
-		if parent.ParentRef.Namespace == nil || *parent.ParentRef.Namespace != sharedGatewayNamespace {
+		if parent.ParentRef.Namespace == nil || *parent.ParentRef.Namespace != *expected.Namespace {
 			continue
 		}
-		if parent.ParentRef.SectionName == nil || *parent.ParentRef.SectionName != sharedGatewaySection {
+		if parent.ParentRef.SectionName == nil || *parent.ParentRef.SectionName != *expected.SectionName {
 			continue
 		}
 		if parent.ParentRef.Port != nil {

@@ -56,7 +56,7 @@ func (r *Reconciler) ensureNamespace(ctx context.Context, plan ReconciliationPla
 	namespace := &corev1.Namespace{}
 	err := r.Get(ctx, types.NamespacedName{Name: plan.Namespace}, namespace)
 	if apierrors.IsNotFound(err) {
-		return r.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: plan.Namespace, Labels: map[string]string{kubemetadata.ManagedByLabel: kubemetadata.ControlPlaneOwner}, Annotations: map[string]string{workspaceIDAnnotation: plan.WorkspaceID, kubemetadata.ControlPlaneOwnerAnnotation: kubemetadata.ControlPlaneOwner}}})
+		return r.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: plan.Namespace, Labels: map[string]string{kubemetadata.ManagedByLabel: kubemetadata.ControlPlaneOwner, kubemetadata.PublicationNamespaceLabel: "enabled"}, Annotations: map[string]string{workspaceIDAnnotation: plan.WorkspaceID, kubemetadata.ControlPlaneOwnerAnnotation: kubemetadata.ControlPlaneOwner}}})
 	}
 	if err != nil {
 		return err

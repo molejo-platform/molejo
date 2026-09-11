@@ -318,8 +318,7 @@ func TestPublicationObservabilitySignalsAreCorrelatedAndIdempotent(t *testing.T)
 	ctx := context.Background()
 	namespace := createTestNamespace(t, "publication-observability")
 	appDeployment := newAppDeployment(namespace, "ap-publicationobservability", testImage)
-	appDeployment.Spec.Exposure = platformv1alpha1.ExposurePublic
-	appDeployment.Spec.Slug = "publication-observability"
+	appDeployment.Spec.PublicEndpoints = []platformv1alpha1.AppDeploymentPublicEndpoint{testHTTPEndpoint("publication-observability.molejo.dev")}
 	if err := testClient.Create(ctx, appDeployment); err != nil {
 		t.Fatalf("create public AppDeployment: %v", err)
 	}
@@ -356,7 +355,7 @@ func TestPublicationObservabilitySignalsAreCorrelatedAndIdempotent(t *testing.T)
 		t.Fatalf("idempotent public reconcile: %v", err)
 	}
 
-	route := getHTTPRoute(t, ctx, request.NamespacedName)
+	route := getHTTPRoute(t, ctx, client.ObjectKey{Namespace: namespace, Name: httpRouteName(appDeployment, "web", "publication-observability.molejo.dev")})
 	route.Spec.Hostnames[0] = "drift.molejo.dev"
 	if err := testClient.Update(ctx, route); err != nil {
 		t.Fatalf("introduce HTTPRoute drift: %v", err)
@@ -366,8 +365,7 @@ func TestPublicationObservabilitySignalsAreCorrelatedAndIdempotent(t *testing.T)
 	}
 
 	stored := getAppDeployment(t, ctx, request.NamespacedName)
-	stored.Spec.Exposure = platformv1alpha1.ExposurePrivate
-	stored.Spec.Slug = ""
+	stored.Spec.PublicEndpoints = nil
 	if err := testClient.Update(ctx, stored); err != nil {
 		t.Fatalf("make AppDeployment private: %v", err)
 	}
