@@ -128,3 +128,13 @@ func TestTraefikValuesConfigureNodePortService(t *testing.T) {
 		t.Fatalf("service values=%+v", service)
 	}
 }
+
+func TestDesiredGatewayMakesHTTPRouteGroupDefaultExplicit(t *testing.T) {
+	gateway := desiredGateway(validSetup())
+	for _, listener := range gateway.Spec.Listeners {
+		group := listener.AllowedRoutes.Kinds[0].Group
+		if group == nil || string(*group) != "gateway.networking.k8s.io" {
+			t.Fatalf("listener %s HTTPRoute group = %v", listener.Name, group)
+		}
+	}
+}

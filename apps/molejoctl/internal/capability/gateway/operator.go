@@ -439,10 +439,13 @@ func desiredGateway(setup Setup) *gatewayv1.Gateway {
 	from := gatewayv1.NamespacesFromSelector
 	group := gatewayv1.Group("")
 	kind := gatewayv1.Kind("Secret")
+	// Keep API defaults explicit because Discover compares the persisted spec with
+	// this desired value. Otherwise server-side defaulting causes endless updates.
+	routeGroup := gatewayv1.Group(gatewayv1.GroupVersion.Group)
 	gateway := &gatewayv1.Gateway{TypeMeta: metav1.TypeMeta{APIVersion: gatewayv1.GroupVersion.String(), Kind: "Gateway"}, ObjectMeta: metav1.ObjectMeta{Name: instance.Name, Namespace: instance.Namespace, Labels: map[string]string{ManagedByLabel: ManagedByValue, "app.kubernetes.io/part-of": "molejo-platform"}}, Spec: gatewayv1.GatewaySpec{GatewayClassName: gatewayv1.ObjectName(setup.Spec.Gateway.Controller.ClassName)}}
 	for _, listener := range instance.Listeners {
 		hostname := gatewayv1.Hostname(listener.Hostname)
-		gateway.Spec.Listeners = append(gateway.Spec.Listeners, gatewayv1.Listener{Name: gatewayv1.SectionName(listener.Name), Hostname: &hostname, Port: 443, Protocol: gatewayv1.HTTPSProtocolType, TLS: &gatewayv1.ListenerTLSConfig{Mode: &mode, CertificateRefs: []gatewayv1.SecretObjectReference{{Group: &group, Kind: &kind, Name: gatewayv1.ObjectName(listener.CertificateSecret.Name)}}}, AllowedRoutes: &gatewayv1.AllowedRoutes{Kinds: []gatewayv1.RouteGroupKind{{Kind: "HTTPRoute"}}, Namespaces: &gatewayv1.RouteNamespaces{From: &from, Selector: &metav1.LabelSelector{MatchLabels: map[string]string{kubemetadata.PublicationNamespaceLabel: "enabled"}}}}})
+		gateway.Spec.Listeners = append(gateway.Spec.Listeners, gatewayv1.Listener{Name: gatewayv1.SectionName(listener.Name), Hostname: &hostname, Port: 443, Protocol: gatewayv1.HTTPSProtocolType, TLS: &gatewayv1.ListenerTLSConfig{Mode: &mode, CertificateRefs: []gatewayv1.SecretObjectReference{{Group: &group, Kind: &kind, Name: gatewayv1.ObjectName(listener.CertificateSecret.Name)}}}, AllowedRoutes: &gatewayv1.AllowedRoutes{Kinds: []gatewayv1.RouteGroupKind{{Group: &routeGroup, Kind: "HTTPRoute"}}, Namespaces: &gatewayv1.RouteNamespaces{From: &from, Selector: &metav1.LabelSelector{MatchLabels: map[string]string{kubemetadata.PublicationNamespaceLabel: "enabled"}}}}})
 	}
 	return gateway
 }
