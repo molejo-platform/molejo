@@ -62,6 +62,7 @@ func newControlPlaneInstallCommand(cliVersion string, installer controlPlaneInst
 				verb = "Verified"
 			}
 			_, _ = fmt.Fprintf(command.OutOrStdout(), "%s Molejo control plane %s in context %s\n\n", verb, version, contextName)
+			_, _ = fmt.Fprintf(command.OutOrStdout(), "Cluster ID: %s\nCluster UID: %s\n\n", report.ClusterID, report.ClusterUID)
 			for _, check := range report.Checks {
 				status := "PASS"
 				if !check.Healthy {
@@ -73,6 +74,7 @@ func newControlPlaneInstallCommand(cliVersion string, installer controlPlaneInst
 				_, _ = fmt.Fprintf(command.OutOrStdout(), "\nDatabase user: molejo_cp\nDatabase password: %s\nOwner: owner\nOwner password: %s\n", report.DatabasePassword, report.OwnerPassword)
 			}
 			_, _ = fmt.Fprintln(command.OutOrStdout(), "\nResult: healthy")
+			_, _ = fmt.Fprintln(command.OutOrStdout(), "Next: use Cluster ID in HTTPPublicationSetup and keep --kube-context pinned to this Cluster UID")
 			return nil
 		},
 	}

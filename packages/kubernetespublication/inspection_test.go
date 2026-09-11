@@ -14,8 +14,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
-
-	"github.com/molejo-platform/molejo/packages/kubernetesbinding"
 )
 
 type restrictedReader struct {
@@ -51,8 +49,8 @@ func TestInspectionPreservesFactsWhenOneReadIsDenied(t *testing.T) {
 	gateway := &gatewayv1.Gateway{ObjectMeta: metav1.ObjectMeta{Name: "external", Namespace: "edge", UID: "gateway-uid", Generation: 2}, Spec: gatewayv1.GatewaySpec{GatewayClassName: "external-class", Listeners: []gatewayv1.Listener{{Name: "https", Hostname: &hostname, Protocol: gatewayv1.HTTPSProtocolType, TLS: &gatewayv1.ListenerTLSConfig{}, AllowedRoutes: &gatewayv1.AllowedRoutes{Namespaces: &gatewayv1.RouteNamespaces{From: &from, Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"allowed": "true"}}}}}}}, Status: gatewayv1.GatewayStatus{Conditions: []metav1.Condition{{Type: "Programmed", Status: metav1.ConditionTrue, ObservedGeneration: 2, Reason: "Programmed"}}}}
 	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "workspace", Labels: map[string]string{"allowed": "true"}}}
 	reader := &restrictedReader{Reader: fake.NewClientBuilder().WithScheme(scheme).WithObjects(gateway, ns).Build(), denyClass: true}
-	target := kubernetesbinding.HTTPDestination{BindingID: "binding-one", BindingRevision: 1, SchemaVersion: kubernetesbinding.HTTPBindingSchemaVersion, GatewayNamespace: "edge", GatewayName: "external", SectionName: "https"}
-	facts, err := Inspect(t.Context(), reader, target, "app.example.test", "workspace")
+	target := Target{GatewayNamespace: "edge", GatewayName: "external", SectionName: "https", Hostname: "app.example.test", ConsumerNamespace: "workspace"}
+	facts, err := Inspect(t.Context(), reader, target)
 	if !apierrors.IsForbidden(err) || len(reader.reads) != 3 {
 		t.Fatalf("expected bounded reads and denied class: %v %v", reader.reads, err)
 	}

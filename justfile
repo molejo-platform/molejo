@@ -30,7 +30,7 @@ mod-check:
 hooks-install:
     hook_bin="$(git rev-parse --path-format=absolute --git-path lefthook)"; GOCACHE="${GOCACHE:-/tmp/molejo-go-cache}" go -C tools build -o "$hook_bin" github.com/evilmartians/lefthook/v2; "$hook_bin" install
 
-generate:
+generate-backend:
     BUF_CACHE_DIR="${BUF_CACHE_DIR:-/tmp/molejo-buf-cache}" go run github.com/bufbuild/buf/cmd/buf@v1.72.0 lint
     BUF_CACHE_DIR="${BUF_CACHE_DIR:-/tmp/molejo-buf-cache}" go run github.com/bufbuild/buf/cmd/buf@v1.72.0 generate
     go tool controller-gen object paths=./packages/kubernetes-api/apis/...
@@ -38,8 +38,13 @@ generate:
     # RBAC is intentionally maintained as explicit boundary and runtime roles.
     # Static contract tests guard its least-privilege invariants.
     go tool oapi-codegen -config services/control-plane-api/oapi-codegen.yaml contracts/openapi/control-plane-v1.yaml
+    go tool oapi-codegen -config contracts/openapi/molejoctl-client.yaml contracts/openapi/control-plane-v1.yaml
     go tool sqlc generate -f services/control-plane-api/sqlc.yaml
+
+generate-console-api:
     corepack pnpm --filter @molejo-platform/console-web generate:api-types
+
+generate: generate-backend generate-console-api
 
 frontend-check:
     corepack pnpm --filter @molejo-platform/console-web format:check

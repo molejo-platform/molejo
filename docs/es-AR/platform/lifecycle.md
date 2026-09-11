@@ -30,3 +30,62 @@ y no se pueden instalar directamente: el artefacto preparado también contiene l
 manifests, CRDs y digests de imágenes generados durante el empaquetado. Los charts
 locales se tratan como inmutables; para probar otro contenido con la misma versión
 alfa, eliminá la instalación experimental y volvé a instalarla.
+
+## Administración de publicación HTTP
+
+La instalación del Control Plane imprime el Cluster ID no secreto y el UID actual
+de Kubernetes. Guardá el Cluster ID en un setup versionado y mantené explícito el
+contexto Kubernetes para que molejoctl bloquee un clúster recreado o incorrecto
+antes de modificar el producto.
+
+```yaml
+apiVersion: config.molejo.dev/v1alpha1
+kind: HTTPPublicationSetup
+metadata:
+  name: molejo-dev
+spec:
+  clusterId: cls-abcdefghijklmnopqrst
+  binding:
+    schemaVersion: kubernetes-http.v1alpha1
+    gatewayNamespace: molejo-system
+    gatewayName: molejo
+    listeners:
+      - name: https-apex
+        hostname: molejo.dev
+      - name: https-apps
+        hostname: "*.molejo.dev"
+  domains:
+    - id: home
+      kind: Exact
+      name: molejo.dev
+      reservedNames: []
+      workspaceIds:
+        - ws-abcdefghijklmnopqrst
+    - id: apps
+      kind: SubdomainPool
+      name: molejo.dev
+      reservedNames:
+        - admin.molejo.dev
+      workspaceIds:
+        - ws-abcdefghijklmnopqrst
+```
+
+Ejecutá el plan de solo lectura, revisá las operaciones y después aplicá y verificá:
+
+```sh
+molejoctl capability publication plan --control-plane https://cloud.molejo.dev --username owner --kube-context molejo-k3s --file publication.yaml
+molejoctl capability publication apply --control-plane https://cloud.molejo.dev --username owner --kube-context molejo-k3s --file publication.yaml --yes
+molejoctl capability publication verify --control-plane https://cloud.molejo.dev --username owner --kube-context molejo-k3s --file publication.yaml
+```
+
+Usá `--ca-file` con una CA privada del Control Plane. Las credenciales se solicitan
+solamente en una terminal interactiva. `status` y `dependents` leen el mismo estado
+de API; las listas devuelven una página limitada y un cursor explícito. La eliminación
+nunca se infiere del archivo. Usá `grant revoke`, `domain delete` y
+`binding disconnect` después de quitar referencias Desired, Applied y Executable.
+No existe una opción force.
+
+El Binding declara listeners existentes del Gateway. No instala un Gateway, emite
+o renueva certificados, edita DNS ni demuestra alcance público. Esas responsabilidades
+siguen con los owners de infraestructura configurados; los nombres de DNS privado
+son válidos cuando el routing y los grants declarados son válidos.

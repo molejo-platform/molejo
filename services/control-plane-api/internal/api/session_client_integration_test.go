@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/pquerna/otp/totp"
 
+	controlplanev1alpha1 "github.com/molejo-platform/molejo/contracts/molejo/controlplane/v1alpha1"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/auth"
 )
 
@@ -80,6 +82,22 @@ func TestEphemeralHTTPClientSessionWithMFA(t *testing.T) {
 	csrf, _ = login["csrfToken"].(string)
 	if csrf == "" || len(client.Jar.Cookies(parsed)) == 0 {
 		t.Fatal("login did not establish ephemeral session")
+	}
+	generatedClient, err := controlplanev1alpha1.NewClient(endpoint.URL, controlplanev1alpha1.WithHTTPClient(client), controlplanev1alpha1.WithRequestEditorFn(func(_ context.Context, req *http.Request) error {
+		req.Header.Set("Origin", endpoint.URL)
+		req.Header.Set("X-CSRF-Token", csrf)
+		return nil
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	bindingResponse, err := generatedClient.GetClusterPublicationBinding(t.Context(), testAgentInstallationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = bindingResponse.Body.Close()
+	if bindingResponse.StatusCode != http.StatusOK {
+		t.Fatalf("generated publication client status=%d", bindingResponse.StatusCode)
 	}
 	enrollment := request("POST", "/api/v1/users/me/mfa/totp/enrollment", map[string]string{"password": password}, endpoint.URL, csrf, 201)
 	secret, _ := enrollment["secret"].(string)

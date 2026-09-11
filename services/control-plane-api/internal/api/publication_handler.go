@@ -16,19 +16,25 @@ func (h *generatedHandler) ListPublicationDomains(w http.ResponseWriter, r *http
 	if _, ok := h.authorizeInstallation(w, r, false, authorization.ManageBindings); !ok {
 		return
 	}
-	if !validPublicationPage(w, r, params.Offset) {
+	cursor, ok := validPublicationPage(w, r, params.Cursor, params.Limit, "domains")
+	if !ok {
 		return
 	}
-	items, err := h.server.store.PublicationDomains(r.Context(), publicationOffset(params.Offset))
+	limit := publicationPageSize(params.Limit)
+	items, err := h.server.store.PublicationDomains(r.Context(), cursor.A, limit)
 	if err != nil {
 		writePublicationError(w, r, err)
 		return
 	}
-	hasMore := len(items) > 100
+	hasMore := len(items) > limit
 	if hasMore {
-		items = items[:100]
+		items = items[:limit]
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items, "hasMore": hasMore})
+	var next any
+	if hasMore {
+		next = encodePublicationCursor(publicationCursor{Kind: "domains", A: items[len(items)-1].ID})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items, "hasMore": hasMore, "nextCursor": next})
 }
 
 func (h *generatedHandler) PutPublicationDomain(w http.ResponseWriter, r *http.Request, id string, params generated.PutPublicationDomainParams) {
@@ -74,6 +80,18 @@ func (h *generatedHandler) PutPublicationGrant(w http.ResponseWriter, r *http.Re
 	h.mutatePublicationGrant(w, r, domainID, workspaceID, bindingID, false)
 }
 
+func (h *generatedHandler) GetPublicationGrant(w http.ResponseWriter, r *http.Request, domainID, workspaceID, bindingID string) {
+	if _, ok := h.authorizeInstallation(w, r, false, authorization.ManageBindings); !ok {
+		return
+	}
+	item, err := h.server.store.PublicationGrant(r.Context(), domainID, workspaceID, bindingID)
+	if err != nil {
+		writePublicationError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
 func (h *generatedHandler) DeletePublicationGrant(w http.ResponseWriter, r *http.Request, domainID, workspaceID, bindingID string) {
 	h.mutatePublicationGrant(w, r, domainID, workspaceID, bindingID, true)
 }
@@ -111,19 +129,26 @@ func (h *generatedHandler) GetPublicationDependents(w http.ResponseWriter, r *ht
 		writePublicationError(w, r, domain.ErrPublicationName)
 		return
 	}
-	if !validPublicationPage(w, r, params.Offset) {
+	cursor, ok := validPublicationPage(w, r, params.Cursor, params.Limit, "dependents")
+	if !ok {
 		return
 	}
-	items, err := h.server.store.PublicationDependents(r.Context(), domainID, bindingID, publicationOffset(params.Offset))
+	limit := publicationPageSize(params.Limit)
+	items, err := h.server.store.PublicationDependents(r.Context(), domainID, bindingID, cursor.A, cursor.B, cursor.C, limit)
 	if err != nil {
 		writePublicationError(w, r, err)
 		return
 	}
-	hasMore := len(items) > 100
+	hasMore := len(items) > limit
 	if hasMore {
-		items = items[:100]
+		items = items[:limit]
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items, "hasMore": hasMore})
+	var next any
+	if hasMore {
+		last := items[len(items)-1]
+		next = encodePublicationCursor(publicationCursor{Kind: "dependents", A: last.AppEnvironmentID, B: last.Hostname, C: last.Kind})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items, "hasMore": hasMore, "nextCursor": next})
 }
 
 func (h *generatedHandler) GetPublicationOptions(w http.ResponseWriter, r *http.Request, workspaceID string, params generated.GetPublicationOptionsParams) {
@@ -131,19 +156,26 @@ func (h *generatedHandler) GetPublicationOptions(w http.ResponseWriter, r *http.
 	if !ok {
 		return
 	}
-	if !validPublicationPage(w, r, params.Offset) {
+	cursor, ok := validPublicationPage(w, r, params.Cursor, params.Limit, "options")
+	if !ok {
 		return
 	}
-	items, err := h.server.store.PublicationOptions(r.Context(), workspace.ID, params.ClusterId, publicationOffset(params.Offset))
+	limit := publicationPageSize(params.Limit)
+	items, err := h.server.store.PublicationOptions(r.Context(), workspace.ID, params.ClusterId, cursor.A, cursor.B, limit)
 	if err != nil {
 		writePublicationError(w, r, err)
 		return
 	}
-	hasMore := len(items) > 100
+	hasMore := len(items) > limit
 	if hasMore {
-		items = items[:100]
+		items = items[:limit]
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items, "hasMore": hasMore})
+	var next any
+	if hasMore {
+		last := items[len(items)-1]
+		next = encodePublicationCursor(publicationCursor{Kind: "options", A: last.Domain.ID, B: last.BindingID})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items, "hasMore": hasMore, "nextCursor": next})
 }
 
 func writePublicationError(w http.ResponseWriter, r *http.Request, err error) {
@@ -179,13 +211,6 @@ func writePublicationError(w http.ResponseWriter, r *http.Request, err error) {
 	writeError(w, status, code, message, r)
 }
 
-func publicationOffset(offset *int) int {
-	if offset == nil {
-		return 0
-	}
-	return *offset
-}
-
 func (h *generatedHandler) GetPublicationDomain(w http.ResponseWriter, r *http.Request, id string) {
 	if _, ok := h.authorizeInstallation(w, r, false, authorization.ManageBindings); !ok {
 		return
@@ -202,25 +227,37 @@ func (h *generatedHandler) ListPublicationGrants(w http.ResponseWriter, r *http.
 	if _, ok := h.authorizeInstallation(w, r, false, authorization.ManageBindings); !ok {
 		return
 	}
-	if !validPublicationPage(w, r, params.Offset) {
+	cursor, ok := validPublicationPage(w, r, params.Cursor, params.Limit, "grants")
+	if !ok {
 		return
 	}
-	items, err := h.server.store.PublicationGrants(r.Context(), id, publicationOffset(params.Offset))
+	limit := publicationPageSize(params.Limit)
+	items, err := h.server.store.PublicationGrants(r.Context(), id, cursor.A, cursor.B, limit)
 	if err != nil {
 		writePublicationError(w, r, err)
 		return
 	}
-	hasMore := len(items) > 100
+	hasMore := len(items) > limit
 	if hasMore {
-		items = items[:100]
+		items = items[:limit]
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items, "hasMore": hasMore})
+	var next any
+	if hasMore {
+		last := items[len(items)-1]
+		next = encodePublicationCursor(publicationCursor{Kind: "grants", A: last.WorkspaceID, B: last.BindingID})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items, "hasMore": hasMore, "nextCursor": next})
 }
 
-func validPublicationPage(w http.ResponseWriter, r *http.Request, offset *int) bool {
-	if offset != nil && (*offset < 0 || *offset > 1000000) {
-		writeError(w, http.StatusBadRequest, "pagination_invalid", "offset must be between 0 and 1000000", r)
-		return false
+func validPublicationPage(w http.ResponseWriter, r *http.Request, raw *string, limit *int, kind string) (publicationCursor, bool) {
+	if limit != nil && (*limit < 1 || *limit > maximumPublicationPageSize) {
+		writeError(w, http.StatusBadRequest, "pagination_invalid", "limit must be between 1 and 100", r)
+		return publicationCursor{}, false
 	}
-	return true
+	cursor, err := decodePublicationCursor(raw, kind)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "pagination_invalid", "cursor is invalid for this collection", r)
+		return publicationCursor{}, false
+	}
+	return cursor, true
 }

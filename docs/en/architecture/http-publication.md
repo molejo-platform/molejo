@@ -4,8 +4,8 @@ The executable foundation supports one HTTP endpoint per AppEnvironment, one
 named backend port, and up to ten exact addresses. A private configuration omits the HTTP endpoint. Each address produces one owned HTTPRoute; every route targets the
 same Service and workload. TCP publication and storage retain their existing
 contracts. Phase two provides administrative persistence, product APIs, immutable
-execution snapshots and protected withdrawal. CLI administration is phase three;
-Console consumption is phase four. This alpha cut has no HTTP compatibility reader,
+execution snapshots and protected withdrawal. The CLI supplies the authenticated
+administrative journey; Console consumption is phase four. This alpha cut has no HTTP compatibility reader,
 converter, dual contract or data backfill. Migration 036 requires a clean alpha
 installation; its downgrade is explicitly rejected. Reset instead of rolling back
 to the former HTTP schema.
@@ -78,9 +78,12 @@ gain installation permissions. Reads do not inspect or mutate Kubernetes.
 | `/api/v1/admin/publication/dependents?domainId=…&bindingId=…` | GET Desired, Applied and Executable references; at least one filter is required. |
 | `/api/v1/workspaces/{workspaceId}/publication-options?clusterId=…` | GET choices granted to this Workspace and placement, including unknown/degraded choices. |
 
-New lists return `{items, hasMore}`, at most 100 items, and accept `offset` from
-0 to 1,000,000. Continue with `offset + 100`; concurrent administrative edits may
-change list membership, so mutation safety always uses transactional checks.
+New lists return `{items, hasMore,nextCursor}`, default to 50 items and accept at
+most 100. Continue with the opaque `nextCursor`, whose maximum length is 512
+characters. Cursors use stable keysets: domain ID; Workspace/binding; AppEnvironment/
+hostname/kind; or domain/binding. They expose no total count. Concurrent insertion
+before a cursor does not duplicate an item; mutation safety still uses point reads,
+revisions and transactional checks.
 Existing hierarchy routes and authorization remain authoritative for configuration,
 deploy, status and withdrawal. The session's static publication domains now describe
 TCP only; HTTP authorization comes from the contextual catalogue.
@@ -214,10 +217,33 @@ Unknown on read. It never promotes connectivity or TLS verification from route s
 | Listener ambiguity | Require a choice from authorized candidates, never select by list order. |
 | Binding recreated | New ID rejects previous evidence and snapshots even if revision and coordinates repeat. |
 
-These API journeys are covered by PostgreSQL integration tests. CLI and Console
-consumption remain subsequent phases. The existing session contract has a real
-HTTPS/cookie-jar/MFA/Origin/CSRF/revocation integration test for the future ephemeral
-CLI client; no new authentication mechanism or persistent login is introduced.
+These API journeys are covered by PostgreSQL integration tests. The CLI client uses
+the generated, operation-limited Go contract and a new cookie jar for every process.
+It accepts only an absolute HTTPS Control Plane origin, uses system trust plus an
+optional PEM CA, rejects cross-origin redirects, prompts for password and TOTP on
+an interactive terminal with echo disabled, and attempts logout even after command
+cancellation. No password, TOTP, session or insecure-TLS flag exists.
+
+`HTTPPublicationSetup` declares one cluster ID, one Kubernetes HTTP binding, up to
+ten listeners, one hundred domains and one hundred grants. `plan`, `apply` and
+`verify` first compare the live `kube-system` namespace UID with the active cluster
+reported by the Control Plane. They then inspect the Gateway, GatewayClass,
+WorkspacePlacements and consumer namespaces using read-only clients. The inspector
+has no Secret or write capability. Unknown auxiliary status is a warning; an
+unproven cluster identity, missing Gateway, incompatible listener or unproven route
+attachment blocks mutation.
+
+The functional planner emits only `EnsureBinding`, `EnsureDomain` and `EnsureGrant`,
+in that order. Omission never means deletion. `grant revoke`, `domain delete` and
+`binding disconnect` are separate confirmed commands, and the Control Plane rejects
+them while protected dependents remain. Apply recomputes current state, executes
+sequentially at at most ten mutations per second, and never compensates successful
+earlier operations. When a response is lost, the client performs an exact GET and
+accepts only an equal result; absence or difference stops as a conflict. A retry
+therefore begins with a new plan.
+
+Console consumption remains the next phase. No new authentication mechanism or
+persistent login is introduced.
 
 ## Validation
 

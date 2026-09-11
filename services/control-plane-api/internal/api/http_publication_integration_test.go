@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"testing"
@@ -40,6 +41,10 @@ func TestHTTPPublicationAPIIntegratedJourney(t *testing.T) {
 	response = hierarchyRequest(t, server, owner, http.MethodPut, grantPath, "", nil)
 	if response.Code != http.StatusNoContent {
 		t.Fatalf("grant: %d %s", response.Code, response.Body.String())
+	}
+	response = hierarchyRequest(t, server, owner, http.MethodGet, grantPath, "", nil)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"workspaceId":"`+workspace.PublicID+`"`) {
+		t.Fatalf("grant point read: %d %s", response.Code, response.Body.String())
 	}
 	optionsPath := "/api/v1/workspaces/" + workspace.PublicID + "/publication-options?clusterId=" + testAgentInstallationID
 	response = hierarchyRequest(t, server, owner, http.MethodGet, optionsPath, "", nil)
@@ -147,22 +152,31 @@ func TestPublicationAdministrativeListsAreBoundedAndRecoverable(t *testing.T) {
 	if _, err := s.Pool.Exec(t.Context(), `INSERT INTO publication_domains(id,name,kind,created_by,updated_by) SELECT 'test-'||n,'test-'||n||'.internal','Exact',u.id,u.id FROM generate_series(1,101) n CROSS JOIN (SELECT id FROM users ORDER BY id LIMIT 1) u`); err != nil {
 		t.Fatal(err)
 	}
+	cursor := ""
 	for _, page := range []struct {
-		suffix string
-		count  int
-		more   bool
-	}{{"", 100, true}, {"?offset=100", 3, false}} {
-		response := hierarchyRequest(t, server, owner, http.MethodGet, "/api/v1/admin/publication/domains"+page.suffix, "", nil)
+		count int
+		more  bool
+	}{{50, true}, {50, true}, {3, false}} {
+		suffix := "?limit=50"
+		if cursor != "" {
+			suffix += "&cursor=" + url.QueryEscape(cursor)
+		}
+		response := hierarchyRequest(t, server, owner, http.MethodGet, "/api/v1/admin/publication/domains"+suffix, "", nil)
 		var body struct {
-			Items   []store.AdministrativeDomain `json:"items"`
-			HasMore bool                         `json:"hasMore"`
+			Items      []store.AdministrativeDomain `json:"items"`
+			HasMore    bool                         `json:"hasMore"`
+			NextCursor *string                      `json:"nextCursor"`
 		}
 		decodeResponse(t, response, &body)
 		if response.Code != http.StatusOK || len(body.Items) != page.count || body.HasMore != page.more {
 			t.Fatalf("page: %d %+v", response.Code, body)
 		}
+		cursor = ""
+		if body.NextCursor != nil {
+			cursor = *body.NextCursor
+		}
 	}
-	response := hierarchyRequest(t, server, owner, http.MethodGet, "/api/v1/admin/publication/domains?offset=-1", "", nil)
+	response := hierarchyRequest(t, server, owner, http.MethodGet, "/api/v1/admin/publication/domains?cursor=not-base64!", "", nil)
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("invalid pagination: %d", response.Code)
 	}

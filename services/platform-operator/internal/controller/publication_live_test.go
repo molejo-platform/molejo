@@ -149,7 +149,7 @@ func TestLocalGatewayTLSConformance(t *testing.T) {
 	t.Log("Both Host/SNI names serve the same application with a trusted matching certificate")
 	// Existing external Gateway can be inspected without Helm ownership or TLS material.
 	destination := kubernetesbinding.HTTPDestination{BindingID: "binding-one", BindingRevision: 1, SchemaVersion: kubernetesbinding.HTTPBindingSchemaVersion, GatewayNamespace: gateway.Namespace, GatewayName: gateway.Name, SectionName: "apex"}
-	facts, err := kubernetespublication.Inspect(ctx, admin, destination, "example.test", ns)
+	facts, err := kubernetespublication.Inspect(ctx, limited, kubernetespublication.Target{GatewayNamespace: destination.GatewayNamespace, GatewayName: destination.GatewayName, SectionName: destination.SectionName, Hostname: "example.test", ConsumerNamespace: ns})
 	if err != nil || facts.GatewayUID == "" {
 		t.Fatalf("external inspection: %+v %v", facts, err)
 	}

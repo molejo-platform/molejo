@@ -1,0 +1,26 @@
+package: controlplanev1alpha1
+output: contracts/molejo/controlplane/v1alpha1/client.gen.go
+generate:
+  models: true
+  client: true
+output-options:
+  include-operation-ids:
+    - login
+    - completeTOTPLogin
+    - logout
+    - getCluster
+    - getClusterPublicationBinding
+    - putClusterPublicationBinding
+    - deleteClusterPublicationBinding
+    - listPublicationDomains
+    - getPublicationDomain
+    - putPublicationDomain
+    - deletePublicationDomain
+    - listPublicationGrants
+    - getPublicationGrant
+    - putPublicationGrant
+    - deletePublicationGrant
+    - getPublicationDependents
+    - getPublicationOptions
+compatibility:
+  disable-required-readonly-as-pointer: true

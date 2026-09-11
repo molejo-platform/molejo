@@ -3372,6 +3372,9 @@ type ParameterId = string
 // ProjectId defines model for ProjectId.
 type ProjectId = string
 
+// PublicationCursor defines model for PublicationCursor.
+type PublicationCursor = string
+
 // ReleaseId defines model for ReleaseId.
 type ReleaseId = string
 
@@ -3458,14 +3461,18 @@ type PutClusterStorageBindingParams struct {
 
 // GetPublicationDependentsParams defines parameters for GetPublicationDependents.
 type GetPublicationDependentsParams struct {
-	Offset    *int    `form:"offset,omitempty" json:"offset,omitempty"`
-	DomainId  *string `form:"domainId,omitempty" json:"domainId,omitempty"`
-	BindingId *string `form:"bindingId,omitempty" json:"bindingId,omitempty"`
+	// Cursor Opaque keyset cursor returned by the preceding publication page.
+	Cursor    *PublicationCursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit     *Limit             `form:"limit,omitempty" json:"limit,omitempty"`
+	DomainId  *string            `form:"domainId,omitempty" json:"domainId,omitempty"`
+	BindingId *string            `form:"bindingId,omitempty" json:"bindingId,omitempty"`
 }
 
 // ListPublicationDomainsParams defines parameters for ListPublicationDomains.
 type ListPublicationDomainsParams struct {
-	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
+	// Cursor Opaque keyset cursor returned by the preceding publication page.
+	Cursor *PublicationCursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *Limit             `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
 // DeletePublicationDomainParams defines parameters for DeletePublicationDomain.
@@ -3480,7 +3487,9 @@ type PutPublicationDomainParams struct {
 
 // ListPublicationGrantsParams defines parameters for ListPublicationGrants.
 type ListPublicationGrantsParams struct {
-	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
+	// Cursor Opaque keyset cursor returned by the preceding publication page.
+	Cursor *PublicationCursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *Limit             `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
 // ListUsersParams defines parameters for ListUsers.
@@ -3815,8 +3824,10 @@ type ListEnvironmentAppsParams struct {
 
 // GetPublicationOptionsParams defines parameters for GetPublicationOptions.
 type GetPublicationOptionsParams struct {
-	Offset    *int   `form:"offset,omitempty" json:"offset,omitempty"`
-	ClusterId string `form:"clusterId" json:"clusterId"`
+	// Cursor Opaque keyset cursor returned by the preceding publication page.
+	Cursor    *PublicationCursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit     *Limit             `form:"limit,omitempty" json:"limit,omitempty"`
+	ClusterId string             `form:"clusterId" json:"clusterId"`
 }
 
 // ListStorageProfilesParams defines parameters for ListStorageProfiles.
@@ -4227,6 +4238,9 @@ type ServerInterface interface {
 
 	// (DELETE /api/v1/admin/publication/domains/{domainId}/grants/{workspaceId}/{bindingId})
 	DeletePublicationGrant(w http.ResponseWriter, r *http.Request, domainId string, workspaceId string, bindingId string)
+
+	// (GET /api/v1/admin/publication/domains/{domainId}/grants/{workspaceId}/{bindingId})
+	GetPublicationGrant(w http.ResponseWriter, r *http.Request, domainId string, workspaceId string, bindingId string)
 
 	// (PUT /api/v1/admin/publication/domains/{domainId}/grants/{workspaceId}/{bindingId})
 	PutPublicationGrant(w http.ResponseWriter, r *http.Request, domainId string, workspaceId string, bindingId string)
@@ -4705,6 +4719,11 @@ func (_ Unimplemented) ListPublicationGrants(w http.ResponseWriter, r *http.Requ
 
 // (DELETE /api/v1/admin/publication/domains/{domainId}/grants/{workspaceId}/{bindingId})
 func (_ Unimplemented) DeletePublicationGrant(w http.ResponseWriter, r *http.Request, domainId string, workspaceId string, bindingId string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /api/v1/admin/publication/domains/{domainId}/grants/{workspaceId}/{bindingId})
+func (_ Unimplemented) GetPublicationGrant(w http.ResponseWriter, r *http.Request, domainId string, workspaceId string, bindingId string) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -5929,15 +5948,28 @@ func (siw *ServerInterfaceWrapper) GetPublicationDependents(w http.ResponseWrite
 	// Parameter object where we will unmarshal all parameters from the context
 	var params GetPublicationDependentsParams
 
-	// ------------- Optional query parameter "offset" -------------
+	// ------------- Optional query parameter "cursor" -------------
 
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
 	if err != nil {
 		var requiredError *runtime.RequiredParameterError
 		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
 		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
 		}
 		return
 	}
@@ -5988,15 +6020,28 @@ func (siw *ServerInterfaceWrapper) ListPublicationDomains(w http.ResponseWriter,
 	// Parameter object where we will unmarshal all parameters from the context
 	var params ListPublicationDomainsParams
 
-	// ------------- Optional query parameter "offset" -------------
+	// ------------- Optional query parameter "cursor" -------------
 
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
 	if err != nil {
 		var requiredError *runtime.RequiredParameterError
 		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
 		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
 		}
 		return
 	}
@@ -6160,15 +6205,28 @@ func (siw *ServerInterfaceWrapper) ListPublicationGrants(w http.ResponseWriter, 
 	// Parameter object where we will unmarshal all parameters from the context
 	var params ListPublicationGrantsParams
 
-	// ------------- Optional query parameter "offset" -------------
+	// ------------- Optional query parameter "cursor" -------------
 
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
 	if err != nil {
 		var requiredError *runtime.RequiredParameterError
 		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
 		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
 		}
 		return
 	}
@@ -6219,6 +6277,50 @@ func (siw *ServerInterfaceWrapper) DeletePublicationGrant(w http.ResponseWriter,
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.DeletePublicationGrant(w, r, domainId, workspaceId, bindingId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetPublicationGrant operation middleware
+func (siw *ServerInterfaceWrapper) GetPublicationGrant(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "domainId" -------------
+	var domainId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "domainId", chi.URLParam(r, "domainId"), &domainId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "domainId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "workspaceId" -------------
+	var workspaceId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workspaceId", chi.URLParam(r, "workspaceId"), &workspaceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspaceId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "bindingId" -------------
+	var bindingId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "bindingId", chi.URLParam(r, "bindingId"), &bindingId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "bindingId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPublicationGrant(w, r, domainId, workspaceId, bindingId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -11945,15 +12047,28 @@ func (siw *ServerInterfaceWrapper) GetPublicationOptions(w http.ResponseWriter, 
 	// Parameter object where we will unmarshal all parameters from the context
 	var params GetPublicationOptionsParams
 
-	// ------------- Optional query parameter "offset" -------------
+	// ------------- Optional query parameter "cursor" -------------
 
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
 	if err != nil {
 		var requiredError *runtime.RequiredParameterError
 		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
 		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
 		}
 		return
 	}
@@ -12576,6 +12691,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Delete(options.BaseURL+"/api/v1/admin/publication/domains/{domainId}/grants/{workspaceId}/{bindingId}", wrapper.DeletePublicationGrant)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/admin/publication/domains/{domainId}/grants/{workspaceId}/{bindingId}", wrapper.GetPublicationGrant)
 	})
 	r.Group(func(r chi.Router) {
 		r.Put(options.BaseURL+"/api/v1/admin/publication/domains/{domainId}/grants/{workspaceId}/{bindingId}", wrapper.PutPublicationGrant)
@@ -13711,8 +13829,9 @@ type GetPublicationDependentsResponseObject interface {
 }
 
 type GetPublicationDependents200JSONResponse struct {
-	HasMore bool                   `json:"hasMore"`
-	Items   []PublicationDependent `json:"items"`
+	HasMore    bool                   `json:"hasMore"`
+	Items      []PublicationDependent `json:"items"`
+	NextCursor *string                `json:"nextCursor"`
 }
 
 func (response GetPublicationDependents200JSONResponse) VisitGetPublicationDependentsResponse(w http.ResponseWriter) error {
@@ -13753,8 +13872,9 @@ type ListPublicationDomainsResponseObject interface {
 }
 
 type ListPublicationDomains200JSONResponse struct {
-	HasMore bool                `json:"hasMore"`
-	Items   []PublicationDomain `json:"items"`
+	HasMore    bool                `json:"hasMore"`
+	Items      []PublicationDomain `json:"items"`
+	NextCursor *string             `json:"nextCursor"`
 }
 
 func (response ListPublicationDomains200JSONResponse) VisitListPublicationDomainsResponse(w http.ResponseWriter) error {
@@ -13907,8 +14027,9 @@ type ListPublicationGrantsResponseObject interface {
 }
 
 type ListPublicationGrants200JSONResponse struct {
-	HasMore bool               `json:"hasMore"`
-	Items   []PublicationGrant `json:"items"`
+	HasMore    bool               `json:"hasMore"`
+	Items      []PublicationGrant `json:"items"`
+	NextCursor *string            `json:"nextCursor"`
 }
 
 func (response ListPublicationGrants200JSONResponse) VisitListPublicationGrantsResponse(w http.ResponseWriter) error {
@@ -13954,6 +14075,58 @@ func (response DeletePublicationGrantdefaultJSONResponse) VisitDeletePublication
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPublicationGrantRequestObject struct {
+	DomainId    string `json:"domainId"`
+	WorkspaceId string `json:"workspaceId"`
+	BindingId   string `json:"bindingId"`
+}
+
+type GetPublicationGrantResponseObject interface {
+	VisitGetPublicationGrantResponse(w http.ResponseWriter) error
+}
+
+type GetPublicationGrant200JSONResponse PublicationGrant
+
+func (response GetPublicationGrant200JSONResponse) VisitGetPublicationGrantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPublicationGrant403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response GetPublicationGrant403JSONResponse) VisitGetPublicationGrantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPublicationGrant404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response GetPublicationGrant404JSONResponse) VisitGetPublicationGrantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -20423,8 +20596,9 @@ type GetPublicationOptionsResponseObject interface {
 }
 
 type GetPublicationOptions200JSONResponse struct {
-	HasMore bool                `json:"hasMore"`
-	Items   []PublicationOption `json:"items"`
+	HasMore    bool                `json:"hasMore"`
+	Items      []PublicationOption `json:"items"`
+	NextCursor *string             `json:"nextCursor"`
 }
 
 func (response GetPublicationOptions200JSONResponse) VisitGetPublicationOptionsResponse(w http.ResponseWriter) error {
@@ -20638,6 +20812,9 @@ type StrictServerInterface interface {
 
 	// (DELETE /api/v1/admin/publication/domains/{domainId}/grants/{workspaceId}/{bindingId})
 	DeletePublicationGrant(ctx context.Context, request DeletePublicationGrantRequestObject) (DeletePublicationGrantResponseObject, error)
+
+	// (GET /api/v1/admin/publication/domains/{domainId}/grants/{workspaceId}/{bindingId})
+	GetPublicationGrant(ctx context.Context, request GetPublicationGrantRequestObject) (GetPublicationGrantResponseObject, error)
 
 	// (PUT /api/v1/admin/publication/domains/{domainId}/grants/{workspaceId}/{bindingId})
 	PutPublicationGrant(ctx context.Context, request PutPublicationGrantRequestObject) (PutPublicationGrantResponseObject, error)
@@ -21732,6 +21909,34 @@ func (sh *strictHandler) DeletePublicationGrant(w http.ResponseWriter, r *http.R
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(DeletePublicationGrantResponseObject); ok {
 		if err := validResponse.VisitDeletePublicationGrantResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetPublicationGrant operation middleware
+func (sh *strictHandler) GetPublicationGrant(w http.ResponseWriter, r *http.Request, domainId string, workspaceId string, bindingId string) {
+	var request GetPublicationGrantRequestObject
+
+	request.DomainId = domainId
+	request.WorkspaceId = workspaceId
+	request.BindingId = bindingId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetPublicationGrant(ctx, request.(GetPublicationGrantRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetPublicationGrant")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetPublicationGrantResponseObject); ok {
+		if err := validResponse.VisitGetPublicationGrantResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

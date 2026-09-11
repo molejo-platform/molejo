@@ -70,6 +70,8 @@ type Check struct {
 // Report summarizes the converged installation without printing credentials by default.
 type Report struct {
 	AlreadyInstalled bool
+	ClusterID        string
+	ClusterUID       string
 	OwnerPassword    string
 	DatabasePassword string
 	Checks           []Check
@@ -100,6 +102,13 @@ func (*Installer) Install(ctx context.Context, options Options) (Report, error) 
 	}
 	if err = requireClusterAgent(ctx, client); err != nil {
 		return Report{}, err
+	}
+	clusterIdentity, err := client.CoreV1().Namespaces().Get(ctx, "kube-system", metav1.GetOptions{})
+	if err != nil {
+		return Report{}, fmt.Errorf("read kube-system cluster identity: %w", err)
+	}
+	if clusterIdentity.UID == "" {
+		return Report{}, errors.New("kube-system cluster identity is empty")
 	}
 	helmState, err := inspectControlPlaneRelease(options.ContextName, options)
 	if err != nil {
@@ -197,6 +206,8 @@ func (*Installer) Install(ctx context.Context, options Options) (Report, error) 
 	}
 	return Report{
 		AlreadyInstalled: helmState.installed && !agentChanged,
+		ClusterID:        bootstrap.installationID,
+		ClusterUID:       string(clusterIdentity.UID),
 		OwnerPassword:    bootstrap.ownerPassword,
 		DatabasePassword: database.password,
 		Checks:           checks,

@@ -137,8 +137,8 @@ func (s *Store) PublicationSnapshotForDeployment(ctx context.Context, deployment
 	return snapshot, nil
 }
 
-func (s *Store) PublicationOptions(ctx context.Context, workspaceID int64, clusterID string, offset int) ([]PublicationOption, error) {
-	rows, err := s.Pool.Query(ctx, `SELECT d.id,d.name,d.kind,d.reserved_names,d.version,d.created_at,d.updated_at,b.id,b.configuration,b.observation,b.expires_at FROM publication_grants g JOIN publication_domains d ON d.id=g.domain_id JOIN cluster_publication_bindings b ON b.id=g.binding_id JOIN agent_installations i ON i.id=b.cluster_id JOIN workspace_clusters wc ON wc.workspace_id=g.workspace_id AND wc.installation_id=b.cluster_id WHERE g.workspace_id=$1 AND i.public_id=$2 ORDER BY d.id,b.id LIMIT 101 OFFSET $3`, workspaceID, clusterID, offset)
+func (s *Store) PublicationOptions(ctx context.Context, workspaceID int64, clusterID, afterDomainID, afterBindingID string, limit int) ([]PublicationOption, error) {
+	rows, err := s.Pool.Query(ctx, `SELECT d.id,d.name,d.kind,d.reserved_names,d.version,d.created_at,d.updated_at,b.id,b.configuration,b.observation,b.expires_at FROM publication_grants g JOIN publication_domains d ON d.id=g.domain_id JOIN cluster_publication_bindings b ON b.id=g.binding_id JOIN agent_installations i ON i.id=b.cluster_id JOIN workspace_clusters wc ON wc.workspace_id=g.workspace_id AND wc.installation_id=b.cluster_id WHERE g.workspace_id=$1 AND i.public_id=$2 AND (d.id,b.id)>($3,$4) ORDER BY d.id,b.id LIMIT $5`, workspaceID, clusterID, afterDomainID, afterBindingID, limit+1)
 	if err != nil {
 		return nil, err
 	}

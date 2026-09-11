@@ -27,9 +27,24 @@ type Facts struct {
 	Conditions        []metav1.Condition
 }
 
+// Target contains only the stable Kubernetes coordinates required for a
+// read-only inspection. Product binding identity and revision belong to the
+// authorization and execution contracts, not to this observer.
+type Target struct {
+	GatewayNamespace  string
+	GatewayName       string
+	SectionName       string
+	Hostname          string
+	ConsumerNamespace string
+}
+
 // Inspect consumes an existing Gateway without recipe, Helm, or Secret access.
-func Inspect(ctx context.Context, reader Reader, target kubernetesbinding.HTTPDestination, hostname, consumerNamespace string) (Facts, error) {
-	if err := target.Validate(); err != nil {
+func Inspect(ctx context.Context, reader Reader, target Target) (Facts, error) {
+	validationTarget := kubernetesbinding.HTTPDestination{BindingID: "inspection", BindingRevision: 1, SchemaVersion: kubernetesbinding.HTTPBindingSchemaVersion, GatewayNamespace: target.GatewayNamespace, GatewayName: target.GatewayName, SectionName: target.SectionName}
+	if err := validationTarget.Validate(); err != nil || target.Hostname == "" || target.ConsumerNamespace == "" {
+		if err == nil {
+			err = errors.New("publication_inspection_target_invalid")
+		}
 		return Facts{}, err
 	}
 	gateway := &gatewayv1.Gateway{}
@@ -37,7 +52,7 @@ func Inspect(ctx context.Context, reader Reader, target kubernetesbinding.HTTPDe
 		return Facts{}, err
 	}
 	namespace := &corev1.Namespace{}
-	namespaceErr := reader.Get(ctx, client.ObjectKey{Name: consumerNamespace}, namespace)
+	namespaceErr := reader.Get(ctx, client.ObjectKey{Name: target.ConsumerNamespace}, namespace)
 	class := &gatewayv1.GatewayClass{}
 	classErr := reader.Get(ctx, client.ObjectKey{Name: string(gateway.Spec.GatewayClassName)}, class)
 	if classErr != nil {
@@ -46,7 +61,7 @@ func Inspect(ctx context.Context, reader Reader, target kubernetesbinding.HTTPDe
 	if namespaceErr != nil {
 		namespace = nil
 	}
-	facts := Evaluate(gateway, class, namespace, target.SectionName, hostname)
+	facts := Evaluate(gateway, class, namespace, target.SectionName, target.Hostname)
 	return facts, errors.Join(classErr, namespaceErr)
 }
 

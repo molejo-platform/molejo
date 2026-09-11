@@ -3,6 +3,7 @@ package store
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -12,6 +13,38 @@ import (
 	"github.com/molejo-platform/molejo/packages/runtimecontract"
 	"github.com/molejo-platform/molejo/services/control-plane-api/internal/domain"
 )
+
+func TestPublicationCatalogUsesBoundedKeysetPagesAndPointGrantReads(t *testing.T) {
+	ctx := t.Context()
+	s, wid, actor := newIntegrationFixture(t)
+	for i := range 101 {
+		id := fmt.Sprintf("catalog-%03d", i)
+		name := fmt.Sprintf("catalog-%03d.example.test", i)
+		if _, err := s.Pool.Exec(ctx, `INSERT INTO publication_domains(id,name,kind,reserved_names,created_by,updated_by) VALUES($1,$2,'Exact','[]',$3,$3)`, id, name, actor); err != nil {
+			t.Fatal(err)
+		}
+	}
+	first, err := s.PublicationDomains(ctx, "", 50)
+	if err != nil || len(first) != 51 {
+		t.Fatalf("first keyset page: %d %v", len(first), err)
+	}
+	first = first[:50]
+	if _, err = s.Pool.Exec(ctx, `INSERT INTO publication_domains(id,name,kind,reserved_names,created_by,updated_by) VALUES('catalog-025a','catalog-025a.example.test','Exact','[]',$1,$1)`, actor); err != nil {
+		t.Fatal(err)
+	}
+	second, err := s.PublicationDomains(ctx, first[len(first)-1].ID, 50)
+	if err != nil || len(second) != 51 || second[0].ID <= first[len(first)-1].ID {
+		t.Fatalf("second keyset page: %+v %v", second, err)
+	}
+	var workspaceID, bindingID string
+	if err = s.Pool.QueryRow(ctx, `SELECT w.public_id,g.binding_id FROM publication_grants g JOIN workspaces w ON w.id=g.workspace_id WHERE g.workspace_id=$1 LIMIT 1`, wid).Scan(&workspaceID, &bindingID); err != nil {
+		t.Fatal(err)
+	}
+	grant, err := s.PublicationGrant(ctx, "default", workspaceID, bindingID)
+	if err != nil || grant.WorkspaceID != workspaceID || grant.BindingID != bindingID {
+		t.Fatalf("point grant read: %+v %v", grant, err)
+	}
+}
 
 func TestHTTPPublicationReservationsSurviveSaveSupersessionAndWithdrawal(t *testing.T) {
 	ctx := t.Context()
@@ -47,7 +80,7 @@ func TestHTTPPublicationReservationsSurviveSaveSupersessionAndWithdrawal(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	deps, err := s.PublicationDependents(ctx, "default", "", 0)
+	deps, err := s.PublicationDependents(ctx, "default", "", "", "", "", 100)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +146,7 @@ func TestHTTPPublicationReservationsSurviveSaveSupersessionAndWithdrawal(t *test
 	if err = s.FinishAttempt(ctx, cluster, apply.PublicID, apply.FencingToken, AttemptResult{RuntimeUID: "test-runtime"}); err != nil {
 		t.Fatal(err)
 	}
-	deps, err = s.PublicationDependents(ctx, "default", "", 0)
+	deps, err = s.PublicationDependents(ctx, "default", "", "", "", "", 100)
 	if err != nil || len(deps) != 3 {
 		t.Fatalf("late ACK released claims: %+v %v", deps, err)
 	}
@@ -133,7 +166,7 @@ func TestHTTPPublicationReservationsSurviveSaveSupersessionAndWithdrawal(t *test
 	if err = s.CompleteAppEnvironmentDeletion(ctx, claimed, "terminal barrier and child removal confirmed"); err != nil {
 		t.Fatal(err)
 	}
-	deps, err = s.PublicationDependents(ctx, "default", "", 0)
+	deps, err = s.PublicationDependents(ctx, "default", "", "", "", "", 100)
 	if err != nil || len(deps) != 0 {
 		t.Fatalf("claims after confirmed withdrawal: %+v %v", deps, err)
 	}
@@ -339,7 +372,7 @@ func TestHTTPGrantCannotBeBorrowedByAnotherWorkspace(t *testing.T) {
 	if err := s.Pool.QueryRow(ctx, `SELECT public_id FROM agent_installations LIMIT 1`).Scan(&cluster); err != nil {
 		t.Fatal(err)
 	}
-	choices, err := s.PublicationOptions(ctx, wid, cluster, 0)
+	choices, err := s.PublicationOptions(ctx, wid, cluster, "", "", 100)
 	if err != nil || len(choices) != 0 {
 		t.Fatalf("borrowed catalogue: %+v %v", choices, err)
 	}

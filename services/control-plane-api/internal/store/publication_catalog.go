@@ -61,8 +61,8 @@ func scanDomain(row pgx.Row) (AdministrativeDomain, error) {
 
 const domainColumns = `id,name,kind,reserved_names,version,created_at,updated_at`
 
-func (s *Store) PublicationDomains(ctx context.Context, offset int) ([]AdministrativeDomain, error) {
-	rows, err := s.Pool.Query(ctx, `SELECT `+domainColumns+` FROM publication_domains ORDER BY id LIMIT 101 OFFSET $1`, offset)
+func (s *Store) PublicationDomains(ctx context.Context, afterID string, limit int) ([]AdministrativeDomain, error) {
+	rows, err := s.Pool.Query(ctx, `SELECT `+domainColumns+` FROM publication_domains WHERE id>$1 ORDER BY id LIMIT $2`, afterID, limit+1)
 	if err != nil {
 		return nil, err
 	}
@@ -234,11 +234,7 @@ func (s *Store) SetPublicationGrant(ctx context.Context, domainID, workspaceID, 
 	return tx.Commit(ctx)
 }
 
-func publicationDependents(ctx context.Context, tx pgx.Tx, domainID, bindingID string, offset ...int) ([]PublicationDependent, error) {
-	skip := 0
-	if len(offset) > 0 {
-		skip = offset[0]
-	}
+func publicationDependents(ctx context.Context, tx pgx.Tx, domainID, bindingID, afterApp, afterHostname, afterKind string, limit int) ([]PublicationDependent, error) {
 	rows, err := tx.Query(ctx, `WITH refs AS (
  SELECT ae.public_id,c.hostname,c.desired_configuration_version,c.current_configuration_version,
  EXISTS(SELECT 1 FROM publication_execution_claims ec JOIN deployments d ON d.id=ec.deployment_id WHERE d.app_environment_id=ae.id AND ec.hostname=c.hostname) executable
@@ -247,7 +243,9 @@ func publicationDependents(ctx context.Context, tx pgx.Tx, domainID, bindingID s
  ) SELECT public_id,hostname,kind FROM refs CROSS JOIN LATERAL (
  SELECT 'Desired' kind WHERE desired_configuration_version IS NOT NULL
  UNION ALL SELECT 'Applied' WHERE current_configuration_version IS NOT NULL
- UNION ALL SELECT 'Executable' WHERE executable) kinds ORDER BY public_id,hostname,kind LIMIT 101 OFFSET $3`, domainID, bindingID, skip)
+ UNION ALL SELECT 'Executable' WHERE executable) kinds
+ WHERE (public_id,hostname,kind)>($3,$4,$5)
+ ORDER BY public_id,hostname,kind LIMIT $6`, domainID, bindingID, afterApp, afterHostname, afterKind, limit+1)
 	if err != nil {
 		return nil, err
 	}
@@ -263,13 +261,13 @@ func publicationDependents(ctx context.Context, tx pgx.Tx, domainID, bindingID s
 	return result, rows.Err()
 }
 
-func (s *Store) PublicationDependents(ctx context.Context, domainID, bindingID string, offset int) ([]PublicationDependent, error) {
+func (s *Store) PublicationDependents(ctx context.Context, domainID, bindingID, afterApp, afterHostname, afterKind string, limit int) ([]PublicationDependent, error) {
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback(ctx)
-	return publicationDependents(ctx, tx, domainID, bindingID, offset)
+	return publicationDependents(ctx, tx, domainID, bindingID, afterApp, afterHostname, afterKind, limit)
 }
 
 func (s *Store) PublicationDomain(ctx context.Context, id string) (AdministrativeDomain, error) {
@@ -283,8 +281,8 @@ type PublicationGrant struct {
 	CreatedAt   time.Time `json:"createdAt"`
 }
 
-func (s *Store) PublicationGrants(ctx context.Context, id string, offset int) ([]PublicationGrant, error) {
-	rows, err := s.Pool.Query(ctx, `SELECT g.domain_id,w.public_id,g.binding_id,g.created_at FROM publication_grants g JOIN workspaces w ON w.id=g.workspace_id WHERE g.domain_id=$1 ORDER BY w.public_id,g.binding_id LIMIT 101 OFFSET $2`, id, offset)
+func (s *Store) PublicationGrants(ctx context.Context, id, afterWorkspaceID, afterBindingID string, limit int) ([]PublicationGrant, error) {
+	rows, err := s.Pool.Query(ctx, `SELECT g.domain_id,w.public_id,g.binding_id,g.created_at FROM publication_grants g JOIN workspaces w ON w.id=g.workspace_id WHERE g.domain_id=$1 AND (w.public_id,g.binding_id)>($2,$3) ORDER BY w.public_id,g.binding_id LIMIT $4`, id, afterWorkspaceID, afterBindingID, limit+1)
 	if err != nil {
 		return nil, err
 	}
@@ -298,4 +296,13 @@ func (s *Store) PublicationGrants(ctx context.Context, id string, offset int) ([
 		items = append(items, item)
 	}
 	return items, rows.Err()
+}
+
+func (s *Store) PublicationGrant(ctx context.Context, domainID, workspaceID, bindingID string) (PublicationGrant, error) {
+	var item PublicationGrant
+	err := s.Pool.QueryRow(ctx, `SELECT g.domain_id,w.public_id,g.binding_id,g.created_at FROM publication_grants g JOIN workspaces w ON w.id=g.workspace_id WHERE g.domain_id=$1 AND w.public_id=$2 AND g.binding_id=$3`, domainID, workspaceID, bindingID).Scan(&item.DomainID, &item.WorkspaceID, &item.BindingID, &item.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		err = ErrNotFound
+	}
+	return item, err
 }

@@ -1903,8 +1903,10 @@ paths:
   /api/v1/admin/publication/domains:
     get:
       operationId: listPublicationDomains
+      security: [{ sessionCookie: [] }]
       parameters:
-        - { name: offset, in: query, schema: { type: integer, minimum: 0, maximum: 1000000, default: 0 } }
+        - { $ref: '#/components/parameters/PublicationCursor' }
+        - { $ref: '#/components/parameters/Limit' }
       responses:
         default:
           description: Sanitized API error
@@ -1915,10 +1917,11 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [items, hasMore]
+                required: [items, hasMore, nextCursor]
                 additionalProperties: false
                 properties:
                   hasMore: { type: boolean }
+                  nextCursor: { type: [string, 'null'], maxLength: 512 }
                   items:
                     type: array
                     maxItems: 100
@@ -1928,12 +1931,14 @@ paths:
       - { name: domainId, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
     get:
       operationId: getPublicationDomain
+      security: [{ sessionCookie: [] }]
       responses:
         '200':
           description: Current administrative revision
           content: { application/json: { schema: { $ref: '#/components/schemas/PublicationDomain' } } }
     put:
       operationId: putPublicationDomain
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       parameters:
         - { name: If-Match, in: header, schema: { type: integer, minimum: 1 } }
       requestBody:
@@ -1957,6 +1962,7 @@ paths:
                 $ref: '#/components/schemas/PublicationDomain'
     delete:
       operationId: deletePublicationDomain
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       parameters:
         - { name: If-Match, in: header, required: true, schema: { type: integer, minimum: 1 } }
       responses:
@@ -1968,9 +1974,11 @@ paths:
   /api/v1/admin/publication/domains/{domainId}/grants:
     get:
       operationId: listPublicationGrants
+      security: [{ sessionCookie: [] }]
       parameters:
         - { name: domainId, in: path, required: true, schema: { type: string, maxLength: 128 } }
-        - { name: offset, in: query, schema: { type: integer, minimum: 0, maximum: 1000000, default: 0 } }
+        - { $ref: '#/components/parameters/PublicationCursor' }
+        - { $ref: '#/components/parameters/Limit' }
       responses:
         '200':
           description: Administrative grants
@@ -1979,9 +1987,10 @@ paths:
               schema:
                 type: object
                 additionalProperties: false
-                required: [items, hasMore]
+                required: [items, hasMore, nextCursor]
                 properties:
                   hasMore: { type: boolean }
+                  nextCursor: { type: [string, 'null'], maxLength: 512 }
                   items:
                     type: array
                     maxItems: 100
@@ -1991,8 +2000,18 @@ paths:
       - { name: domainId, in: path, required: true, schema: { type: string, maxLength: 128 } }
       - { name: workspaceId, in: path, required: true, schema: { type: string, maxLength: 128 } }
       - { name: bindingId, in: path, required: true, schema: { type: string, maxLength: 128 } }
+    get:
+      operationId: getPublicationGrant
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Current administrative grant
+          content: { application/json: { schema: { $ref: '#/components/schemas/PublicationGrant' } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
     put:
       operationId: putPublicationGrant
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       responses:
         default:
           description: Sanitized API error
@@ -2001,6 +2020,7 @@ paths:
           description: Grant mutation completed
     delete:
       operationId: deletePublicationGrant
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       responses:
         default:
           description: Sanitized API error
@@ -2010,8 +2030,10 @@ paths:
   /api/v1/admin/publication/dependents:
     get:
       operationId: getPublicationDependents
+      security: [{ sessionCookie: [] }]
       parameters:
-        - { name: offset, in: query, schema: { type: integer, minimum: 0, maximum: 1000000, default: 0 } }
+        - { $ref: '#/components/parameters/PublicationCursor' }
+        - { $ref: '#/components/parameters/Limit' }
         - { name: domainId, in: query, schema: { type: string, maxLength: 128 } }
         - { name: bindingId, in: query, schema: { type: string, maxLength: 128 } }
       responses:
@@ -2024,10 +2046,11 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [items, hasMore]
+                required: [items, hasMore, nextCursor]
                 additionalProperties: false
                 properties:
                   hasMore: { type: boolean }
+                  nextCursor: { type: [string, 'null'], maxLength: 512 }
                   items:
                     type: array
                     maxItems: 100
@@ -2035,8 +2058,10 @@ paths:
   /api/v1/workspaces/{workspaceId}/publication-options:
     get:
       operationId: getPublicationOptions
+      security: [{ sessionCookie: [] }]
       parameters:
-        - { name: offset, in: query, schema: { type: integer, minimum: 0, maximum: 1000000, default: 0 } }
+        - { $ref: '#/components/parameters/PublicationCursor' }
+        - { $ref: '#/components/parameters/Limit' }
         - { name: workspaceId, in: path, required: true, schema: { type: string } }
         - { name: clusterId, in: query, required: true, schema: { type: string } }
       responses:
@@ -2049,10 +2074,11 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [items, hasMore]
+                required: [items, hasMore, nextCursor]
                 additionalProperties: false
                 properties:
                   hasMore: { type: boolean }
+                  nextCursor: { type: [string, 'null'], maxLength: 512 }
                   items:
                     type: array
                     maxItems: 100
@@ -2075,6 +2101,11 @@ components:
       bearerFormat: Molejo service account token
       description: When Authorization is present on a dual-authentication operation, bearer authentication is authoritative and the server never falls back to a session cookie.
   parameters:
+    PublicationCursor:
+      name: cursor
+      in: query
+      description: Opaque keyset cursor returned by the preceding publication page.
+      schema: { type: string, minLength: 1, maxLength: 512 }
     Cursor:
       name: cursor
       in: query

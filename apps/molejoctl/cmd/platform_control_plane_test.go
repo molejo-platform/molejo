@@ -23,6 +23,8 @@ func (f *fakeControlPlaneInstaller) Install(_ context.Context, options controlpl
 
 func TestControlPlaneInstallUsesContextAndVersion(t *testing.T) {
 	installer := &fakeControlPlaneInstaller{report: controlplaneinstall.Report{
+		ClusterID:        "cls-abcdefghijklmnopqrst",
+		ClusterUID:       "cluster-uid",
 		OwnerPassword:    "secret-owner-password",
 		DatabasePassword: "secret-database-password",
 		Checks:           []controlplaneinstall.Check{{Name: "Cluster Agent", Detail: "Paired", Healthy: true}},
@@ -34,7 +36,7 @@ func TestControlPlaneInstallUsesContextAndVersion(t *testing.T) {
 	if installer.options.ContextName != "molejo-k3s" || installer.options.Version != "0.1.0-alpha.3" || installer.options.StorageClass != "local-path" {
 		t.Fatalf("options=%+v", installer.options)
 	}
-	if !strings.Contains(output, "Cluster Agent") || !strings.Contains(output, "Result: healthy") {
+	if !strings.Contains(output, "Cluster Agent") || !strings.Contains(output, "Result: healthy") || !strings.Contains(output, "Cluster ID: cls-abcdefghijklmnopqrst") || !strings.Contains(output, "Cluster UID: cluster-uid") {
 		t.Fatalf("output=%q", output)
 	}
 	if strings.Contains(output, "secret-owner-password") || strings.Contains(output, "secret-database-password") {

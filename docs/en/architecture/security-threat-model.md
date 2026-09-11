@@ -109,6 +109,7 @@ credentials or secret values.
 | TM-14 | SSRF / A01 | Provider endpoint or webhook target supplied by a Workspace actor reaches metadata or internal services. | Provider endpoints are installation/operator configuration, typed allowlisted schemes/hosts, no arbitrary URL in runtime commands. | Adapter validation and blocked private/metadata target tests. |
 | TM-15 | Exceptional condition / A10 | Partial provisioning leaves a namespace privileged, orphaned, or usable before policy is ready. | Condition-based state machine, access granted only after ownership checks, retry-safe plans, finalizers/explicit deletion policy, no success before all required conditions. | Envtest interruption and recovery matrix. |
 | TM-16 | Tampering / A01/A08 | Compromised discovery or Agent evidence activates a malicious or unintended storage, publication, or telemetry binding. | Typed Control Plane binding owned by an authenticated Cluster Operator workflow; Agent evidence is read-only and cannot activate candidates. | API authorization/admission tests and a negative observation-to-binding mutation test. |
+| TM-17 | Spoofing / information disclosure / A02 | Administrator credentials or a reusable session leak through CLI flags, files, output, redirects, or process lifetime. | Interactive no-echo password/TOTP input, per-invocation cookie jar, validated HTTPS trust, cross-origin redirect refusal, sanitized errors, bounded responses and best-effort logout. | HTTPS client tests cover TLS/CA, cookies, MFA, Origin/CSRF, redirects and revocation; Cobra exposes no credential or insecure-TLS flag. |
 
 ## Current implementation evidence and gaps
 
@@ -146,10 +147,12 @@ optional capability state and do not make the core application loop unhealthy.
   silently change desired application state.
 - Agent observations and discovered candidates cannot create or activate a
   Control Plane binding.
+- Human CLI credentials are accepted only from an interactive no-echo terminal;
+  they are never flags, environment configuration, persisted session state or output.
 - A cluster administrator can always override Molejo controls; this actor is
   outside Molejo tenant isolation.
 
-## HTTP publication foundation (TM-04, TM-05, TM-07, TM-16)
+## HTTP publication foundation (TM-04, TM-05, TM-07, TM-16, TM-17)
 
 The [publication contract](http-publication.md) rejects legacy or partial runtime
 payloads before effects, fixes a per-address Gateway/listener target, and preserves
@@ -159,6 +162,12 @@ Molejo owns this label on Workspace and control-plane namespaces. The label is a
 infrastructure attachment boundary, not a product domain grant. Workloads must
 not be allowed to mutate namespaces, AppDeployments or HTTPRoutes directly.
 External Gateway inspection requires neither Helm ownership nor Secret reads.
+
+The molejoctl publication workflow separates Kubernetes credentials from the
+Installation Administrator session. It verifies the live `kube-system` UID against
+the active Control Plane Cluster before mutation, stores no human session, and
+never treats an observation as product authorization. A lost write response is
+resolved by an exact authorized read; the CLI does not blindly retry a mutation.
 
 CP result fencing and a missing Kubernetes object alone do not prove that a late
 Apply cannot recreate a deleted route. Phase-two operation/claim transactions must
