@@ -1,7 +1,9 @@
 package conformance
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/url"
@@ -61,6 +63,64 @@ func TestReporterPersistsPartialRunAndReloadsIt(t *testing.T) {
 	}
 	if junitInfo.Mode().Perm() != 0o600 {
 		t.Fatalf("JUnit mode=%v, want 600", junitInfo.Mode().Perm())
+	}
+}
+
+func TestReporterRejectsExistingLedgerWithoutChangingIt(t *testing.T) {
+	directory := t.TempDir()
+	reporter, err := NewReporter(directory, "test", "revision-1", "run-1", Profile{ID: "test", Version: "v1"}, Target{ClusterID: "cluster", Disposable: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = reporter.AddResource(ResourceRecord{Kind: "App", ID: "app-1", RunID: "run-1", State: "created"}); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(directory, "report.json")
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err = NewReporter(directory, "test", "revision-2", "run-2", Profile{ID: "test", Version: "v1"}, Target{ClusterID: "cluster", Disposable: true}); err == nil || !strings.Contains(err.Error(), "already contains report.json") {
+		t.Fatalf("second reporter error=%v", err)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(after, before) {
+		t.Fatal("second reporter changed the existing ownership ledger")
+	}
+}
+
+func TestReporterClaimsOutputDirectoryAtomically(t *testing.T) {
+	directory := t.TempDir()
+	start := make(chan struct{})
+	results := make(chan error, 2)
+	for _, runID := range []string{"run-1", "run-2"} {
+		go func() {
+			<-start
+			_, err := NewReporter(directory, "test", "revision", runID, Profile{ID: "test", Version: "v1"}, Target{ClusterID: "cluster", Disposable: true})
+			results <- err
+		}()
+	}
+	close(start)
+
+	succeeded, rejected := 0, 0
+	for range 2 {
+		if err := <-results; err == nil {
+			succeeded++
+		} else if strings.Contains(err.Error(), "already contains report.json") {
+			rejected++
+		} else {
+			t.Fatalf("unexpected reporter error: %v", err)
+		}
+	}
+	if succeeded != 1 || rejected != 1 {
+		t.Fatalf("reporter claims succeeded=%d rejected=%d, want 1 each", succeeded, rejected)
+	}
+	if _, err := LoadReporter(directory); err != nil {
+		t.Fatalf("load winning report: %v", err)
 	}
 }
 
@@ -161,6 +221,89 @@ func TestCleanupUsesReverseLedgerOrderAndRejectsForeignEntries(t *testing.T) {
 		Headers: map[string]string{"Authorization": "edited"}, Required: true,
 	}, reporter.Snapshot()) {
 		t.Fatal("cleanup accepted a header outside the runner allowlist")
+	}
+}
+
+func TestCleanupWaitsForAppEnvironmentOperationAndResumesAfterObservationFailure(t *testing.T) {
+	observationAvailable := false
+	var requests []string
+	transport := roundTripperFunc(func(request *http.Request) (*http.Response, error) {
+		requests = append(requests, request.Method+" "+request.URL.Path)
+		switch {
+		case request.Method == http.MethodDelete:
+			return &http.Response{StatusCode: http.StatusAccepted, Body: io.NopCloser(strings.NewReader(`{"id":"op-withdraw","status":"Pending"}`)), Header: make(http.Header)}, nil
+		case request.Method == http.MethodGet && request.URL.Path == "/api/v1/operations/op-withdraw":
+			if !observationAvailable {
+				return nil, errors.New("operation observation unavailable")
+			}
+			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"id":"op-withdraw","status":"Succeeded"}`)), Header: make(http.Header)}, nil
+		default:
+			t.Fatalf("unexpected request: %s %s", request.Method, request.URL.Path)
+			return nil, nil
+		}
+	})
+	baseURL, _ := url.Parse("https://control.example")
+	client := &Client{baseURL: baseURL, http: &http.Client{Transport: transport}}
+	reporter, err := NewReporter(t.TempDir(), "test", "revision", "run-async", Profile{ID: "test", Version: "v1"}, Target{ClusterID: "cluster", Disposable: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = reporter.SetOutputs(RunOutputs{WorkspaceID: "ws"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, resource := range []ResourceRecord{
+		{Kind: "Project", ID: "project", RunID: "run-async", Required: false, State: "created"},
+		{Kind: "App", ID: "app", RunID: "run-async", Required: false, State: "created"},
+		{Kind: "AppEnvironment", ID: "target", RunID: "run-async", CleanupPath: "/api/v1/workspaces/ws/projects/project/apps/app/environments/target", Headers: map[string]string{"If-Match": "1", "Idempotency-Key": "conformance-run-async-withdraw"}, Required: true, State: "created"},
+	} {
+		if err = reporter.AddResource(resource); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	result, err := cleanupResources(reporter, client)
+	if err != nil || result.Status != StatusFail || reporter.Snapshot().Resources[2].State != "failed" {
+		t.Fatalf("first cleanup=%+v state=%q err=%v", result, reporter.Snapshot().Resources[2].State, err)
+	}
+	observationAvailable = true
+	result, err = cleanupResources(reporter, client)
+	if err != nil || result.Status != StatusPass || reporter.Snapshot().Resources[2].State != "archived" {
+		t.Fatalf("resumed cleanup=%+v state=%q err=%v", result, reporter.Snapshot().Resources[2].State, err)
+	}
+	want := []string{
+		"DELETE /api/v1/workspaces/ws/projects/project/apps/app/environments/target",
+		"GET /api/v1/operations/op-withdraw",
+		"DELETE /api/v1/workspaces/ws/projects/project/apps/app/environments/target",
+		"GET /api/v1/operations/op-withdraw",
+	}
+	if !reflect.DeepEqual(requests, want) {
+		t.Fatalf("requests=%v, want %v", requests, want)
+	}
+}
+
+func TestCleanupRejectsAcceptedStatusForSynchronousResource(t *testing.T) {
+	transport := roundTripperFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusAccepted, Body: io.NopCloser(strings.NewReader(`{"id":"unexpected-operation"}`)), Header: make(http.Header)}, nil
+	})
+	baseURL, _ := url.Parse("https://control.example")
+	client := &Client{baseURL: baseURL, http: &http.Client{Transport: transport}}
+	reporter, err := NewReporter(t.TempDir(), "test", "revision", "run-sync", Profile{ID: "test", Version: "v1"}, Target{ClusterID: "cluster", Disposable: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = reporter.SetOutputs(RunOutputs{WorkspaceID: "ws"}); err != nil {
+		t.Fatal(err)
+	}
+	if err = reporter.AddResource(ResourceRecord{Kind: "Project", ID: "project", RunID: "run-sync", CleanupPath: "/api/v1/workspaces/ws/projects/project", Headers: map[string]string{"If-Match": "1"}, Required: true, State: "created"}); err != nil {
+		t.Fatal(err)
+	}
+
+	result, cleanupErr := cleanupResources(reporter, client)
+	if cleanupErr != nil {
+		t.Fatal(cleanupErr)
+	}
+	if result.Status != StatusFail || len(result.Resources) != 1 || result.Resources[0].State != "failed" || !strings.Contains(result.Reason, "HTTP 202") {
+		t.Fatalf("cleanup=%+v", result)
 	}
 }
 

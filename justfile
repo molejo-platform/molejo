@@ -19,6 +19,15 @@ fmt-check:
 lint:
     GOCACHE="${GOCACHE:-/tmp/molejo-go-cache}" go -C tools build -o /tmp/molejo-golangci-lint github.com/golangci/golangci-lint/v2/cmd/golangci-lint
     GOCACHE="${GOCACHE:-/tmp/molejo-go-cache}" GOLANGCI_LINT_CACHE="${GOLANGCI_LINT_CACHE:-/tmp/molejo-golangci-cache}" /tmp/molejo-golangci-lint run ./...
+    cd tools && GOCACHE="${GOCACHE:-/tmp/molejo-go-cache}" GOLANGCI_LINT_CACHE="${GOLANGCI_LINT_CACHE:-/tmp/molejo-golangci-tools-cache}" /tmp/molejo-golangci-lint run --config ../.golangci.yml ./...
+
+# Report maintainability pressure without making the current alpha baseline a gate.
+quality-report:
+    GOCACHE="${GOCACHE:-/tmp/molejo-go-cache}" go -C tools build -o /tmp/molejo-golangci-lint github.com/golangci/golangci-lint/v2/cmd/golangci-lint
+    @echo "Root module complexity report"
+    GOCACHE="${GOCACHE:-/tmp/molejo-go-cache}" GOLANGCI_LINT_CACHE="${GOLANGCI_LINT_CACHE:-/tmp/molejo-quality-cache}" /tmp/molejo-golangci-lint run --config .golangci-quality.yml --issues-exit-code=0 --tests=false ./...
+    @echo "Tools module complexity report"
+    cd tools && GOCACHE="${GOCACHE:-/tmp/molejo-go-cache}" GOLANGCI_LINT_CACHE="${GOLANGCI_LINT_CACHE:-/tmp/molejo-quality-tools-cache}" /tmp/molejo-golangci-lint run --config ../.golangci-quality.yml --issues-exit-code=0 --tests=false ./...
 
 mod-check:
     go mod tidy -diff
@@ -84,6 +93,7 @@ distribution-test:
 
 script-check:
     bash -n tools/testing/*.sh
+    tools/testing/shellcheck.sh tools/testing/*.sh
 
 # Run the disposable Kind harness or one profile against an existing context.
 molejo-conformance profile context="" storage_class="" gateway_file="" registry_file="":

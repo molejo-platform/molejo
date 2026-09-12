@@ -5,6 +5,7 @@
 - Go 1.26.6, the version used by CI.
 - Node.js 24 or newer with Corepack enabled.
 - `just` 1.57 or newer.
+- `curl`, `tar`, and SHA-256 tooling for the pinned ShellCheck bootstrap.
 - Docker for PostgreSQL integration tests.
 - `kubectl` only for acceptance checks against a real cluster.
 
@@ -52,6 +53,19 @@ MOLEJO_TEST_DATABASE_URL='postgres://user:password@host/database?sslmode=disable
 `just verify` runs both suites and all repository quality gates.
 `just ci` additionally checks that generation and formatting leave the
 worktree unchanged.
+
+`just lint` runs the same `golangci-lint` configuration against both Go modules:
+the product module at the repository root and the separate `tools` module.
+`just script-check` checks Bash syntax and runs the checksum-verified ShellCheck
+version pinned by the repository. The first run downloads it into
+`MOLEJO_TOOL_CACHE` or a private temporary cache.
+
+Use `just quality-report` to inspect cyclomatic complexity, function length, and
+maintainability warnings in non-test Go code. This report is diagnostic during
+the alpha baseline and does not fail because of findings. Its current thresholds
+are complexity above 20, more than 120 lines or 70 statements per function, and
+maintainability index below 20. There is no raw file-length gate; review the
+reported functions according to their cohesion and responsibility instead.
 
 Use the narrowest relevant command while iterating:
 

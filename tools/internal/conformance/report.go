@@ -4,7 +4,9 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"encoding/xml"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -50,7 +52,12 @@ func NewReporter(directory, runnerVersion, revision, runID string, profile Profi
 		Coverage:  Coverage{Required: required},
 		Cleanup:   CleanupResult{Status: StatusPending},
 	}}
-	if err := reporter.save(); err != nil {
+	// The canonical ledger also claims the output directory for this run. A
+	// second process must fail before it can replace cleanup authorization.
+	if err := reporter.initialize(); err != nil {
+		if errors.Is(err, fs.ErrExist) {
+			return nil, fmt.Errorf("output directory already contains report.json; choose a new --output directory or recover it with cleanup --run-dir")
+		}
 		return nil, err
 	}
 	return reporter, nil
@@ -179,13 +186,17 @@ func (r *Reporter) Finish(status Status, reason string) error {
 	return r.saveLocked()
 }
 
-func (r *Reporter) save() error {
+func (r *Reporter) initialize() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.saveLocked()
+	return r.saveLockedWith(writePrivateExclusive)
 }
 
 func (r *Reporter) saveLocked() error {
+	return r.saveLockedWith(writePrivateAtomic)
+}
+
+func (r *Reporter) saveLockedWith(writeReport func(string, string, []byte) error) error {
 	r.report.Coverage = reportCoverage(r.report.Coverage.Required, r.report.Scenarios)
 	// JSON is the authoritative incremental result. JUnit is regenerated from
 	// the same snapshot so CI never becomes a second verdict implementation.
@@ -193,7 +204,7 @@ func (r *Reporter) saveLocked() error {
 	if err != nil {
 		return fmt.Errorf("encode conformance report: %w", err)
 	}
-	if err = writePrivateAtomic(r.dir, "report.json", append(encoded, '\n')); err != nil {
+	if err = writeReport(r.dir, "report.json", append(encoded, '\n')); err != nil {
 		return fmt.Errorf("publish conformance report: %w", err)
 	}
 	junit, err := encodeJUnit(r.report)
@@ -202,6 +213,24 @@ func (r *Reporter) saveLocked() error {
 	}
 	if err = writePrivateAtomic(r.dir, "junit.xml", junit); err != nil {
 		return fmt.Errorf("publish conformance JUnit report: %w", err)
+	}
+	return nil
+}
+
+func writePrivateExclusive(directory, name string, contents []byte) error {
+	path := filepath.Join(directory, name)
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return fmt.Errorf("create exclusive result: %w", err)
+	}
+	if _, err = file.Write(contents); err != nil {
+		_ = file.Close()
+		_ = os.Remove(path)
+		return fmt.Errorf("write exclusive result: %w", err)
+	}
+	if err = file.Close(); err != nil {
+		_ = os.Remove(path)
+		return fmt.Errorf("close exclusive result: %w", err)
 	}
 	return nil
 }

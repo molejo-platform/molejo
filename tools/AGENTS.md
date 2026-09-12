@@ -46,9 +46,12 @@ Run the narrowest relevant checks while iterating:
 ```bash
 GOCACHE="${GOCACHE:-/tmp/molejo-go-cache}" \
   go -C tools test ./cmd/molejo-conformance/... ./internal/conformance/...
-bash -n tools/testing/*.sh
+just lint
+just script-check
 ```
 
 Run `just distribution-test` and `just script-check` before completing a change
 that crosses the runner and its harnesses. Run the Kind harness only when its
 Docker, cluster, installation, and cleanup behavior is part of the change.
+Use `just quality-report` to inspect maintainability pressure. It is diagnostic;
+do not split a cohesive file merely to reduce its line count.

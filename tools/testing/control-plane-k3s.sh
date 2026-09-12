@@ -72,13 +72,14 @@ verify_control_plane() {
   check_equal "PostgreSQL ready replicas" "$(kubectl --context "$context_name" -n molejo-control-plane get statefulset postgres -o jsonpath='{.status.readyReplicas}')" "1"
   check_equal "bootstrap succeeded jobs" "$(kubectl --context "$context_name" -n molejo-control-plane get job control-plane-bootstrap -o jsonpath='{.status.succeeded}')" "1"
   check_equal "control-plane available replicas" "$(kubectl --context "$context_name" -n molejo-control-plane get deployment control-plane-api -o jsonpath='{.status.availableReplicas}')" "1"
-  local status
+  local status enrollment_token
   status="$(agent_status)"
   if ! grep -q '"state":"Paired"' <<<"$status"; then
     echo "cluster-agent is not paired: $status" >&2
     return 1
   fi
-  if kubectl --context "$context_name" -n molejo-system get secret molejo-agent-enrollment -o jsonpath='{.data.token}' | grep -q .; then
+  enrollment_token="$(kubectl --context "$context_name" -n molejo-system get secret molejo-agent-enrollment -o jsonpath='{.data.token}')"
+  if [[ -n "$enrollment_token" ]]; then
     echo "Agent enrollment token was not cleared" >&2
     exit 1
   fi
@@ -96,7 +97,9 @@ teardown_control_plane() {
   kubectl --context "$context_name" -n molejo-system patch secret molejo-agent-enrollment --type=merge -p '{"data":null}' >/dev/null
   kubectl --context "$context_name" -n molejo-system rollout restart deployment/cluster-agent >/dev/null
   kubectl --context "$context_name" -n molejo-system rollout status deployment/cluster-agent --timeout=120s >/dev/null
-  if kubectl --context "$context_name" get namespace molejo-control-plane >/dev/null 2>&1; then
+  local remaining_namespace
+  remaining_namespace="$(kubectl --context "$context_name" get namespace molejo-control-plane --ignore-not-found -o name)"
+  if [[ -n "$remaining_namespace" ]]; then
     echo "control plane namespace still exists" >&2
     exit 1
   fi

@@ -133,6 +133,11 @@ go -C tools run ./cmd/molejo-conformance run \
   --workspace-id "$WORKSPACE_ID"
 ```
 
+`--output` starts a new ownership ledger and must not already contain
+`report.json`. The runner rejects reuse so an interrupted run cannot be replaced
+before its resources are recovered. Use a new directory for another run, or run
+`cleanup --run-dir` against the existing directory.
+
 The default TLS server name and HTTP `Host` match the in-cluster Control Plane
 service. Use `--server-name` and `--host` when an external endpoint terminates or
 routes TLS differently. Mutating requests send the default trusted origin

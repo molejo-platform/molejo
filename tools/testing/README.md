@@ -122,7 +122,11 @@ derived JUnit file is durable.
 - Treat storage and Registry smokes as mutations with temporary resources.
 - Keep public acceptance read-only. Exercise domain, grant, withdrawal, and
   cleanup mutations in a disposable target or explicitly authorized test scope.
-- Run `bash -n tools/testing/*.sh` after editing any harness.
+- Keep absence checks tri-state: present, absent after a successful observation,
+  or observation failure. A failed `kubectl`, `jq`, or external probe is not
+  evidence that a resource is absent.
+- Run `just script-check` after editing any harness. It checks Bash syntax and
+  executes the checksum-verified ShellCheck version pinned by the repository.
 
 Development rules for profiles, evidence, cleanup, and future infrastructure
 adapters are in

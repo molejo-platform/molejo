@@ -195,35 +195,36 @@ assert_can_i() {
 
 assert_withdrawn_tombstone() {
   local namespace="$1"
-  local count withdrawn condition reason tombstone_uid
-  count="$(kubectl --kubeconfig "$kubeconfig_file" --context "$context_name" --namespace "$namespace" get appdeployments --no-headers 2>/dev/null | wc -l | tr -d ' ')"
+  local deployments_json children_json count withdrawn condition reason tombstone_uid managed_children owned_children
+  deployments_json="$(kubectl --kubeconfig "$kubeconfig_file" --context "$context_name" --namespace "$namespace" get appdeployments -o json)"
+  count="$(jq '.items | length' <<<"$deployments_json")"
   [[ "$count" == "1" ]] || {
     echo "expected one terminal AppDeployment tombstone in ${namespace}, found ${count}" >&2
     return 1
   }
-  withdrawn="$(kubectl --kubeconfig "$kubeconfig_file" --context "$context_name" --namespace "$namespace" get appdeployments -o jsonpath='{.items[0].spec.withdrawn}')"
-  condition="$(kubectl --kubeconfig "$kubeconfig_file" --context "$context_name" --namespace "$namespace" get appdeployments -o jsonpath='{.items[0].status.conditions[?(@.type=="Withdrawn")].status}')"
-  reason="$(kubectl --kubeconfig "$kubeconfig_file" --context "$context_name" --namespace "$namespace" get appdeployments -o jsonpath='{.items[0].status.conditions[?(@.type=="Withdrawn")].reason}')"
-  tombstone_uid="$(kubectl --kubeconfig "$kubeconfig_file" --context "$context_name" --namespace "$namespace" get appdeployments -o jsonpath='{.items[0].metadata.uid}')"
+  withdrawn="$(jq -r '.items[0].spec.withdrawn // false' <<<"$deployments_json")"
+  condition="$(jq -r '[.items[0].status.conditions[]? | select(.type == "Withdrawn")][-1].status // ""' <<<"$deployments_json")"
+  reason="$(jq -r '[.items[0].status.conditions[]? | select(.type == "Withdrawn")][-1].reason // ""' <<<"$deployments_json")"
+  tombstone_uid="$(jq -r '.items[0].metadata.uid // ""' <<<"$deployments_json")"
   [[ "$withdrawn" == "true" && "$condition" == "True" && "$reason" == "ChildrenRemoved" ]] || {
     echo "terminal AppDeployment in ${namespace} does not carry the confirmed withdrawal fence" >&2
     return 1
   }
-  if kubectl --kubeconfig "$kubeconfig_file" --context "$context_name" --namespace "$namespace" get deployments,services,configmaps,secrets,httproutes.gateway.networking.k8s.io \
-    --selector app.kubernetes.io/managed-by=molejo-platform-operator --no-headers 2>/dev/null | grep -q .; then
+  children_json="$(kubectl --kubeconfig "$kubeconfig_file" --context "$context_name" --namespace "$namespace" get deployments,services,configmaps,secrets,httproutes.gateway.networking.k8s.io -o json)"
+  managed_children="$(jq '[.items[] | select(.metadata.labels["app.kubernetes.io/managed-by"] == "molejo-platform-operator")] | length' <<<"$children_json")"
+  if [[ "$managed_children" != "0" ]]; then
     echo "managed application children remained after withdrawal in ${namespace}" >&2
     return 1
   fi
-  if kubectl --kubeconfig "$kubeconfig_file" --context "$context_name" --namespace "$namespace" get deployments,services,configmaps,secrets,httproutes.gateway.networking.k8s.io -o json |
-    jq -e --arg uid "$tombstone_uid" 'any(.items[]; any(.metadata.ownerReferences[]?; .uid == $uid))' >/dev/null; then
+  owned_children="$(jq --arg uid "$tombstone_uid" '[.items[] | select(any(.metadata.ownerReferences[]?; .uid == $uid))] | length' <<<"$children_json")"
+  if [[ "$owned_children" != "0" ]]; then
     echo "application children owned by the terminal AppDeployment remained in ${namespace}" >&2
     return 1
   fi
 }
 
 wait_for_registry() {
-  local attempt
-  for attempt in $(seq 1 30); do
+  for _ in $(seq 1 30); do
     if curl --fail --silent "http://127.0.0.1:${registry_port}/v2/" >/dev/null 2>&1; then
       return
     fi
@@ -422,13 +423,13 @@ kubectl --kubeconfig "$kubeconfig_file" --context "$context_name" create configm
   kubectl --kubeconfig "$kubeconfig_file" --context "$context_name" apply -f - >/dev/null
 
 progress "Installing the runtime and control plane twice"
-for attempt in 1 2; do
+for _ in 1 2; do
   "$molejoctl_bin" platform runtime install \
     --kube-context "$context_name" \
     --version "$version" \
     --chart-path "${bundle_directory}/molejo-cluster-${version}.tgz"
 done
-for attempt in 1 2; do
+for _ in 1 2; do
   "$molejoctl_bin" platform control-plane install \
     --kube-context "$context_name" \
     --version "$version" \
@@ -507,12 +508,19 @@ assert_can_i no molejo-system/platform-operator update gateways.gateway.networki
 assert_can_i no molejo-system/workspace-boundary-controller create deployments.apps "$workspace_namespace"
 assert_can_i no molejo-system/workspace-boundary-controller create secrets "$workspace_namespace"
 denied_name="conformance-denied-${run_id}"
+denied_error="${scratch_directory}/forbidden-configmap.stderr"
 if kubectl --kubeconfig "$kubeconfig_file" --context "$context_name" --as=system:serviceaccount:molejo-system:platform-operator \
-  --namespace default create configmap "$denied_name" --from-literal=probe=true >/dev/null 2>&1; then
+  --namespace default create configmap "$denied_name" --from-literal=probe=true >/dev/null 2>"$denied_error"; then
   echo "platform-operator created a forbidden cross-namespace canary" >&2
   exit 1
 fi
-if kubectl --kubeconfig "$kubeconfig_file" --context "$context_name" --namespace default get configmap "$denied_name" >/dev/null 2>&1; then
+if ! grep -Eiq '(^|[^[:alpha:]])forbidden([^[:alpha:]]|$)' "$denied_error"; then
+  cat "$denied_error" >&2
+  echo "cross-namespace canary failed without an explicit Forbidden response" >&2
+  exit 1
+fi
+denied_resource="$(kubectl --kubeconfig "$kubeconfig_file" --context "$context_name" --namespace default get configmap "$denied_name" --ignore-not-found -o name)"
+if [[ -n "$denied_resource" ]]; then
   echo "forbidden RBAC canary exists after the denied request" >&2
   exit 1
 fi

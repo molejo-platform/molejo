@@ -94,6 +94,12 @@ kinds, paths, identifiers, headers, and the current run ID. New cleanup behavior
 must include tests proving rejection of foreign hosts, paths, IDs, run IDs,
 headers, and resources.
 
+Creating a run claims `report.json` exclusively. Never overwrite or resume an
+existing ledger through `run`; use `cleanup --run-dir` to recover it. Cleanup
+must distinguish synchronous deletion from an accepted asynchronous operation.
+It may mark an `AppEnvironment` archived only after its recorded idempotent
+operation reaches `Succeeded`.
+
 Never infer ownership from a name prefix alone when an API identity, revision, or
 recorded relationship is available. Never put pre-existing resources in the
 cleanup ledger.
@@ -132,6 +138,8 @@ must:
 - remove scratch credentials and infrastructure on success, failure, and signals;
 - retain only sanitized evidence in the published result directory;
 - report incomplete teardown as failure;
+- treat command or decoding errors as observation failures, never as proof that
+  a resource is absent;
 - preserve runner JSON as the profile verdict instead of parsing console text.
 
 External DNS and public certificate checks belong to a separate acceptance tool.
@@ -145,7 +153,8 @@ Run focused tests first:
 ```bash
 GOCACHE="${GOCACHE:-/tmp/molejo-go-cache}" \
   go -C tools test ./cmd/molejo-conformance/... ./internal/conformance/...
-bash -n tools/testing/*.sh
+just lint
+just script-check
 ```
 
 Then run repository-owned distribution checks:
@@ -153,7 +162,13 @@ Then run repository-owned distribution checks:
 ```bash
 just distribution-test
 just script-check
+just quality-report
 ```
+
+The quality report is informational while the alpha baseline is reduced. It
+reports complex or long production functions and low maintainability without a
+hard file-size limit. Treat each finding as a prompt to inspect cohesion and
+decision boundaries, not as an instruction to fragment code.
 
 Run the disposable integration proof when runner behavior, environment assembly,
 installation, Gateway/TLS wiring, fixture images, cleanup, or evidence publication

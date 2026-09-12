@@ -37,7 +37,7 @@ func cleanupResources(reporter *Reporter, client *Client) (CleanupResult, error)
 			result.Resources = append(result.Resources, resource)
 			continue
 		}
-		err := client.Delete(ctx, resource.CleanupPath, nil, resource.Headers)
+		err := cleanupResource(ctx, client, resource)
 		var status *StatusError
 		if errors.As(err, &status) && status.Code == http.StatusNotFound {
 			resource.State = "already_absent"
@@ -59,6 +59,22 @@ func cleanupResources(reporter *Reporter, client *Client) (CleanupResult, error)
 	}
 	result.FinishedAt = time.Now().UTC()
 	return result, persistenceErr
+}
+
+func cleanupResource(ctx context.Context, client *Client, resource ResourceRecord) error {
+	if resource.Kind != "AppEnvironment" {
+		return client.Delete(ctx, resource.CleanupPath, nil, resource.Headers, http.StatusNoContent)
+	}
+	// HTTP 202 transfers completion authority to the returned operation. Keep
+	// the ledger retryable until the Control Plane confirms terminal withdrawal.
+	var deletion operation
+	if err := client.Delete(ctx, resource.CleanupPath, &deletion, resource.Headers, http.StatusAccepted); err != nil {
+		return err
+	}
+	if deletion.ID == "" {
+		return errors.New("AppEnvironment cleanup returned an empty operation ID")
+	}
+	return waitOperation(ctx, client, deletion.ID)
 }
 
 func RecoverCleanup(reporter *Reporter, client *Client) (CleanupResult, error) {

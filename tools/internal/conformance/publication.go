@@ -355,7 +355,7 @@ func runHTTPPublicationJourney(run *ScenarioContext) error {
 			return err
 		}
 	}
-	if err = run.Assert("withdrawal-complete", "routes and publication claims were removed while the terminal runtime fence remained"); err != nil {
+	if err = run.Assert("withdrawal-complete", "terminal runtime withdrawal was confirmed and published routes and claims were removed"); err != nil {
 		return err
 	}
 	return nil

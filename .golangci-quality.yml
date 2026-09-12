@@ -1,0 +1,25 @@
+version: "2"
+
+run:
+  relative-path-mode: gomod
+
+linters:
+  default: none
+  enable:
+    - cyclop
+    - funlen
+    - maintidx
+  settings:
+    cyclop:
+      max-complexity: 20
+    funlen:
+      lines: 120
+      statements: 70
+    maintidx:
+      under: 20
+  exclusions:
+    generated: strict
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

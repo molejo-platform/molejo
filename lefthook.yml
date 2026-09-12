@@ -23,3 +23,8 @@ pre-commit:
       glob: "*.go"
       run: test -z "$(go tool -modfile=tools/go.mod gci list --skip-generated -s standard -s default -s localmodule {staged_files})"
       fail_text: Go imports are not organized. Run `just fmt` and stage them again.
+
+    - name: shell-lint
+      glob: "*.sh"
+      run: tools/testing/shellcheck.sh {staged_files}
+      fail_text: Shell scripts failed ShellCheck. Run `just script-check`.
