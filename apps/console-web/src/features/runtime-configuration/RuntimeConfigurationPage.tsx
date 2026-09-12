@@ -1,6 +1,6 @@
 import type { FormEvent, ReactNode } from "react";
 
-import { userFacingError } from "../../shared/api/errors";
+import { errorViolations, userFacingError } from "../../shared/api/errors";
 import type { AppEnvironment, Parameter, RuntimeConfiguration } from "../../shared/api/types";
 import { Alert } from "../../shared/ui/Alert";
 import { Button } from "../../shared/ui/Button";
@@ -51,6 +51,8 @@ export function createRuntimeConfigurationPage(
     disabled: boolean,
     onValidityChange: (valid: boolean) => void,
     target: AppEnvironment,
+    params: EnvironmentParams,
+    violations: Array<{ field: string; message: string }>,
   ) => ReactNode,
 ) {
   return function ConfigurationPage() {
@@ -93,6 +95,8 @@ export function ConfigurationEditor({
     disabled: boolean,
     onValidityChange: (valid: boolean) => void,
     target: AppEnvironment,
+    params: EnvironmentParams,
+    violations: Array<{ field: string; message: string }>,
   ) => ReactNode;
 }) {
   const viewModel = useRuntimeConfigurationEditor(target, params, section);
@@ -134,7 +138,16 @@ export function ConfigurationEditor({
             required
           />
         ) : (
-          render(draft, viewModel.updateDraft, parameters.data?.items ?? [], !canMutate, viewModel.setValid, target)
+          render(
+            draft,
+            viewModel.updateDraft,
+            parameters.data?.items ?? [],
+            !canMutate,
+            viewModel.setValid,
+            target,
+            params,
+            errorViolations(save.error),
+          )
         )}
         {canMutate && (
           <div className="form-actions">
@@ -150,7 +163,7 @@ export function ConfigurationEditor({
               </Button>
             )}
             {conflict && (
-              <Button type="button" variant="secondary" onClick={viewModel.saveDesired}>
+              <Button type="button" variant="secondary" onClick={viewModel.saveDesired} disabled={save.isPending}>
                 Reaplicar minhas alterações
               </Button>
             )}

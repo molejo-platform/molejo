@@ -521,7 +521,7 @@ func ValidateRuntimeConfig(config RuntimeConfig, maxReplicas int32, maxCPU, maxM
 	}
 	endpointNames := make(map[string]struct{}, len(config.PublicEndpoints))
 	endpointTypes := make(map[string]struct{}, len(config.PublicEndpoints))
-	for _, endpoint := range config.PublicEndpoints {
+	for endpointIndex, endpoint := range config.PublicEndpoints {
 		if !slugPattern.MatchString(endpoint.Name) || len(endpoint.Name) > 15 {
 			return errors.New("public endpoint names must be unique lowercase labels of at most 15 characters")
 		}
@@ -536,14 +536,20 @@ func ValidateRuntimeConfig(config RuntimeConfig, maxReplicas int32, maxCPU, maxM
 		}
 		if endpoint.Type == EndpointHTTP {
 			if endpoint.DomainID != "" || endpoint.HostnameLabel != "" || endpoint.ExternalPort != 0 || len(endpoint.Addresses) < 1 || len(endpoint.Addresses) > 10 {
-				return errors.New("http_publication_invalid")
+				return PublicationAssociationError{EndpointIndex: endpointIndex, AddressIndex: -1, Field: "addresses", Err: ErrPublicationName}
 			}
-			for _, address := range endpoint.Addresses {
-				if address.DomainID == "" || len(address.DomainID) > 128 || address.BindingID == "" || len(address.BindingID) > 128 || (address.ListenerName != "" && (len(address.ListenerName) > 63 || !slugPattern.MatchString(address.ListenerName))) {
-					return errors.New("publication_reference_required")
+			for addressIndex, address := range endpoint.Addresses {
+				if address.DomainID == "" || len(address.DomainID) > 128 {
+					return PublicationAssociationError{EndpointIndex: endpointIndex, AddressIndex: addressIndex, Field: "domainId", Err: ErrPublicationName}
+				}
+				if address.BindingID == "" || len(address.BindingID) > 128 {
+					return PublicationAssociationError{EndpointIndex: endpointIndex, AddressIndex: addressIndex, Field: "bindingId", Err: ErrPublicationName}
+				}
+				if address.ListenerName != "" && (len(address.ListenerName) > 63 || !slugPattern.MatchString(address.ListenerName)) {
+					return PublicationAssociationError{EndpointIndex: endpointIndex, AddressIndex: addressIndex, Field: "listenerName", Err: ErrPublicationName}
 				}
 				if address.Label != "" && (!slugPattern.MatchString(address.Label) || len(address.Label) > 63) {
-					return errors.New("publication_label_invalid")
+					return PublicationAssociationError{EndpointIndex: endpointIndex, AddressIndex: addressIndex, Field: "label", Err: ErrPublicationName}
 				}
 			}
 		} else {

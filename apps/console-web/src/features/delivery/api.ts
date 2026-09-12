@@ -73,6 +73,18 @@ export const listAppEnvironmentDeployments = (
     `${runtimeBase(workspaceId, projectId, appId, appEnvironmentId)}/deployments`,
     signal,
   ) as Promise<ResourceList<Deployment>>;
+export const getAppEnvironmentDeployment = (
+  workspaceId: string,
+  projectId: string,
+  appId: string,
+  appEnvironmentId: string,
+  deploymentId: string,
+  signal?: AbortSignal,
+) =>
+  request<Deployment>(
+    `${runtimeBase(workspaceId, projectId, appId, appEnvironmentId)}/deployments/${encodeURIComponent(deploymentId)}`,
+    { signal },
+  );
 export const createAppEnvironmentDeployment = (
   workspaceId: string,
   projectId: string,

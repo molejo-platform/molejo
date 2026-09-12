@@ -13,11 +13,11 @@ import { useSessionQuery } from "../authentication/public";
 import { environmentKeys, environmentQueries } from "../environments/public";
 import { useEffectiveCapabilities } from "../workspace-access/public";
 import { AppEnvironmentLayout } from "./AppEnvironmentLayout";
-import { publicationAddress } from "./publication";
+import { publicationAddresses } from "./publication";
 import "./app-environments.css";
 
 function runtimeAddresses(configuration: RuntimeConfiguration, session: ReturnType<typeof useSessionQuery>["data"]) {
-  return configuration.publicEndpoints.map((endpoint) => publicationAddress(session, endpoint));
+  return configuration.publicEndpoints.flatMap((endpoint) => publicationAddresses(session, endpoint));
 }
 
 export function EnvironmentAppsPage() {
@@ -109,7 +109,7 @@ export function EnvironmentAppsPage() {
                   </div>
                   <dl>
                     <div>
-                      <dt>Runtime</dt>
+                      <dt>Endereços desejados</dt>
                       <dd>{addresses.join(", ") || "Privado"}</dd>
                     </div>
                     <div>

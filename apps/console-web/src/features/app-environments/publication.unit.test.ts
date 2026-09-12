@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Session } from "../../shared/api/types";
-import { publicationAddress, publicationDomains } from "./publication";
+import { publicationAddresses, tcpPublicationDomains } from "./publication";
 
 const session = {
   installationCapabilities: {
@@ -14,13 +14,13 @@ const session = {
 
 describe("publication domains", () => {
   it("offers the stateful domain only to stateful workloads", () => {
-    expect(publicationDomains(session, "Stateless", "TCP").map((domain) => domain.id)).toEqual(["default"]);
-    expect(publicationDomains(session, "Stateful", "TCP").map((domain) => domain.id)).toEqual(["default", "stateful"]);
+    expect(tcpPublicationDomains(session, "Stateless").map((domain) => domain.id)).toEqual(["default"]);
+    expect(tcpPublicationDomains(session, "Stateful").map((domain) => domain.id)).toEqual(["default", "stateful"]);
   });
 
   it("renders the selected domain and allocated port", () => {
     expect(
-      publicationAddress(session, {
+      publicationAddresses(session, {
         name: "tcp",
         type: "TCP",
         portName: "postgres",
@@ -28,6 +28,6 @@ describe("publication domains", () => {
         hostnameLabel: "pg",
         externalPort: 20000,
       }),
-    ).toBe("pg.stateful.molejo.dev:20000");
+    ).toEqual(["pg.stateful.molejo.dev:20000"]);
   });
 });

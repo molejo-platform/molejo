@@ -2,16 +2,26 @@ import type { AppEnvironment, RuntimeConfiguration } from "../../shared/api/type
 import { Alert } from "../../shared/ui/Alert";
 import { Button } from "../../shared/ui/Button";
 import { Field, SelectField } from "../../shared/ui/Field";
-import { publicationDomains, publicationSuffix } from "../app-environments/public";
+import { tcpPublicationDomains, tcpPublicationSuffix } from "../app-environments/public";
 import { useSessionQuery } from "../authentication/public";
+import { HTTPPublicationEditor } from "../http-publication/public";
 import { createRuntimeConfigurationPage } from "./RuntimeConfigurationPage";
 
 export const EnvironmentNetworkPage = createRuntimeConfigurationPage(
   "network",
   "Rede",
   "Defina portas internas nomeadas e publique, no máximo, um endpoint HTTP e um TCP.",
-  (draft, setDraft, _parameters, disabled, _onValidityChange, target) => (
-    <NetworkEditor draft={draft} setDraft={setDraft} disabled={disabled} workloadKind={target.workloadKind} />
+  (draft, setDraft, _parameters, disabled, onValidityChange, target, params, violations) => (
+    <NetworkEditor
+      draft={draft}
+      setDraft={setDraft}
+      disabled={disabled}
+      workloadKind={target.workloadKind}
+      workspaceId={params.workspaceId}
+      clusterId={target.clusterId}
+      violations={violations}
+      onValidityChange={onValidityChange}
+    />
   ),
 );
 
@@ -20,17 +30,23 @@ function NetworkEditor({
   setDraft,
   disabled,
   workloadKind,
+  workspaceId,
+  clusterId,
+  violations,
+  onValidityChange,
 }: {
   draft: RuntimeConfiguration;
   setDraft: (value: RuntimeConfiguration) => void;
   disabled: boolean;
   workloadKind: AppEnvironment["workloadKind"];
+  workspaceId: string;
+  clusterId: string;
+  violations: Array<{ field: string; message: string }>;
+  onValidityChange: (valid: boolean) => void;
 }) {
   const session = useSessionQuery();
-  const http = draft.publicEndpoints.find((endpoint) => endpoint.type === "HTTP");
   const tcp = draft.publicEndpoints.find((endpoint) => endpoint.type === "TCP");
-  const httpDomains = publicationDomains(session.data, workloadKind, "HTTP");
-  const tcpDomains = publicationDomains(session.data, workloadKind, "TCP");
+  const tcpDomains = tcpPublicationDomains(session.data, workloadKind);
   const addPort = () => {
     if (draft.ports.length < 8)
       setDraft({
@@ -95,68 +111,15 @@ function NetworkEditor({
           )}
         </div>
       ))}
-      <div className="form-grid">
-        <SelectField
-          label="HTTP público"
-          value={http ? "enabled" : "disabled"}
-          onChange={(event) =>
-            replaceEndpoint(
-              "HTTP",
-              event.target.value === "enabled"
-                ? {
-                    name: "web",
-                    type: "HTTP",
-                    portName: draft.ports[0].name,
-                    domainId: httpDomains[0]?.id ?? "default",
-                    hostnameLabel: "app",
-                  }
-                : undefined,
-            )
-          }
-          disabled={disabled}
-        >
-          <option value="disabled">Desativado</option>
-          <option value="enabled">Ativado</option>
-        </SelectField>
-        {http && (
-          <>
-            <SelectField
-              label="Porta HTTP"
-              value={http.portName}
-              onChange={(event) => replaceEndpoint("HTTP", { ...http, portName: event.target.value })}
-              disabled={disabled}
-            >
-              {draft.ports.map((port) => (
-                <option key={port.name} value={port.name}>
-                  {port.name} · {port.containerPort}
-                </option>
-              ))}
-            </SelectField>
-            <SelectField
-              label="Domínio HTTP"
-              value={http.domainId}
-              onChange={(event) => replaceEndpoint("HTTP", { ...http, domainId: event.target.value })}
-              disabled={disabled}
-            >
-              {httpDomains.map((domain) => (
-                <option key={domain.id} value={domain.id}>
-                  {domain.suffix}
-                </option>
-              ))}
-            </SelectField>
-            <Field
-              label="Hostname HTTP"
-              helper={`${http.hostnameLabel || "app"}.${publicationSuffix(session.data, http.domainId)}`}
-              value={http.hostnameLabel}
-              onChange={(event) => replaceEndpoint("HTTP", { ...http, hostnameLabel: event.target.value })}
-              pattern="^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$"
-              maxLength={63}
-              disabled={disabled}
-              required
-            />
-          </>
-        )}
-      </div>
+      <HTTPPublicationEditor
+        workspaceId={workspaceId}
+        clusterId={clusterId}
+        value={draft}
+        onChange={setDraft}
+        disabled={disabled}
+        violations={violations}
+        onValidityChange={onValidityChange}
+      />
       {session.data?.installationCapabilities?.publicTCP?.enabled ? (
         <div className="form-grid">
           <SelectField
@@ -213,7 +176,7 @@ function NetworkEditor({
               </SelectField>
               <Field
                 label="Hostname TCP"
-                helper={`${tcp.hostnameLabel || "app-tcp"}.${publicationSuffix(session.data, tcp.domainId)}${tcp.externalPort ? `:${tcp.externalPort}` : " · porta alocada ao salvar"}`}
+                helper={`${tcp.hostnameLabel || "app-tcp"}.${tcpPublicationSuffix(session.data, tcp.domainId ?? "")}${tcp.externalPort ? `:${tcp.externalPort}` : " · porta alocada ao salvar"}`}
                 value={tcp.hostnameLabel}
                 onChange={(event) =>
                   replaceEndpoint("TCP", { ...tcp, hostnameLabel: event.target.value, externalPort: undefined })

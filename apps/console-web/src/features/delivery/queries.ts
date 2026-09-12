@@ -3,6 +3,7 @@ import { queryOptions } from "@tanstack/react-query";
 import { cachePolicy } from "../../shared/api/cache-policy";
 import {
   getAppBuild,
+  getAppEnvironmentDeployment,
   getAppEnvironmentDeliveryPolicy,
   listAppBuildLogs,
   listAppBuilds,
@@ -27,6 +28,8 @@ export const deliveryKeys = {
     ["workspaces", workspaceId, "projects", projectId, "apps", appId, "releases"] as const,
   deployments: (workspaceId: string, projectId: string, appId: string, appEnvironmentId: string) =>
     [...runtime(workspaceId, projectId, appId, appEnvironmentId), "deployments"] as const,
+  deployment: (workspaceId: string, projectId: string, appId: string, appEnvironmentId: string, deploymentId: string) =>
+    [...runtime(workspaceId, projectId, appId, appEnvironmentId), "deployments", deploymentId] as const,
   policy: (workspaceId: string, projectId: string, appId: string, appEnvironmentId: string) =>
     [...runtime(workspaceId, projectId, appId, appEnvironmentId), "delivery-policy"] as const,
   preview: (
@@ -78,6 +81,14 @@ export const deliveryQueries = {
     queryOptions({
       queryKey: deliveryKeys.deployments(workspaceId, projectId, appId, appEnvironmentId),
       queryFn: ({ signal }) => listAppEnvironmentDeployments(workspaceId, projectId, appId, appEnvironmentId, signal),
+      staleTime: cachePolicy.availability,
+    }),
+  deployment: (workspaceId: string, projectId: string, appId: string, appEnvironmentId: string, deploymentId: string) =>
+    queryOptions({
+      queryKey: deliveryKeys.deployment(workspaceId, projectId, appId, appEnvironmentId, deploymentId),
+      queryFn: ({ signal }) =>
+        getAppEnvironmentDeployment(workspaceId, projectId, appId, appEnvironmentId, deploymentId, signal),
+      enabled: Boolean(workspaceId && projectId && appId && appEnvironmentId && deploymentId),
       staleTime: cachePolicy.availability,
     }),
   preview: (

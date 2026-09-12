@@ -1,14 +1,30 @@
+import { useInfiniteQuery } from "@tanstack/react-query";
+import {
+  addressHostname,
+  isHTTPEndpoint,
+  optionForAddress,
+  publicationOptionQueries,
+} from "../http-publication/public";
 import type { ApplicationSetupDraft } from "./model";
 
 export function ApplicationSetupReview({
   draft,
   appName,
   clusterName,
+  workspaceId,
 }: {
   draft: ApplicationSetupDraft;
   appName?: string;
   clusterName?: string;
+  workspaceId: string;
 }) {
+  const optionPages = useInfiniteQuery(publicationOptionQueries.list(workspaceId, draft.clusterId));
+  const options = optionPages.data?.pages.flatMap((page) => page.items) ?? [];
+  const addresses = draft.configuration.publicEndpoints
+    .filter(isHTTPEndpoint)
+    .flatMap((endpoint) =>
+      endpoint.addresses.map((address) => addressHostname(address, optionForAddress(options, address))),
+    );
   return (
     <section className="review" aria-labelledby="setup-review-title">
       <div>
@@ -29,9 +45,7 @@ export function ApplicationSetupReview({
         <dt>Execução</dt>
         <dd>{draft.workloadKind}</dd>
         <dt>HTTP</dt>
-        <dd>
-          {draft.configuration.publicEndpoints.some((endpoint) => endpoint.type === "HTTP") ? "Público" : "Privado"}
-        </dd>
+        <dd>{addresses.length ? addresses.join(", ") : "Privado"}</dd>
       </dl>
     </section>
   );

@@ -10,6 +10,7 @@ import { environmentQueries } from "../environments/public";
 import { canUseFeature, featureIds, findFeature, useFeatureAvailability } from "../feature-availability/public";
 import { RuntimeMetricsProvider, RuntimeStatusStrip } from "../observability/public";
 import { type EnvironmentParams, requireEnvironmentParams } from "./runtime-ref";
+import { appEnvironmentQueries } from "./queries";
 
 type RuntimeLayoutValue = { target: AppEnvironment; params: EnvironmentParams };
 const RuntimeLayoutContext = createContext<RuntimeLayoutValue | undefined>(undefined);
@@ -32,6 +33,15 @@ function ResolvedEnvironmentAppLayout({
   const params = requireEnvironmentParams(useParams({ strict: false }));
   const availability = useFeatureAvailability(params.workspaceId, "AppEnvironment", params.appEnvironmentId);
   const targets = useQuery(environmentQueries.applications(params.workspaceId, params.projectId, params.environmentId));
+  const listedTarget = targets.data?.items.find((item) => item.id === params.appEnvironmentId);
+  const detail = useQuery(
+    appEnvironmentQueries.detail(
+      params.workspaceId,
+      params.projectId,
+      listedTarget?.appId ?? "",
+      params.appEnvironmentId,
+    ),
+  );
   if (targets.isPending) {
     return (
       <p className="muted" role="status">
@@ -39,10 +49,9 @@ function ResolvedEnvironmentAppLayout({
       </p>
     );
   }
-  const target = targets.data?.items.find((item) => item.id === params.appEnvironmentId);
-  if (targets.error || !target) {
-    return <Alert>{targets.error ? userFacingError(targets.error) : "App não encontrado neste Environment."}</Alert>;
-  }
+  const target = detail.data ?? listedTarget;
+  if (targets.error || detail.error) return <Alert>{userFacingError(targets.error ?? detail.error)}</Alert>;
+  if (!target) return <Alert>App não encontrado neste Environment.</Alert>;
   const routeParams = {
     workspaceId: params.workspaceId,
     projectId: params.projectId,

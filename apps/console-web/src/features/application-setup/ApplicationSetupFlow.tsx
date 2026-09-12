@@ -84,6 +84,7 @@ export function ApplicationSetupFlow({
   const draft = form.watch();
   const [step, setStep] = useState<SetupStep>(1);
   const [errors, setErrors] = useState<SetupErrors>({});
+  const [publicationValid, setPublicationValid] = useState(true);
   const idempotencyKey = useRef(createIdempotencyKey());
   const availability = useFeatureAvailability(workspaceId, "Workspace", workspaceId);
   const storageFeature = findFeature(availability.data, featureIds.storageRWO);
@@ -324,6 +325,8 @@ export function ApplicationSetupFlow({
             <summary>Ajustar rede, escala e recursos</summary>
             <div className="stack">
               <RuntimeConfigurationFields
+                workspaceId={workspaceId}
+                clusterId={draft.clusterId}
                 value={draft.configuration}
                 onChange={(value: RuntimeConfiguration) => set("configuration", value)}
                 variables={draft.variables}
@@ -332,6 +335,8 @@ export function ApplicationSetupFlow({
                 variablesId="setup-variables"
                 availableParameters={parameters.data?.items}
                 replicasLocked={draft.workloadKind === "Stateful"}
+                violations={errorViolations(create.error)}
+                onPublicationValidityChange={setPublicationValid}
               />
             </div>
           </details>
@@ -339,6 +344,7 @@ export function ApplicationSetupFlow({
       )}
       {step === 3 && (
         <ApplicationSetupReview
+          workspaceId={workspaceId}
           draft={draft}
           appName={
             draft.mode === "new"
@@ -358,7 +364,10 @@ export function ApplicationSetupFlow({
         <Button
           type="submit"
           loading={create.isPending}
-          disabled={step === 2 && (runtimeDependenciesPending || runtimeDependenciesFailed || !readyClusters.length)}
+          disabled={
+            step === 2 &&
+            (runtimeDependenciesPending || runtimeDependenciesFailed || !readyClusters.length || !publicationValid)
+          }
         >
           {step === 3 ? "Criar App no Environment" : "Continuar"}
         </Button>

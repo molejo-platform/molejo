@@ -46,6 +46,18 @@ type PublicationAddress struct {
 	Label    string
 }
 
+// PublicationAssociationError preserves which submitted association failed
+// while the wrapped error remains the authority for the product rule.
+type PublicationAssociationError struct {
+	EndpointIndex int
+	AddressIndex  int
+	Field         string
+	Err           error
+}
+
+func (e PublicationAssociationError) Error() string { return e.Err.Error() }
+func (e PublicationAssociationError) Unwrap() error { return e.Err }
+
 func NormalizePublicationName(value string) (string, error) {
 	name := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(value), "."))
 	if !runtimecontract.ValidHostname(name) || net.ParseIP(name) != nil {

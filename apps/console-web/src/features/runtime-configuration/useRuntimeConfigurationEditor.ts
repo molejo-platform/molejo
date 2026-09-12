@@ -35,7 +35,7 @@ export function useRuntimeConfigurationEditor(
   section: RuntimeConfigurationSection,
 ) {
   const capabilities = useEffectiveCapabilities(params.workspaceId, "AppEnvironment", target.id);
-  const canMutate = capabilities.data?.editResources === true;
+  const canMutate = capabilities.data?.editResources === true && target.withdrawalState === "None";
   const queryClient = useQueryClient();
   const parameters = useQuery(parameterQueries.list(params.workspaceId));
   const [branch, setBranch] = useState(target.branch);
@@ -65,8 +65,12 @@ export function useRuntimeConfigurationEditor(
         version,
         mergeRuntimeConfiguration(latest, branch, draft, section),
       ),
-    onSuccess: async () => {
+    onSuccess: async (updated) => {
       setDirty(false);
+      queryClient.setQueryData(
+        appEnvironmentKeys.detail(params.workspaceId, params.projectId, target.appId, target.id),
+        updated,
+      );
       await Promise.all([
         queryClient.invalidateQueries({
           queryKey: environmentKeys.applications(params.workspaceId, params.projectId, params.environmentId),
@@ -80,9 +84,14 @@ export function useRuntimeConfigurationEditor(
       ]);
     },
     onError: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: environmentKeys.applications(params.workspaceId, params.projectId, params.environmentId),
-      });
+      await Promise.all([
+        queryClient.refetchQueries({
+          queryKey: appEnvironmentKeys.detail(params.workspaceId, params.projectId, target.appId, target.id),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: environmentKeys.applications(params.workspaceId, params.projectId, params.environmentId),
+        }),
+      ]);
     },
   });
   const conflict = save.error instanceof ApiRequestError && save.error.status === 409;

@@ -10,6 +10,7 @@ import { EmptyState } from "../../shared/ui/Page";
 import { StatusBadge } from "../../shared/ui/StatusBadge";
 import { DeliveryNav } from "../delivery/public";
 import { canUseFeature, FeatureAvailabilityNotice } from "../feature-availability/public";
+import { isHTTPEndpoint } from "../http-publication/public";
 import { EnvironmentAppLayout } from "./RuntimeLayout";
 import type { EnvironmentParams } from "./runtime-ref";
 import { useDeploymentViewModel } from "./useDeploymentViewModel";
@@ -39,6 +40,7 @@ function TargetDeployments({ target, params }: { target: AppEnvironment; params:
     availableReleases,
     canMutate,
     configurationVersion,
+    currentDeployment,
     deploy,
     deployments,
     error,
@@ -47,6 +49,7 @@ function TargetDeployments({ target, params }: { target: AppEnvironment; params:
     releaseId,
     releases,
     revisions,
+    selectedRevision,
     runtimeApply,
   } = viewModel;
   const labels: Record<string, string> = {
@@ -59,6 +62,19 @@ function TargetDeployments({ target, params }: { target: AppEnvironment; params:
     Variables: "Variáveis",
     Secrets: "Segredos vinculados",
   };
+  const targetAddresses = selectedRevision?.configuration.publicEndpoints
+    .filter(isHTTPEndpoint)
+    .flatMap((endpoint) => endpoint.addresses.map((address) => address.hostname).filter(Boolean) as string[]);
+  const currentAddresses = currentDeployment.data?.configuration.publicEndpoints
+    .filter(isHTTPEndpoint)
+    .flatMap((endpoint) => endpoint.addresses.map((address) => address.hostname).filter(Boolean) as string[]);
+  const currentAddressLabel = target.currentDeploymentId
+    ? currentDeployment.isPending
+      ? "Carregando estado aplicado…"
+      : currentDeployment.isError
+        ? "Estado aplicado indisponível"
+        : currentAddresses?.join(", ") || "Acesso privado"
+    : "Acesso privado";
   if (deployments.isError || releases.isError || revisions.isError)
     return <Alert>{userFacingError(deployments.error ?? releases.error ?? revisions.error)}</Alert>;
   return (
@@ -143,6 +159,16 @@ function TargetDeployments({ target, params }: { target: AppEnvironment; params:
                 <div>
                   <dt>Configuração</dt>
                   <dd>v{preview.data.target.configurationVersion}</dd>
+                </div>
+              </dl>
+              <dl className="detail-grid">
+                <div>
+                  <dt>Endereços HTTP atuais</dt>
+                  <dd className="mono">{currentAddressLabel}</dd>
+                </div>
+                <div>
+                  <dt>Endereços HTTP após implantar</dt>
+                  <dd className="mono">{targetAddresses?.join(", ") || "Acesso privado"}</dd>
                 </div>
               </dl>
               <div className="tag-list">

@@ -28,6 +28,20 @@ export const appEnvironmentQueries = {
       queryKey: appEnvironmentKeys.detail(workspaceId, projectId, appId, appEnvironmentId),
       queryFn: ({ signal }) => getAppEnvironment(workspaceId, projectId, appId, appEnvironmentId, signal),
       enabled: Boolean(workspaceId && projectId && appId && appEnvironmentId),
-      staleTime: cachePolicy.availability,
+      staleTime: 0,
+      refetchOnWindowFocus: true,
+      refetchOnReconnect: true,
+      refetchInterval: (query) => {
+        const target = query.state.data;
+        if (!target || target.withdrawalState === "Confirmed") return false;
+        const converging =
+          target.state === "Progressing" ||
+          target.withdrawalState === "Requested" ||
+          target.withdrawalState === "Removing" ||
+          target.desiredDeploymentId !== target.currentDeploymentId;
+        if (converging) return 2_000;
+        const hasHTTP = target.configuration.publicEndpoints.some((endpoint) => endpoint.type === "HTTP");
+        return hasHTTP || target.publicationObservation ? 20_000 : false;
+      },
     }),
 };

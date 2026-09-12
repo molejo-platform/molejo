@@ -2614,6 +2614,7 @@ components:
     PublicationObservation:
       type: object
       additionalProperties: false
+      required: [uid, desiredVersion, generation, observedAt, state, reasonCode, addresses]
       properties:
         uid: { type: string, maxLength: 128 }
         desiredVersion: { type: integer, minimum: 0 }
@@ -3328,7 +3329,7 @@ components:
         appEnvironment: { $ref: '#/components/schemas/AppEnvironment' }
     AppEnvironment:
       type: object
-      required: [id, clusterId, projectId, appId, appName, environmentId, environmentName, branch, workloadKind, configuration, configurationVersion, version, state, createdAt, updatedAt]
+      required: [withdrawalState, id, clusterId, projectId, appId, appName, environmentId, environmentName, branch, workloadKind, configuration, configurationVersion, version, state, createdAt, updatedAt]
       additionalProperties: false
       properties:
         withdrawalState: { type: string, enum: [None, Requested, Removing, Confirmed] }

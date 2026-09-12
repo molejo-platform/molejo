@@ -1972,31 +1972,31 @@ type App struct {
 
 // AppEnvironment defines model for AppEnvironment.
 type AppEnvironment struct {
-	AppId                       string                         `json:"appId"`
-	AppName                     string                         `json:"appName"`
-	Branch                      string                         `json:"branch"`
-	ClusterId                   string                         `json:"clusterId"`
-	Configuration               RuntimeConfiguration           `json:"configuration"`
-	ConfigurationVersion        int                            `json:"configurationVersion"`
-	CreatedAt                   time.Time                      `json:"createdAt"`
-	CurrentConfigurationVersion *int                           `json:"currentConfigurationVersion,omitempty"`
-	CurrentDeploymentId         *string                        `json:"currentDeploymentId,omitempty"`
-	CurrentReleaseId            *string                        `json:"currentReleaseId,omitempty"`
-	DesiredConfigurationVersion *int                           `json:"desiredConfigurationVersion,omitempty"`
-	DesiredDeploymentId         *string                        `json:"desiredDeploymentId,omitempty"`
-	EnvironmentId               string                         `json:"environmentId"`
-	EnvironmentName             string                         `json:"environmentName"`
-	Id                          string                         `json:"id"`
-	Message                     *string                        `json:"message,omitempty"`
-	ProjectId                   string                         `json:"projectId"`
-	PublicationObservation      *PublicationObservation        `json:"publicationObservation,omitempty"`
-	RuntimeObservedAt           *time.Time                     `json:"runtimeObservedAt,omitempty"`
-	RuntimeObservedGeneration   *int                           `json:"runtimeObservedGeneration,omitempty"`
-	State                       AppEnvironmentState            `json:"state"`
-	UpdatedAt                   time.Time                      `json:"updatedAt"`
-	Version                     int                            `json:"version"`
-	WithdrawalState             *AppEnvironmentWithdrawalState `json:"withdrawalState,omitempty"`
-	WorkloadKind                AppEnvironmentWorkloadKind     `json:"workloadKind"`
+	AppId                       string                        `json:"appId"`
+	AppName                     string                        `json:"appName"`
+	Branch                      string                        `json:"branch"`
+	ClusterId                   string                        `json:"clusterId"`
+	Configuration               RuntimeConfiguration          `json:"configuration"`
+	ConfigurationVersion        int                           `json:"configurationVersion"`
+	CreatedAt                   time.Time                     `json:"createdAt"`
+	CurrentConfigurationVersion *int                          `json:"currentConfigurationVersion,omitempty"`
+	CurrentDeploymentId         *string                       `json:"currentDeploymentId,omitempty"`
+	CurrentReleaseId            *string                       `json:"currentReleaseId,omitempty"`
+	DesiredConfigurationVersion *int                          `json:"desiredConfigurationVersion,omitempty"`
+	DesiredDeploymentId         *string                       `json:"desiredDeploymentId,omitempty"`
+	EnvironmentId               string                        `json:"environmentId"`
+	EnvironmentName             string                        `json:"environmentName"`
+	Id                          string                        `json:"id"`
+	Message                     *string                       `json:"message,omitempty"`
+	ProjectId                   string                        `json:"projectId"`
+	PublicationObservation      *PublicationObservation       `json:"publicationObservation,omitempty"`
+	RuntimeObservedAt           *time.Time                    `json:"runtimeObservedAt,omitempty"`
+	RuntimeObservedGeneration   *int                          `json:"runtimeObservedGeneration,omitempty"`
+	State                       AppEnvironmentState           `json:"state"`
+	UpdatedAt                   time.Time                     `json:"updatedAt"`
+	Version                     int                           `json:"version"`
+	WithdrawalState             AppEnvironmentWithdrawalState `json:"withdrawalState"`
+	WorkloadKind                AppEnvironmentWorkloadKind    `json:"workloadKind"`
 }
 
 // AppEnvironmentState defines model for AppEnvironment.State.
@@ -2768,13 +2768,13 @@ type PublicationListener struct {
 
 // PublicationObservation defines model for PublicationObservation.
 type PublicationObservation struct {
-	Addresses      *[]PublicationAddressObservation `json:"addresses,omitempty"`
-	DesiredVersion *int                             `json:"desiredVersion,omitempty"`
-	Generation     *int                             `json:"generation,omitempty"`
-	ObservedAt     *time.Time                       `json:"observedAt,omitempty"`
-	ReasonCode     *string                          `json:"reasonCode,omitempty"`
-	State          *PublicationObservationState     `json:"state,omitempty"`
-	Uid            *string                          `json:"uid,omitempty"`
+	Addresses      []PublicationAddressObservation `json:"addresses"`
+	DesiredVersion int                             `json:"desiredVersion"`
+	Generation     int                             `json:"generation"`
+	ObservedAt     time.Time                       `json:"observedAt"`
+	ReasonCode     string                          `json:"reasonCode"`
+	State          PublicationObservationState     `json:"state"`
+	Uid            string                          `json:"uid"`
 }
 
 // PublicationObservationState defines model for PublicationObservation.State.

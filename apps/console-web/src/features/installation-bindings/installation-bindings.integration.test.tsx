@@ -8,7 +8,6 @@ import { renderWithQueryClient } from "../../test/render";
 const mocks = vi.hoisted(() => ({
   listClusters: vi.fn(),
   listStorageBindings: vi.fn(),
-  getPublicationBinding: vi.fn(),
   getHistoricalMetricBinding: vi.fn(),
   putStorageBinding: vi.fn(),
 }));
@@ -30,12 +29,9 @@ vi.mock("../cluster-placement/public", async () => {
 });
 vi.mock("./api", () => ({
   listStorageBindings: mocks.listStorageBindings,
-  getPublicationBinding: mocks.getPublicationBinding,
   getHistoricalMetricBinding: mocks.getHistoricalMetricBinding,
   putStorageBinding: mocks.putStorageBinding,
   deleteStorageBinding: vi.fn(),
-  putPublicationBinding: vi.fn(),
-  deletePublicationBinding: vi.fn(),
 }));
 
 import { ClusterBindingsPage } from "./ClusterBindingsPage";
@@ -48,7 +44,6 @@ describe("cluster bindings", () => {
       items: [{ id: "agi-cluster", name: "K3s", status: "Active", kubernetesVersion: "v1.36.3" }],
     });
     mocks.listStorageBindings.mockResolvedValue({ items: [] });
-    mocks.getPublicationBinding.mockResolvedValue(null);
     mocks.getHistoricalMetricBinding.mockResolvedValue(null);
     mocks.putStorageBinding.mockResolvedValue({
       clusterId: "agi-cluster",

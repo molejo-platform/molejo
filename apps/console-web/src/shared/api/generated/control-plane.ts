@@ -1574,6 +1574,108 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/publication/domains": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listPublicationDomains"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/publication/domains/{domainId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                domainId: string;
+            };
+            cookie?: never;
+        };
+        get: operations["getPublicationDomain"];
+        put: operations["putPublicationDomain"];
+        post?: never;
+        delete: operations["deletePublicationDomain"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/publication/domains/{domainId}/grants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listPublicationGrants"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/publication/domains/{domainId}/grants/{workspaceId}/{bindingId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                domainId: string;
+                workspaceId: string;
+                bindingId: string;
+            };
+            cookie?: never;
+        };
+        get: operations["getPublicationGrant"];
+        put: operations["putPublicationGrant"];
+        post?: never;
+        delete: operations["deletePublicationGrant"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/publication/dependents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getPublicationDependents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/publication-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getPublicationOptions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1768,31 +1870,121 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
         };
+        PublicationListener: {
+            name: string;
+            hostname: string;
+        };
         ClusterPublicationBindingInput: {
+            /** @enum {string} */
+            schemaVersion: "kubernetes-http.v1alpha1";
             gatewayNamespace: string;
             gatewayName: string;
-            sectionName: string;
+            listeners: components["schemas"]["PublicationListener"][];
         };
         ClusterPublicationBinding: {
-            clusterId: string;
+            /** @enum {string} */
+            schemaVersion: "kubernetes-http.v1alpha1";
             gatewayNamespace: string;
             gatewayName: string;
-            sectionName: string;
-            gatewayClassName: string;
-            gatewayClassAccepted: boolean;
-            gatewayProgrammed: boolean;
-            listenerReady: boolean;
-            supportedRouteKinds: string[];
+            listeners: components["schemas"]["PublicationListener"][];
+            id: string;
+            clusterId: string;
+            clusterUid: string;
+            revision: number;
             /** @enum {string} */
             health: "Unknown" | "Healthy" | "Degraded" | "Unavailable";
             reasonCode: string;
             /** Format: date-time */
             observedAt?: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        PublicationDomainInput: {
+            name: string;
+            /** @enum {string} */
+            kind: "Exact" | "SubdomainPool";
+            reservedNames: string[];
+        };
+        PublicationDomain: {
+            name: string;
+            /** @enum {string} */
+            kind: "Exact" | "SubdomainPool";
+            reservedNames: string[];
+            id: string;
             version: number;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
+        };
+        PublicationObservation: {
+            uid: string;
+            desiredVersion: number;
+            generation: number;
+            /** Format: date-time */
+            observedAt: string;
+            /** @enum {string} */
+            state: "Unknown" | "Ready" | "Progressing" | "Degraded";
+            reasonCode: string;
+            addresses: components["schemas"]["PublicationAddressObservation"][];
+        };
+        PublicationAddressObservation: {
+            endpointName: string;
+            hostname: string;
+            destination: components["schemas"]["HTTPDestination"];
+            routeName: string;
+            routeUid: string;
+            routeGeneration: number;
+            gatewayUid: string;
+            conditions: {
+                /** @enum {string} */
+                type: "RouteReady" | "GatewayReady" | "ConnectivityVerified" | "ServedTLSVerified";
+                /** @enum {string} */
+                status: "True" | "False" | "Unknown";
+                reason: string;
+                observedGeneration: number;
+                /** Format: date-time */
+                lastTransitionAt: string;
+            }[];
+        };
+        HTTPDestination: {
+            bindingId: string;
+            bindingRevision: number;
+            /** @enum {string} */
+            schemaVersion: "kubernetes-http.v1alpha1";
+            gatewayNamespace: string;
+            gatewayName: string;
+            sectionName: string;
+        };
+        PublicationGrant: {
+            domainId: string;
+            workspaceId: string;
+            bindingId: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        PublicationOption: {
+            domain: components["schemas"]["PublicationDomain"];
+            bindingId: string;
+            listeners: components["schemas"]["PublicationListener"][];
+            /** @enum {string} */
+            health: "Unknown" | "Healthy" | "Degraded" | "Unavailable";
+            reasonCode: string;
+        };
+        PublicationDependent: {
+            appEnvironmentId: string;
+            hostname: string;
+            /** @enum {string} */
+            kind: "Desired" | "Applied" | "Executable";
+        };
+        HTTPAssociation: {
+            domainId: string;
+            bindingId: string;
+            label?: string;
+            listenerName?: string;
+            readonly hostname?: string;
         };
         Cluster: {
             id: string;
@@ -2323,6 +2515,9 @@ export interface components {
             appEnvironment: components["schemas"]["AppEnvironment"];
         };
         AppEnvironment: {
+            /** @enum {string} */
+            withdrawalState: "None" | "Requested" | "Removing" | "Confirmed";
+            publicationObservation?: components["schemas"]["PublicationObservation"];
             id: string;
             clusterId: string;
             projectId: string;
@@ -2444,10 +2639,17 @@ export interface components {
             /** @enum {string} */
             type: "HTTP" | "TCP";
             portName: string;
-            domainId: string;
-            hostnameLabel: string;
+            addresses?: components["schemas"]["HTTPAssociation"][];
+            domainId?: string;
+            hostnameLabel?: string;
             readonly externalPort?: number;
-        };
+        } & ({
+            /** @enum {unknown} */
+            type?: "HTTP";
+        } | {
+            /** @enum {unknown} */
+            type?: "TCP";
+        });
         Deployment: {
             id: string;
             appEnvironmentId: string;
@@ -2660,6 +2862,8 @@ export interface components {
         };
     };
     parameters: {
+        /** @description Opaque keyset cursor returned by the preceding publication page. */
+        PublicationCursor: string;
         Cursor: string;
         Limit: number;
         IncludeArchived: boolean;
@@ -6428,6 +6632,339 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Operation"];
+                };
+            };
+        };
+    };
+    listPublicationDomains: {
+        parameters: {
+            query?: {
+                /** @description Opaque keyset cursor returned by the preceding publication page. */
+                cursor?: components["parameters"]["PublicationCursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Administrative domains */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        hasMore: boolean;
+                        nextCursor: string | null;
+                        items: components["schemas"]["PublicationDomain"][];
+                    };
+                };
+            };
+            /** @description Sanitized API error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getPublicationDomain: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                domainId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current administrative revision */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationDomain"];
+                };
+            };
+        };
+    };
+    putPublicationDomain: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-Match"?: number;
+            };
+            path: {
+                domainId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublicationDomainInput"];
+            };
+        };
+        responses: {
+            /** @description Updated domain */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationDomain"];
+                };
+            };
+            /** @description Created domain */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationDomain"];
+                };
+            };
+            /** @description Sanitized API error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deletePublicationDomain: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match": number;
+            };
+            path: {
+                domainId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Domain removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Sanitized API error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listPublicationGrants: {
+        parameters: {
+            query?: {
+                /** @description Opaque keyset cursor returned by the preceding publication page. */
+                cursor?: components["parameters"]["PublicationCursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path: {
+                domainId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Administrative grants */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        hasMore: boolean;
+                        nextCursor: string | null;
+                        items: components["schemas"]["PublicationGrant"][];
+                    };
+                };
+            };
+        };
+    };
+    getPublicationGrant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                domainId: string;
+                workspaceId: string;
+                bindingId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current administrative grant */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationGrant"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    putPublicationGrant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                domainId: string;
+                workspaceId: string;
+                bindingId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Grant mutation completed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Sanitized API error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deletePublicationGrant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                domainId: string;
+                workspaceId: string;
+                bindingId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Grant mutation completed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Sanitized API error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getPublicationDependents: {
+        parameters: {
+            query?: {
+                /** @description Opaque keyset cursor returned by the preceding publication page. */
+                cursor?: components["parameters"]["PublicationCursor"];
+                limit?: components["parameters"]["Limit"];
+                domainId?: string;
+                bindingId?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Publication dependencies */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        hasMore: boolean;
+                        nextCursor: string | null;
+                        items: components["schemas"]["PublicationDependent"][];
+                    };
+                };
+            };
+            /** @description Sanitized API error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getPublicationOptions: {
+        parameters: {
+            query: {
+                /** @description Opaque keyset cursor returned by the preceding publication page. */
+                cursor?: components["parameters"]["PublicationCursor"];
+                limit?: components["parameters"]["Limit"];
+                clusterId: string;
+            };
+            header?: never;
+            path: {
+                workspaceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Granted publication choices */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        hasMore: boolean;
+                        nextCursor: string | null;
+                        items: components["schemas"]["PublicationOption"][];
+                    };
+                };
+            };
+            /** @description Sanitized API error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };

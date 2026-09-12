@@ -13,10 +13,12 @@ import (
 )
 
 type ResolvedPublication struct {
-	EndpointName string                            `json:"endpointName"`
-	DomainID     string                            `json:"domainId"`
-	Hostname     string                            `json:"hostname"`
-	Destination  kubernetesbinding.HTTPDestination `json:"destination"`
+	EndpointName  string                            `json:"endpointName"`
+	DomainID      string                            `json:"domainId"`
+	Hostname      string                            `json:"hostname"`
+	Destination   kubernetesbinding.HTTPDestination `json:"destination"`
+	EndpointIndex int                               `json:"-"`
+	AddressIndex  int                               `json:"-"`
 }
 type PublicationSnapshot struct {
 	SchemaVersion string                `json:"schemaVersion"`
@@ -41,7 +43,7 @@ func (s *Store) resolveHTTPConfiguration(ctx context.Context, tx pgx.Tx, environ
 			continue
 		}
 		if len(endpoint.Addresses) < 1 || len(endpoint.Addresses) > 10 || endpoint.DomainID != "" || endpoint.HostnameLabel != "" {
-			return config, snapshot, domain.ErrPublicationName
+			return config, snapshot, associationError(ei, -1, "addresses", domain.ErrPublicationName)
 		}
 		for ai := range endpoint.Addresses {
 			a := &endpoint.Addresses[ai]
@@ -50,7 +52,7 @@ func (s *Store) resolveHTTPConfiguration(ctx context.Context, tx pgx.Tx, environ
 			var b kubernetesbinding.HTTPBinding
 			err := tx.QueryRow(ctx, `SELECT d.id,d.name,d.kind,d.reserved_names,b.id,b.version,b.configuration FROM publication_domains d JOIN publication_grants g ON g.domain_id=d.id JOIN cluster_publication_bindings b ON b.id=g.binding_id JOIN app_environments ae ON ae.workspace_id=g.workspace_id AND ae.cluster_id=b.cluster_id WHERE ae.id=$1 AND d.id=$2 AND b.id=$3`, environmentID, a.DomainID, a.BindingID).Scan(&d.ID, &d.Name, &d.Kind, &reservations, &b.ID, &b.Revision, &raw)
 			if errors.Is(err, pgx.ErrNoRows) {
-				return config, snapshot, domain.ErrPublicationNotGranted
+				return config, snapshot, associationError(ei, ai, "domainId", domain.ErrPublicationNotGranted)
 			}
 			if err != nil {
 				return config, snapshot, err
@@ -65,21 +67,29 @@ func (s *Store) resolveHTTPConfiguration(ctx context.Context, tx pgx.Tx, environ
 			b.ID, b.Revision = id, revision
 			hostname, err := d.Resolve(a.Label)
 			if err != nil {
-				return config, snapshot, err
+				field := "label"
+				if errors.Is(err, domain.ErrPublicationUnsupported) {
+					field = "domainId"
+				}
+				return config, snapshot, associationError(ei, ai, field, err)
 			}
 			if seen[hostname] {
-				return config, snapshot, domain.ErrPublicationName
+				return config, snapshot, associationError(ei, ai, "label", domain.ErrPublicationName)
 			}
 			seen[hostname] = true
 			destination, err := b.Resolve(hostname, a.ListenerName)
 			if err != nil {
-				return config, snapshot, err
+				return config, snapshot, associationError(ei, ai, "listenerName", err)
 			}
 			a.Hostname, a.ListenerName = hostname, destination.SectionName
-			snapshot.Addresses = append(snapshot.Addresses, ResolvedPublication{EndpointName: endpoint.Name, DomainID: d.ID, Hostname: hostname, Destination: destination})
+			snapshot.Addresses = append(snapshot.Addresses, ResolvedPublication{EndpointName: endpoint.Name, DomainID: d.ID, Hostname: hostname, Destination: destination, EndpointIndex: ei, AddressIndex: ai})
 		}
 	}
 	return config, snapshot, nil
+}
+
+func associationError(endpointIndex, addressIndex int, field string, err error) error {
+	return domain.PublicationAssociationError{EndpointIndex: endpointIndex, AddressIndex: addressIndex, Field: field, Err: err}
 }
 
 func reserveHTTPClaim(ctx context.Context, tx pgx.Tx, environmentID, version int64, a ResolvedPublication, desired bool) error {

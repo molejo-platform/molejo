@@ -174,7 +174,12 @@ func (h *generatedHandler) appEnvironmentSetupCommand(workspaceID, actorID int64
 		violations = append(violations, errorViolation{Field: "/workloadKind", Code: "invalid_workload", Message: err.Error()})
 	}
 	if err := domain.ValidateRuntimeConfig(command.Configuration, h.server.config.MaxReplicas, h.server.config.MaxCPU, h.server.config.MaxMemory); err != nil {
-		violations = append(violations, errorViolation{Field: "/configuration", Code: "invalid_configuration", Message: err.Error()})
+		var association domain.PublicationAssociationError
+		if errors.As(err, &association) {
+			violations = append(violations, errorViolation{Field: publicationAssociationField(association), Code: "publication_invalid", Message: "review this publication address"})
+		} else {
+			violations = append(violations, errorViolation{Field: "/configuration", Code: "invalid_configuration", Message: err.Error()})
+		}
 	}
 	return command, violations
 }

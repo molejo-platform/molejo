@@ -13,7 +13,7 @@ import { EmptyState, PageHeader } from "../../shared/ui/Page";
 import { StatusBadge } from "../../shared/ui/StatusBadge";
 import { useSessionQuery } from "../authentication/public";
 import { activeClusters, clusterPlacementQueries } from "../cluster-placement/public";
-import { deletePublicationBinding, deleteStorageBinding, putPublicationBinding, putStorageBinding } from "./api";
+import { deleteStorageBinding, putStorageBinding } from "./api";
 import { installationBindingKeys, installationBindingQueries } from "./queries";
 
 export function ClusterBindingsPage() {
@@ -64,7 +64,6 @@ export function ClusterBindingsPage() {
 function ClusterBindingEditor({ clusterId }: { clusterId: string }) {
   const queryClient = useQueryClient();
   const storage = useQuery(installationBindingQueries.storage(clusterId));
-  const publication = useQuery(installationBindingQueries.publication(clusterId));
   const metrics = useQuery(installationBindingQueries.metrics(clusterId));
   const [storageForm, setStorageForm] = useState({ profileId: "persistent-standard", storageClassName: "local-path" });
 
@@ -83,25 +82,7 @@ function ClusterBindingEditor({ clusterId }: { clusterId: string }) {
     mutationFn: (binding: ClusterStorageBinding) => deleteStorageBinding(clusterId, binding),
     onSuccess: refresh,
   });
-  const savePublication = useMutation({
-    mutationFn: () => putPublicationBinding(clusterId, publication.data?.version),
-    onSuccess: refresh,
-  });
-  const removePublication = useMutation({
-    mutationFn: () => {
-      if (!publication.data) throw new Error("Publication binding is not loaded");
-      return deletePublicationBinding(clusterId, publication.data);
-    },
-    onSuccess: refresh,
-  });
-  const error =
-    storage.error ??
-    publication.error ??
-    metrics.error ??
-    saveStorage.error ??
-    removeStorage.error ??
-    savePublication.error ??
-    removePublication.error;
+  const error = storage.error ?? metrics.error ?? saveStorage.error ?? removeStorage.error;
 
   function submitStorage(event: FormEvent) {
     event.preventDefault();
@@ -170,49 +151,6 @@ function ClusterBindingEditor({ clusterId }: { clusterId: string }) {
             description="Aplicações stateless continuam independentes deste binding."
           />
         )}
-      </section>
-      <section className="panel stack">
-        <div>
-          <h2>Publicação HTTP</h2>
-          <p className="muted">Convenção desta versão: `molejo-system/molejo#https-molejo`.</p>
-        </div>
-        {publication.isPending ? (
-          <p role="status">Carregando publicação…</p>
-        ) : publication.data ? (
-          <DataList>
-            <DataListItem>
-              <span>
-                <strong>
-                  {publication.data.gatewayNamespace}/{publication.data.gatewayName}#{publication.data.sectionName}
-                </strong>
-                <small>
-                  {publication.data.gatewayClassName || "Aguardando observação"} · versão {publication.data.version}
-                </small>
-              </span>
-              <div className="row-controls">
-                <StatusBadge
-                  status={publication.data.health}
-                  label={publication.data.reasonCode || publication.data.health}
-                />
-                <Button
-                  variant="secondary"
-                  loading={removePublication.isPending}
-                  onClick={() => removePublication.mutate()}
-                >
-                  Remover
-                </Button>
-              </div>
-            </DataListItem>
-          </DataList>
-        ) : (
-          <EmptyState
-            title="Publicação não configurada"
-            description="Aplicações privadas continuam funcionando normalmente."
-          />
-        )}
-        <Button variant="secondary" loading={savePublication.isPending} onClick={() => savePublication.mutate()}>
-          {publication.data ? "Reverificar referência" : "Registrar referência convencional"}
-        </Button>
       </section>
       <section className="panel stack">
         <h2>Métricas históricas</h2>

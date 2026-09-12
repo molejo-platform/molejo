@@ -87,7 +87,7 @@ func (s *Store) reservePublicationClaims(ctx context.Context, tx pgx.Tx, appEnvi
 	}
 	for _, a := range snapshot.Addresses {
 		if err = reserveHTTPClaim(ctx, tx, appEnvironmentID, configurationVersion, a, desired); err != nil {
-			return configuration, err
+			return configuration, associationError(a.EndpointIndex, a.AddressIndex, "label", err)
 		}
 	}
 	for index := range configuration.PublicEndpoints {

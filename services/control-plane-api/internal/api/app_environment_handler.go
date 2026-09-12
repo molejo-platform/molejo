@@ -352,6 +352,11 @@ func (h *generatedHandler) appEnvironmentInput(w http.ResponseWriter, r *http.Re
 	}
 	input.Configuration = domain.NormalizeRuntimeConfig(input.Configuration)
 	if err := domain.ValidateRuntimeConfig(input.Configuration, h.server.config.MaxReplicas, h.server.config.MaxCPU, h.server.config.MaxMemory); err != nil {
+		var association domain.PublicationAssociationError
+		if errors.As(err, &association) {
+			writePublicationError(w, r, err)
+			return appEnvironmentInput{}, false
+		}
 		writeError(w, http.StatusBadRequest, "configuration_invalid", err.Error(), r)
 		return appEnvironmentInput{}, false
 	}

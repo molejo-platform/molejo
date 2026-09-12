@@ -65,8 +65,15 @@ func TestHTTPPublicationAPIIntegratedJourney(t *testing.T) {
 	target, release, image := createExecutorTargetAndRelease(t, s, workspace.ID, actor)
 	base := "/api/v1/workspaces/" + workspace.PublicID + "/projects/" + target.ProjectPublicID + "/apps/" + target.AppPublicID + "/environments/" + target.PublicID
 	config := apiRuntimeConfiguration("welcome")
-	config.PublicEndpoints[0].Addresses = append(config.PublicEndpoints[0].Addresses, domain.HTTPAssociation{DomainID: "home", BindingID: "pbd-test"})
+	config.PublicEndpoints[0].Addresses = append(config.PublicEndpoints[0].Addresses, domain.HTTPAssociation{DomainID: "home", BindingID: "pbd-test", Label: "invalid-for-exact"})
 	body, _ := json.Marshal(map[string]any{"branch": "main", "configuration": config})
+	response = hierarchyRequest(t, server, owner, http.MethodPut, base, string(body), map[string]string{"If-Match": strconv.FormatInt(target.Version, 10)})
+	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), `"field":"/configuration/publicEndpoints/0/addresses/1/label"`) {
+		t.Fatalf("association error: %d %s", response.Code, response.Body.String())
+	}
+	config.PublicEndpoints[0].Addresses = config.PublicEndpoints[0].Addresses[:1]
+	config.PublicEndpoints[0].Addresses = append(config.PublicEndpoints[0].Addresses, domain.HTTPAssociation{DomainID: "home", BindingID: "pbd-test"})
+	body, _ = json.Marshal(map[string]any{"branch": "main", "configuration": config})
 	response = hierarchyRequest(t, server, owner, http.MethodPut, base, string(body), map[string]string{"If-Match": strconv.FormatInt(target.Version, 10)})
 	if response.Code != http.StatusOK {
 		t.Fatalf("save: %d %s", response.Code, response.Body.String())

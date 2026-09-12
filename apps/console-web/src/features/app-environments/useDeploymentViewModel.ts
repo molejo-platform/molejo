@@ -16,7 +16,8 @@ export function useDeploymentViewModel(target: AppEnvironment, params: Environme
   const capabilities = useEffectiveCapabilities(params.workspaceId, "AppEnvironment", target.id);
   const availability = useFeatureAvailability(params.workspaceId, "AppEnvironment", target.id);
   const runtimeApply = findFeature(availability.data, featureIds.runtimeWorkloadApply);
-  const canMutate = capabilities.data?.deploy === true && canUseFeature(runtimeApply);
+  const canMutate =
+    capabilities.data?.deploy === true && canUseFeature(runtimeApply) && target.withdrawalState === "None";
   const deployments = useQuery(
     deliveryQueries.deployments(params.workspaceId, params.projectId, target.appId, target.id),
   );
@@ -27,6 +28,15 @@ export function useDeploymentViewModel(target: AppEnvironment, params: Environme
   );
   const revisions = useQuery(
     runtimeConfigurationQueries.versions(params.workspaceId, params.projectId, target.appId, target.id),
+  );
+  const currentDeployment = useQuery(
+    deliveryQueries.deployment(
+      params.workspaceId,
+      params.projectId,
+      target.appId,
+      target.id,
+      target.currentDeploymentId ?? "",
+    ),
   );
   const [releaseId, setReleaseId] = useState("");
   const [configurationVersion, setConfigurationVersion] = useState(target.configurationVersion);
@@ -49,6 +59,7 @@ export function useDeploymentViewModel(target: AppEnvironment, params: Environme
       configurationVersion,
     ),
   );
+  const selectedRevision = revisions.data?.items.find((revision) => revision.version === configurationVersion);
   const operation = useOperationTracker({ workspaceId: params.workspaceId, scope: `deployment:${target.id}` });
   useEffect(() => {
     if (!operation.isSucceeded) return;
@@ -96,6 +107,8 @@ export function useDeploymentViewModel(target: AppEnvironment, params: Environme
     configurationVersion,
     setConfigurationVersion,
     preview,
+    selectedRevision,
+    currentDeployment,
     operation,
     deploy,
     error:
@@ -104,6 +117,7 @@ export function useDeploymentViewModel(target: AppEnvironment, params: Environme
       deployments.error ??
       releases.error ??
       revisions.error ??
+      currentDeployment.error ??
       preview.error ??
       deploy.error ??
       operation.error,

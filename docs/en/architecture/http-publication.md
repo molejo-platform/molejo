@@ -5,10 +5,11 @@ named backend port, and up to ten exact addresses. A private configuration omits
 same Service and workload. TCP publication and storage retain their existing
 contracts. Phase two provides administrative persistence, product APIs, immutable
 execution snapshots and protected withdrawal. The CLI supplies the authenticated
-administrative journey; Console consumption is phase four. This alpha cut has no HTTP compatibility reader,
-converter, dual contract or data backfill. Migration 036 requires a clean alpha
-installation; its downgrade is explicitly rejected. Reset instead of rolling back
-to the former HTTP schema.
+administrative journey; the Console supplies the developer journey over the same
+contracts. This alpha cut has no HTTP compatibility reader, converter, dual
+contract or data backfill. Migration 036 requires a clean alpha installation; its
+downgrade is explicitly rejected. Reset instead of rolling back to the former HTTP
+schema.
 
 ## Ownership and contracts
 
@@ -242,8 +243,22 @@ earlier operations. When a response is lost, the client performs an exact GET an
 accepts only an equal result; absence or difference stops as a conflict. A retry
 therefore begins with a new plan.
 
-Console consumption remains the next phase. No new authentication mechanism or
-persistent login is introduced.
+The Console lists only the granted choices for the selected Workspace and cluster,
+fifty at a time. It never creates domains, grants, listeners, certificates or DNS
+records. The developer selects an exact domain without a label or supplies one DNS
+label for a pool, selects a listener when the authorized destination is ambiguous,
+and can combine up to ten addresses on one named application port. Removing an
+address changes the saved configuration only; deployment remains an explicit next
+action. Changing the placement cluster does not silently retarget restored
+associations: they must be removed before saving.
+
+The application view keeps desired, applied and observed states separate. Applied
+addresses remain visible while removal awaits deployment, and runtime observations
+show route/Gateway readiness independently from connectivity and served TLS
+verification. A `409` keeps the local draft and asks the developer to reload the
+authoritative revision before retrying. Diagnostics copied from this view identify
+the application state and hostname without exposing Kubernetes coordinates or
+credentials. No new authentication mechanism or persistent login is introduced.
 
 ## Validation
 

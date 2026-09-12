@@ -1,0 +1,45 @@
+@layer features {
+  .http-publication {
+    container-type: inline-size;
+  }
+
+  .publication-address,
+  .publication-composer {
+    display: grid;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface-subtle);
+  }
+
+  .publication-address {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+
+  .publication-address > .alert,
+  .publication-address > small {
+    grid-column: 1 / -1;
+  }
+
+  .publication-composer legend {
+    padding-inline: var(--space-2);
+    font-weight: 700;
+  }
+
+  .publication-preview {
+    margin: 0;
+  }
+
+  .publication-status-list {
+    display: grid;
+    gap: var(--space-3);
+  }
+
+  @container (max-width: 34rem) {
+    .publication-address {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+}

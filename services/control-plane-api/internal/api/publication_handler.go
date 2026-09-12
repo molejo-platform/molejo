@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/molejo-platform/molejo/packages/kubernetesbinding"
@@ -179,7 +180,30 @@ func (h *generatedHandler) GetPublicationOptions(w http.ResponseWriter, r *http.
 }
 
 func writePublicationError(w http.ResponseWriter, r *http.Request, err error) {
+	status, code, message, violationCode, violationMessage := publicationErrorDetails(err)
+	var association domain.PublicationAssociationError
+	if errors.As(err, &association) {
+		field := publicationAssociationField(association)
+		writeDetailedError(w, status, code, message, []errorViolation{{Field: field, Code: violationCode, Message: violationMessage}}, r)
+		return
+	}
+	writeError(w, status, code, message, r)
+}
+
+func publicationAssociationField(association domain.PublicationAssociationError) string {
+	field := fmt.Sprintf("/configuration/publicEndpoints/%d", association.EndpointIndex)
+	if association.AddressIndex >= 0 {
+		field += fmt.Sprintf("/addresses/%d", association.AddressIndex)
+	}
+	if association.Field != "" {
+		field += "/" + association.Field
+	}
+	return field
+}
+
+func publicationErrorDetails(err error) (int, string, string, string, string) {
 	status, code, message := http.StatusInternalServerError, "storage_failed", "publication state could not be persisted"
+	violationCode, violationMessage := "publication_invalid", "review this publication address"
 	switch {
 	case errors.Is(err, store.ErrPublicationDependency):
 		status, code, message = http.StatusConflict, "publication_has_dependents", "remove desired, applied and executable references before this change"
@@ -187,6 +211,7 @@ func writePublicationError(w http.ResponseWriter, r *http.Request, err error) {
 		status, code, message = http.StatusConflict, "version_conflict", "reload the current revision before retrying"
 	case errors.Is(err, store.ErrPublicationConflict):
 		status, code, message = http.StatusConflict, "publication_conflict", "the requested address is unavailable"
+		violationCode, violationMessage = "address_conflict", "this address is already reserved"
 	case errors.Is(err, store.ErrNotFound), errors.Is(err, store.ErrBindingNotFound), errors.Is(err, store.ErrClusterNotFound):
 		status, code, message = http.StatusNotFound, "resource_not_found", "resource was not found"
 	case errors.Is(err, domain.ErrPublicationName), errors.Is(err, kubernetesbinding.ErrHTTPBindingInvalid), errors.Is(err, kubernetesbinding.ErrHTTPListenerInvalid):
@@ -194,21 +219,25 @@ func writePublicationError(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.Is(err, domain.ErrPublicationUnsupported), errors.Is(err, kubernetesbinding.ErrHTTPBindingUnsupported):
 		status, code, message = http.StatusBadRequest, "publication_mode_unsupported", "this publication mode is not supported"
 	case errors.Is(err, kubernetesbinding.ErrHTTPSelectionRequired):
-		writeDetailedError(w, http.StatusBadRequest, "publication_listener_required", "select one of the eligible listeners", []errorViolation{{Field: "/configuration/publicEndpoints", Code: "listener_required", Message: "set listenerName on the ambiguous address"}}, r)
-		return
+		status, code, message = http.StatusBadRequest, "publication_listener_required", "select one of the eligible listeners"
+		violationCode, violationMessage = "listener_required", "select a listener for this address"
 	case errors.Is(err, kubernetesbinding.ErrHTTPDestinationUnavailable):
 		status, code, message = http.StatusBadRequest, "publication_destination_unavailable", "the selected listener does not cover the requested name"
+		violationCode, violationMessage = "listener_unavailable", "the selected listener does not cover this address"
 	case errors.Is(err, domain.ErrPublicationNotGranted):
 		status = http.StatusBadRequest
 		code, message = "publication_not_granted", "the selected domain and destination are not granted in this context"
+		violationCode, violationMessage = "domain_not_granted", "this destination is not granted to the Workspace"
 	case errors.Is(err, domain.ErrPublicationReserved):
 		status = http.StatusBadRequest
 		code, message = "publication_reserved", "the requested name is reserved"
+		violationCode, violationMessage = "name_reserved", "this name is reserved"
 	case errors.Is(err, domain.ErrPublicationLimit):
 		status = http.StatusBadRequest
 		code, message = "publication_limit_exceeded", "publication exceeds the supported limit"
+		violationCode, violationMessage = "address_limit", "use no more than ten addresses"
 	}
-	writeError(w, status, code, message, r)
+	return status, code, message, violationCode, violationMessage
 }
 
 func (h *generatedHandler) GetPublicationDomain(w http.ResponseWriter, r *http.Request, id string) {

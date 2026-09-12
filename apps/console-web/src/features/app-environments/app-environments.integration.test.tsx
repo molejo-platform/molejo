@@ -13,6 +13,7 @@ const params = vi.hoisted(() => ({
 
 const target = vi.hoisted(() => ({
   id: "aev-aaaaaaaaaaaaaaaaaaaa",
+  clusterId: "cls-aaaaaaaaaaaaaaaaaaaa",
   projectId: "prj-aaaaaaaaaaaaaaaaaaaa",
   appId: "app-aaaaaaaaaaaaaaaaaaaa",
   appName: "API",
@@ -35,6 +36,7 @@ const target = vi.hoisted(() => ({
   },
   configurationVersion: 1,
   version: 1,
+  withdrawalState: "None",
   state: "Ready",
   createdAt: "2026-08-27T00:00:00Z",
   updatedAt: "2026-08-27T00:00:00Z",

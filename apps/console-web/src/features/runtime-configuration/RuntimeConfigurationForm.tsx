@@ -1,8 +1,8 @@
 import type { Parameter, RuntimeConfiguration, Variable } from "../../shared/api/types";
 import { Button } from "../../shared/ui/Button";
 import { Field, SelectField, TextareaField } from "../../shared/ui/Field";
-import { publicationSuffix } from "../app-environments/public";
 import { useSessionQuery } from "../authentication/public";
+import { HTTPPublicationEditor } from "../http-publication/public";
 
 export const defaultRuntimeConfiguration = (): RuntimeConfiguration => ({
   replicas: 1,
@@ -26,8 +26,12 @@ type RuntimeConfigurationFieldsProps = {
   variablesError?: string;
   variablesId?: string;
   availableParameters?: Parameter[];
+  workspaceId: string;
+  clusterId: string;
   disabled?: boolean;
   replicasLocked?: boolean;
+  violations?: Array<{ field: string; message: string }>;
+  onPublicationValidityChange?: (valid: boolean) => void;
 };
 
 export function RuntimeConfigurationFields({
@@ -38,11 +42,14 @@ export function RuntimeConfigurationFields({
   variablesError,
   variablesId,
   availableParameters = [],
+  workspaceId,
+  clusterId,
   disabled = false,
   replicasLocked = false,
+  violations = [],
+  onPublicationValidityChange,
 }: RuntimeConfigurationFieldsProps) {
   const session = useSessionQuery();
-  const httpEndpoint = value.publicEndpoints.find((endpoint) => endpoint.type === "HTTP");
   const primaryPort = value.ports[0];
   const updateResources = (group: "requests" | "limits", field: "cpuMillis" | "memoryMiB", next: number) =>
     onChange({ ...value, resources: { ...value.resources, [group]: { ...value.resources[group], [field]: next } } });
@@ -76,51 +83,6 @@ export function RuntimeConfigurationFields({
   return (
     <>
       <div className="form-grid">
-        <SelectField
-          label="HTTP público"
-          value={httpEndpoint ? "Public" : "Private"}
-          onChange={(event) =>
-            onChange({
-              ...value,
-              publicEndpoints:
-                event.target.value === "Public"
-                  ? [
-                      ...value.publicEndpoints.filter((endpoint) => endpoint.type !== "HTTP"),
-                      {
-                        name: "web",
-                        type: "HTTP",
-                        portName: primaryPort.name,
-                        domainId: "default",
-                        hostnameLabel: "app",
-                      },
-                    ]
-                  : value.publicEndpoints.filter((endpoint) => endpoint.type !== "HTTP"),
-            })
-          }
-          disabled={disabled}
-        >
-          <option value="Private">Privado</option>
-          <option value="Public">Público</option>
-        </SelectField>
-        {httpEndpoint && (
-          <Field
-            label="Hostname HTTP"
-            helper={`${httpEndpoint.hostnameLabel || "app"}.${publicationSuffix(session.data, httpEndpoint.domainId)}`}
-            value={httpEndpoint.hostnameLabel}
-            onChange={(event) =>
-              onChange({
-                ...value,
-                publicEndpoints: value.publicEndpoints.map((endpoint) =>
-                  endpoint.type === "HTTP" ? { ...endpoint, hostnameLabel: event.target.value } : endpoint,
-                ),
-              })
-            }
-            pattern="^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$"
-            maxLength={63}
-            disabled={disabled}
-            required
-          />
-        )}
         <Field
           label="Porta principal"
           type="number"
@@ -150,6 +112,15 @@ export function RuntimeConfigurationFields({
           required
         />
       </div>
+      <HTTPPublicationEditor
+        workspaceId={workspaceId}
+        clusterId={clusterId}
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+        violations={violations}
+        onValidityChange={onPublicationValidityChange}
+      />
       {session.data?.installationCapabilities?.publicTCP?.enabled && (
         <p className="muted">TCP público experimental pode ser configurado depois em Configuração → Rede.</p>
       )}
