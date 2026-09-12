@@ -89,14 +89,38 @@ amplos somente quando o comportamento não puder ser provado em uma camada
 inferior. Nunca inclua credenciais, chaves privadas, certificados ou kubeconfigs
 em snapshots.
 
-A fundação de publicação HTTP também possui uma prova local com TLS real:
+A prova ponta a ponta mantida usa o runner de conformidade versionado:
 
 ```bash
-tools/testing/publication-kind.sh
+just molejo-conformance kind
 ```
 
-Ela cria e remove um Kind isolado com kubeconfig próprio. Requer Docker, Helm e
-kubectl e nunca usa o contexto atual do cluster.
+Ela cria e remove um Kind e um registry isolados, instala os mesmos charts do
+`molejoctl` e executa `alpha-core/v1` e `http-publication/v1`. A publicação
+implanta o domínio exato, adiciona um endereço do pool na mesma porta, remove o
+endereço exato preservando o pool e, por fim, retira a aplicação, com Gateway e
+TLS local reais. O diretório privado impresso conserva JSON e JUnit dos perfis e
+do harness; artefatos de build e credenciais permanecem no scratch descartado.
+Requer Docker, Helm, OpenSSL, jq e kubectl e nunca usa o contexto atual do cluster.
+
+Liste ou inspecione o contrato compilado sem realizar alterações:
+
+```bash
+go -C tools run ./cmd/molejo-conformance profile list
+go -C tools run ./cmd/molejo-conformance plan --profile alpha-core \
+  --cluster-id <cluster-id> --workspace-id <test-workspace-id>
+```
+
+Targets persistentes exigem um Workspace de teste existente. O gerenciamento do
+binding é aceito somente em targets descartáveis. `run` registra a identidade do
+target antes dos efeitos e `cleanup --run-dir <diretório>` retoma a limpeza pelo
+ledger privado. Em um target persistente, o hostname efêmero Exact pode usar um
+listener wildcard informado por `--publication-exact-listener-hostname`.
+
+O workflow dedicado executa uma vez por push, disparo manual e dia UTC. Durante
+a calibração alfa ele permanece não bloqueante; deve virar obrigatório nos
+caminhos cobertos somente após dez execuções qualificadas bem-sucedidas em dias
+distintos.
 
 ## Testes de aceitação no K3s
 
@@ -111,6 +135,18 @@ tools/testing/tls-k3s.sh verify --context molejo-k3s --file ./tls-setup.yaml
 Os modos `teardown` e `cycle` do script do Control Plane modificam o cluster e
 exigem o argumento explícito `--confirm <context>`. A verificação TLS é somente
 leitura. Execute os scripts sem argumentos para consultar o uso completo.
+
+O aceite da borda pública também é somente leitura e permanece separado dos
+perfis de aplicação:
+
+```bash
+tools/testing/public-edge-acceptance.sh --output ./public-edge-evidence
+```
+
+Ele verifica `molejo.dev`, `cloud.molejo.dev`, o HTTP 401 com desafio Bearer do
+Registry e a validade mínima dos certificados. Marcadores opcionais de corpo
+confirmam a identidade do apex e do Console; a evidência conserva apenas o hash
+SHA-256 do conteúdo. O script não altera DNS, Gateway, rotas ou TLS.
 
 ## Commits
 

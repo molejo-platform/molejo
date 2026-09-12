@@ -2,7 +2,7 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: $0 <kind|core|metrics-current|storage-rwo|publication-http> [--context <name>] [--storage-class <name>] [--gateway-file <path>]" >&2
+  echo "usage: $0 <kind|installation|metrics-current|storage-rwo|publication-binding|registry-private> [--context <name>] [--storage-class <name>] [--gateway-file <path>] [--registry-file <path>]" >&2
   exit 2
 }
 
@@ -12,6 +12,7 @@ shift
 context_name=""
 storage_class=""
 gateway_file=""
+registry_file=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -30,6 +31,11 @@ while [[ $# -gt 0 ]]; do
       gateway_file="$2"
       shift 2
       ;;
+    --registry-file)
+      [[ $# -ge 2 ]] || usage
+      registry_file="$2"
+      shift 2
+      ;;
     *) usage ;;
   esac
 done
@@ -37,7 +43,7 @@ done
 repository_root="$(git rev-parse --show-toplevel)"
 
 if [[ "$profile" == "kind" ]]; then
-  [[ -z "$context_name" && -z "$storage_class" && -z "$gateway_file" ]] || usage
+  [[ -z "$context_name" && -z "$storage_class" && -z "$gateway_file" && -z "$registry_file" ]] || usage
   exec "$repository_root/tools/testing/kind-conformance.sh"
 fi
 
@@ -56,7 +62,7 @@ molejoctl() {
 }
 
 case "$profile" in
-  core)
+  installation)
     "$repository_root/tools/testing/control-plane-k3s.sh" verify --context "$context_name"
     molejoctl platform doctor --kube-context "$context_name"
     ;;
@@ -71,12 +77,20 @@ case "$profile" in
     }
     molejoctl capability storage smoke --kube-context "$context_name" --storage-class "$storage_class"
     ;;
-  publication-http)
+  publication-binding)
     [[ -n "$gateway_file" ]] || {
-      echo "publication-http requires --gateway-file" >&2
+      echo "publication-binding requires --gateway-file" >&2
       exit 2
     }
     molejoctl capability gateway verify --kube-context "$context_name" --file "$gateway_file"
+    ;;
+  registry-private)
+    [[ -n "$registry_file" ]] || {
+      echo "registry-private requires --registry-file" >&2
+      exit 2
+    }
+    molejoctl capability registry verify --kube-context "$context_name" --file "$registry_file"
+    molejoctl capability registry smoke --kube-context "$context_name" --file "$registry_file"
     ;;
   *) usage ;;
 esac

@@ -107,11 +107,13 @@ reconciliations do not emit duplicate transition Events.
 ## Reproducible checks
 
 `just molejo-conformance kind` creates disposable local Kind and registry
-instances, packages the same charts consumed by `molejoctl`, and validates the
-idempotent runtime and Control Plane installation. The journey creates a
-Workspace with RBAC boundaries, registers an immutable OCI image, reconciles and
-observes a private application, cancels its log stream, deletes the application
-idempotently, and proves environment teardown.
+instances, packages the same charts consumed by `molejoctl`, and runs versioned
+core and HTTP publication profiles. The harness checks installation idempotency,
+Workspace RBAC, and infrastructure teardown. The compiled profiles check
+immutable OCI deployment, current observability, incremental exact and pooled
+HTTPS addresses, partial address removal, bounded dependent pagination,
+protected grant revocation, the terminal withdrawal fence, and deterministic
+resource cleanup. The runner and harness write private JSON and JUnit evidence.
 
 This local proof does not validate inbound public DNS or a publicly trusted
 certificate. Those remain a separate acceptance step in the foundation

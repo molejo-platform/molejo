@@ -2,6 +2,7 @@ package workspaceboundary
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -16,6 +17,19 @@ import (
 	platformv1alpha1 "github.com/molejo-platform/molejo/packages/kubernetes-api/apis/platform/v1alpha1"
 	"github.com/molejo-platform/molejo/packages/workspacecontract"
 )
+
+type transientRoleBindingClient struct {
+	client.Client
+	remainingFailures int
+}
+
+func (c *transientRoleBindingClient) Create(ctx context.Context, object client.Object, options ...client.CreateOption) error {
+	if _, ok := object.(*rbacv1.RoleBinding); ok && c.remainingFailures > 0 {
+		c.remainingFailures--
+		return errors.New("transient RoleBinding write failure")
+	}
+	return c.Client.Create(ctx, object, options...)
+}
 
 func TestReconcileMaterializesOnlyTheWorkspaceBoundary(t *testing.T) {
 	placement := testPlacement()
@@ -84,6 +98,32 @@ func TestReconcileNeverAdoptsAForeignNamespace(t *testing.T) {
 	}
 	condition := apiMeta.FindStatusCondition(current.Status.Conditions, platformv1alpha1.WorkspacePlacementConditionPolicyReady)
 	if condition == nil || condition.Status != metav1.ConditionFalse || condition.Reason != "NamespaceConflict" {
+		t.Fatalf("PolicyReady=%+v", condition)
+	}
+}
+
+func TestReconcileRetriesTransientAccessBindingFailureUntilReady(t *testing.T) {
+	placement := testPlacement()
+	baseClient := boundaryTestClient(t, placement)
+	kubernetesClient := &transientRoleBindingClient{Client: baseClient, remainingFailures: 2}
+	reconciler := &Reconciler{Client: kubernetesClient}
+	request := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(placement)}
+
+	for attempt := 0; attempt < 2; attempt++ {
+		if _, err := reconciler.Reconcile(context.Background(), request); err == nil {
+			t.Fatalf("attempt %d discarded a transient RoleBinding error", attempt+1)
+		}
+	}
+	if _, err := reconciler.Reconcile(context.Background(), request); err != nil {
+		t.Fatal(err)
+	}
+
+	current := &platformv1alpha1.WorkspacePlacement{}
+	if err := baseClient.Get(context.Background(), client.ObjectKeyFromObject(placement), current); err != nil {
+		t.Fatal(err)
+	}
+	condition := apiMeta.FindStatusCondition(current.Status.Conditions, platformv1alpha1.WorkspacePlacementConditionPolicyReady)
+	if condition == nil || condition.Status != metav1.ConditionTrue || condition.Reason != "BoundaryReady" {
 		t.Fatalf("PolicyReady=%+v", condition)
 	}
 }

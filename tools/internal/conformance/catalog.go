@@ -7,9 +7,20 @@ import (
 )
 
 func Profiles() []Profile {
-	profiles := []Profile{alphaCoreProfile()}
+	profiles := []Profile{alphaCoreProfile(), httpPublicationProfile()}
 	sort.Slice(profiles, func(i, j int) bool { return profiles[i].ID < profiles[j].ID })
 	return profiles
+}
+
+func httpPublicationProfile() Profile {
+	return Profile{
+		ID: HTTPPublicationProfileID, Version: HTTPPublicationVersion,
+		Description: "Molejo exact and subdomain-pool HTTP publication with real TLS and withdrawal",
+		Scenarios: []Scenario{{
+			ID: "exact-and-pool-publication", Description: "publish one application at exact and pooled HTTPS addresses",
+			Required: true, Timeout: 10 * time.Minute, Run: runHTTPPublicationJourney,
+		}},
+	}
 }
 
 func ProfileByID(id string) (Profile, error) {

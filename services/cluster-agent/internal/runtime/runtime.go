@@ -184,8 +184,9 @@ func (k *KubernetesClient) ApplyDeployment(ctx context.Context, namespace, name 
 	// Dry-run the full projection with strict field validation before creating
 	// configuration objects. An older CRD must reject, rather than prune, addresses.
 	preflight := obj.DeepCopy()
+	var current *platformv1alpha1.AppDeployment
 	if exists {
-		current := &platformv1alpha1.AppDeployment{}
+		current = &platformv1alpha1.AppDeployment{}
 		if err := k.client.Get(applyCtx, client.ObjectKeyFromObject(obj), current); err != nil {
 			return err
 		}
@@ -195,9 +196,8 @@ func (k *KubernetesClient) ApplyDeployment(ctx context.Context, namespace, name 
 		if current.Spec.Withdrawn || objectDesiredVersion(current) > desiredVersion {
 			return errors.New("stale deployment version")
 		}
-		obj.UID, obj.ResourceVersion = current.UID, current.ResourceVersion
-		preflight.UID, preflight.ResourceVersion = current.UID, current.ResourceVersion
-		if err := k.client.Patch(applyCtx, preflight, client.Apply, client.FieldOwner(k.fieldManager), client.ForceOwnership, client.DryRunAll, &client.PatchOptions{FieldValidation: "Strict"}); err != nil {
+		preflight = replaceOwnedAppDeployment(current, preflight)
+		if err := k.client.Update(applyCtx, preflight, &client.UpdateOptions{DryRun: []string{metav1.DryRunAll}, FieldManager: k.fieldManager, FieldValidation: "Strict"}); err != nil {
 			return fmt.Errorf("validate runtime schema: %w", err)
 		}
 	} else if err := k.client.Create(applyCtx, preflight, client.DryRunAll, &client.CreateOptions{FieldValidation: "Strict"}); err != nil {
@@ -226,10 +226,25 @@ func (k *KubernetesClient) ApplyDeployment(ctx context.Context, namespace, name 
 		}
 		return nil
 	}
-	if err := k.client.Patch(applyCtx, obj, client.Apply, client.FieldOwner(k.fieldManager), client.ForceOwnership, &client.PatchOptions{FieldValidation: "Strict"}); err != nil {
+	// The Agent owns the closed AppDeployment spec. A full update is deliberate:
+	// associative-list apply merges can retain a removed publication address and
+	// falsely advance desired-version fencing without replacing the desired spec.
+	updated := replaceOwnedAppDeployment(current, obj)
+	if err := k.client.Update(applyCtx, updated, &client.UpdateOptions{FieldManager: k.fieldManager, FieldValidation: "Strict"}); err != nil {
 		return fmt.Errorf("apply AppDeployment: %w", err)
 	}
 	return nil
+}
+
+func replaceOwnedAppDeployment(current, desired *platformv1alpha1.AppDeployment) *platformv1alpha1.AppDeployment {
+	updated := current.DeepCopy()
+	updated.Spec = *desired.Spec.DeepCopy()
+	if updated.Annotations == nil {
+		updated.Annotations = map[string]string{}
+	}
+	updated.Annotations[controlPlaneOwnerAnnotation] = desired.Annotations[controlPlaneOwnerAnnotation]
+	updated.Annotations[desiredVersionAnnotation] = desired.Annotations[desiredVersionAnnotation]
+	return updated
 }
 
 func (k *KubernetesClient) ApplyVolume(ctx context.Context, namespace, name string, desiredVersion int64, intent VolumeIntent) error {

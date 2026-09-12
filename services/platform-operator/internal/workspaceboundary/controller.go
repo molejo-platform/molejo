@@ -2,6 +2,7 @@ package workspaceboundary
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"time"
@@ -20,6 +21,8 @@ import (
 )
 
 const workspaceIDAnnotation = "platform.molejo.dev/workspace-id"
+
+var errBoundaryConflict = errors.New("workspace boundary ownership conflict")
 
 type Reconciler struct {
 	client.Client
@@ -42,11 +45,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 		return r.deleteBoundary(ctx, placement, plan)
 	}
 	if err = r.ensureNamespace(ctx, plan); err != nil {
-		return ctrl.Result{}, r.updateConditions(ctx, placement, false, "NamespaceConflict", err.Error())
+		return ctrl.Result{}, r.recordFailure(ctx, placement, "NamespaceConflict", err)
 	}
 	for _, binding := range plan.Bindings {
 		if err = r.ensureBinding(ctx, plan, binding); err != nil {
-			return ctrl.Result{}, r.updateConditions(ctx, placement, false, "AccessBindingFailed", err.Error())
+			return ctrl.Result{}, r.recordFailure(ctx, placement, "AccessBindingFailed", err)
 		}
 	}
 	return ctrl.Result{}, r.updateConditions(ctx, placement, true, "BoundaryReady", "workspace namespace and fixed access bindings are ready")
@@ -62,7 +65,7 @@ func (r *Reconciler) ensureNamespace(ctx context.Context, plan ReconciliationPla
 		return err
 	}
 	if namespace.Annotations[workspaceIDAnnotation] != plan.WorkspaceID || namespace.Annotations[kubemetadata.ControlPlaneOwnerAnnotation] != kubemetadata.ControlPlaneOwner {
-		return fmt.Errorf("namespace %s is not owned by Workspace %s", plan.Namespace, plan.WorkspaceID)
+		return fmt.Errorf("%w: namespace %s is not owned by Workspace %s", errBoundaryConflict, plan.Namespace, plan.WorkspaceID)
 	}
 	return nil
 }
@@ -79,9 +82,20 @@ func (r *Reconciler) ensureBinding(ctx context.Context, plan ReconciliationPlan,
 		return err
 	}
 	if current.Annotations[workspaceIDAnnotation] != plan.WorkspaceID || current.RoleRef != desired.RoleRef || !reflect.DeepEqual(current.Subjects, desired.Subjects) {
-		return fmt.Errorf("RoleBinding %s/%s conflicts with the fixed access profile", plan.Namespace, binding.Name)
+		return fmt.Errorf("%w: RoleBinding %s/%s conflicts with the fixed access profile", errBoundaryConflict, plan.Namespace, binding.Name)
 	}
 	return nil
+}
+
+func (r *Reconciler) recordFailure(ctx context.Context, placement *platformv1alpha1.WorkspacePlacement, reason string, operationErr error) error {
+	statusErr := r.updateConditions(ctx, placement, false, reason, operationErr.Error())
+	// Ownership conflicts require human correction. Transient Kubernetes errors
+	// must remain visible to controller-runtime so the boundary is retried even
+	// when writing the degraded condition succeeds or makes no status change.
+	if errors.Is(operationErr, errBoundaryConflict) {
+		return statusErr
+	}
+	return errors.Join(operationErr, statusErr)
 }
 
 func (r *Reconciler) deleteBoundary(ctx context.Context, placement *platformv1alpha1.WorkspacePlacement, plan ReconciliationPlan) (ctrl.Result, error) {

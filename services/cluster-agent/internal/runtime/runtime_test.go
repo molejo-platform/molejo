@@ -172,6 +172,17 @@ func TestApplyDeploymentKeepsTheRuntimeNameStableAcrossIntentUpdates(t *testing.
 	if len(current.Spec.Variables) != 1 || current.Spec.Variables[0].Name != "APP_MODE" || current.Spec.Variables[0].Value != "production" {
 		t.Fatalf("runtime variables do not match intent: %+v", current.Spec.Variables)
 	}
+	third := second
+	third.PublicEndpoints = nil
+	if err := kubernetesClient.ApplyDeployment(context.Background(), "molejo-workspaces", "ap-deployment-id", 3, third); err != nil {
+		t.Fatal(err)
+	}
+	if err := kubernetesClient.client.Get(context.Background(), client.ObjectKey{Namespace: "molejo-workspaces", Name: "ap-deployment-id"}, current); err != nil {
+		t.Fatal(err)
+	}
+	if len(current.Spec.PublicEndpoints) != 0 || current.Annotations[desiredVersionAnnotation] != "3" {
+		t.Fatalf("removed publication addresses remained in the latest intent: %+v", current.Spec.PublicEndpoints)
+	}
 	originalHash := objectSpecHash(current.Spec)
 	(*current.Spec.Replicas)++
 	if objectSpecHash(current.Spec) == originalHash {

@@ -44,6 +44,9 @@ func runApplicationLifecycle(run *ScenarioContext) error {
 	if err = run.Assert("workspace-ready", "workspace placement ready in "+namespace); err != nil {
 		return err
 	}
+	if err = run.Reporter.SetOutputs(RunOutputs{WorkspaceID: workspace.ID, Namespace: namespace}); err != nil {
+		return err
+	}
 
 	nameSuffix := run.Config.RunID
 	if len(nameSuffix) > 12 {

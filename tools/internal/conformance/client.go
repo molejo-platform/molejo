@@ -98,6 +98,13 @@ func (c *Client) Post(ctx context.Context, path string, body, output any, header
 	return c.do(ctx, http.MethodPost, path, body, headers, statuses, output)
 }
 
+func (c *Client) Put(ctx context.Context, path string, body, output any, headers map[string]string, statuses ...int) error {
+	if len(statuses) == 0 {
+		statuses = []int{http.StatusOK, http.StatusCreated}
+	}
+	return c.do(ctx, http.MethodPut, path, body, headers, statuses, output)
+}
+
 func (c *Client) Delete(ctx context.Context, path string, output any, headers map[string]string, statuses ...int) error {
 	if len(statuses) == 0 {
 		statuses = []int{http.StatusOK, http.StatusAccepted, http.StatusNoContent}

@@ -257,8 +257,10 @@ persistent login is introduced.
   grant/revocation races, durable execution claims, supersession/late ACK, binding
   recreation, stale observations and the integrated HTTP API journey. Also checks
   the real HTTPS session/MFA contract.
-- `tools/testing/publication-kind.sh`: isolated disposable Kind, real Traefik,
-  verified Host/SNI and certificate, same application, partial removal and negative
-  Gateway/Secret RBAC. Its TLS trust is local test trust, not public Internet trust.
+- `just molejo-conformance kind`: isolated disposable Kind, real Traefik,
+  versioned API journey, exact and pooled Host/SNI, trusted certificate, same
+  application, incremental address addition and partial removal, protected
+  revocation, terminal withdrawal, and negative Gateway/Secret RBAC.
+  Its TLS trust is local test trust, not public Internet trust.
 
 Remote K3s, DNS and edge acceptance require separately authorized deployment.

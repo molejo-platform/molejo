@@ -3,9 +3,11 @@ package conformance
 import "time"
 
 const (
-	ReportSchemaVersion = "molejo-conformance-report.v1alpha1"
-	AlphaCoreProfileID  = "alpha-core"
-	AlphaCoreVersion    = "v1"
+	ReportSchemaVersion      = "molejo-conformance-report.v1alpha1"
+	AlphaCoreProfileID       = "alpha-core"
+	AlphaCoreVersion         = "v1"
+	HTTPPublicationProfileID = "http-publication"
+	HTTPPublicationVersion   = "v1"
 )
 
 type Status string
@@ -25,6 +27,21 @@ type Target struct {
 	KubeContext        string `json:"kubeContext,omitempty"`
 	Disposable         bool   `json:"disposable"`
 	WorkspaceID        string `json:"workspaceId,omitempty"`
+}
+
+type PublicationConfig struct {
+	GatewayNamespace      string
+	GatewayName           string
+	ExactHostname         string
+	PoolDomain            string
+	PoolLabel             string
+	ExactListener         string
+	PoolListener          string
+	ExactListenerHostname string
+	PoolListenerHostname  string
+	ProbeAddress          string
+	CAFile                string
+	ManageBinding         bool
 }
 
 type TargetEvidence struct {
@@ -56,8 +73,17 @@ type Scenario struct {
 type ScenarioFunc func(*ScenarioContext) error
 
 type ProfileReference struct {
-	ID      string `json:"id"`
-	Version string `json:"version"`
+	ID          string `json:"id"`
+	Version     string `json:"version"`
+	Fingerprint string `json:"fingerprint"`
+}
+
+type Coverage struct {
+	Required int `json:"required"`
+	Executed int `json:"executed"`
+	Passed   int `json:"passed"`
+	Failed   int `json:"failed"`
+	Skipped  int `json:"skipped"`
 }
 
 type AssertionResult struct {
@@ -98,14 +124,26 @@ type CleanupResult struct {
 }
 
 type RunOutputs struct {
-	WorkspaceID      string `json:"workspaceId,omitempty"`
-	Namespace        string `json:"namespace,omitempty"`
-	AppEnvironmentID string `json:"appEnvironmentId,omitempty"`
+	WorkspaceID                string                `json:"workspaceId,omitempty"`
+	Namespace                  string                `json:"namespace,omitempty"`
+	AppEnvironmentID           string                `json:"appEnvironmentId,omitempty"`
+	PublicationBindingID       string                `json:"publicationBindingId,omitempty"`
+	PublicationBindingRevision int                   `json:"publicationBindingRevision,omitempty"`
+	PublicationAddresses       []PublicationEvidence `json:"publicationAddresses,omitempty"`
+}
+
+type PublicationEvidence struct {
+	Hostname              string    `json:"hostname"`
+	Listener              string    `json:"listener"`
+	HTTPStatus            int       `json:"httpStatus"`
+	CertificateSHA256     string    `json:"certificateSha256"`
+	CertificateValidUntil time.Time `json:"certificateValidUntil"`
 }
 
 type Report struct {
 	SchemaVersion string           `json:"schemaVersion"`
 	RunnerVersion string           `json:"runnerVersion"`
+	Revision      string           `json:"revision"`
 	RunID         string           `json:"runId"`
 	Profile       ProfileReference `json:"profile"`
 	Target        TargetEvidence   `json:"target"`
@@ -115,6 +153,7 @@ type Report struct {
 	FinishedAt    time.Time        `json:"finishedAt,omitempty"`
 	DurationMS    int64            `json:"durationMs,omitempty"`
 	Scenarios     []ScenarioResult `json:"scenarios"`
+	Coverage      Coverage         `json:"coverage"`
 	Outputs       RunOutputs       `json:"outputs,omitempty"`
 	Resources     []ResourceRecord `json:"resources,omitempty"`
 	Cleanup       CleanupResult    `json:"cleanup"`

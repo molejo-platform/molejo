@@ -86,8 +86,8 @@ script-check:
     bash -n tools/testing/*.sh
 
 # Run the disposable Kind harness or one profile against an existing context.
-molejo-conformance profile context="" storage_class="" gateway_file="":
-    tools/testing/molejo-conformance.sh "{{ profile }}" --context "{{ context }}" --storage-class "{{ storage_class }}" --gateway-file "{{ gateway_file }}"
+molejo-conformance profile context="" storage_class="" gateway_file="" registry_file="":
+    tools/testing/molejo-conformance.sh "{{ profile }}" --context "{{ context }}" --storage-class "{{ storage_class }}" --gateway-file "{{ gateway_file }}" --registry-file "{{ registry_file }}"
 
 # Run the fast automated suite without Docker.
 test: operator-test cluster-agent-test control-plane-test contract-test distribution-test frontend-test script-check

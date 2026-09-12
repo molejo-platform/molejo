@@ -109,11 +109,14 @@ Reconciliações repetidas já convergidas não emitem Events de transição dup
 ## Verificações reproduzíveis
 
 `just molejo-conformance kind` cria um cluster Kind e um registry locais e
-descartáveis, empacota os mesmos charts consumidos pelo `molejoctl` e valida a
-instalação idempotente do runtime e do Control Plane. A jornada cria um Workspace
-com limites de RBAC, registra uma imagem OCI imutável, reconcilia e observa uma
-aplicação privada, cancela o stream de logs, remove a aplicação de forma
-idempotente e comprova o teardown do ambiente.
+descartáveis, empacota os mesmos charts consumidos pelo `molejoctl` e executa
+perfis versionados de núcleo e publicação HTTP. O harness verifica instalação
+idempotente, RBAC do Workspace e descarte da infraestrutura. Os perfis compilados
+verificam deploy OCI imutável, observabilidade atual, adição incremental de
+endereços HTTPS exato e de pool, remoção parcial de endereço, paginação limitada
+de dependências, proteção da revogação, barreira terminal de retirada e limpeza
+determinística dos recursos. Runner e harness gravam evidências privadas em JSON
+e JUnit.
 
 Essa prova local não valida DNS público de entrada nem certificado publicamente
 confiável. Esses itens permanecem como uma etapa de aceite separada no ambiente

@@ -17,7 +17,10 @@ import (
 	"github.com/molejo-platform/molejo/tools/internal/conformance"
 )
 
-var version = "dev"
+var (
+	version = "dev"
+	commit  = "unknown"
+)
 
 func main() {
 	code := run(context.Background(), os.Args[1:], os.Stdout, os.Stderr)
@@ -51,12 +54,21 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if errors.As(err, &usage) {
 		return 2
 	}
+	var blocked *blockedRunError
+	if errors.As(err, &blocked) {
+		return 2
+	}
 	return 1
 }
 
 type usageError struct{ message string }
 
 func (e *usageError) Error() string { return e.message }
+
+type blockedRunError struct{ cause error }
+
+func (e *blockedRunError) Error() string { return e.cause.Error() }
+func (e *blockedRunError) Unwrap() error { return e.cause }
 
 func runProfile(args []string, stdout, stderr io.Writer) error {
 	if len(args) != 1 || args[0] != "list" {
@@ -77,7 +89,7 @@ func runPlan(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return &usageError{message: err.Error()}
 	}
-	lines, err := conformance.Plan(profile, options.target())
+	lines, err := conformance.PlanWithConfig(profile, options.target(), options.publication())
 	if err != nil {
 		return &usageError{message: err.Error()}
 	}
@@ -116,11 +128,17 @@ func runConformance(parent context.Context, args []string, stdout, stderr io.Wri
 	ctx, cancel := context.WithTimeout(parent, options.timeout)
 	defer cancel()
 	report, err := conformance.RunProfile(ctx, conformance.RunConfig{
-		RunID: runID, RunnerVersion: version, Target: options.target(), Profile: profile,
+		RunID: runID, RunnerVersion: version, Revision: commit, Target: options.target(), Profile: profile,
 		Client: client, Password: password, Image: options.image, OutputDir: options.outputDir,
-		Progress: func(message string) { _, _ = fmt.Fprintln(stdout, "PASS", message) },
+		Publication: options.publication(),
+		Progress:    func(message string) { _, _ = fmt.Fprintln(stdout, "PASS", message) },
 	})
-	_, _ = fmt.Fprintf(stdout, "Result: %s profile=%s/%s run=%s report=%s/report.json\n", report.Status, profile.ID, profile.Version, runID, options.outputDir)
+	if report.RunID != "" {
+		_, _ = fmt.Fprintf(stdout, "Result: %s profile=%s/%s run=%s report=%s/report.json\n", report.Status, profile.ID, profile.Version, runID, options.outputDir)
+	}
+	if err != nil && report.Status != conformance.StatusFail {
+		return &blockedRunError{cause: err}
+	}
 	return err
 }
 
@@ -174,7 +192,10 @@ func runCleanup(ctx context.Context, args []string, stdout, stderr io.Writer) er
 	if observed.ClusterID != report.Target.ClusterID {
 		return errors.New("cleanup target identity mismatch")
 	}
-	result := conformance.RecoverCleanup(reporter, client)
+	result, err := conformance.RecoverCleanup(reporter, client)
+	if err != nil {
+		return &blockedRunError{cause: err}
+	}
 	_, _ = fmt.Fprintf(stdout, "Cleanup: %s run=%s report=%s/report.json\n", result.Status, report.RunID, *runDir)
 	if result.Status != conformance.StatusPass {
 		return errors.New("cleanup did not complete")
@@ -186,6 +207,12 @@ type options struct {
 	profile, endpoint, serverName, host, origin, caFile, passwordFile string
 	image, outputDir, runID, clusterID, clusterUID, kubeContext       string
 	workspaceID                                                       string
+	publicationGatewayNamespace, publicationGatewayName               string
+	publicationExactHost, publicationPoolDomain, publicationPoolLabel string
+	publicationExactListener, publicationPoolListener                 string
+	publicationExactListenerHostname, publicationPoolListenerHostname string
+	publicationProbeAddress, publicationCAFile                        string
+	publicationManageBinding                                          bool
 	disposable                                                        bool
 	timeout                                                           time.Duration
 }
@@ -209,6 +236,18 @@ func parseOptions(command string, args []string, stderr io.Writer, requireRuntim
 	flags.StringVar(&value.kubeContext, "kube-context", "", "target Kubernetes context recorded in evidence")
 	flags.StringVar(&value.workspaceID, "workspace-id", "", "existing test Workspace for a persistent target")
 	flags.BoolVar(&value.disposable, "disposable-target", false, "allow creation of a Workspace because the entire target will be destroyed")
+	flags.StringVar(&value.publicationGatewayNamespace, "publication-gateway-namespace", "", "Gateway namespace for HTTP publication")
+	flags.StringVar(&value.publicationGatewayName, "publication-gateway-name", "", "Gateway name for HTTP publication")
+	flags.StringVar(&value.publicationExactHost, "publication-exact-host", "", "exact hostname exercised by HTTP publication")
+	flags.StringVar(&value.publicationPoolDomain, "publication-pool-domain", "", "base domain exercised as a subdomain pool")
+	flags.StringVar(&value.publicationPoolLabel, "publication-pool-label", "conformance", "label allocated from the publication pool")
+	flags.StringVar(&value.publicationExactListener, "publication-exact-listener", "apex", "Gateway listener for the exact hostname")
+	flags.StringVar(&value.publicationPoolListener, "publication-pool-listener", "pool", "Gateway listener for the subdomain pool")
+	flags.StringVar(&value.publicationExactListenerHostname, "publication-exact-listener-hostname", "", "hostname or wildcard configured on the exact-address listener (defaults to exact host)")
+	flags.StringVar(&value.publicationPoolListenerHostname, "publication-pool-listener-hostname", "", "hostname or wildcard configured on the pool listener (defaults to *.pool-domain)")
+	flags.StringVar(&value.publicationProbeAddress, "publication-probe-address", "", "host:port reached while preserving HTTPS SNI")
+	flags.StringVar(&value.publicationCAFile, "publication-ca-file", "", "CA that validates the publication certificate")
+	flags.BoolVar(&value.publicationManageBinding, "publication-manage-binding", false, "create and remove the binding on a disposable target")
 	flags.DurationVar(&value.timeout, "timeout", 10*time.Minute, "run timeout")
 	if err := flags.Parse(args); err != nil {
 		return options{}, &usageError{message: err.Error()}
@@ -223,6 +262,16 @@ func parseOptions(command string, args []string, stderr io.Writer, requireRuntim
 		return options{}, &usageError{message: "endpoint, ca-file, password-file, image, and output are required"}
 	}
 	return value, nil
+}
+
+func (o options) publication() conformance.PublicationConfig {
+	return conformance.PublicationConfig{
+		GatewayNamespace: o.publicationGatewayNamespace, GatewayName: o.publicationGatewayName,
+		ExactHostname: o.publicationExactHost, PoolDomain: o.publicationPoolDomain, PoolLabel: o.publicationPoolLabel,
+		ExactListener: o.publicationExactListener, PoolListener: o.publicationPoolListener,
+		ExactListenerHostname: o.publicationExactListenerHostname, PoolListenerHostname: o.publicationPoolListenerHostname,
+		ProbeAddress: o.publicationProbeAddress, CAFile: o.publicationCAFile, ManageBinding: o.publicationManageBinding,
+	}
 }
 
 func (o options) target() conformance.Target {
