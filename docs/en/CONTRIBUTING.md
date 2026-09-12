@@ -95,33 +95,13 @@ The maintained end-to-end proof runs through the versioned conformance runner:
 just molejo-conformance kind
 ```
 
-It creates and deletes an isolated Kind cluster and registry, installs the same
+It creates and deletes an isolated Kind cluster and Registry, installs the same
 charts used by `molejoctl`, and runs the compiled `alpha-core/v1` and
-`http-publication/v1` profiles. The latter deploys an exact hostname, adds a
-subdomain-pool hostname on the same application port, removes the exact address
-while preserving the pool, and then withdraws the application. It uses a real
-Gateway and locally trusted TLS. Profile and aggregate harness JSON/JUnit
-evidence are retained in the printed private directory; build archives, binaries,
-credentials, keys, certificates, and kubeconfig remain in deleted scratch space. The harness
-requires Docker, Helm, OpenSSL, jq, and kubectl; it never uses the current
-cluster context.
-
-List or inspect the compiled contract without making changes:
-
-```bash
-go -C tools run ./cmd/molejo-conformance profile list
-go -C tools run ./cmd/molejo-conformance plan --profile alpha-core \
-  --cluster-id <cluster-id> --workspace-id <test-workspace-id>
-```
-
-Persistent targets must use a pre-existing test Workspace. Binding management
-is accepted only for disposable targets. `run` records target identity before
-effects and `cleanup --run-dir <directory>` can resume cleanup from the private
-resource ledger. A persistent wildcard listener can be selected independently
-from its ephemeral Exact domain with `--publication-exact-listener-hostname`.
-The same compiled profile and fingerprint identify a Kind or K3s verdict;
-installation, storage, Gateway, Registry, and metrics checks remain separate
-operational prerequisites.
+`http-publication/v1` profiles with real Gateway and TLS behavior. Read the
+[runner guide](../../tools/cmd/molejo-conformance/README.md) for profiles, target
+modes, direct commands, evidence, exit codes, and cleanup recovery. Read the
+[development guide](../../tools/cmd/molejo-conformance/DEVELOPMENT.md) before
+changing profile semantics, reports, ownership, or harness boundaries.
 
 The dedicated workflow runs once per push, manual dispatch, and UTC day. Keep it
 non-blocking while the alpha signal is calibrated; require it for changes to the
@@ -129,8 +109,7 @@ covered paths only after ten successful qualified runs on distinct days.
 
 ## K3s acceptance checks
 
-These maintainer checks are not part of `just verify` because they require an
-existing cluster:
+Maintainer checks against existing clusters are not part of `just verify`:
 
 ```bash
 tools/testing/control-plane-k3s.sh verify --context molejo-k3s
@@ -148,14 +127,9 @@ application profiles:
 tools/testing/public-edge-acceptance.sh --output ./public-edge-evidence
 ```
 
-It expects `molejo.dev` and `cloud.molejo.dev` to return HTTP 200,
-`registry.molejo.dev/v2/` to return HTTP 401, and every served certificate to
-remain valid for at least 14 days. Use `just molejo-conformance
-registry-private ...` with the Registry setup file for the independent private
-pull smoke. Optional `--apex-body-marker` and `--console-body-marker` arguments
-verify endpoint identity without retaining response content; the report stores
-only its SHA-256. The Registry check also requires the Bearer authentication
-challenge. Neither command edits DNS, Gateway, routes, or certificates.
+The [test and acceptance guide](../../tools/testing/README.md) defines the
+responsibility, prerequisites, mutation boundary, and retained evidence for each
+Kind, K3s, Registry, Gateway, TLS, storage, metrics, and public-edge harness.
 
 ## Commits
 

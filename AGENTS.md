@@ -13,6 +13,7 @@ the task requires it.
 - Authentication, authorization, RBAC, or secrets: [`docs/en/architecture/security-threat-model.md`](docs/en/architecture/security-threat-model.md)
 - Documentation translations: [`docs/TRANSLATION_GLOSSARY.md`](docs/TRANSLATION_GLOSSARY.md)
 - Platform commands and alpha lifecycle: [`docs/en/platform/lifecycle.md`](docs/en/platform/lifecycle.md)
+- Conformance runner: [`tools/cmd/molejo-conformance/README.md`](tools/cmd/molejo-conformance/README.md)
 - Release work: [`tools/cmd/release/README.md`](tools/cmd/release/README.md)
 
 Before editing a component, read its local instructions:
@@ -22,6 +23,7 @@ Before editing a component, read its local instructions:
 - Control Plane: [`services/control-plane-api/AGENTS.md`](services/control-plane-api/AGENTS.md)
 - Cluster Agent: [`services/cluster-agent/AGENTS.md`](services/cluster-agent/AGENTS.md)
 - Platform Operator: [`services/platform-operator/AGENTS.md`](services/platform-operator/AGENTS.md)
+- Tooling: [`tools/AGENTS.md`](tools/AGENTS.md)
 
 ## Code map
 
