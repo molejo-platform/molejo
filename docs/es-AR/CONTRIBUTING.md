@@ -5,6 +5,8 @@
 - Go 1.26.6, la versión utilizada por CI.
 - Node.js 24 o superior con Corepack habilitado.
 - `just` 1.57 o superior.
+- `curl`, `tar` y una herramienta SHA-256 para instalar la versión fijada de
+  ShellCheck.
 - Docker para las pruebas de integración con PostgreSQL.
 - `kubectl` solamente para pruebas de aceptación en un clúster real.
 
@@ -55,6 +57,21 @@ MOLEJO_TEST_DATABASE_URL='postgres://user:password@host/database?sslmode=disable
 repositorio.
 `just ci` también verifica que la generación y el formato no modifiquen el
 worktree.
+
+`just lint` ejecuta la misma configuración de `golangci-lint` sobre los dos
+módulos Go: el módulo del producto en la raíz del repositorio y el módulo
+separado en `tools`. `just script-check` verifica la sintaxis Bash y ejecuta la
+versión de ShellCheck fijada por el repositorio y validada por checksum. La
+primera ejecución la descarga en `MOLEJO_TOOL_CACHE` o en un caché temporal
+privado.
+
+Usá `just quality-report` para inspeccionar la complejidad ciclomática, el
+tamaño de las funciones y las advertencias de mantenibilidad en código Go que
+no sea de prueba. Este informe es diagnóstico durante el baseline alfa y no
+falla por los hallazgos. Sus límites actuales son complejidad superior a 20,
+más de 120 líneas o 70 instrucciones por función e índice de mantenibilidad
+inferior a 20. No hay un control bruto del tamaño de archivo; revisá las
+funciones informadas según su cohesión y responsabilidad.
 
 Durante el desarrollo, usá primero el comando del menor alcance relevante:
 
@@ -107,14 +124,6 @@ con Gateway y TLS local reales. El directorio privado impreso conserva JSON y
 JUnit de los perfiles y del harness; los artefactos de build y credenciales
 permanecen en el scratch eliminado. Requiere Docker, Helm, OpenSSL, jq y kubectl
 y nunca usa el contexto actual del clúster.
-
-Listá o inspeccioná el contrato compilado sin realizar cambios:
-
-```bash
-go -C tools run ./cmd/molejo-conformance profile list
-go -C tools run ./cmd/molejo-conformance plan --profile alpha-core \
-  --cluster-id <cluster-id> --workspace-id <test-workspace-id>
-```
 
 Los targets persistentes requieren un Workspace de prueba existente. La gestión
 del binding se admite solamente en targets descartables. `run` registra la

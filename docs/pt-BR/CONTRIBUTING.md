@@ -5,6 +5,8 @@
 - Go 1.26.6, a versão utilizada pelo CI.
 - Node.js 24 ou superior com Corepack habilitado.
 - `just` 1.57 ou superior.
+- `curl`, `tar` e uma ferramenta SHA-256 para instalar a versão fixada do
+  ShellCheck.
 - Docker para os testes de integração com PostgreSQL.
 - `kubectl` somente para testes de aceitação em um cluster real.
 
@@ -52,6 +54,20 @@ MOLEJO_TEST_DATABASE_URL='postgres://user:password@host/database?sslmode=disable
 `just verify` executa ambas as suítes e todos os gates de qualidade do
 repositório.
 `just ci` também verifica que a geração e a formatação não alterem a worktree.
+
+`just lint` executa a mesma configuração do `golangci-lint` nos dois módulos
+Go: o módulo do produto na raiz do repositório e o módulo separado em `tools`.
+`just script-check` verifica a sintaxe Bash e executa a versão do ShellCheck
+fixada no repositório e validada por checksum. A primeira execução a baixa em
+`MOLEJO_TOOL_CACHE` ou em um cache temporário privado.
+
+Use `just quality-report` para inspecionar complexidade ciclomática, tamanho de
+funções e alertas de manutenibilidade em código Go que não seja de teste. Esse
+relatório é diagnóstico durante o baseline alfa e não falha devido aos achados.
+Os limites atuais são complexidade acima de 20, mais de 120 linhas ou 70
+instruções por função e índice de manutenibilidade abaixo de 20. Não há um gate
+bruto de tamanho de arquivo; avalie as funções reportadas conforme sua coesão e
+responsabilidade.
 
 Durante o desenvolvimento, use primeiro o comando do menor escopo relevante:
 
@@ -102,14 +118,6 @@ endereço exato preservando o pool e, por fim, retira a aplicação, com Gateway
 TLS local reais. O diretório privado impresso conserva JSON e JUnit dos perfis e
 do harness; artefatos de build e credenciais permanecem no scratch descartado.
 Requer Docker, Helm, OpenSSL, jq e kubectl e nunca usa o contexto atual do cluster.
-
-Liste ou inspecione o contrato compilado sem realizar alterações:
-
-```bash
-go -C tools run ./cmd/molejo-conformance profile list
-go -C tools run ./cmd/molejo-conformance plan --profile alpha-core \
-  --cluster-id <cluster-id> --workspace-id <test-workspace-id>
-```
 
 Targets persistentes exigem um Workspace de teste existente. O gerenciamento do
 binding é aceito somente em targets descartáveis. `run` registra a identidade do
